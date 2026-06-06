@@ -23,6 +23,7 @@ fun main() {
         val input = LayoutInput(
             content = TiqianTextContent(fixture.text),
             constraints = fixture.constraints,
+            paragraphStyle = org.tiqian.text.core.ParagraphStyle(textAlign = fixture.textAlign),
         )
         val greedyResult = greedyEngine.layout(input)
         val lookaheadResult = lookaheadEngine.layout(input)
@@ -57,16 +58,22 @@ private fun printFixtureDump(fixture: LayoutFixture, greedy: LayoutResult, looka
 }
 
 private fun printEngineDump(label: String, result: LayoutResult) {
-    val totalAdjusted = result.lines.sumOf { it.adjustedWidth.toDouble() }.toFloat()
+    val totalVisual = result.lines.sumOf { it.visualWidth.toDouble() }.toFloat()
     val repairs = result.debug.lineDecisions.count { it.repair != null }
+    val justifications = result.debug.justificationDecisions.count { it.allocations.isNotEmpty() }
     println(
-        "  [$label] size=${result.size.width.oneDecimal()}x${result.size.height.oneDecimal()} lines=${result.lines.size} adjusted-sum=${totalAdjusted.oneDecimal()} repairs=$repairs",
+        "  [$label] size=${result.size.width.oneDecimal()}x${result.size.height.oneDecimal()} lines=${result.lines.size} visual-sum=${totalVisual.oneDecimal()} repairs=$repairs justifications=$justifications",
     )
     result.lines.forEachIndexed { lineIndex, line ->
         val repair = result.debug.lineDecisions.getOrNull(lineIndex)?.repair
+        val justify = result.debug.justificationDecisions.firstOrNull { it.lineRange == line.range }
         val repairTag = if (repair != null) " repair=$repair" else ""
+        val justifyTag = if (justify != null && justify.allocations.isNotEmpty()) {
+            val kinds = justify.allocations.map { it.kind }.distinct().joinToString("+")
+            " justify=$kinds(+${(justify.deficitBefore - justify.deficitAfter).oneDecimal()})"
+        } else ""
         println(
-            "    line[$lineIndex] adjusted=${line.adjustedWidth.oneDecimal()} natural=${line.naturalWidth.oneDecimal()} range=${line.range.start}-${line.range.end}$repairTag",
+            "    line[$lineIndex] adjusted=${line.adjustedWidth.oneDecimal()} visual=${line.visualWidth.oneDecimal()} range=${line.range.start}-${line.range.end}$repairTag$justifyTag",
         )
     }
 }
@@ -126,6 +133,8 @@ private fun renderHtmlReport(items: List<PlaygroundReportItem>): String =
               .sample-engine .glyph.latin { background: var(--glyph-latin); border-left: 1px solid var(--glyph-latin-border); border-right: 1px solid var(--glyph-latin-border); }
               .sample-engine .glyph .ch { font-size: 16px; line-height: 1; transform: translateY(0); }
               .sample-engine .repair-tag { position: absolute; right: -6px; transform: translate(100%, 0); padding: 1px 6px; font-size: 10px; background: rgba(196, 80, 60, 0.12); color: #b03a2e; border: 1px solid rgba(196, 80, 60, 0.45); border-radius: 3px; white-space: nowrap; pointer-events: none; }
+              .sample-engine .justify-tag { position: absolute; right: -6px; transform: translate(100%, 0); padding: 1px 6px; font-size: 10px; background: rgba(60, 140, 90, 0.10); color: #2e7d4f; border: 1px solid rgba(60, 140, 90, 0.40); border-radius: 3px; white-space: nowrap; pointer-events: none; }
+              .sample-engine .max-width-rule { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(80, 120, 200, 0.3); pointer-events: none; }
               .legend { display: flex; gap: 12px; font-size: 11px; color: var(--muted); margin-top: 8px; flex-wrap: wrap; }
               .legend .swatch { display: inline-block; width: 10px; height: 10px; vertical-align: middle; margin-right: 4px; border: 1px solid currentColor; }
               .legend .baseline-sw { background: transparent; border-top: 1px solid var(--baseline); border-left: none; border-right: none; border-bottom: none; height: 0; width: 14px; }
@@ -221,6 +230,14 @@ private fun renderEngineColumn(label: String, result: LayoutResult, maxWidth: Fl
                     "<div class=\"repair-tag\" style=\"top:${line.top.oneDecimal()}px\">↻ $repair</div>",
                 )
             }
+            val justification = result.debug.justificationDecisions.firstOrNull { it.lineRange == line.range }
+            if (justification != null && justification.allocations.isNotEmpty()) {
+                val kinds = justification.allocations.map { it.kind }.distinct().joinToString("+")
+                val totalDelta = justification.allocations.sumOf { it.delta.toDouble() }.toFloat()
+                appendLine(
+                    "<div class=\"justify-tag\" style=\"top:${(line.top + 18f).oneDecimal()}px\">↔ ${kinds} +${totalDelta.oneDecimal()}</div>",
+                )
+            }
         }
         appendLine("</div>")
         appendLine("</div>")
@@ -232,13 +249,25 @@ private fun renderEngineMetadata(label: String, result: LayoutResult): String =
         appendLine("<div class=\"col-label\">${label.escapeHtml()}</div>")
         result.lines.forEachIndexed { lineIndex, line ->
             val repair = result.debug.lineDecisions.getOrNull(lineIndex)
+            val justification = result.debug.justificationDecisions.firstOrNull { it.lineRange == line.range }
             appendLine("<div class=\"metrics\">")
             appendLine("<span class=\"metric\">line $lineIndex</span>")
             appendLine("<span class=\"metric\">range ${line.range.start}-${line.range.end}</span>")
             appendLine("<span class=\"metric\">natural ${line.naturalWidth.oneDecimal()}</span>")
             appendLine("<span class=\"metric\">adjusted ${line.adjustedWidth.oneDecimal()}</span>")
+            appendLine("<span class=\"metric\">visual ${line.visualWidth.oneDecimal()}</span>")
             if (repair?.repair != null) {
                 appendLine("<span class=\"metric\">repair ${repair.repair} (+${repair.repairPenalty})</span>")
+            }
+            if (justification != null) {
+                appendLine(
+                    "<span class=\"metric\">justify deficit ${justification.deficitBefore.oneDecimal()}→${justification.deficitAfter.oneDecimal()}</span>",
+                )
+                justification.allocations.forEach { alloc ->
+                    appendLine(
+                        "<span class=\"metric\">${alloc.kind} +${alloc.delta.oneDecimal()} @${alloc.clusterRange.start}-${alloc.clusterRange.end}</span>",
+                    )
+                }
             }
             appendLine("</div>")
         }

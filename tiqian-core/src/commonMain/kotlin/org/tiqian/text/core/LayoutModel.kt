@@ -54,6 +54,7 @@ data class LayoutDebugInfo(
     val spacingDecisions: List<SpacingDecisionInfo> = emptyList(),
     val roleOverrides: List<RoleOverrideInfo> = emptyList(),
     val lineDecisions: List<LineDecisionInfo> = emptyList(),
+    val justificationDecisions: List<JustificationDecisionInfo> = emptyList(),
 )
 
 data class FontDecisionInfo(
@@ -120,4 +121,19 @@ data class LineDecisionInfo(
     val repair: String? = null,
     val repairPenalty: Int = 0,
     val notes: List<String> = emptyList(),
+)
+
+data class JustificationDecisionInfo(
+    val lineRange: TextRange,
+    val deficitBefore: Float,
+    val deficitAfter: Float,
+    val allocations: List<JustificationAllocationInfo>,
+)
+
+data class JustificationAllocationInfo(
+    val clusterRange: TextRange,
+    val kind: String,
+    val priority: Int,
+    val delta: Float,
+    val reason: String,
 )

@@ -1,12 +1,14 @@
 package org.tiqian.text.test
 
 import org.tiqian.text.core.LayoutConstraints
+import org.tiqian.text.core.TextAlign
 
 data class LayoutFixture(
     val id: String,
     val text: String,
     val constraints: LayoutConstraints,
     val notes: String,
+    val textAlign: TextAlign = TextAlign.Start,
 )
 
 object EarlyLayoutFixtures {
@@ -58,6 +60,20 @@ object EarlyLayoutFixtures {
             text = "中文中文中文。",
             constraints = LayoutConstraints(maxWidth = 48f),
             notes = "At width 48 greedy ends up with a CarryPrevious repair on the last line; lookahead shifts the first break earlier to avoid the conflict entirely.",
+        ),
+        LayoutFixture(
+            id = "justify-cjk-paragraph",
+            text = "中文中文中文中文中文中文",
+            constraints = LayoutConstraints(maxWidth = 100f),
+            notes = "Justification fills the small deficit on the first line by adding CjkInterChar glue between adjacent CJK clusters. textAlign=Justify.",
+            textAlign = TextAlign.Justify,
+        ),
+        LayoutFixture(
+            id = "justify-mixed-paragraph",
+            text = "中文Hello中文，世界。",
+            constraints = LayoutConstraints(maxWidth = 144f),
+            notes = "Justification uses CjkLatinSpace at the CJK↔Latin boundary plus PunctuationGlue if a spacing reduction landed on the line. textAlign=Justify.",
+            textAlign = TextAlign.Justify,
         ),
     )
 }

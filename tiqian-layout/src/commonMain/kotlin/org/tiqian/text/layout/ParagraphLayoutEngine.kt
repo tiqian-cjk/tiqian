@@ -9,6 +9,8 @@ import org.tiqian.text.core.Cluster
 import org.tiqian.text.core.FontDecisionInfo
 import org.tiqian.text.core.Glyph
 import org.tiqian.text.core.GlyphRun
+import org.tiqian.text.core.JustificationAllocationInfo
+import org.tiqian.text.core.JustificationDecisionInfo
 import org.tiqian.text.core.LayoutDebugInfo
 import org.tiqian.text.core.LayoutInput
 import org.tiqian.text.core.LayoutResult
@@ -20,6 +22,7 @@ import org.tiqian.text.core.PunctuationDecisionInfo
 import org.tiqian.text.core.RoleOverrideInfo
 import org.tiqian.text.core.Size
 import org.tiqian.text.core.SpacingDecisionInfo
+import org.tiqian.text.core.TextAlign
 import org.tiqian.text.core.TextRange
 import org.tiqian.text.font.CjkFontRoleClassifier
 import org.tiqian.text.font.FallbackResolver
@@ -51,6 +54,7 @@ class ExplainableStubParagraphLayoutEngine(
     private val punctuationSpacingCompressor: PunctuationSpacingCompressor = PunctuationSpacingCompressor(),
     private val quotePairAnalyzer: QuotePairAnalyzer = QuotePairAnalyzer(),
     private val lineBreaker: LineBreaker = GreedyLineBreaker(),
+    private val justifier: Justifier = Justifier(),
 ) : ParagraphLayoutEngine {
     override fun layout(input: LayoutInput): LayoutResult {
         val text = input.content.text
@@ -131,7 +135,46 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        val glyphRuns = clusters.groupAdjacentBy { it.fontKey }.map { runClusters ->
+        val lineMetrics = metricDecisions.lineMetrics(input.paragraphStyle.lineHeight)
+        val lineSolution = if (text.isEmpty()) {
+            LineSolution(emptyList())
+        } else {
+            lineBreaker.breakLines(
+                naturalClusters = naturalClusters,
+                adjustedClusters = clusters,
+                maxWidth = input.constraints.maxWidth,
+            )
+        }
+
+        val clusterRoles = fontDecisions.map { it.role }
+        val justify = input.paragraphStyle.textAlign == TextAlign.Justify
+        val justificationPlans: List<JustificationPlan?> = lineSolution.lines.mapIndexed { lineIndex, lineCandidate ->
+            val isLast = lineIndex == lineSolution.lines.lastIndex
+            if (!justify || isLast) {
+                null
+            } else {
+                justifier.justify(
+                    adjustedClusters = clusters,
+                    clusterRoles = clusterRoles,
+                    lineClusterRange = lineCandidate.clusterRange,
+                    maxWidth = input.constraints.maxWidth,
+                    spacingPlan = spacingPlan,
+                    fontSize = fontSize,
+                    skip = false,
+                )
+            }
+        }
+        val justifyDeltaByCluster = HashMap<Int, Float>().apply {
+            justificationPlans.filterNotNull()
+                .flatMap { it.allocations }
+                .forEach { alloc -> merge(alloc.targetClusterIndex, alloc.delta) { a, b -> a + b } }
+        }
+        val finalClusters = clusters.mapIndexed { idx, c ->
+            val extra = justifyDeltaByCluster[idx] ?: 0f
+            if (extra == 0f) c else c.copy(advance = c.advance + extra)
+        }
+
+        val glyphRuns = finalClusters.groupAdjacentBy { it.fontKey }.map { runClusters ->
             GlyphRun(
                 range = TextRange(runClusters.first().range.start, runClusters.last().range.end),
                 fontKey = runClusters.first().fontKey,
@@ -146,17 +189,10 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        val lineMetrics = metricDecisions.lineMetrics(input.paragraphStyle.lineHeight)
-        val lineSolution = if (text.isEmpty()) {
-            LineSolution(emptyList())
-        } else {
-            lineBreaker.breakLines(
-                naturalClusters = naturalClusters,
-                adjustedClusters = clusters,
-                maxWidth = input.constraints.maxWidth,
-            )
-        }
         val lines = lineSolution.lines.mapIndexed { lineIndex, lineCandidate ->
+            val visualWidth = lineCandidate.clusterRange
+                .sumOf { finalClusters[it].advance.toDouble() }
+                .toFloat()
             LineBox(
                 range = lineCandidate.sourceRange,
                 baseline = lineMetrics.baseline + lineIndex * lineMetrics.height,
@@ -164,17 +200,17 @@ class ExplainableStubParagraphLayoutEngine(
                 bottom = (lineIndex + 1) * lineMetrics.height,
                 naturalWidth = lineCandidate.naturalWidth,
                 adjustedWidth = lineCandidate.adjustedWidth,
-                visualWidth = lineCandidate.adjustedWidth,
+                visualWidth = visualWidth,
                 debug = LineDebugInfo(
                     repair = lineCandidate.repair?.let { "${it::class.simpleName}:${it.reason}" },
                     notes = listOf(
                         "line:${lineIndex}:clusters=${lineCandidate.clusterRange.first}-${lineCandidate.clusterRange.last}",
-                        "natural=${lineCandidate.naturalWidth},adjusted=${lineCandidate.adjustedWidth}",
+                        "natural=${lineCandidate.naturalWidth},adjusted=${lineCandidate.adjustedWidth},visual=$visualWidth",
                     ),
                 ),
             )
         }
-        val widestLine = lines.maxOfOrNull { it.adjustedWidth } ?: 0f
+        val widestLine = lines.maxOfOrNull { it.visualWidth } ?: 0f
         val totalHeight = if (lines.isEmpty()) lineMetrics.height else lines.size * lineMetrics.height
         val resultWidth = widestLine.coerceAtMost(input.constraints.maxWidth)
 
@@ -184,7 +220,7 @@ class ExplainableStubParagraphLayoutEngine(
                 width = resultWidth,
                 height = totalHeight,
             ),
-            clusters = clusters,
+            clusters = finalClusters,
             glyphRuns = glyphRuns,
             lines = lines,
             debug = LayoutDebugInfo(
@@ -254,9 +290,31 @@ class ExplainableStubParagraphLayoutEngine(
                             "index:$lineIndex",
                             "natural:${line.naturalWidth}",
                             "adjusted:${line.adjustedWidth}",
+                            "visual:${line.visualWidth}",
                         ) + listOfNotNull(candidate.repair?.let { "repair-reason:${it.reason}" }),
                     )
                 },
+                justificationDecisions = justificationPlans.zip(lineSolution.lines)
+                    .mapNotNull { (plan, candidate) ->
+                        plan
+                            ?.takeIf { it.allocations.isNotEmpty() || it.deficitBefore > 0f }
+                            ?.let {
+                                JustificationDecisionInfo(
+                                    lineRange = candidate.sourceRange,
+                                    deficitBefore = it.deficitBefore,
+                                    deficitAfter = it.unfilledDeficit,
+                                    allocations = it.allocations.map { alloc ->
+                                        JustificationAllocationInfo(
+                                            clusterRange = clusters[alloc.targetClusterIndex].range,
+                                            kind = alloc.kind.name,
+                                            priority = alloc.priority,
+                                            delta = alloc.delta,
+                                            reason = alloc.reason,
+                                        )
+                                    },
+                                )
+                            }
+                    },
             ),
         )
     }
