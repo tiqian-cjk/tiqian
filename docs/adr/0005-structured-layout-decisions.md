@@ -33,7 +33,7 @@ ClusterRoleOverride  (range, originalRole, overriddenRole, source, reason)   // 
 
 `LayoutDebugInfo` 的字段从 `List<String>` 改为这些类型的列表；现有的字符串 dump 通过 `toDebugString()` 扩展提供，golden 测试可继续工作。
 
-### 2. SpacingPlan 替代 advance mutation
+### 2. SpacingPlan 作为结构化解释，与 cluster 的最终 advance 共存
 
 ```text
 SpacingPlan
@@ -41,7 +41,18 @@ SpacingPlan
   totalReduction: Float
 ```
 
-`Cluster.advance` 保持自然值。Line 计算时把 plan 合成进 line.adjustedWidth / visualWidth。Justifier (Slice 5) 拿到的是 natural advance + spacing plan，可以重新分配 glue。
+实际落地的 pipeline：
+
+```text
+naturalClusters (advance = 自然值)
+  -> punctuationAtoms
+  -> spacingPlan = compressor.compress(atoms)
+  -> clusters    = naturalClusters.applyPlan(spacingPlan)   // advance 压缩到最终值
+```
+
+`Cluster.advance` 携带压缩后的最终 advance，渲染器可以直接 draw；`line.naturalWidth = sum(naturalClusters.advance)` 记录压缩前总宽，`line.adjustedWidth` 与 `line.visualWidth` 记录压缩后总宽，差额由 `spacingPlan.totalReduction` 解释。`result.debug.spacingDecisions` 用结构化条目暴露每一次 reduction 的 left/right char、targetRange、reason，供 justifier (Slice 5) 在需要时重新分配 glue。
+
+关键差别：`SpacingPlan` 不是「替代」cluster mutation 的唯一来源，而是为这次 mutation **保留结构化解释**——cluster 携带渲染所需的几何，plan 携带「这几何是怎么从自然值压缩来的」。Slice 5 的 justifier 读 plan 即可恢复并重新分配。
 
 ### 3. FontRoleClassifier 接 profile
 
@@ -64,7 +75,7 @@ interface FontRoleClassifier {
 ## Consequences
 
 - LayoutResult 真正可被结构化消费：playground HTML、未来 IDE 调试器、benchmark、screenshot 比对都能拿到字段而不是 grep 字符串。
-- Slice 5 (justification) 可以直接基于 SpacingPlan + natural advance 工作，不需要 reverse-engineer 已 mutation 的 advance。
+- Slice 5 (justification) 可以基于 `clusters + spacingPlan` 恢复自然 advance 并重新分配 glue；无需扫源码反推压缩规则。
 - profile-driven 规则集中到 clreq 模块；引擎里再出现 `if (cp == ...)` 应在 review 时打回。
 - 测试可以从「字符串 contains」迁到「字段断言」，重构成本下降。
 - 不影响任何现有 fixture 的行为；这是纯结构重构。

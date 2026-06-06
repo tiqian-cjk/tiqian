@@ -256,7 +256,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
-    fun compressesAdjacentPunctuationViaPlanWithoutMutatingClusterAdvance() {
+    fun appliesAdjacentPunctuationCompressionToDrawableGeometry() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 content = TiqianTextContent("你好，。"),
@@ -271,9 +271,9 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals(60f, line.adjustedWidth)
         assertEquals(60f, line.visualWidth)
         assertEquals(60f, result.size.width)
-        // Cluster advance stays at natural value; reduction is captured by the
-        // spacing plan so the justifier in a later slice can re-allocate glue.
-        assertEquals(16f, stop.advance)
+        assertEquals(12f, stop.advance)
+        assertEquals(60f, result.clusters.sumOf { it.advance.toDouble() }.toFloat())
+        assertEquals(60f, result.glyphRuns.sumOf { it.advance.toDouble() }.toFloat())
         assertTrue(line.debug.notes.contains("punctuation-spacing-reduction:4.0"))
 
         val spacing = result.debug.spacingDecisions.single()

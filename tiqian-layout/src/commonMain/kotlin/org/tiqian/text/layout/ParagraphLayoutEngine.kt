@@ -86,7 +86,7 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        val clusters = fontDecisions.map { decision ->
+        val naturalClusters = fontDecisions.map { decision ->
             val sourceText = text.substring(decision.range.start, decision.range.end)
             val substitution = punctuationGlyphSubstitutor.substitute(sourceText)
             Cluster(
@@ -101,10 +101,11 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        val punctuationAtoms = clusters.flatMap { cluster ->
+        val punctuationAtoms = naturalClusters.flatMap { cluster ->
             cluster.punctuationAtoms(em = fontSize, builder = punctuationAtomBuilder)
         }
         val spacingPlan = punctuationSpacingCompressor.compress(punctuationAtoms)
+        val clusters = naturalClusters.withPunctuationSpacingCompression(spacingPlan)
 
         val metricDecisions = fontDecisions.map { decision ->
             val request = FontMetricsRequest(
@@ -144,8 +145,8 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        val naturalAdvance = clusters.sumOf { it.advance.toDouble() }.toFloat()
-        val adjustedAdvance = (naturalAdvance - spacingPlan.totalReduction).coerceAtLeast(0f)
+        val naturalAdvance = naturalClusters.sumOf { it.advance.toDouble() }.toFloat()
+        val adjustedAdvance = glyphRuns.sumOf { it.advance.toDouble() }.toFloat()
         val resultWidth = adjustedAdvance.coerceAtMost(input.constraints.maxWidth)
         val lineMetrics = metricDecisions.lineMetrics(input.paragraphStyle.lineHeight)
         val lines = if (text.isEmpty()) {
@@ -342,6 +343,27 @@ class ExplainableStubParagraphLayoutEngine(
         } else {
             range
         }
+
+    private fun List<Cluster>.withPunctuationSpacingCompression(
+        compression: PunctuationSpacingCompressionResult,
+    ): List<Cluster> {
+        if (compression.adjustments.isEmpty()) return this
+
+        return map { cluster ->
+            val reduction = compression.adjustments
+                .filter { adjustment -> adjustment.reductionTargetRange.isInside(cluster.range) }
+                .sumOf { it.reduction.toDouble() }
+                .toFloat()
+            if (reduction == 0f) {
+                cluster
+            } else {
+                cluster.copy(advance = (cluster.advance - reduction).coerceAtLeast(0f))
+            }
+        }
+    }
+
+    private fun TextRange.isInside(other: TextRange): Boolean =
+        start >= other.start && end <= other.end
 
     private fun List<ClusterMetricDecision>.lineMetrics(explicitLineHeight: Float?): ResolvedLineMetrics {
         if (isEmpty()) {
