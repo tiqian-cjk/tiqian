@@ -127,6 +127,40 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun keepsTextStartLatinQuotePairInLatinRun() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("\u201CHello\u201D world"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val quoted = result.clusters.first()
+
+        assertEquals("\u201CHello\u201D", quoted.text)
+        assertEquals("latin-primary", quoted.fontKey)
+        assertTrue(
+            result.debug.fontDecisions.any {
+                it.contains("\u201CHello\u201D") && it.contains(FontRole.LatinText.name)
+            },
+        )
+    }
+
+    @Test
+    fun skipsNeutralDashBeforeLatinQuotePairInLayout() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("English \u2014 \u201Chello\u201D"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val quoted = result.clusters.first { it.text == "\u201Chello\u201D" }
+
+        assertEquals("latin-primary", quoted.fontKey)
+    }
+
+    @Test
     fun buildsTwoEmPunctuationAtomForRecommendedDashCodepoint() {
         val atom = PunctuationAtomBuilder().build("⸺", index = 0, em = 16f)
 

@@ -45,6 +45,7 @@ class CjkFontRoleClassifier : FontRoleClassifier {
         return when {
             firstCodePoint.isCjkCodePoint() -> FontRole.CjkText
             firstCodePoint.isLatinTechnicalPunctuation(text, range) -> FontRole.LatinText
+            firstCodePoint.isLatinCurlyQuote(text, range) -> FontRole.LatinText
             firstCodePoint.isCjkPunctuationCodePoint() -> FontRole.CjkPunctuation
             firstCodePoint.isLatinCodePoint() -> FontRole.LatinText
             firstCodePoint.isEmojiCodePoint() -> FontRole.Emoji
@@ -66,10 +67,7 @@ class CjkFontRoleClassifier : FontRoleClassifier {
     private fun Int.isCjkPunctuationCodePoint(): Boolean =
         this in 0x3000..0x303F ||
             this == 0x2014 ||
-            this == 0x2018 ||
-            this == 0x2019 ||
-            this == 0x201C ||
-            this == 0x201D ||
+            isAmbiguousCurlyQuote() ||
             this == 0x2013 ||
             this == 0x203C ||
             this == 0x2047 ||
@@ -101,8 +99,19 @@ class CjkFontRoleClassifier : FontRoleClassifier {
                     text.nextCodePointAfter(range.end)?.isLatinTechnicalRunCodePoint() == true
                 )
 
+    private fun Int.isLatinCurlyQuote(text: String, range: TextRange): Boolean =
+        isAmbiguousCurlyQuote() &&
+            text.previousCodePointBefore(range.start)?.isLatinRunCodePoint() == true &&
+            text.nextCodePointAfter(range.end)?.isLatinRunCodePoint() == true
+
+    private fun Int.isAmbiguousCurlyQuote(): Boolean =
+        this == 0x2018 || this == 0x2019 || this == 0x201C || this == 0x201D
+
     private fun Int.isAmbiguousAsciiPunctuation(): Boolean =
         this == 0x002D || this == 0x002F || this == 0x007E
+
+    private fun Int.isLatinRunCodePoint(): Boolean =
+        isLatinCodePoint() || isAmbiguousAsciiPunctuation() || isAmbiguousCurlyQuote() || this == 0x0020
 
     private fun Int.isLatinTechnicalRunCodePoint(): Boolean =
         isLatinCodePoint() || isAmbiguousAsciiPunctuation() || this == 0x002E || this == 0x003A || this == 0x005F

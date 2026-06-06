@@ -37,6 +37,41 @@ class CjkFontRoleClassifierTest {
         assertEquals(FontRole.LatinText, classifier.classify("well-known", TextRange(4, 5)))
         assertEquals(FontRole.LatinText, classifier.classify("https://example", TextRange(6, 7)))
         assertEquals(FontRole.LatinText, classifier.classify("https://example", TextRange(7, 8)))
-        assertEquals(FontRole.CjkPunctuation, classifier.classify("中文/中文", TextRange(2, 3)))
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("\u4E2D\u6587/\u4E2D\u6587", TextRange(2, 3)))
+    }
+
+    @Test
+    fun classifiesCurlyQuotesAsCjkWhenSurroundedByCjk() {
+        // U+201C/201D between CJK text -> CjkPunctuation
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("\u4ED6\u8BF4\u201C\u4F60\u597D\u201D", TextRange(2, 3)))
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("\u4ED6\u8BF4\u201C\u4F60\u597D\u201D", TextRange(5, 6)))
+        // U+2018/2019 between CJK text -> CjkPunctuation
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("\u4ED6\u8BF4\u2018\u4F60\u597D\u2019", TextRange(2, 3)))
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("\u4ED6\u8BF4\u2018\u4F60\u597D\u2019", TextRange(5, 6)))
+    }
+
+    @Test
+    fun classifiesCurlyQuotesAsLatinWhenSurroundedByLatin() {
+        // said "hello" -> quotes between Latin chars are LatinText
+        assertEquals(FontRole.LatinText, classifier.classify("said \u201Chello\u201D end", TextRange(5, 6)))
+        assertEquals(FontRole.LatinText, classifier.classify("said \u201Chello\u201D end", TextRange(11, 12)))
+        // it's -> apostrophe between Latin chars is LatinText
+        assertEquals(FontRole.LatinText, classifier.classify("it\u2019s", TextRange(2, 3)))
+    }
+
+    @Test
+    fun classifiesCurlyQuotesAsCjkInMixedContext() {
+        // CJK"Latin" -> opening quote has CJK on left, so CjkPunctuation
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("\u4ED6\u8BF4\u201Chello\u201D", TextRange(2, 3)))
+        // CJK"Latin" -> closing quote has Latin on left but nothing/end on right, so CjkPunctuation
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("\u4ED6\u8BF4\u201Chello\u201D", TextRange(8, 9)))
+    }
+
+    @Test
+    fun classifiesCurlyQuotesAsCjkAtTextBoundary() {
+        // Quote at start of text -> no left neighbor -> CjkPunctuation
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("\u201C\u4F60\u597D\u201D", TextRange(0, 1)))
+        // Quote at end of text -> no right neighbor -> CjkPunctuation
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("\u201C\u4F60\u597D\u201D", TextRange(3, 4)))
     }
 }

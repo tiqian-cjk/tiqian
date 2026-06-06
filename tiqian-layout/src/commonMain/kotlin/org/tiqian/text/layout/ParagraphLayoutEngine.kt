@@ -41,6 +41,7 @@ class ExplainableStubParagraphLayoutEngine(
     private val fontMetricsNormalizer: FontMetricsNormalizer = ScriptAwareFontMetricsNormalizer(),
     private val punctuationAtomBuilder: PunctuationAtomBuilder = PunctuationAtomBuilder(),
     private val punctuationSpacingCompressor: PunctuationSpacingCompressor = PunctuationSpacingCompressor(),
+    private val quotePairAnalyzer: QuotePairAnalyzer = QuotePairAnalyzer(),
 ) : ParagraphLayoutEngine {
     override fun layout(input: LayoutInput): LayoutResult {
         val text = input.content.text
@@ -51,9 +52,17 @@ class ExplainableStubParagraphLayoutEngine(
             policy = clreqProfile.punctuationGlyphPolicy,
         )
 
-        val clusterRanges = clusterRanges(text)
+        val quotePairs = quotePairAnalyzer.analyze(text)
+        val quoteRoleOverrides = quotePairAnalyzer.classifyPairs(text, quotePairs, fontRoleClassifier)
+        val effectiveClassifier: FontRoleClassifier = if (quoteRoleOverrides.isNotEmpty()) {
+            QuotePairAwareFontRoleClassifier(fontRoleClassifier, quoteRoleOverrides)
+        } else {
+            fontRoleClassifier
+        }
+
+        val clusterRanges = clusterRanges(text, effectiveClassifier)
         val fontDecisions = clusterRanges.map { range ->
-            val role = fontRoleClassifier.classify(text, range)
+            val role = effectiveClassifier.classify(text, range)
             fallbackResolver.resolve(
                 text = text,
                 range = range,
@@ -192,7 +201,7 @@ class ExplainableStubParagraphLayoutEngine(
         )
     }
 
-    private fun clusterRanges(text: String): List<TextRange> {
+    private fun clusterRanges(text: String, classifier: FontRoleClassifier): List<TextRange> {
         val ranges = mutableListOf<TextRange>()
         var index = 0
         while (index < text.length) {
@@ -200,7 +209,7 @@ class ExplainableStubParagraphLayoutEngine(
             val charCount = codePoint.charCount()
             val start = index
             val firstRange = TextRange(start, start + charCount)
-            val role = fontRoleClassifier.classify(text, firstRange)
+            val role = classifier.classify(text, firstRange)
 
             index += charCount
             if (role == FontRole.LatinText) {
@@ -208,7 +217,7 @@ class ExplainableStubParagraphLayoutEngine(
                     val nextCodePoint = text.codePointAtCompat(index)
                     val nextCharCount = nextCodePoint.charCount()
                     val nextRange = TextRange(index, index + nextCharCount)
-                    if (fontRoleClassifier.classify(text, nextRange) != FontRole.LatinText) break
+                    if (classifier.classify(text, nextRange) != FontRole.LatinText) break
                     index += nextCharCount
                 }
             } else if (role == FontRole.CjkPunctuation && codePoint.isRepeatableCjkPunctuation()) {
