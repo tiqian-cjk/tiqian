@@ -41,7 +41,14 @@ class GreedyLineBreaker(
         }
 
         val greedy = greedyFill(naturalClusters, adjustedClusters, maxWidth)
-        return applyKinsokuRepairs(greedy, naturalClusters, adjustedClusters)
+        return applyKinsokuRepairs(
+            initial = greedy,
+            naturalClusters = naturalClusters,
+            adjustedClusters = adjustedClusters,
+            kinsoku = kinsoku,
+            carryPreviousPenalty = carryPreviousPenalty,
+            leaveRaggedPenalty = leaveRaggedPenalty,
+        )
     }
 
     private fun greedyFill(
@@ -59,7 +66,6 @@ class GreedyLineBreaker(
             val overflows = nextAdjusted > maxWidth && i > lineStart
             if (overflows) {
                 lines += buildLine(
-                    naturalClusters = naturalClusters,
                     adjustedClusters = adjustedClusters,
                     clusterRange = lineStart..(i - 1),
                     naturalWidth = naturalAccum,
@@ -75,7 +81,6 @@ class GreedyLineBreaker(
         }
 
         lines += buildLine(
-            naturalClusters = naturalClusters,
             adjustedClusters = adjustedClusters,
             clusterRange = lineStart..adjustedClusters.lastIndex,
             naturalWidth = naturalAccum,
@@ -84,53 +89,7 @@ class GreedyLineBreaker(
         return lines
     }
 
-    private fun applyKinsokuRepairs(
-        initial: List<LineCandidate>,
-        naturalClusters: List<Cluster>,
-        adjustedClusters: List<Cluster>,
-    ): LineSolution {
-        if (initial.size < 2) return LineSolution(initial)
-
-        val mutable = initial.toMutableList()
-        for (i in 1 until mutable.size) {
-            val curr = mutable[i]
-            val firstCluster = adjustedClusters[curr.clusterRange.first]
-            if (!kinsoku.forbiddenAtLineStart(firstCluster)) continue
-
-            val prev = mutable[i - 1]
-            val canCarry = prev.clusterRange.first < prev.clusterRange.last
-            if (!canCarry) {
-                // Cannot repair without emptying the previous line.
-                mutable[i] = curr.copy(
-                    repair = RepairOption.LeaveRagged(
-                        penalty = leaveRaggedPenalty,
-                        reason = "ForbiddenAtLineStart:${firstCluster.text}:no-room-to-carry",
-                    ),
-                )
-                continue
-            }
-
-            val carriedIndex = prev.clusterRange.last
-            val newPrevRange = prev.clusterRange.first..(carriedIndex - 1)
-            val newCurrRange = carriedIndex..curr.clusterRange.last
-            mutable[i - 1] = rebuildLine(newPrevRange, naturalClusters, adjustedClusters)
-            mutable[i] = rebuildLine(
-                newCurrRange,
-                naturalClusters,
-                adjustedClusters,
-                repair = RepairOption.CarryPrevious(
-                    penalty = carryPreviousPenalty,
-                    reason = "ForbiddenAtLineStart:${firstCluster.text}:carried=${adjustedClusters[carriedIndex].text}",
-                ),
-            )
-        }
-
-        val totalBadness = mutable.sumOf { (it.repair?.penalty ?: 0).toDouble() }.toFloat()
-        return LineSolution(mutable, totalBadness = totalBadness)
-    }
-
     private fun buildLine(
-        naturalClusters: List<Cluster>,
         adjustedClusters: List<Cluster>,
         clusterRange: IntRange,
         naturalWidth: Float,
@@ -145,28 +104,233 @@ class GreedyLineBreaker(
             adjustedWidth = adjustedWidth,
         )
     }
+}
 
-    private fun rebuildLine(
-        clusterRange: IntRange,
+/**
+ * LookaheadLineBreaker — runs greedy first, then for each line decision tries
+ * shifting the break by [window] clusters on either side and scores each
+ * candidate by simulating the next [futureLineHorizon] lines (greedy + kinsoku
+ * applied to the splice). Picks the candidate with the lowest combined badness.
+ *
+ * Badness per line = raggedness * [raggednessWeight] + repair penalty.
+ * Last line raggedness is not penalized (a short last line is expected).
+ *
+ * Defaults are tuned so that a single em of raggedness costs less than a
+ * CarryPrevious repair (8 vs 10), and noticeably less than LeaveRagged (8 vs
+ * 20), so kinsoku conflicts that can be sidestepped by a one-cluster shift are
+ * preferred over leaving the conflict in place.
+ */
+class LookaheadLineBreaker(
+    private val window: Int = 1,
+    private val futureLineHorizon: Int = 2,
+    private val raggednessWeight: Float = 0.5f,
+    private val kinsoku: KinsokuRule = ClreqKinsokuRule(),
+    private val carryPreviousPenalty: Int = 10,
+    private val leaveRaggedPenalty: Int = 20,
+) : LineBreaker {
+    private val greedy = GreedyLineBreaker(
+        kinsoku = kinsoku,
+        carryPreviousPenalty = carryPreviousPenalty,
+        leaveRaggedPenalty = leaveRaggedPenalty,
+    )
+
+    override fun breakLines(
         naturalClusters: List<Cluster>,
         adjustedClusters: List<Cluster>,
-        repair: RepairOption? = null,
-    ): LineCandidate {
-        var natural = 0f
-        var adjusted = 0f
-        for (idx in clusterRange) {
-            natural += naturalClusters[idx].advance
-            adjusted += adjustedClusters[idx].advance
+        maxWidth: Float,
+    ): LineSolution {
+        if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
+        require(naturalClusters.size == adjustedClusters.size) {
+            "naturalClusters and adjustedClusters must align cluster-for-cluster."
         }
-        return LineCandidate(
-            clusterRange = clusterRange,
-            sourceRange = TextRange(
-                adjustedClusters[clusterRange.first].range.start,
-                adjustedClusters[clusterRange.last].range.end,
-            ),
-            naturalWidth = natural,
-            adjustedWidth = adjusted,
-            repair = repair,
+        require(window >= 0) { "window must be non-negative." }
+        require(futureLineHorizon >= 0) { "futureLineHorizon must be non-negative." }
+
+        val committed = mutableListOf<LineCandidate>()
+        var lineStart = 0
+        while (lineStart < adjustedClusters.size) {
+            val greedyEnd = findGreedyEnd(adjustedClusters, lineStart, maxWidth)
+            if (greedyEnd >= adjustedClusters.size) {
+                committed += rebuildLine(
+                    lineStart..adjustedClusters.lastIndex,
+                    naturalClusters,
+                    adjustedClusters,
+                )
+                break
+            }
+
+            // Candidates only shift earlier than greedy. Shifting later would
+            // overflow maxWidth (Hang territory, not yet implemented).
+            val candidates = ((greedyEnd - window)..greedyEnd)
+                .filter { it in (lineStart + 1)..adjustedClusters.size }
+                .distinct()
+
+            var bestEnd = greedyEnd
+            var bestScore = Float.POSITIVE_INFINITY
+            for (e in candidates) {
+                val score = scoreCandidate(
+                    s = lineStart,
+                    e = e,
+                    natural = naturalClusters,
+                    adjusted = adjustedClusters,
+                    maxWidth = maxWidth,
+                )
+                if (score < bestScore) {
+                    bestScore = score
+                    bestEnd = e
+                }
+            }
+
+            committed += rebuildLine(
+                lineStart..(bestEnd - 1),
+                naturalClusters,
+                adjustedClusters,
+            )
+            lineStart = bestEnd
+        }
+
+        return applyKinsokuRepairs(
+            initial = committed,
+            naturalClusters = naturalClusters,
+            adjustedClusters = adjustedClusters,
+            kinsoku = kinsoku,
+            carryPreviousPenalty = carryPreviousPenalty,
+            leaveRaggedPenalty = leaveRaggedPenalty,
         )
     }
+
+    private fun scoreCandidate(
+        s: Int,
+        e: Int,
+        natural: List<Cluster>,
+        adjusted: List<Cluster>,
+        maxWidth: Float,
+    ): Float {
+        val firstLine = rebuildLine(s..(e - 1), natural, adjusted)
+        val futureSolution = if (e >= adjusted.size) {
+            LineSolution(emptyList())
+        } else {
+            greedy.breakLines(
+                naturalClusters = natural.subList(e, natural.size),
+                adjustedClusters = adjusted.subList(e, adjusted.size),
+                maxWidth = maxWidth,
+            )
+        }
+        // Re-resolve future lines onto absolute cluster indices.
+        val absoluteFuture = futureSolution.lines.map { l ->
+            l.copy(
+                clusterRange = (l.clusterRange.first + e)..(l.clusterRange.last + e),
+            )
+        }
+        // Apply kinsoku across [firstLine] + absoluteFuture so any conflict at
+        // the splice between firstLine and absoluteFuture[0] is realised here.
+        val spliced = applyKinsokuRepairs(
+            initial = listOf(firstLine) + absoluteFuture,
+            naturalClusters = natural,
+            adjustedClusters = adjusted,
+            kinsoku = kinsoku,
+            carryPreviousPenalty = carryPreviousPenalty,
+            leaveRaggedPenalty = leaveRaggedPenalty,
+        ).lines
+
+        val horizon = (1 + futureLineHorizon).coerceAtMost(spliced.size)
+        var score = 0f
+        for (idx in 0 until horizon) {
+            val isLast = (idx == spliced.lastIndex)
+            score += badness(spliced[idx], maxWidth, isLast)
+        }
+        return score
+    }
+
+    private fun badness(line: LineCandidate, maxWidth: Float, isLast: Boolean): Float {
+        val ragged = if (isLast) 0f else (maxWidth - line.adjustedWidth).coerceAtLeast(0f)
+        return ragged * raggednessWeight + (line.repair?.penalty ?: 0).toFloat()
+    }
+}
+
+internal fun applyKinsokuRepairs(
+    initial: List<LineCandidate>,
+    naturalClusters: List<Cluster>,
+    adjustedClusters: List<Cluster>,
+    kinsoku: KinsokuRule,
+    carryPreviousPenalty: Int,
+    leaveRaggedPenalty: Int,
+): LineSolution {
+    if (initial.size < 2) return LineSolution(initial)
+
+    val mutable = initial.toMutableList()
+    for (i in 1 until mutable.size) {
+        val curr = mutable[i]
+        val firstCluster = adjustedClusters[curr.clusterRange.first]
+        if (!kinsoku.forbiddenAtLineStart(firstCluster)) continue
+
+        val prev = mutable[i - 1]
+        val canCarry = prev.clusterRange.first < prev.clusterRange.last
+        if (!canCarry) {
+            mutable[i] = curr.copy(
+                repair = RepairOption.LeaveRagged(
+                    penalty = leaveRaggedPenalty,
+                    reason = "ForbiddenAtLineStart:${firstCluster.text}:no-room-to-carry",
+                ),
+            )
+            continue
+        }
+
+        val carriedIndex = prev.clusterRange.last
+        val newPrevRange = prev.clusterRange.first..(carriedIndex - 1)
+        val newCurrRange = carriedIndex..curr.clusterRange.last
+        mutable[i - 1] = rebuildLine(newPrevRange, naturalClusters, adjustedClusters)
+        mutable[i] = rebuildLine(
+            newCurrRange,
+            naturalClusters,
+            adjustedClusters,
+            repair = RepairOption.CarryPrevious(
+                penalty = carryPreviousPenalty,
+                reason = "ForbiddenAtLineStart:${firstCluster.text}:carried=${adjustedClusters[carriedIndex].text}",
+            ),
+        )
+    }
+
+    val totalBadness = mutable.sumOf { (it.repair?.penalty ?: 0).toDouble() }.toFloat()
+    return LineSolution(mutable, totalBadness = totalBadness)
+}
+
+internal fun rebuildLine(
+    clusterRange: IntRange,
+    naturalClusters: List<Cluster>,
+    adjustedClusters: List<Cluster>,
+    repair: RepairOption? = null,
+): LineCandidate {
+    var natural = 0f
+    var adjusted = 0f
+    for (idx in clusterRange) {
+        natural += naturalClusters[idx].advance
+        adjusted += adjustedClusters[idx].advance
+    }
+    return LineCandidate(
+        clusterRange = clusterRange,
+        sourceRange = TextRange(
+            adjustedClusters[clusterRange.first].range.start,
+            adjustedClusters[clusterRange.last].range.end,
+        ),
+        naturalWidth = natural,
+        adjustedWidth = adjusted,
+        repair = repair,
+    )
+}
+
+internal fun findGreedyEnd(
+    adjustedClusters: List<Cluster>,
+    start: Int,
+    maxWidth: Float,
+): Int {
+    var accum = 0f
+    var i = start
+    while (i < adjustedClusters.size) {
+        val next = accum + adjustedClusters[i].advance
+        if (next > maxWidth && i > start) return i
+        accum = next
+        i += 1
+    }
+    return adjustedClusters.size
 }

@@ -53,5 +53,11 @@ object EarlyLayoutFixtures {
             constraints = LayoutConstraints(maxWidth = 64f),
             notes = "Forces a kinsoku CarryPrevious repair: greedy break would put 。 at line start, so the engine pulls the preceding character down.",
         ),
+        LayoutFixture(
+            id = "lookahead-avoids-repair",
+            text = "中文中文中文。",
+            constraints = LayoutConstraints(maxWidth = 48f),
+            notes = "At width 48 greedy ends up with a CarryPrevious repair on the last line; lookahead shifts the first break earlier to avoid the conflict entirely.",
+        ),
     )
 }

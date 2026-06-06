@@ -7,25 +7,28 @@ import org.tiqian.text.core.LineBox
 import org.tiqian.text.core.SpacingDecisionInfo
 import org.tiqian.text.core.TiqianTextContent
 import org.tiqian.text.layout.ExplainableStubParagraphLayoutEngine
+import org.tiqian.text.layout.GreedyLineBreaker
+import org.tiqian.text.layout.LookaheadLineBreaker
 import org.tiqian.text.test.EarlyLayoutFixtures
 import org.tiqian.text.test.LayoutFixture
 import java.io.File
 import java.util.Locale
 
 fun main() {
-    val engine = ExplainableStubParagraphLayoutEngine()
+    val greedyEngine = ExplainableStubParagraphLayoutEngine(lineBreaker = GreedyLineBreaker())
+    val lookaheadEngine = ExplainableStubParagraphLayoutEngine(lineBreaker = LookaheadLineBreaker())
     val reportItems = mutableListOf<PlaygroundReportItem>()
 
     EarlyLayoutFixtures.all.forEach { fixture ->
-        val result = engine.layout(
-            LayoutInput(
-                content = TiqianTextContent(fixture.text),
-                constraints = fixture.constraints,
-            ),
+        val input = LayoutInput(
+            content = TiqianTextContent(fixture.text),
+            constraints = fixture.constraints,
         )
+        val greedyResult = greedyEngine.layout(input)
+        val lookaheadResult = lookaheadEngine.layout(input)
 
-        reportItems += PlaygroundReportItem(fixture, result)
-        printFixtureDump(fixture, result)
+        reportItems += PlaygroundReportItem(fixture, greedyResult, lookaheadResult)
+        printFixtureDump(fixture, greedyResult, lookaheadResult)
     }
 
     val reportFile = File("build/reports/tiqian-layout-playground/index.html")
@@ -37,29 +40,35 @@ fun main() {
 
 private data class PlaygroundReportItem(
     val fixture: LayoutFixture,
-    val result: LayoutResult,
+    val greedy: LayoutResult,
+    val lookahead: LayoutResult,
 )
 
-private fun printFixtureDump(fixture: LayoutFixture, result: LayoutResult) {
-    val totalNatural = result.lines.sumOf { it.naturalWidth.toDouble() }.toFloat()
-    val totalAdjusted = result.lines.sumOf { it.adjustedWidth.toDouble() }.toFloat()
-
+private fun printFixtureDump(fixture: LayoutFixture, greedy: LayoutResult, lookahead: LayoutResult) {
     println("${fixture.id}:")
     println("  text=${fixture.text}")
-    println("  size=${result.size.width.oneDecimal()}x${result.size.height.oneDecimal()} lines=${result.lines.size} natural-sum=${totalNatural.oneDecimal()} adjusted-sum=${totalAdjusted.oneDecimal()}")
-    result.lines.forEachIndexed { lineIndex, line ->
-        val lineClusters = result.clusters.filter { it.range.start >= line.range.start && it.range.end <= line.range.end }
-        println(
-            "  line[$lineIndex] natural=${line.naturalWidth.oneDecimal()} adjusted=${line.adjustedWidth.oneDecimal()} " +
-                "baseline=${line.baseline.oneDecimal()} top=${line.top.oneDecimal()} bottom=${line.bottom.oneDecimal()}",
-        )
-        println("    clusters=${lineClusters.joinToString(" | ") { it.compactDump() }}")
-    }
-    if (result.debug.spacingDecisions.isNotEmpty()) {
-        println("  spacing:")
-        result.debug.spacingDecisions.forEach { println("    ${it.compactDump()}") }
+    printEngineDump("greedy   ", greedy)
+    printEngineDump("lookahead", lookahead)
+    if (greedy.debug.spacingDecisions.isNotEmpty()) {
+        println("  spacing (paragraph-wide, identical across engines):")
+        greedy.debug.spacingDecisions.forEach { println("    ${it.compactDump()}") }
     }
     println()
+}
+
+private fun printEngineDump(label: String, result: LayoutResult) {
+    val totalAdjusted = result.lines.sumOf { it.adjustedWidth.toDouble() }.toFloat()
+    val repairs = result.debug.lineDecisions.count { it.repair != null }
+    println(
+        "  [$label] size=${result.size.width.oneDecimal()}x${result.size.height.oneDecimal()} lines=${result.lines.size} adjusted-sum=${totalAdjusted.oneDecimal()} repairs=$repairs",
+    )
+    result.lines.forEachIndexed { lineIndex, line ->
+        val repair = result.debug.lineDecisions.getOrNull(lineIndex)?.repair
+        val repairTag = if (repair != null) " repair=$repair" else ""
+        println(
+            "    line[$lineIndex] adjusted=${line.adjustedWidth.oneDecimal()} natural=${line.naturalWidth.oneDecimal()} range=${line.range.start}-${line.range.end}$repairTag",
+        )
+    }
 }
 
 private fun SpacingDecisionInfo.compactDump(): String =
@@ -103,7 +112,7 @@ private fun renderHtmlReport(items: List<PlaygroundReportItem>): String =
               section { border-top: 1px solid var(--rule); padding: 24px 0 32px; }
               h2 { font-size: 18px; margin: 0 0 4px; }
               .notes { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
-              .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; margin: 12px 0 14px; }
+              .compare { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; align-items: start; margin: 12px 0 14px; }
               .col-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
               .sample-browser { font-size: 16px; line-height: 1; padding: 0; background: var(--panel); border: 1px dashed var(--rule); box-sizing: content-box; word-break: break-word; }
               .sample-engine { position: relative; font-size: 16px; line-height: 1; background: var(--panel); border: 1px dashed var(--rule); box-sizing: content-box; overflow: visible; }
@@ -133,21 +142,20 @@ private fun renderHtmlReport(items: List<PlaygroundReportItem>): String =
         appendLine("<body><main>")
         appendLine("<h1>提椠 layout playground</h1>")
         appendLine(
-            "<p class=\"intro\">每个 fixture 显示两栏：左侧是浏览器在相同宽度下的默认排版结果（没有走提椠引擎），" +
-                "右侧是提椠引擎计算出的 cluster 位置——每个矩形是引擎决定的一个 cluster，宽度 = " +
-                "<code>cluster.advance</code>，纵向位置 = <code>line.top / bottom</code>。红线是 baseline、" +
-                "蓝色点线是 line box 上下沿。Latin 字 cluster 在 stub 实现里按 1em/字符计宽，所以 Latin 文字会从 cluster 框里溢出——这是 stub 故意暴露的差异。</p>",
+            "<p class=\"intro\">每个 fixture 显示三栏：浏览器默认排版 · 提椠 greedy · 提椠 lookahead。" +
+                "中间和右侧是提椠引擎按真实算出的 cluster 位置渲染：每个矩形是一个 cluster，宽度 = " +
+                "<code>cluster.advance</code>，纵向位置 = <code>line.top / bottom</code>。" +
+                "红线 = baseline；蓝色点线 = line box 上下沿；右上红色 <code>↻ 标签</code>表示该行触发了 kinsoku repair。" +
+                "lookahead 会用更小的窗口（默认 ±1 cluster）扫多种断行，挑 raggedness + repair penalty 最低的那种。" +
+                "Latin 字 cluster 在当前 stub 里按 1em/字符计宽，所以 Latin 文字会从 cluster 框里溢出——这是 stub 故意暴露的差异。</p>",
         )
         items.forEach { item -> appendLine(item.renderSection()) }
         appendLine("</main></body></html>")
     }
 
 private fun PlaygroundReportItem.renderSection(): String {
-    val totalNatural = result.lines.sumOf { it.naturalWidth.toDouble() }.toFloat()
-    val totalAdjusted = result.lines.sumOf { it.adjustedWidth.toDouble() }.toFloat()
-    val spacing = result.debug.spacingDecisions
     val maxWidth = fixture.constraints.maxWidth
-    val totalHeight = if (result.lines.isEmpty()) result.size.height else result.lines.last().bottom
+    val spacing = greedy.debug.spacingDecisions
 
     return buildString {
         appendLine("<section>")
@@ -162,9 +170,37 @@ private fun PlaygroundReportItem.renderSection(): String {
         appendLine("<div class=\"sample-browser\" style=\"width:${maxWidth.oneDecimal()}px\">${fixture.text.escapeHtml()}</div>")
         appendLine("</div>")
 
-        // Tiqian engine column.
+        // Tiqian engine columns.
+        appendLine(renderEngineColumn("Tiqian greedy", greedy, maxWidth))
+        appendLine(renderEngineColumn("Tiqian lookahead", lookahead, maxWidth))
+
+        appendLine("</div>") // .compare
+        appendLine(renderLegend())
+
+        // Metadata block (collapsible).
+        appendLine("<details>")
+        appendLine(
+            "<summary>metadata · greedy size ${greedy.size.width.oneDecimal()}×${greedy.size.height.oneDecimal()} · lookahead size ${lookahead.size.width.oneDecimal()}×${lookahead.size.height.oneDecimal()} · spacing ${spacing.size}</summary>",
+        )
+        appendLine(renderEngineMetadata("greedy", greedy))
+        appendLine(renderEngineMetadata("lookahead", lookahead))
+        if (spacing.isNotEmpty()) {
+            appendLine("<pre>${spacing.joinToString("\n") { it.compactDump() }.escapeHtml()}</pre>")
+        }
+        appendLine("</details>")
+
+        appendLine("</section>")
+    }
+}
+
+private fun renderEngineColumn(label: String, result: LayoutResult, maxWidth: Float): String {
+    val totalHeight = if (result.lines.isEmpty()) result.size.height else result.lines.last().bottom
+    val repairs = result.debug.lineDecisions.count { it.repair != null }
+    return buildString {
         appendLine("<div>")
-        appendLine("<div class=\"col-label\">Tiqian engine · width ${maxWidth.oneDecimal()}px · lines ${result.lines.size}</div>")
+        appendLine(
+            "<div class=\"col-label\">${label.escapeHtml()} · width ${maxWidth.oneDecimal()}px · lines ${result.lines.size}${if (repairs > 0) " · repairs $repairs" else ""}</div>",
+        )
         appendLine(
             "<div class=\"sample-engine\" style=\"width:${maxWidth.oneDecimal()}px; height:${totalHeight.oneDecimal()}px\">",
         )
@@ -187,31 +223,26 @@ private fun PlaygroundReportItem.renderSection(): String {
             }
         }
         appendLine("</div>")
-        appendLine(renderLegend())
         appendLine("</div>")
+    }
+}
 
-        appendLine("</div>") // .compare
-
-        // Metadata block (collapsible).
-        appendLine("<details>")
-        appendLine("<summary>metadata · size ${result.size.width.oneDecimal()}×${result.size.height.oneDecimal()} · natural-sum ${totalNatural.oneDecimal()} · adjusted-sum ${totalAdjusted.oneDecimal()} · clusters ${result.clusters.size} · spacing ${spacing.size}</summary>")
+private fun renderEngineMetadata(label: String, result: LayoutResult): String =
+    buildString {
+        appendLine("<div class=\"col-label\">${label.escapeHtml()}</div>")
         result.lines.forEachIndexed { lineIndex, line ->
+            val repair = result.debug.lineDecisions.getOrNull(lineIndex)
             appendLine("<div class=\"metrics\">")
             appendLine("<span class=\"metric\">line $lineIndex</span>")
             appendLine("<span class=\"metric\">range ${line.range.start}-${line.range.end}</span>")
             appendLine("<span class=\"metric\">natural ${line.naturalWidth.oneDecimal()}</span>")
             appendLine("<span class=\"metric\">adjusted ${line.adjustedWidth.oneDecimal()}</span>")
-            appendLine("<span class=\"metric\">baseline ${line.baseline.oneDecimal()}</span>")
+            if (repair?.repair != null) {
+                appendLine("<span class=\"metric\">repair ${repair.repair} (+${repair.repairPenalty})</span>")
+            }
             appendLine("</div>")
         }
-        if (spacing.isNotEmpty()) {
-            appendLine("<pre>${spacing.joinToString("\n") { it.compactDump() }.escapeHtml()}</pre>")
-        }
-        appendLine("</details>")
-
-        appendLine("</section>")
     }
-}
 
 private fun renderLineOverlays(line: LineBox, lineIndex: Int, lastIndex: Int): String {
     // line.baseline is paragraph-absolute (cumulative across lines) — matches the
