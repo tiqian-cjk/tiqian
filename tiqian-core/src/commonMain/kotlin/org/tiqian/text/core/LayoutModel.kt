@@ -3,6 +3,7 @@ package org.tiqian.text.core
 data class Cluster(
     val range: TextRange,
     val text: String,
+    val displayText: String = text,
     val fontKey: String,
     val advance: Float,
 )
@@ -51,4 +52,3 @@ data class LayoutDebugInfo(
     val metricDecisions: List<String> = emptyList(),
     val lineDecisions: List<String> = emptyList(),
 )
-

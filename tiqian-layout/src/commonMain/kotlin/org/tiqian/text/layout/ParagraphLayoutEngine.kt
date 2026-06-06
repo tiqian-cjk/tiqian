@@ -1,5 +1,6 @@
 package org.tiqian.text.layout
 
+import org.tiqian.text.clreq.ClreqPunctuationGlyphSubstitutor
 import org.tiqian.text.core.Cluster
 import org.tiqian.text.core.Glyph
 import org.tiqian.text.core.GlyphRun
@@ -24,6 +25,7 @@ interface ParagraphLayoutEngine {
 class ExplainableStubParagraphLayoutEngine(
     private val fontRoleClassifier: FontRoleClassifier = CjkFontRoleClassifier(),
     private val fallbackResolver: FallbackResolver = PreferCjkForAmbiguousPunctuationResolver(),
+    private val punctuationGlyphSubstitutor: ClreqPunctuationGlyphSubstitutor = ClreqPunctuationGlyphSubstitutor(),
 ) : ParagraphLayoutEngine {
     override fun layout(input: LayoutInput): LayoutResult {
         val text = input.content.text
@@ -45,11 +47,14 @@ class ExplainableStubParagraphLayoutEngine(
         }
 
         val clusters = fontDecisions.map { decision ->
+            val sourceText = text.substring(decision.range.start, decision.range.end)
+            val substitution = punctuationGlyphSubstitutor.substitute(sourceText)
             Cluster(
                 range = decision.range,
-                text = text.substring(decision.range.start, decision.range.end),
+                text = sourceText,
+                displayText = substitution.displayText,
                 fontKey = decision.candidate.key,
-                advance = advance * text.substring(decision.range.start, decision.range.end).codePointCount(),
+                advance = advance * sourceText.layoutAdvanceEmCount(substitution.displayText),
             )
         }
 
@@ -103,7 +108,8 @@ class ExplainableStubParagraphLayoutEngine(
             debug = LayoutDebugInfo(
                 fontDecisions = fontDecisions.map { decision ->
                     val clusterText = text.substring(decision.range.start, decision.range.end)
-                    "font:${decision.range.start}-${decision.range.end}:$clusterText:${decision.role}:${decision.candidate.key}:${decision.reason}"
+                    val substitution = punctuationGlyphSubstitutor.substitute(clusterText)
+                    "font:${decision.range.start}-${decision.range.end}:$clusterText->${substitution.displayText}:${decision.role}:${decision.candidate.key}:${decision.reason}:${substitution.reason}"
                 },
                 metricDecisions = listOf("metrics:raw-placeholder"),
                 lineDecisions = listOf("line:single-placeholder"),
@@ -146,8 +152,14 @@ class ExplainableStubParagraphLayoutEngine(
     private fun String.codePointCount(): Int =
         codePointCountCompat(0, length)
 
+    private fun String.layoutAdvanceEmCount(displayText: String): Int =
+        when {
+            this == "——" && displayText == "⸺" -> 2
+            else -> codePointCount()
+        }
+
     private fun Int.isRepeatableCjkPunctuation(): Boolean =
-        this == 0x2014 || this == 0x2026
+        this == 0x2014 || this == 0x2026 || this == 0x22EF
 
     private fun String.codePointAtCompat(index: Int): Int {
         val high = this[index].code

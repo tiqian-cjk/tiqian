@@ -10,6 +10,7 @@ data class ClreqProfile(
     val id: String,
     val strictness: ClreqStrictness,
     val region: ClreqRegion,
+    val punctuationGlyphPolicy: CjkPunctuationGlyphPolicy = CjkPunctuationGlyphPolicy.PreferClreqRecommendedCodepoints,
 ) {
     companion object {
         val MainlandHorizontal = ClreqProfile(
@@ -25,6 +26,12 @@ enum class ClreqRegion {
     Taiwan,
     HongKong,
     Custom,
+}
+
+enum class CjkPunctuationGlyphPolicy {
+    PreserveInput,
+    PreferClreqRecommendedCodepoints,
+    ForceClreqRecommendedCodepoints,
 }
 
 enum class PunctuationClass {
@@ -52,8 +59,8 @@ object ClreqPunctuationPolicies {
             '”', '’', '）', '》', '〉', '」', '』' -> PunctuationClass.Closing
             '，', '、', '。', '；', '：', '！', '？' -> PunctuationClass.PauseOrStop
             '·' -> PunctuationClass.MiddleDot
-            '…' -> PunctuationClass.Ellipsis
-            '—' -> PunctuationClass.Dash
+            '…', '⋯' -> PunctuationClass.Ellipsis
+            '—', '⸺' -> PunctuationClass.Dash
             else -> PunctuationClass.Other
         }
 
@@ -82,3 +89,43 @@ object ClreqPunctuationPolicies {
     }
 }
 
+data class CjkPunctuationGlyphSubstitution(
+    val sourceText: String,
+    val displayText: String,
+    val reason: String,
+)
+
+class ClreqPunctuationGlyphSubstitutor(
+    private val policy: CjkPunctuationGlyphPolicy = CjkPunctuationGlyphPolicy.PreferClreqRecommendedCodepoints,
+) {
+    fun substitute(sourceText: String): CjkPunctuationGlyphSubstitution {
+        val displayText = when (policy) {
+            CjkPunctuationGlyphPolicy.PreserveInput -> sourceText
+            CjkPunctuationGlyphPolicy.PreferClreqRecommendedCodepoints,
+            CjkPunctuationGlyphPolicy.ForceClreqRecommendedCodepoints,
+            -> sourceText.toClreqRecommendedDisplayText()
+        }
+
+        val reason = if (displayText == sourceText) {
+            "CjkPunctuationGlyphPolicy:$policy:preserve"
+        } else {
+            "CjkPunctuationGlyphPolicy:$policy:${sourceText.toCodePointLabels()}->${displayText.toCodePointLabels()}"
+        }
+
+        return CjkPunctuationGlyphSubstitution(
+            sourceText = sourceText,
+            displayText = displayText,
+            reason = reason,
+        )
+    }
+
+    private fun String.toClreqRecommendedDisplayText(): String =
+        when {
+            all { it == '…' } -> "⋯".repeat(length)
+            this == "——" -> "⸺"
+            else -> this
+        }
+
+    private fun String.toCodePointLabels(): String =
+        map { char -> "U+${char.code.toString(16).uppercase().padStart(4, '0')}" }.joinToString("+")
+}

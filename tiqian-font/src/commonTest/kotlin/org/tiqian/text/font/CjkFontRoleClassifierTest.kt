@@ -15,7 +15,9 @@ class CjkFontRoleClassifierTest {
     @Test
     fun classifiesCjkPunctuation() {
         assertEquals(FontRole.CjkPunctuation, classifier.classify("……", TextRange(0, 1)))
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("⋯⋯", TextRange(0, 1)))
         assertEquals(FontRole.CjkPunctuation, classifier.classify("——", TextRange(0, 1)))
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("⸺", TextRange(0, 1)))
         assertEquals(FontRole.CjkPunctuation, classifier.classify("。", TextRange(0, 1)))
     }
 
@@ -24,4 +26,3 @@ class CjkFontRoleClassifierTest {
         assertEquals(FontRole.LatinText, classifier.classify("English", TextRange(0, 1)))
     }
 }
-

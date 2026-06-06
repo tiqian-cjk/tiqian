@@ -170,6 +170,22 @@ halt         半宽替代形
 palt         比例替代宽度
 ```
 
+省略号和破折号需要区分 source text 与 display glyph sequence。提椠不应改写用户输入、复制文本、搜索文本或 range mapping，但 layout cluster 可以根据 profile 选择更符合 CLREQ 的显示码点。
+
+默认策略为 `PreferClreqRecommendedCodepoints`：
+
+```text
+source "……"  -> display "⋯⋯"  // U+22EF U+22EF
+source "——"  -> display "⸺"    // U+2E3A
+```
+
+同时仍然要求这些 display glyph 使用中文标点字体优先显示，并保持中文排版语义：
+
+- 省略号六点居中。
+- 破折号占两个汉字宽度，中间不断开。
+- source range 保持不变。
+- 必要时可通过 `PreserveInput` profile 保留输入码点作为显示码点。
+
 但为了普适性，不能假设所有字体都提供可靠特性。需要一套 fallback 测量方案：
 
 ```text

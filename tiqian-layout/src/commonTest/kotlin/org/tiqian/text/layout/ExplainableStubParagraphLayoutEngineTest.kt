@@ -33,14 +33,38 @@ class ExplainableStubParagraphLayoutEngineTest {
         )
 
         assertTrue(
-            result.debug.fontDecisions.any { it.contains("……") && it.contains(FontRole.CjkPunctuation.name) && it.contains("cjk-primary") },
+            result.debug.fontDecisions.any {
+                it.contains("……->⋯⋯") && it.contains(FontRole.CjkPunctuation.name) && it.contains("cjk-primary")
+            },
         )
         assertTrue(
-            result.debug.fontDecisions.any { it.contains("——") && it.contains(FontRole.CjkPunctuation.name) && it.contains("cjk-primary") },
+            result.debug.fontDecisions.any {
+                it.contains("——->⸺") && it.contains(FontRole.CjkPunctuation.name) && it.contains("cjk-primary")
+            },
         )
         assertTrue(
             result.debug.fontDecisions.any { it.contains("English") && it.contains(FontRole.LatinText.name) && it.contains("latin-primary") },
         )
         assertEquals("English", result.clusters.first { it.text == "English" }.text)
+    }
+
+    @Test
+    fun preservesSourceTextWhenUsingClreqRecommendedDisplayGlyphs() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("……——"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val ellipsis = result.clusters.first { it.text == "……" }
+        val dash = result.clusters.first { it.text == "——" }
+
+        assertEquals("……", ellipsis.text)
+        assertEquals("⋯⋯", ellipsis.displayText)
+        assertEquals("——", dash.text)
+        assertEquals("⸺", dash.displayText)
+        assertEquals("cjk-primary", ellipsis.fontKey)
+        assertEquals("cjk-primary", dash.fontKey)
     }
 }

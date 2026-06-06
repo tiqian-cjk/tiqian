@@ -70,6 +70,8 @@ class CjkFontRoleClassifier : FontRoleClassifier {
             this == 0x201C ||
             this == 0x201D ||
             this == 0x2026 ||
+            this == 0x22EF ||
+            this == 0x2E3A ||
             this == 0x00B7 ||
             this == 0xFF01 ||
             this == 0xFF1F ||

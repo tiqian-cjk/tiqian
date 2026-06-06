@@ -10,6 +10,9 @@ kotlin {
             api(project(":tiqian-core"))
             api(project(":tiqian-linebreak"))
         }
+
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
     }
 }
-
