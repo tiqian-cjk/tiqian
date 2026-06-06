@@ -20,23 +20,29 @@ sealed interface RepairOption {
     data class PushIn(
         override val penalty: Int,
         override val reason: String,
+        val offenderClusterIndex: Int,
         val targetClusterIndex: Int,
         val shrink: Float,
+        val availableCapacity: Float,
     ) : RepairOption
 
     data class Hang(
         override val penalty: Int,
         override val reason: String,
+        val offenderClusterIndex: Int,
     ) : RepairOption
 
     data class CarryPrevious(
         override val penalty: Int,
         override val reason: String,
+        val offenderClusterIndex: Int,
+        val carriedClusterIndex: Int,
     ) : RepairOption
 
     data class LeaveRagged(
         override val penalty: Int,
         override val reason: String,
+        val offenderClusterIndex: Int,
     ) : RepairOption
 }
 
@@ -46,6 +52,21 @@ data class LineCandidate(
     val naturalWidth: Float,
     val adjustedWidth: Float,
     val repair: RepairOption? = null,
+    val repairCandidates: List<RepairCandidate> = emptyList(),
+)
+
+data class RepairCandidate(
+    val kind: String,
+    val reasonCode: String,
+    val offenderClusterIndex: Int,
+    val penalty: Int,
+    val accepted: Boolean,
+    val rejectionReason: String? = null,
+    val targetClusterIndex: Int? = null,
+    val carriedClusterIndex: Int? = null,
+    val shrink: Float = 0f,
+    val requiredShrink: Float = 0f,
+    val availableCapacity: Float = 0f,
 )
 
 data class LineSolution(

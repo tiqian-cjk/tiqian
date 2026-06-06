@@ -113,6 +113,10 @@ class GreedyLineBreakerTest {
         repair as RepairOption.PushIn
         assertEquals(3, repair.targetClusterIndex)
         assertEquals(4f, repair.shrink)
+        assertEquals(4f, repair.availableCapacity)
+        assertEquals(1, line.repairCandidates.size)
+        assertEquals("PushIn", line.repairCandidates.single().kind)
+        assertEquals(true, line.repairCandidates.single().accepted)
         assertEquals(2f, solution.totalBadness)
     }
 
@@ -135,6 +139,12 @@ class GreedyLineBreakerTest {
         assertEquals(0..1, solution.lines[0].clusterRange)
         assertEquals(2..3, solution.lines[1].clusterRange)
         assertEquals(true, solution.lines[1].repair is RepairOption.CarryPrevious)
+        assertEquals(2, solution.lines[1].repairCandidates.size)
+        assertEquals("PushIn", solution.lines[1].repairCandidates[0].kind)
+        assertEquals(false, solution.lines[1].repairCandidates[0].accepted)
+        assertEquals("insufficient-capacity", solution.lines[1].repairCandidates[0].rejectionReason)
+        assertEquals("CarryPrevious", solution.lines[1].repairCandidates[1].kind)
+        assertEquals(true, solution.lines[1].repairCandidates[1].accepted)
     }
 
     @Test

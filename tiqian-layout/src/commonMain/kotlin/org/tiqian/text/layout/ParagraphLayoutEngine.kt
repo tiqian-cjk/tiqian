@@ -17,6 +17,8 @@ import org.tiqian.text.core.LayoutResult
 import org.tiqian.text.core.LineBox
 import org.tiqian.text.core.LineDebugInfo
 import org.tiqian.text.core.LineDecisionInfo
+import org.tiqian.text.core.LineRepairCandidateInfo
+import org.tiqian.text.core.LineRepairDecisionInfo
 import org.tiqian.text.core.MetricDecisionInfo
 import org.tiqian.text.core.PunctuationDecisionInfo
 import org.tiqian.text.core.RoleOverrideInfo
@@ -296,6 +298,8 @@ class ExplainableStubParagraphLayoutEngine(
                         kind = lineBreaker.strategyName,
                         repair = candidate.repair?.let { "${it::class.simpleName}" },
                         repairPenalty = candidate.repair?.penalty ?: 0,
+                        repairDecision = candidate.repair?.toDecisionInfo(clusters),
+                        repairCandidates = candidate.repairCandidates.map { it.toDecisionInfo(clusters) },
                         notes = listOf(
                             "index:$lineIndex",
                             "natural:${line.naturalWidth}",
@@ -455,6 +459,56 @@ class ExplainableStubParagraphLayoutEngine(
             if (capacity > 0f) index to capacity else null
         }.toMap()
     }
+
+    private fun RepairCandidate.toDecisionInfo(clusters: List<Cluster>): LineRepairCandidateInfo =
+        LineRepairCandidateInfo(
+            kind = kind,
+            reasonCode = reasonCode,
+            offenderRange = clusters[offenderClusterIndex].range,
+            penalty = penalty,
+            accepted = accepted,
+            rejectionReason = rejectionReason,
+            targetClusterIndex = targetClusterIndex,
+            carriedClusterIndex = carriedClusterIndex,
+            shrink = shrink,
+            requiredShrink = requiredShrink,
+            availableCapacity = availableCapacity,
+        )
+
+    private fun RepairOption.toDecisionInfo(clusters: List<Cluster>): LineRepairDecisionInfo =
+        when (this) {
+            is RepairOption.PushIn -> LineRepairDecisionInfo(
+                kind = "PushIn",
+                reasonCode = "ForbiddenAtLineStart",
+                offenderRange = clusters[offenderClusterIndex].range,
+                penalty = penalty,
+                targetClusterIndex = targetClusterIndex,
+                shrink = shrink,
+                availableCapacity = availableCapacity,
+            )
+
+            is RepairOption.CarryPrevious -> LineRepairDecisionInfo(
+                kind = "CarryPrevious",
+                reasonCode = "ForbiddenAtLineStart",
+                offenderRange = clusters[offenderClusterIndex].range,
+                penalty = penalty,
+                carriedClusterIndex = carriedClusterIndex,
+            )
+
+            is RepairOption.LeaveRagged -> LineRepairDecisionInfo(
+                kind = "LeaveRagged",
+                reasonCode = "ForbiddenAtLineStart",
+                offenderRange = clusters[offenderClusterIndex].range,
+                penalty = penalty,
+            )
+
+            is RepairOption.Hang -> LineRepairDecisionInfo(
+                kind = "Hang",
+                reasonCode = "ForbiddenAtLineStart",
+                offenderRange = clusters[offenderClusterIndex].range,
+                penalty = penalty,
+            )
+        }
 
     private fun List<ClusterMetricDecision>.lineMetrics(explicitLineHeight: Float?): ResolvedLineMetrics {
         if (isEmpty()) {

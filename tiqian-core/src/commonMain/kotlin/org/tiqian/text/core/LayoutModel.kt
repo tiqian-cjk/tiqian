@@ -120,7 +120,34 @@ data class LineDecisionInfo(
     val kind: String,
     val repair: String? = null,
     val repairPenalty: Int = 0,
+    val repairDecision: LineRepairDecisionInfo? = null,
+    val repairCandidates: List<LineRepairCandidateInfo> = emptyList(),
     val notes: List<String> = emptyList(),
+)
+
+data class LineRepairDecisionInfo(
+    val kind: String,
+    val reasonCode: String,
+    val offenderRange: TextRange,
+    val penalty: Int,
+    val targetClusterIndex: Int? = null,
+    val carriedClusterIndex: Int? = null,
+    val shrink: Float = 0f,
+    val availableCapacity: Float = 0f,
+)
+
+data class LineRepairCandidateInfo(
+    val kind: String,
+    val reasonCode: String,
+    val offenderRange: TextRange,
+    val penalty: Int,
+    val accepted: Boolean,
+    val rejectionReason: String? = null,
+    val targetClusterIndex: Int? = null,
+    val carriedClusterIndex: Int? = null,
+    val shrink: Float = 0f,
+    val requiredShrink: Float = 0f,
+    val availableCapacity: Float = 0f,
 )
 
 data class JustificationDecisionInfo(

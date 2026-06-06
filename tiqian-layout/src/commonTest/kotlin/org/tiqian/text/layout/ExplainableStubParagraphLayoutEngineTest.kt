@@ -375,6 +375,19 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals(null, result.debug.lineDecisions[0].repair)
         assertEquals("CarryPrevious", result.debug.lineDecisions[1].repair)
         assertEquals(10, result.debug.lineDecisions[1].repairPenalty)
+        val repairDecision = result.debug.lineDecisions[1].repairDecision
+        assertEquals("CarryPrevious", repairDecision?.kind)
+        assertEquals("ForbiddenAtLineStart", repairDecision?.reasonCode)
+        assertEquals(4, repairDecision?.offenderRange?.start)
+        assertEquals(5, repairDecision?.offenderRange?.end)
+        assertEquals(3, repairDecision?.carriedClusterIndex)
+        val repairCandidates = result.debug.lineDecisions[1].repairCandidates
+        assertEquals(2, repairCandidates.size)
+        assertEquals("PushIn", repairCandidates[0].kind)
+        assertEquals(false, repairCandidates[0].accepted)
+        assertEquals("insufficient-capacity", repairCandidates[0].rejectionReason)
+        assertEquals("CarryPrevious", repairCandidates[1].kind)
+        assertEquals(true, repairCandidates[1].accepted)
         assertTrue(
             result.debug.lineDecisions[1].notes.any {
                 it.contains("ForbiddenAtLineStart:。") && it.contains("carried=文")
@@ -409,6 +422,20 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals(12f, stop.advance)
         assertEquals("PushIn", result.debug.lineDecisions.single().repair)
         assertEquals(2, result.debug.lineDecisions.single().repairPenalty)
+        val repairDecision = result.debug.lineDecisions.single().repairDecision
+        assertEquals("PushIn", repairDecision?.kind)
+        assertEquals("ForbiddenAtLineStart", repairDecision?.reasonCode)
+        assertEquals(3, repairDecision?.offenderRange?.start)
+        assertEquals(4, repairDecision?.offenderRange?.end)
+        assertEquals(3, repairDecision?.targetClusterIndex)
+        assertEquals(4f, repairDecision?.shrink)
+        assertEquals(4f, repairDecision?.availableCapacity)
+        val repairCandidates = result.debug.lineDecisions.single().repairCandidates
+        assertEquals(1, repairCandidates.size)
+        assertEquals("PushIn", repairCandidates.single().kind)
+        assertEquals(true, repairCandidates.single().accepted)
+        assertEquals(4f, repairCandidates.single().requiredShrink)
+        assertEquals(4f, repairCandidates.single().availableCapacity)
         assertTrue(
             result.debug.lineDecisions.single().notes.any {
                 it.contains("ForbiddenAtLineStart:。") && it.contains("pushed-in=4.0")

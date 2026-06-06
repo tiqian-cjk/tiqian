@@ -259,6 +259,33 @@ private fun renderEngineMetadata(label: String, result: LayoutResult): String =
             if (repair?.repair != null) {
                 appendLine("<span class=\"metric\">repair ${repair.repair} (+${repair.repairPenalty})</span>")
             }
+            repair?.repairDecision?.let { decision ->
+                appendLine(
+                    "<span class=\"metric\">reason ${decision.reasonCode} @${decision.offenderRange.start}-${decision.offenderRange.end}</span>",
+                )
+                decision.targetClusterIndex?.let { target ->
+                    appendLine(
+                        "<span class=\"metric\">target cluster $target shrink ${decision.shrink.oneDecimal()}/${decision.availableCapacity.oneDecimal()}</span>",
+                    )
+                }
+                decision.carriedClusterIndex?.let { carried ->
+                    appendLine("<span class=\"metric\">carried cluster $carried</span>")
+                }
+            }
+            repair?.repairCandidates?.forEach { candidate ->
+                val status = if (candidate.accepted) "accepted" else "rejected:${candidate.rejectionReason}"
+                val details = buildList {
+                    candidate.targetClusterIndex?.let { add("target $it") }
+                    candidate.carriedClusterIndex?.let { add("carried $it") }
+                    if (candidate.requiredShrink > 0f || candidate.availableCapacity > 0f) {
+                        add("shrink ${candidate.requiredShrink.oneDecimal()}/${candidate.availableCapacity.oneDecimal()}")
+                    }
+                }.joinToString(" ")
+                val suffix = if (details.isEmpty()) "" else " $details"
+                appendLine(
+                    "<span class=\"metric\">candidate ${candidate.kind} $status$suffix</span>",
+                )
+            }
             if (justification != null) {
                 appendLine(
                     "<span class=\"metric\">justify deficit ${justification.deficitBefore.oneDecimal()}→${justification.deficitAfter.oneDecimal()}</span>",

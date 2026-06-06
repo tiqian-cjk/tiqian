@@ -317,6 +317,7 @@ internal fun applyKinsokuRepairs(
         }
 
         val prev = mutable[i - 1]
+        val repairCandidates = mutableListOf<RepairCandidate>()
         val pushIn = tryPushIn(
             prev = prev,
             curr = curr,
@@ -326,7 +327,8 @@ internal fun applyKinsokuRepairs(
             pushInCapacities = pushInCapacities,
             pushInPenalty = pushInPenalty,
         )
-        if (pushIn != null) {
+        repairCandidates += pushIn.candidate
+        if (pushIn.candidate.accepted) {
             mutable[i - 1] = pushIn.previous
             if (pushIn.current == null) {
                 mutable.removeAt(i)
@@ -339,11 +341,28 @@ internal fun applyKinsokuRepairs(
 
         val canCarry = prev.clusterRange.first < prev.clusterRange.last
         if (!canCarry) {
+            repairCandidates += RepairCandidate(
+                kind = "CarryPrevious",
+                reasonCode = "ForbiddenAtLineStart",
+                offenderClusterIndex = curr.clusterRange.first,
+                penalty = carryPreviousPenalty,
+                accepted = false,
+                rejectionReason = "no-room-to-carry",
+            )
+            repairCandidates += RepairCandidate(
+                kind = "LeaveRagged",
+                reasonCode = "ForbiddenAtLineStart",
+                offenderClusterIndex = curr.clusterRange.first,
+                penalty = leaveRaggedPenalty,
+                accepted = true,
+            )
             mutable[i] = curr.copy(
                 repair = RepairOption.LeaveRagged(
                     penalty = leaveRaggedPenalty,
                     reason = "ForbiddenAtLineStart:${firstCluster.text}:no-room-to-carry",
+                    offenderClusterIndex = curr.clusterRange.first,
                 ),
+                repairCandidates = repairCandidates,
             )
             i += 1
             continue
@@ -352,6 +371,14 @@ internal fun applyKinsokuRepairs(
         val carriedIndex = prev.clusterRange.last
         val newPrevRange = prev.clusterRange.first..(carriedIndex - 1)
         val newCurrRange = carriedIndex..curr.clusterRange.last
+        repairCandidates += RepairCandidate(
+            kind = "CarryPrevious",
+            reasonCode = "ForbiddenAtLineStart",
+            offenderClusterIndex = curr.clusterRange.first,
+            penalty = carryPreviousPenalty,
+            accepted = true,
+            carriedClusterIndex = carriedIndex,
+        )
         mutable[i - 1] = rebuildLine(newPrevRange, naturalClusters, adjustedClusters)
         mutable[i] = rebuildLine(
             newCurrRange,
@@ -360,7 +387,10 @@ internal fun applyKinsokuRepairs(
             repair = RepairOption.CarryPrevious(
                 penalty = carryPreviousPenalty,
                 reason = "ForbiddenAtLineStart:${firstCluster.text}:carried=${adjustedClusters[carriedIndex].text}",
+                offenderClusterIndex = curr.clusterRange.first,
+                carriedClusterIndex = carriedIndex,
             ),
+            repairCandidates = repairCandidates,
         )
         i += 1
     }
@@ -372,6 +402,7 @@ internal fun applyKinsokuRepairs(
 private data class PushInResult(
     val previous: LineCandidate,
     val current: LineCandidate?,
+    val candidate: RepairCandidate,
 )
 
 private fun tryPushIn(
@@ -382,32 +413,61 @@ private fun tryPushIn(
     maxWidth: Float,
     pushInCapacities: Map<Int, Float>,
     pushInPenalty: Int,
-): PushInResult? {
+): PushInResult {
     val offenderIndex = curr.clusterRange.first
     val expandedRange = prev.clusterRange.first..offenderIndex
     val expanded = rebuildLine(expandedRange, naturalClusters, adjustedClusters)
     val overflow = expanded.adjustedWidth - maxWidth
-    if (overflow <= 0f) return null
 
     val capacity = pushInCapacities[offenderIndex] ?: 0f
-    if (overflow > capacity) return null
+    if (overflow <= 0f || overflow > capacity) {
+        return PushInResult(
+            previous = prev,
+            current = curr,
+            candidate = RepairCandidate(
+                kind = "PushIn",
+                reasonCode = "ForbiddenAtLineStart",
+                offenderClusterIndex = offenderIndex,
+                penalty = pushInPenalty,
+                accepted = false,
+                rejectionReason = if (overflow <= 0f) "no-overflow" else "insufficient-capacity",
+                targetClusterIndex = offenderIndex,
+                requiredShrink = overflow.coerceAtLeast(0f),
+                availableCapacity = capacity,
+            ),
+        )
+    }
 
     val offender = adjustedClusters[offenderIndex]
+    val candidate = RepairCandidate(
+        kind = "PushIn",
+        reasonCode = "ForbiddenAtLineStart",
+        offenderClusterIndex = offenderIndex,
+        penalty = pushInPenalty,
+        accepted = true,
+        targetClusterIndex = offenderIndex,
+        shrink = overflow,
+        requiredShrink = overflow,
+        availableCapacity = capacity,
+    )
     val repairedPrevious = expanded.copy(
         adjustedWidth = expanded.adjustedWidth - overflow,
         repair = RepairOption.PushIn(
             penalty = pushInPenalty,
             reason = "ForbiddenAtLineStart:${offender.text}:pushed-in=$overflow",
+            offenderClusterIndex = offenderIndex,
             targetClusterIndex = offenderIndex,
             shrink = overflow,
+            availableCapacity = capacity,
         ),
+        repairCandidates = listOf(candidate),
     )
     val repairedCurrent = if (offenderIndex == curr.clusterRange.last) {
         null
     } else {
         rebuildLine((offenderIndex + 1)..curr.clusterRange.last, naturalClusters, adjustedClusters)
     }
-    return PushInResult(repairedPrevious, repairedCurrent)
+    return PushInResult(repairedPrevious, repairedCurrent, candidate)
 }
 
 internal fun rebuildLine(
@@ -415,6 +475,7 @@ internal fun rebuildLine(
     naturalClusters: List<Cluster>,
     adjustedClusters: List<Cluster>,
     repair: RepairOption? = null,
+    repairCandidates: List<RepairCandidate> = emptyList(),
 ): LineCandidate {
     var natural = 0f
     var adjusted = 0f
@@ -431,6 +492,7 @@ internal fun rebuildLine(
         naturalWidth = natural,
         adjustedWidth = adjusted,
         repair = repair,
+        repairCandidates = repairCandidates,
     )
 }
 
