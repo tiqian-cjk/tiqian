@@ -50,5 +50,6 @@ data class LayoutResult(
 data class LayoutDebugInfo(
     val fontDecisions: List<String> = emptyList(),
     val metricDecisions: List<String> = emptyList(),
+    val punctuationDecisions: List<String> = emptyList(),
     val lineDecisions: List<String> = emptyList(),
 )

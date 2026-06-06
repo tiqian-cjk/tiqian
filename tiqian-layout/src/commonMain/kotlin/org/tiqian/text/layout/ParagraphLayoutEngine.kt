@@ -39,6 +39,7 @@ class ExplainableStubParagraphLayoutEngine(
     private val clreqProfileResolver: ClreqProfileResolver = BuiltInClreqProfileResolver,
     private val fontMetricsResolver: FontMetricsResolver = StubFontMetricsResolver(),
     private val fontMetricsNormalizer: FontMetricsNormalizer = ScriptAwareFontMetricsNormalizer(),
+    private val punctuationAtomBuilder: PunctuationAtomBuilder = PunctuationAtomBuilder(),
 ) : ParagraphLayoutEngine {
     override fun layout(input: LayoutInput): LayoutResult {
         val text = input.content.text
@@ -75,6 +76,13 @@ class ExplainableStubParagraphLayoutEngine(
                     sourceText = sourceText,
                     displayText = substitution.displayText,
                 ),
+            )
+        }
+
+        val punctuationAtoms = clusters.flatMap { cluster ->
+            cluster.punctuationAtoms(
+                em = fontSize,
+                builder = punctuationAtomBuilder,
             )
         }
 
@@ -133,7 +141,10 @@ class ExplainableStubParagraphLayoutEngine(
                     visualWidth = naturalWidth,
                     debug = LineDebugInfo(
                         repair = null,
-                        notes = listOf("ExplainableStubParagraphLayoutEngine emits one unoptimized line."),
+                        notes = listOf(
+                            "ExplainableStubParagraphLayoutEngine emits one unoptimized line.",
+                            "punctuation-atoms:${punctuationAtoms.size}",
+                        ),
                     ),
                 )
             )
@@ -159,6 +170,11 @@ class ExplainableStubParagraphLayoutEngine(
                         "raw(a=${decision.rawMetrics.ascent},d=${decision.rawMetrics.descent},l=${decision.rawMetrics.leading},source=${decision.rawMetrics.source})->" +
                         "layout(a=${decision.layoutMetrics.ascent},d=${decision.layoutMetrics.descent},baseline=${decision.layoutMetrics.baselineClass},box=${decision.layoutMetrics.metricBox},source=${decision.layoutMetrics.source}):" +
                         decision.layoutMetrics.reason
+                },
+                punctuationDecisions = punctuationAtoms.map { atom ->
+                    "punct:${atom.range.start}-${atom.range.end}:${atom.char}:${atom.punctuationClass}:" +
+                        "advance=${atom.advance},body=${atom.bodyWidth}," +
+                        "leading=${atom.leadingGlue.natural},trailing=${atom.trailingGlue.natural},anchor=${atom.anchor}"
                 },
                 lineDecisions = listOf("line:single-placeholder"),
             ),
@@ -212,6 +228,28 @@ class ExplainableStubParagraphLayoutEngine(
 
     private fun Int.charCount(): Int =
         if (this > 0xFFFF) 2 else 1
+
+    private fun Cluster.punctuationAtoms(em: Float, builder: PunctuationAtomBuilder): List<PunctuationAtom> {
+        if (displayText.isEmpty()) return emptyList()
+
+        return displayText.mapIndexedNotNull { index, char ->
+            builder.build(
+                char = char,
+                range = displayCharSourceRange(index),
+                em = em,
+            )
+        }
+    }
+
+    private fun Cluster.displayCharSourceRange(displayIndex: Int): TextRange =
+        if (displayText.length == text.length) {
+            TextRange(
+                start = range.start + displayIndex,
+                end = range.start + displayIndex + 1,
+            )
+        } else {
+            range
+        }
 
     private fun List<ClusterMetricDecision>.lineMetrics(explicitLineHeight: Float?): ResolvedLineMetrics {
         if (isEmpty()) {

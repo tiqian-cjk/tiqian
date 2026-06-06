@@ -53,6 +53,14 @@ data class AdjustmentOpportunity(
 class PunctuationAtomBuilder {
     fun build(text: String, index: Int, em: Float): PunctuationAtom? {
         val char = text.getOrNull(index) ?: return null
+        return build(
+            char = char,
+            range = TextRange(index, index + 1),
+            em = em,
+        )
+    }
+
+    fun build(char: Char, range: TextRange, em: Float): PunctuationAtom? {
         val policy = ClreqPunctuationPolicies.policyFor(char)
         if (policy.punctuationClass == PunctuationClass.Other) return null
 
@@ -61,7 +69,7 @@ class PunctuationAtomBuilder {
         val sideGlue = ((advance - bodyWidth) / 2f).coerceAtLeast(0f)
 
         return PunctuationAtom(
-            range = TextRange(index, index + 1),
+            range = range,
             char = char,
             punctuationClass = policy.punctuationClass,
             advance = advance,

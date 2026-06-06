@@ -136,6 +136,33 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun recordsPunctuationAtomsInLayoutDebug() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("你好，世界。——"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        assertTrue(
+            result.debug.punctuationDecisions.any {
+                it == "punct:2-3:，:PauseOrStop:advance=16.0,body=8.0,leading=4.0,trailing=4.0,anchor=Center"
+            },
+        )
+        assertTrue(
+            result.debug.punctuationDecisions.any {
+                it == "punct:5-6:。:PauseOrStop:advance=16.0,body=8.0,leading=4.0,trailing=4.0,anchor=Center"
+            },
+        )
+        assertTrue(
+            result.debug.punctuationDecisions.any {
+                it == "punct:6-8:⸺:Dash:advance=32.0,body=32.0,leading=0.0,trailing=0.0,anchor=Center"
+            },
+        )
+        assertTrue(result.lines.single().debug.notes.contains("punctuation-atoms:3"))
+    }
+
+    @Test
     fun usesNormalizedIdeographicMetricsForCjkLineBox() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
