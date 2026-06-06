@@ -50,6 +50,7 @@ class ExplainableStubParagraphLayoutEngine(
     private val punctuationAtomBuilder: PunctuationAtomBuilder = PunctuationAtomBuilder(),
     private val punctuationSpacingCompressor: PunctuationSpacingCompressor = PunctuationSpacingCompressor(),
     private val quotePairAnalyzer: QuotePairAnalyzer = QuotePairAnalyzer(),
+    private val lineBreaker: LineBreaker = GreedyLineBreaker(),
 ) : ParagraphLayoutEngine {
     override fun layout(input: LayoutInput): LayoutResult {
         val text = input.content.text
@@ -145,39 +146,43 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        val naturalAdvance = naturalClusters.sumOf { it.advance.toDouble() }.toFloat()
-        val adjustedAdvance = glyphRuns.sumOf { it.advance.toDouble() }.toFloat()
-        val resultWidth = adjustedAdvance.coerceAtMost(input.constraints.maxWidth)
         val lineMetrics = metricDecisions.lineMetrics(input.paragraphStyle.lineHeight)
-        val lines = if (text.isEmpty()) {
-            emptyList()
+        val lineSolution = if (text.isEmpty()) {
+            LineSolution(emptyList())
         } else {
-            listOf(
-                LineBox(
-                    range = TextRange(0, text.length),
-                    baseline = lineMetrics.baseline,
-                    top = 0f,
-                    bottom = lineMetrics.height,
-                    naturalWidth = naturalAdvance,
-                    adjustedWidth = adjustedAdvance,
-                    visualWidth = adjustedAdvance,
-                    debug = LineDebugInfo(
-                        repair = null,
-                        notes = listOf(
-                            "ExplainableStubParagraphLayoutEngine emits one unoptimized line.",
-                            "punctuation-atoms:${punctuationAtoms.size}",
-                            "punctuation-spacing-reduction:${spacingPlan.totalReduction}",
-                        ),
-                    ),
-                )
+            lineBreaker.breakLines(
+                naturalClusters = naturalClusters,
+                adjustedClusters = clusters,
+                maxWidth = input.constraints.maxWidth,
             )
         }
+        val lines = lineSolution.lines.mapIndexed { lineIndex, lineCandidate ->
+            LineBox(
+                range = lineCandidate.sourceRange,
+                baseline = lineMetrics.baseline + lineIndex * lineMetrics.height,
+                top = lineIndex * lineMetrics.height,
+                bottom = (lineIndex + 1) * lineMetrics.height,
+                naturalWidth = lineCandidate.naturalWidth,
+                adjustedWidth = lineCandidate.adjustedWidth,
+                visualWidth = lineCandidate.adjustedWidth,
+                debug = LineDebugInfo(
+                    repair = lineCandidate.repair?.let { "${it::class.simpleName}:${it.reason}" },
+                    notes = listOf(
+                        "line:${lineIndex}:clusters=${lineCandidate.clusterRange.first}-${lineCandidate.clusterRange.last}",
+                        "natural=${lineCandidate.naturalWidth},adjusted=${lineCandidate.adjustedWidth}",
+                    ),
+                ),
+            )
+        }
+        val widestLine = lines.maxOfOrNull { it.adjustedWidth } ?: 0f
+        val totalHeight = if (lines.isEmpty()) lineMetrics.height else lines.size * lineMetrics.height
+        val resultWidth = widestLine.coerceAtMost(input.constraints.maxWidth)
 
         return LayoutResult(
             input = input,
             size = Size(
                 width = resultWidth,
-                height = lineMetrics.height,
+                height = totalHeight,
             ),
             clusters = clusters,
             glyphRuns = glyphRuns,
@@ -239,11 +244,15 @@ class ExplainableStubParagraphLayoutEngine(
                     )
                 },
                 roleOverrides = roleOverrideInfos,
-                lineDecisions = lines.map { line ->
+                lineDecisions = lines.mapIndexed { lineIndex, line ->
                     LineDecisionInfo(
                         range = line.range,
-                        kind = "single-placeholder",
-                        notes = line.debug.notes,
+                        kind = "greedy",
+                        notes = listOf(
+                            "index:$lineIndex",
+                            "natural:${line.naturalWidth}",
+                            "adjusted:${line.adjustedWidth}",
+                        ),
                     )
                 },
             ),

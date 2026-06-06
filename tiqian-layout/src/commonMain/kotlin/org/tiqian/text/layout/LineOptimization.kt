@@ -39,15 +39,16 @@ sealed interface RepairOption {
 }
 
 data class LineCandidate(
-    val range: TextRange,
+    val clusterRange: IntRange,
+    val sourceRange: TextRange,
     val naturalWidth: Float,
-    val visualEnd: Float,
-    val repairPlan: RepairOption?,
+    val adjustedWidth: Float,
+    val repair: RepairOption? = null,
 )
 
 data class LineSolution(
     val lines: List<LineCandidate>,
-    val totalBadness: Int,
+    val totalBadness: Float = 0f,
 )
 
 enum class LineOptimizationStrategy {
@@ -55,4 +56,3 @@ enum class LineOptimizationStrategy {
     Lookahead,
     ParagraphDynamicProgramming,
 }
-

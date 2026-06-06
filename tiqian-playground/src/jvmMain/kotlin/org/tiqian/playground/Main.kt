@@ -39,14 +39,22 @@ private data class PlaygroundReportItem(
 )
 
 private fun printFixtureDump(fixture: LayoutFixture, result: LayoutResult) {
-    val line = result.lines.singleOrNull()
-    val naturalWidth = line?.naturalWidth ?: result.size.width
-    val adjustedWidth = line?.adjustedWidth ?: result.size.width
+    val totalNatural = result.lines.sumOf { it.naturalWidth.toDouble() }.toFloat()
+    val totalAdjusted = result.lines.sumOf { it.adjustedWidth.toDouble() }.toFloat()
 
     println("${fixture.id}:")
     println("  text=${fixture.text}")
-    println("  width natural=${naturalWidth.oneDecimal()} adjusted=${adjustedWidth.oneDecimal()} result=${result.size.width.oneDecimal()}")
-    println("  clusters=${result.clusters.joinToString(" | ") { it.compactDump() }}")
+    println("  size=${result.size.width.oneDecimal()}x${result.size.height.oneDecimal()} lines=${result.lines.size} natural-sum=${totalNatural.oneDecimal()} adjusted-sum=${totalAdjusted.oneDecimal()}")
+    result.lines.forEachIndexed { lineIndex, line ->
+        val lineClusters = result.clusters.filter {
+            it.range.start >= line.range.start && it.range.end <= line.range.end
+        }
+        println(
+            "  line[$lineIndex] natural=${line.naturalWidth.oneDecimal()} adjusted=${line.adjustedWidth.oneDecimal()} " +
+                "baseline=${line.baseline.oneDecimal()} top=${line.top.oneDecimal()} bottom=${line.bottom.oneDecimal()}",
+        )
+        println("    clusters=${lineClusters.joinToString(" | ") { it.compactDump() }}")
+    }
     if (result.debug.spacingDecisions.isNotEmpty()) {
         println("  spacing:")
         result.debug.spacingDecisions.forEach { println("    ${it.compactDump()}") }
@@ -99,9 +107,8 @@ private fun renderHtmlReport(items: List<PlaygroundReportItem>): String =
     }
 
 private fun PlaygroundReportItem.renderSection(): String {
-    val line = result.lines.singleOrNull()
-    val naturalWidth = line?.naturalWidth ?: result.size.width
-    val adjustedWidth = line?.adjustedWidth ?: result.size.width
+    val totalNatural = result.lines.sumOf { it.naturalWidth.toDouble() }.toFloat()
+    val totalAdjusted = result.lines.sumOf { it.adjustedWidth.toDouble() }.toFloat()
     val spacing = result.debug.spacingDecisions
 
     return buildString {
@@ -110,15 +117,26 @@ private fun PlaygroundReportItem.renderSection(): String {
         appendLine("<p>${fixture.notes.escapeHtml()}</p>")
         appendLine("<div class=\"sample\">${fixture.text.escapeHtml()}</div>")
         appendLine("<div class=\"metrics\">")
-        appendLine("<span class=\"metric\">natural ${naturalWidth.oneDecimal()}</span>")
-        appendLine("<span class=\"metric\">adjusted ${adjustedWidth.oneDecimal()}</span>")
-        appendLine("<span class=\"metric\">result ${result.size.width.oneDecimal()}</span>")
+        appendLine("<span class=\"metric\">size ${result.size.width.oneDecimal()}×${result.size.height.oneDecimal()}</span>")
+        appendLine("<span class=\"metric\">lines ${result.lines.size}</span>")
+        appendLine("<span class=\"metric\">natural-sum ${totalNatural.oneDecimal()}</span>")
+        appendLine("<span class=\"metric\">adjusted-sum ${totalAdjusted.oneDecimal()}</span>")
         appendLine("<span class=\"metric\">clusters ${result.clusters.size}</span>")
         appendLine("<span class=\"metric\">spacing decisions ${spacing.size}</span>")
         appendLine("</div>")
-        appendLine("<div class=\"clusters\">")
-        result.clusters.forEach { cluster -> appendLine(cluster.renderCluster()) }
-        appendLine("</div>")
+        result.lines.forEachIndexed { lineIndex, line ->
+            val lineClusters = result.clusters.filter {
+                it.range.start >= line.range.start && it.range.end <= line.range.end
+            }
+            appendLine("<div class=\"metrics\">")
+            appendLine("<span class=\"metric\">line $lineIndex</span>")
+            appendLine("<span class=\"metric\">natural ${line.naturalWidth.oneDecimal()}</span>")
+            appendLine("<span class=\"metric\">adjusted ${line.adjustedWidth.oneDecimal()}</span>")
+            appendLine("</div>")
+            appendLine("<div class=\"clusters\">")
+            lineClusters.forEach { cluster -> appendLine(cluster.renderCluster()) }
+            appendLine("</div>")
+        }
         if (spacing.isNotEmpty()) {
             appendLine("<pre>${spacing.joinToString("\n") { it.compactDump() }.escapeHtml()}</pre>")
         }

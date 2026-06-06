@@ -41,5 +41,11 @@ object EarlyLayoutFixtures {
             constraints = LayoutConstraints(maxWidth = 240f),
             notes = "Covers cluster font role classification for CJK text, CJK punctuation, and Latin words.",
         ),
+        LayoutFixture(
+            id = "greedy-multi-line",
+            text = "提椠是一个面向中文正文的排版引擎，用于测试断行。",
+            constraints = LayoutConstraints(maxWidth = 144f),
+            notes = "Exercises greedy multi-line breaking with width tight enough to trigger several breaks.",
+        ),
     )
 }

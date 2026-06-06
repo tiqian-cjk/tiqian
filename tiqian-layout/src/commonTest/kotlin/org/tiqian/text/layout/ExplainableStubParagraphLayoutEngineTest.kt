@@ -23,7 +23,7 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         assertEquals(2, result.clusters.size)
         assertEquals(1, result.lines.size)
-        assertEquals("single-placeholder", result.debug.lineDecisions.single().kind)
+        assertEquals("greedy", result.debug.lineDecisions.single().kind)
     }
 
     @Test
@@ -252,7 +252,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals("Dash", dash.punctuationClass)
         assertEquals(32f, dash.advance)
 
-        assertTrue(result.lines.single().debug.notes.contains("punctuation-atoms:3"))
+        assertEquals(3, result.debug.punctuationDecisions.size)
     }
 
     @Test
@@ -274,7 +274,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals(12f, stop.advance)
         assertEquals(60f, result.clusters.sumOf { it.advance.toDouble() }.toFloat())
         assertEquals(60f, result.glyphRuns.sumOf { it.advance.toDouble() }.toFloat())
-        assertTrue(line.debug.notes.contains("punctuation-spacing-reduction:4.0"))
+        assertEquals(4f, result.debug.spacingDecisions.sumOf { it.reduction.toDouble() }.toFloat())
 
         val spacing = result.debug.spacingDecisions.single()
         assertEquals(2, spacing.range.start)
@@ -287,6 +287,55 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals(3, spacing.reductionTargetRange.start)
         assertEquals(4, spacing.reductionTargetRange.end)
         assertEquals("collapse-adjacent-punctuation-inner-glue", spacing.reason)
+    }
+
+    @Test
+    fun greedyBreakerProducesMultipleLinesWhenWidthOverflows() {
+        // 8 CJK clusters * 16f = 128f natural; maxWidth=64f -> 4 clusters per line -> 2 lines.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("中文排版引擎测试"),
+                constraints = LayoutConstraints(maxWidth = 64f),
+            ),
+        )
+
+        assertEquals(2, result.lines.size)
+        assertEquals(8, result.clusters.size)
+
+        val first = result.lines[0]
+        val second = result.lines[1]
+        assertEquals(0, first.range.start)
+        assertEquals(4, first.range.end)
+        assertEquals(64f, first.adjustedWidth)
+        assertEquals(0f, first.top)
+        assertEquals(16f, first.bottom)
+
+        assertEquals(4, second.range.start)
+        assertEquals(8, second.range.end)
+        assertEquals(64f, second.adjustedWidth)
+        assertEquals(16f, second.top)
+        assertEquals(32f, second.bottom)
+
+        assertEquals(2, result.debug.lineDecisions.size)
+        assertTrue(result.debug.lineDecisions.all { it.kind == "greedy" })
+        assertEquals(32f, result.size.height)
+    }
+
+    @Test
+    fun greedyBreakerKeepsLatinRunAsSingleClusterEvenWhenLineOverflows() {
+        // "中" (16f) + "English" cluster (7*16=112f) > maxWidth=80f.
+        // First line should be "中" alone (16f), "English" goes to line 2 (overflows but
+        // can't be split further at cluster level in this slice).
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("中English"),
+                constraints = LayoutConstraints(maxWidth = 80f),
+            ),
+        )
+
+        assertEquals(2, result.lines.size)
+        assertEquals("中", result.clusters[result.lines[0].range.start.coerceAtMost(0)].text)
+        assertEquals("English", result.clusters.first { it.text == "English" }.text)
     }
 
     @Test
