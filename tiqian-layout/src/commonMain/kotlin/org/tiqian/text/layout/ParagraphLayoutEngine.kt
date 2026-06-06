@@ -13,10 +13,18 @@ import org.tiqian.text.core.Size
 import org.tiqian.text.core.TextRange
 import org.tiqian.text.font.CjkFontRoleClassifier
 import org.tiqian.text.font.FallbackResolver
+import org.tiqian.text.font.FontMetricsNormalizationInput
+import org.tiqian.text.font.FontMetricsNormalizer
+import org.tiqian.text.font.FontMetricsRequest
+import org.tiqian.text.font.FontMetricsResolver
 import org.tiqian.text.font.FontRequest
 import org.tiqian.text.font.FontRole
 import org.tiqian.text.font.FontRoleClassifier
+import org.tiqian.text.font.LayoutFontMetrics
 import org.tiqian.text.font.PreferCjkForAmbiguousPunctuationResolver
+import org.tiqian.text.font.RawFontMetrics
+import org.tiqian.text.font.ScriptAwareFontMetricsNormalizer
+import org.tiqian.text.font.StubFontMetricsResolver
 
 interface ParagraphLayoutEngine {
     fun layout(input: LayoutInput): LayoutResult
@@ -26,6 +34,8 @@ class ExplainableStubParagraphLayoutEngine(
     private val fontRoleClassifier: FontRoleClassifier = CjkFontRoleClassifier(),
     private val fallbackResolver: FallbackResolver = PreferCjkForAmbiguousPunctuationResolver(),
     private val punctuationGlyphSubstitutor: ClreqPunctuationGlyphSubstitutor = ClreqPunctuationGlyphSubstitutor(),
+    private val fontMetricsResolver: FontMetricsResolver = StubFontMetricsResolver(),
+    private val fontMetricsNormalizer: FontMetricsNormalizer = ScriptAwareFontMetricsNormalizer(),
 ) : ParagraphLayoutEngine {
     override fun layout(input: LayoutInput): LayoutResult {
         val text = input.content.text
@@ -58,6 +68,29 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
+        val metricDecisions = fontDecisions.map { decision ->
+            val request = FontMetricsRequest(
+                fontKey = decision.candidate.key,
+                fontSize = fontSize,
+                role = decision.role,
+                locale = input.textStyle.locale,
+            )
+            val rawMetrics = fontMetricsResolver.resolve(request)
+            val layoutMetrics = fontMetricsNormalizer.normalize(
+                FontMetricsNormalizationInput(
+                    request = request,
+                    rawMetrics = rawMetrics,
+                ),
+            )
+            ClusterMetricDecision(
+                range = decision.range,
+                sourceText = text.substring(decision.range.start, decision.range.end),
+                request = request,
+                rawMetrics = rawMetrics,
+                layoutMetrics = layoutMetrics,
+            )
+        }
+
         val glyphRuns = clusters.groupAdjacentBy { it.fontKey }.map { runClusters ->
             GlyphRun(
                 range = TextRange(runClusters.first().range.start, runClusters.last().range.end),
@@ -75,16 +108,16 @@ class ExplainableStubParagraphLayoutEngine(
 
         val totalAdvance = glyphRuns.sumOf { it.advance.toDouble() }.toFloat()
         val naturalWidth = totalAdvance.coerceAtMost(input.constraints.maxWidth)
-        val lineHeight = input.paragraphStyle.lineHeight ?: fontSize * 1.4f
+        val lineMetrics = metricDecisions.lineMetrics(input.paragraphStyle.lineHeight)
         val lines = if (text.isEmpty()) {
             emptyList()
         } else {
             listOf(
                 LineBox(
                     range = TextRange(0, text.length),
-                    baseline = fontSize,
+                    baseline = lineMetrics.baseline,
                     top = 0f,
-                    bottom = lineHeight,
+                    bottom = lineMetrics.height,
                     naturalWidth = naturalWidth,
                     adjustedWidth = naturalWidth,
                     visualWidth = naturalWidth,
@@ -100,7 +133,7 @@ class ExplainableStubParagraphLayoutEngine(
             input = input,
             size = Size(
                 width = naturalWidth,
-                height = lineHeight,
+                height = lineMetrics.height,
             ),
             clusters = clusters,
             glyphRuns = glyphRuns,
@@ -111,7 +144,12 @@ class ExplainableStubParagraphLayoutEngine(
                     val substitution = punctuationGlyphSubstitutor.substitute(clusterText)
                     "font:${decision.range.start}-${decision.range.end}:$clusterText->${substitution.displayText}:${decision.role}:${decision.candidate.key}:${decision.reason}:${substitution.reason}"
                 },
-                metricDecisions = listOf("metrics:raw-placeholder"),
+                metricDecisions = metricDecisions.map { decision ->
+                    "metrics:${decision.range.start}-${decision.range.end}:${decision.sourceText}:${decision.request.role}:${decision.request.fontKey}:" +
+                        "raw(a=${decision.rawMetrics.ascent},d=${decision.rawMetrics.descent},l=${decision.rawMetrics.leading},source=${decision.rawMetrics.source})->" +
+                        "layout(a=${decision.layoutMetrics.ascent},d=${decision.layoutMetrics.descent},baseline=${decision.layoutMetrics.baselineClass},box=${decision.layoutMetrics.metricBox},source=${decision.layoutMetrics.source}):" +
+                        decision.layoutMetrics.reason
+                },
                 lineDecisions = listOf("line:single-placeholder"),
             ),
         )
@@ -184,6 +222,27 @@ class ExplainableStubParagraphLayoutEngine(
     private fun Int.charCount(): Int =
         if (this > 0xFFFF) 2 else 1
 
+    private fun List<ClusterMetricDecision>.lineMetrics(explicitLineHeight: Float?): ResolvedLineMetrics {
+        if (isEmpty()) {
+            val height = explicitLineHeight ?: 0f
+            return ResolvedLineMetrics(
+                baseline = 0f,
+                height = height,
+            )
+        }
+
+        val ascent = maxOf { it.layoutMetrics.ascent }
+        val descent = maxOf { it.layoutMetrics.descent }
+        val naturalHeight = ascent + descent
+        val height = explicitLineHeight?.coerceAtLeast(naturalHeight) ?: naturalHeight
+        val extraLeading = (height - naturalHeight).coerceAtLeast(0f)
+
+        return ResolvedLineMetrics(
+            baseline = extraLeading / 2f + ascent,
+            height = height,
+        )
+    }
+
     private inline fun <T, K> List<T>.groupAdjacentBy(keySelector: (T) -> K): List<List<T>> {
         if (isEmpty()) return emptyList()
 
@@ -206,3 +265,16 @@ class ExplainableStubParagraphLayoutEngine(
         return groups
     }
 }
+
+private data class ClusterMetricDecision(
+    val range: TextRange,
+    val sourceText: String,
+    val request: FontMetricsRequest,
+    val rawMetrics: RawFontMetrics,
+    val layoutMetrics: LayoutFontMetrics,
+)
+
+private data class ResolvedLineMetrics(
+    val baseline: Float,
+    val height: Float,
+)

@@ -75,4 +75,27 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals("cjk-primary", interpunct.fontKey)
         assertEquals("cjk-primary", solidus.fontKey)
     }
+
+    @Test
+    fun usesNormalizedIdeographicMetricsForCjkLineBox() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("提椠"),
+                constraints = LayoutConstraints(maxWidth = 240f),
+            ),
+        )
+
+        val line = result.lines.single()
+        assertEquals(8f, line.baseline)
+        assertEquals(16f, line.bottom)
+        assertTrue(
+            result.debug.metricDecisions.any {
+                it.contains("CjkText") &&
+                    it.contains("raw(a=18.4") &&
+                    it.contains("layout(a=8.0,d=8.0") &&
+                    it.contains("baseline=IdeographicCentered") &&
+                    it.contains("box=IdeographicEmBox")
+            },
+        )
+    }
 }

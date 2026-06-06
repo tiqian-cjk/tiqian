@@ -100,6 +100,50 @@ LayoutFontMetrics
   提椠用于排版的度量。
 ```
 
+这部分应参考 Apple / Web / OpenType 的共同模型：不同文字系统有不同 baseline class，CJK 不应只靠 Roman baseline 和 raw top/bottom 排版。
+
+提椠需要显式建模：
+
+```text
+BaselineClass.Roman
+BaselineClass.IdeographicCentered
+BaselineClass.IdeographicLow
+BaselineClass.Math
+
+MetricBox.RawFontBox
+MetricBox.IdeographicEmBox
+MetricBox.IdeographicCharacterFace
+MetricBox.SampledInkBox
+
+FontMetricSource.RawTables
+FontMetricSource.OpenTypeBase
+FontMetricSource.GlyphSampling
+FontMetricSource.ManualOverride
+FontMetricSource.SynthesizedIdeographicBox
+```
+
+默认中文正文策略为：
+
+```text
+CJK text / CJK punctuation
+  -> BaselineClass.IdeographicCentered
+  -> MetricBox.IdeographicEmBox
+
+Latin text
+  -> BaselineClass.Roman
+  -> MetricBox.RawFontBox
+```
+
+这意味着，即使一个 CJK 字体 raw metrics 因兼容附加符号而提供过高 ascent，提椠也应先把它视为 raw input，再通过 normalized layout metrics 生成 line box。最终 layout result 必须能解释：
+
+```text
+raw ascent/descent/source
+  -> layout ascent/descent
+  -> baseline class
+  -> metric box
+  -> normalizer reason
+```
+
 建议提供这些策略：
 
 ```text

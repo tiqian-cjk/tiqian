@@ -169,6 +169,7 @@ data class RawFontMetrics(
     val ascent: Float,
     val descent: Float,
     val leading: Float = 0f,
+    val source: FontMetricSource = FontMetricSource.RawTables,
 )
 
 data class LayoutFontMetrics(
@@ -177,6 +178,10 @@ data class LayoutFontMetrics(
     val baselineOffset: Float,
     val policy: FontMetricsPolicy,
     val baselinePolicy: BaselinePolicy,
+    val baselineClass: BaselineClass = BaselineClass.Roman,
+    val metricBox: MetricBox = MetricBox.RawFontBox,
+    val source: FontMetricSource = FontMetricSource.RawTables,
+    val reason: String = "",
 )
 
 enum class PunctuationFontPolicy {
