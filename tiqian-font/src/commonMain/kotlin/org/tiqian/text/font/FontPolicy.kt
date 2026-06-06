@@ -69,18 +69,29 @@ class CjkFontRoleClassifier : FontRoleClassifier {
             this == 0x2019 ||
             this == 0x201C ||
             this == 0x201D ||
+            this == 0x2013 ||
+            this == 0x203C ||
+            this == 0x2047 ||
             this == 0x2026 ||
+            this == 0x2027 ||
             this == 0x22EF ||
+            this == 0x30FB ||
             this == 0x2E3A ||
             this == 0x00B7 ||
+            this == 0x002D ||
+            this == 0x002F ||
+            this == 0x007E ||
+            this == 0x2022 ||
             this == 0xFF01 ||
             this == 0xFF1F ||
             this == 0xFF0C ||
             this == 0xFF0E ||
+            this == 0xFF0F ||
             this == 0xFF1A ||
             this == 0xFF1B ||
             this == 0xFF08 ||
-            this == 0xFF09
+            this == 0xFF09 ||
+            this == 0xFF5E
 
     private fun Int.isLatinCodePoint(): Boolean =
         this in 0x0041..0x005A ||

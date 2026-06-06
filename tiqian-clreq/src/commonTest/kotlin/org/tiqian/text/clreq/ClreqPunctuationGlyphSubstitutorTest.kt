@@ -12,6 +12,9 @@ class ClreqPunctuationGlyphSubstitutorTest {
 
         assertEquals("⋯⋯", substitutor.substitute("……").displayText)
         assertEquals("⸺", substitutor.substitute("——").displayText)
+        assertEquals("·", substitutor.substitute("・").displayText)
+        assertEquals("·", substitutor.substitute("‧").displayText)
+        assertEquals("·", substitutor.substitute("•").displayText)
     }
 
     @Test
@@ -22,6 +25,19 @@ class ClreqPunctuationGlyphSubstitutorTest {
 
         assertEquals("……", substitutor.substitute("……").displayText)
         assertEquals("——", substitutor.substitute("——").displayText)
+        assertEquals("・", substitutor.substitute("・").displayText)
+    }
+
+    @Test
+    fun preferPolicyDoesNotRewriteAmbiguousConnectorOrSolidusForms() {
+        val substitutor = ClreqPunctuationGlyphSubstitutor(
+            policy = CjkPunctuationGlyphPolicy.PreferClreqRecommendedCodepoints,
+        )
+
+        assertEquals("～", substitutor.substitute("～").displayText)
+        assertEquals("-", substitutor.substitute("-").displayText)
+        assertEquals("/", substitutor.substitute("/").displayText)
+        assertEquals("／", substitutor.substitute("／").displayText)
+        assertEquals("．", substitutor.substitute("．").displayText)
     }
 }
-

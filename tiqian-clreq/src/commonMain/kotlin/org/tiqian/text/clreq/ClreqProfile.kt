@@ -39,6 +39,9 @@ enum class PunctuationClass {
     Closing,
     PauseOrStop,
     MiddleDot,
+    Interpunct,
+    Connector,
+    Solidus,
     Ellipsis,
     Dash,
     Quote,
@@ -59,6 +62,9 @@ object ClreqPunctuationPolicies {
             '”', '’', '）', '》', '〉', '」', '』' -> PunctuationClass.Closing
             '，', '、', '。', '；', '：', '！', '？' -> PunctuationClass.PauseOrStop
             '·' -> PunctuationClass.MiddleDot
+            '・', '‧', '•' -> PunctuationClass.Interpunct
+            '～', '~', '-', '–' -> PunctuationClass.Connector
+            '/', '／' -> PunctuationClass.Solidus
             '…', '⋯' -> PunctuationClass.Ellipsis
             '—', '⸺' -> PunctuationClass.Dash
             else -> PunctuationClass.Other
@@ -81,6 +87,9 @@ object ClreqPunctuationPolicies {
                 -> 1.0f
 
                 PunctuationClass.MiddleDot,
+                PunctuationClass.Interpunct,
+                PunctuationClass.Connector,
+                PunctuationClass.Solidus,
                 PunctuationClass.Quote,
                 PunctuationClass.Other,
                 -> 1.0f
@@ -123,6 +132,7 @@ class ClreqPunctuationGlyphSubstitutor(
         when {
             all { it == '…' } -> "⋯".repeat(length)
             this == "——" -> "⸺"
+            this == "・" || this == "‧" || this == "•" -> "·"
             else -> this
         }
 

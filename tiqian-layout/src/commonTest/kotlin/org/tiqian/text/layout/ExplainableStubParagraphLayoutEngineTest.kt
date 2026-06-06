@@ -52,19 +52,27 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun preservesSourceTextWhenUsingClreqRecommendedDisplayGlyphs() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                content = TiqianTextContent("……——"),
+                content = TiqianTextContent("……——・／"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
         )
 
         val ellipsis = result.clusters.first { it.text == "……" }
         val dash = result.clusters.first { it.text == "——" }
+        val interpunct = result.clusters.first { it.text == "・" }
+        val solidus = result.clusters.first { it.text == "／" }
 
         assertEquals("……", ellipsis.text)
         assertEquals("⋯⋯", ellipsis.displayText)
         assertEquals("——", dash.text)
         assertEquals("⸺", dash.displayText)
+        assertEquals("・", interpunct.text)
+        assertEquals("·", interpunct.displayText)
+        assertEquals("／", solidus.text)
+        assertEquals("／", solidus.displayText)
         assertEquals("cjk-primary", ellipsis.fontKey)
         assertEquals("cjk-primary", dash.fontKey)
+        assertEquals("cjk-primary", interpunct.fontKey)
+        assertEquals("cjk-primary", solidus.fontKey)
     }
 }

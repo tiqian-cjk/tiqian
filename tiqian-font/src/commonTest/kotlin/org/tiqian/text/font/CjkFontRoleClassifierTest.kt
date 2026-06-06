@@ -19,6 +19,12 @@ class CjkFontRoleClassifierTest {
         assertEquals(FontRole.CjkPunctuation, classifier.classify("——", TextRange(0, 1)))
         assertEquals(FontRole.CjkPunctuation, classifier.classify("⸺", TextRange(0, 1)))
         assertEquals(FontRole.CjkPunctuation, classifier.classify("。", TextRange(0, 1)))
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("・", TextRange(0, 1)))
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("‧", TextRange(0, 1)))
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("～", TextRange(0, 1)))
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("-", TextRange(0, 1)))
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("/", TextRange(0, 1)))
+        assertEquals(FontRole.CjkPunctuation, classifier.classify("／", TextRange(0, 1)))
     }
 
     @Test
