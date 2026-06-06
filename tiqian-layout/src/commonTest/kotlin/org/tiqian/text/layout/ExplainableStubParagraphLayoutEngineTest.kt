@@ -339,6 +339,77 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun kinsokuCarriesPreviousClusterWhenLineWouldStartWithForbiddenPunctuation() {
+        // Pure greedy at maxWidth=64 -> line 0: 中文中文 (clusters 0..3), line 1: 。
+        // 。 is PauseOrStop, forbidden at line start, so CarryPrevious pulls
+        // 文 (cluster 3) to line 1: line 0 = 中文中, line 1 = 文。.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("中文中文。"),
+                constraints = LayoutConstraints(maxWidth = 64f),
+            ),
+        )
+
+        assertEquals(2, result.lines.size)
+        assertEquals(0, result.lines[0].range.start)
+        assertEquals(3, result.lines[0].range.end)
+        assertEquals(3, result.lines[1].range.start)
+        assertEquals(5, result.lines[1].range.end)
+        assertEquals(48f, result.lines[0].adjustedWidth)
+        assertEquals(32f, result.lines[1].adjustedWidth)
+
+        assertEquals(null, result.debug.lineDecisions[0].repair)
+        assertEquals("CarryPrevious", result.debug.lineDecisions[1].repair)
+        assertEquals(10, result.debug.lineDecisions[1].repairPenalty)
+        assertTrue(
+            result.debug.lineDecisions[1].notes.any {
+                it.contains("ForbiddenAtLineStart:。") && it.contains("carried=文")
+            },
+        )
+    }
+
+    @Test
+    fun kinsokuLeavesGreedyBreakAloneWhenNoForbiddenPunctAtLineStart() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("中文中文哈哈"),
+                constraints = LayoutConstraints(maxWidth = 64f),
+            ),
+        )
+
+        assertEquals(2, result.lines.size)
+        assertEquals(0, result.lines[0].range.start)
+        assertEquals(4, result.lines[0].range.end)
+        assertEquals(4, result.lines[1].range.start)
+        assertEquals(6, result.lines[1].range.end)
+        assertEquals(null, result.debug.lineDecisions[0].repair)
+        assertEquals(null, result.debug.lineDecisions[1].repair)
+    }
+
+    @Test
+    fun kinsokuFallsBackToLeaveRaggedWhenPreviousLineCannotSpareACluster() {
+        // English is one cluster (7 chars, 112f). At maxWidth=96, greedy keeps it on
+        // line 0 alone (i > lineStart guard) and pushes 。 to line 1. Previous line
+        // has only one cluster, so CarryPrevious cannot apply -> LeaveRagged.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("English。"),
+                constraints = LayoutConstraints(maxWidth = 96f),
+            ),
+        )
+
+        assertEquals(2, result.lines.size)
+        assertEquals("English", result.clusters.first { it.text == "English" }.text)
+        assertEquals("LeaveRagged", result.debug.lineDecisions[1].repair)
+        assertEquals(20, result.debug.lineDecisions[1].repairPenalty)
+        assertTrue(
+            result.debug.lineDecisions[1].notes.any {
+                it.contains("ForbiddenAtLineStart:。") && it.contains("no-room-to-carry")
+            },
+        )
+    }
+
+    @Test
     fun usesNormalizedIdeographicMetricsForCjkLineBox() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(

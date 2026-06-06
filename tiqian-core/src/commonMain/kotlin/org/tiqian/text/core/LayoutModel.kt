@@ -117,5 +117,7 @@ data class RoleOverrideInfo(
 data class LineDecisionInfo(
     val range: TextRange,
     val kind: String,
+    val repair: String? = null,
+    val repairPenalty: Int = 0,
     val notes: List<String> = emptyList(),
 )

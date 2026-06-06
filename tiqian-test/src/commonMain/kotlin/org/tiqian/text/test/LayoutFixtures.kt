@@ -47,5 +47,11 @@ object EarlyLayoutFixtures {
             constraints = LayoutConstraints(maxWidth = 144f),
             notes = "Exercises greedy multi-line breaking with width tight enough to trigger several breaks.",
         ),
+        LayoutFixture(
+            id = "kinsoku-carry-previous",
+            text = "提椠中文中文中文。",
+            constraints = LayoutConstraints(maxWidth = 64f),
+            notes = "Forces a kinsoku CarryPrevious repair: greedy break would put 。 at line start, so the engine pulls the preceding character down.",
+        ),
     )
 }

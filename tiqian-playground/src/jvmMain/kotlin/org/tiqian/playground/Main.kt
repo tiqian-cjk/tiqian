@@ -116,6 +116,7 @@ private fun renderHtmlReport(items: List<PlaygroundReportItem>): String =
               .sample-engine .glyph.cjk-punct { background: var(--glyph-punct); border-left: 1px solid var(--glyph-punct-border); border-right: 1px solid var(--glyph-punct-border); }
               .sample-engine .glyph.latin { background: var(--glyph-latin); border-left: 1px solid var(--glyph-latin-border); border-right: 1px solid var(--glyph-latin-border); }
               .sample-engine .glyph .ch { font-size: 16px; line-height: 1; transform: translateY(0); }
+              .sample-engine .repair-tag { position: absolute; right: -6px; transform: translate(100%, 0); padding: 1px 6px; font-size: 10px; background: rgba(196, 80, 60, 0.12); color: #b03a2e; border: 1px solid rgba(196, 80, 60, 0.45); border-radius: 3px; white-space: nowrap; pointer-events: none; }
               .legend { display: flex; gap: 12px; font-size: 11px; color: var(--muted); margin-top: 8px; flex-wrap: wrap; }
               .legend .swatch { display: inline-block; width: 10px; height: 10px; vertical-align: middle; margin-right: 4px; border: 1px solid currentColor; }
               .legend .baseline-sw { background: transparent; border-top: 1px solid var(--baseline); border-left: none; border-right: none; border-bottom: none; height: 0; width: 14px; }
@@ -177,6 +178,12 @@ private fun PlaygroundReportItem.renderSection(): String {
                 val role = result.debug.fontDecisions.firstOrNull { it.range == cluster.range }?.role
                 appendLine(renderGlyphBox(cluster, role, leftPx = x, line = line))
                 x += cluster.advance
+            }
+            val repair = result.debug.lineDecisions.getOrNull(lineIndex)?.repair
+            if (repair != null) {
+                appendLine(
+                    "<div class=\"repair-tag\" style=\"top:${line.top.oneDecimal()}px\">↻ $repair</div>",
+                )
             }
         }
         appendLine("</div>")

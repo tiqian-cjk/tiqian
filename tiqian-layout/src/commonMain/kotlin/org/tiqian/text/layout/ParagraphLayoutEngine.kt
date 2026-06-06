@@ -244,15 +244,17 @@ class ExplainableStubParagraphLayoutEngine(
                     )
                 },
                 roleOverrides = roleOverrideInfos,
-                lineDecisions = lines.mapIndexed { lineIndex, line ->
+                lineDecisions = lines.zip(lineSolution.lines).mapIndexed { lineIndex, (line, candidate) ->
                     LineDecisionInfo(
                         range = line.range,
                         kind = "greedy",
+                        repair = candidate.repair?.let { "${it::class.simpleName}" },
+                        repairPenalty = candidate.repair?.penalty ?: 0,
                         notes = listOf(
                             "index:$lineIndex",
                             "natural:${line.naturalWidth}",
                             "adjusted:${line.adjustedWidth}",
-                        ),
+                        ) + listOfNotNull(candidate.repair?.let { "repair-reason:${it.reason}" }),
                     )
                 },
             ),

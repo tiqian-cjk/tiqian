@@ -65,6 +65,63 @@ class GreedyLineBreakerTest {
     }
 
     @Test
+    fun kinsokuCarryPreviousMovesPrevClusterToNextLine() {
+        val clusters = listOf(
+            cluster(0, 1, "a", 16f),
+            cluster(1, 2, "b", 16f),
+            cluster(2, 3, "c", 16f),
+            cluster(3, 4, "。", 16f), // forbidden at line start per ClreqKinsokuRule
+        )
+        // maxWidth=48f -> greedy line 0 = a,b,c (48f), line 1 = 。 (16f).
+        val solution = GreedyLineBreaker().breakLines(clusters, clusters, maxWidth = 48f)
+
+        assertEquals(2, solution.lines.size)
+        assertEquals(0..1, solution.lines[0].clusterRange)
+        assertEquals(2..3, solution.lines[1].clusterRange)
+        assertEquals(32f, solution.lines[0].adjustedWidth)
+        assertEquals(32f, solution.lines[1].adjustedWidth)
+        val repair = solution.lines[1].repair
+        assertEquals(true, repair is RepairOption.CarryPrevious)
+        assertEquals(10f, solution.totalBadness)
+    }
+
+    @Test
+    fun kinsokuLeaveRaggedWhenPrevLineIsSingleCluster() {
+        // Force prev line to single cluster: clusters[0] alone is wider than maxWidth.
+        val clusters = listOf(
+            cluster(0, 7, "English", 112f),
+            cluster(7, 8, "。", 16f),
+        )
+        val solution = GreedyLineBreaker().breakLines(clusters, clusters, maxWidth = 64f)
+
+        assertEquals(2, solution.lines.size)
+        val repair = solution.lines[1].repair
+        assertEquals(true, repair is RepairOption.LeaveRagged)
+        assertEquals(20f, solution.totalBadness)
+    }
+
+    @Test
+    fun customKinsokuRuleOverridesDefault() {
+        // Inject a rule that never forbids -> no repair even when 。 would lead line.
+        val breaker = GreedyLineBreaker(
+            kinsoku = object : KinsokuRule {
+                override fun forbiddenAtLineStart(cluster: Cluster) = false
+                override fun forbiddenAtLineEnd(cluster: Cluster) = false
+            },
+        )
+        val clusters = listOf(
+            cluster(0, 1, "a", 16f),
+            cluster(1, 2, "b", 16f),
+            cluster(2, 3, "c", 16f),
+            cluster(3, 4, "。", 16f),
+        )
+        val solution = breaker.breakLines(clusters, clusters, maxWidth = 48f)
+        assertEquals(2, solution.lines.size)
+        assertEquals(null, solution.lines[1].repair)
+        assertEquals(0f, solution.totalBadness)
+    }
+
+    @Test
     fun misalignedClusterListsThrow() {
         val a = listOf(cluster(0, 1, "中", 16f), cluster(1, 2, "文", 16f))
         val b = listOf(cluster(0, 1, "中", 16f))
