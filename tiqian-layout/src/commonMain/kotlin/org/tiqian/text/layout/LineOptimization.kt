@@ -20,6 +20,8 @@ sealed interface RepairOption {
     data class PushIn(
         override val penalty: Int,
         override val reason: String,
+        val targetClusterIndex: Int,
+        val shrink: Float,
     ) : RepairOption
 
     data class Hang(

@@ -8,6 +8,7 @@ interface LineBreaker {
         naturalClusters: List<Cluster>,
         adjustedClusters: List<Cluster>,
         maxWidth: Float,
+        pushInCapacities: Map<Int, Float> = emptyMap(),
     ): LineSolution
 }
 
@@ -21,12 +22,12 @@ interface LineBreaker {
  * Repairs that cannot be applied without leaving a line empty fall back to
  * [RepairOption.LeaveRagged] — the unfortunate break is recorded but kept.
  *
- * Slice 4b scope: CarryPrevious + LeaveRagged. PushIn and Hang need explicit
- * glue accounting / rendering overflow respectively and arrive in later
- * slices.
+ * Slice 4b scope: PushIn via punctuation glue, CarryPrevious, and LeaveRagged.
+ * Hang remains profile opt-in and is not a default repair.
  */
 class GreedyLineBreaker(
     private val kinsoku: KinsokuRule = ClreqKinsokuRule(),
+    private val pushInPenalty: Int = 2,
     private val carryPreviousPenalty: Int = 10,
     private val leaveRaggedPenalty: Int = 20,
 ) : LineBreaker {
@@ -34,6 +35,7 @@ class GreedyLineBreaker(
         naturalClusters: List<Cluster>,
         adjustedClusters: List<Cluster>,
         maxWidth: Float,
+        pushInCapacities: Map<Int, Float>,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -45,7 +47,10 @@ class GreedyLineBreaker(
             initial = greedy,
             naturalClusters = naturalClusters,
             adjustedClusters = adjustedClusters,
+            maxWidth = maxWidth,
             kinsoku = kinsoku,
+            pushInCapacities = pushInCapacities,
+            pushInPenalty = pushInPenalty,
             carryPreviousPenalty = carryPreviousPenalty,
             leaveRaggedPenalty = leaveRaggedPenalty,
         )
@@ -125,11 +130,13 @@ class LookaheadLineBreaker(
     private val futureLineHorizon: Int = 2,
     private val raggednessWeight: Float = 0.5f,
     private val kinsoku: KinsokuRule = ClreqKinsokuRule(),
+    private val pushInPenalty: Int = 2,
     private val carryPreviousPenalty: Int = 10,
     private val leaveRaggedPenalty: Int = 20,
 ) : LineBreaker {
     private val greedy = GreedyLineBreaker(
         kinsoku = kinsoku,
+        pushInPenalty = pushInPenalty,
         carryPreviousPenalty = carryPreviousPenalty,
         leaveRaggedPenalty = leaveRaggedPenalty,
     )
@@ -138,6 +145,7 @@ class LookaheadLineBreaker(
         naturalClusters: List<Cluster>,
         adjustedClusters: List<Cluster>,
         maxWidth: Float,
+        pushInCapacities: Map<Int, Float>,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -159,8 +167,9 @@ class LookaheadLineBreaker(
                 break
             }
 
-            // Candidates only shift earlier than greedy. Shifting later would
-            // overflow maxWidth (Hang territory, not yet implemented).
+            // Candidates only shift earlier than greedy. PushIn is evaluated
+            // during the repair pass below, where punctuation glue capacity is
+            // known and the shrink can be recorded on the chosen line.
             val candidates = ((greedyEnd - window)..greedyEnd)
                 .filter { it in (lineStart + 1)..adjustedClusters.size }
                 .distinct()
@@ -174,6 +183,7 @@ class LookaheadLineBreaker(
                     natural = naturalClusters,
                     adjusted = adjustedClusters,
                     maxWidth = maxWidth,
+                    pushInCapacities = pushInCapacities,
                 )
                 if (score < bestScore) {
                     bestScore = score
@@ -193,7 +203,10 @@ class LookaheadLineBreaker(
             initial = committed,
             naturalClusters = naturalClusters,
             adjustedClusters = adjustedClusters,
+            maxWidth = maxWidth,
             kinsoku = kinsoku,
+            pushInCapacities = pushInCapacities,
+            pushInPenalty = pushInPenalty,
             carryPreviousPenalty = carryPreviousPenalty,
             leaveRaggedPenalty = leaveRaggedPenalty,
         )
@@ -205,6 +218,7 @@ class LookaheadLineBreaker(
         natural: List<Cluster>,
         adjusted: List<Cluster>,
         maxWidth: Float,
+        pushInCapacities: Map<Int, Float>,
     ): Float {
         val firstLine = rebuildLine(s..(e - 1), natural, adjusted)
         val futureSolution = if (e >= adjusted.size) {
@@ -228,7 +242,10 @@ class LookaheadLineBreaker(
             initial = listOf(firstLine) + absoluteFuture,
             naturalClusters = natural,
             adjustedClusters = adjusted,
+            maxWidth = maxWidth,
             kinsoku = kinsoku,
+            pushInCapacities = pushInCapacities,
+            pushInPenalty = pushInPenalty,
             carryPreviousPenalty = carryPreviousPenalty,
             leaveRaggedPenalty = leaveRaggedPenalty,
         ).lines
@@ -252,19 +269,46 @@ internal fun applyKinsokuRepairs(
     initial: List<LineCandidate>,
     naturalClusters: List<Cluster>,
     adjustedClusters: List<Cluster>,
+    maxWidth: Float,
     kinsoku: KinsokuRule,
+    pushInCapacities: Map<Int, Float> = emptyMap(),
+    pushInPenalty: Int,
     carryPreviousPenalty: Int,
     leaveRaggedPenalty: Int,
 ): LineSolution {
     if (initial.size < 2) return LineSolution(initial)
 
     val mutable = initial.toMutableList()
-    for (i in 1 until mutable.size) {
+    var i = 1
+    while (i < mutable.size) {
         val curr = mutable[i]
         val firstCluster = adjustedClusters[curr.clusterRange.first]
-        if (!kinsoku.forbiddenAtLineStart(firstCluster)) continue
+        if (!kinsoku.forbiddenAtLineStart(firstCluster)) {
+            i += 1
+            continue
+        }
 
         val prev = mutable[i - 1]
+        val pushIn = tryPushIn(
+            prev = prev,
+            curr = curr,
+            naturalClusters = naturalClusters,
+            adjustedClusters = adjustedClusters,
+            maxWidth = maxWidth,
+            pushInCapacities = pushInCapacities,
+            pushInPenalty = pushInPenalty,
+        )
+        if (pushIn != null) {
+            mutable[i - 1] = pushIn.previous
+            if (pushIn.current == null) {
+                mutable.removeAt(i)
+            } else {
+                mutable[i] = pushIn.current
+                continue
+            }
+            continue
+        }
+
         val canCarry = prev.clusterRange.first < prev.clusterRange.last
         if (!canCarry) {
             mutable[i] = curr.copy(
@@ -273,6 +317,7 @@ internal fun applyKinsokuRepairs(
                     reason = "ForbiddenAtLineStart:${firstCluster.text}:no-room-to-carry",
                 ),
             )
+            i += 1
             continue
         }
 
@@ -289,10 +334,52 @@ internal fun applyKinsokuRepairs(
                 reason = "ForbiddenAtLineStart:${firstCluster.text}:carried=${adjustedClusters[carriedIndex].text}",
             ),
         )
+        i += 1
     }
 
     val totalBadness = mutable.sumOf { (it.repair?.penalty ?: 0).toDouble() }.toFloat()
     return LineSolution(mutable, totalBadness = totalBadness)
+}
+
+private data class PushInResult(
+    val previous: LineCandidate,
+    val current: LineCandidate?,
+)
+
+private fun tryPushIn(
+    prev: LineCandidate,
+    curr: LineCandidate,
+    naturalClusters: List<Cluster>,
+    adjustedClusters: List<Cluster>,
+    maxWidth: Float,
+    pushInCapacities: Map<Int, Float>,
+    pushInPenalty: Int,
+): PushInResult? {
+    val offenderIndex = curr.clusterRange.first
+    val expandedRange = prev.clusterRange.first..offenderIndex
+    val expanded = rebuildLine(expandedRange, naturalClusters, adjustedClusters)
+    val overflow = expanded.adjustedWidth - maxWidth
+    if (overflow <= 0f) return null
+
+    val capacity = pushInCapacities[offenderIndex] ?: 0f
+    if (overflow > capacity) return null
+
+    val offender = adjustedClusters[offenderIndex]
+    val repairedPrevious = expanded.copy(
+        adjustedWidth = expanded.adjustedWidth - overflow,
+        repair = RepairOption.PushIn(
+            penalty = pushInPenalty,
+            reason = "ForbiddenAtLineStart:${offender.text}:pushed-in=$overflow",
+            targetClusterIndex = offenderIndex,
+            shrink = overflow,
+        ),
+    )
+    val repairedCurrent = if (offenderIndex == curr.clusterRange.last) {
+        null
+    } else {
+        rebuildLine((offenderIndex + 1)..curr.clusterRange.last, naturalClusters, adjustedClusters)
+    }
+    return PushInResult(repairedPrevious, repairedCurrent)
 }
 
 internal fun rebuildLine(

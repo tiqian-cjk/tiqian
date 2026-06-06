@@ -369,6 +369,40 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun kinsokuPushesLineStartPunctuationIntoPreviousLineWhenTrailingGlueCanShrink() {
+        // Pure greedy at maxWidth=60 -> line 0: 中文中 (48f), line 1: 。
+        // 。 can become line-end half-width by shrinking its trailing glue 4f,
+        // so PushIn keeps the punctuation on the previous line instead of
+        // carrying 中 down.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("中文中。"),
+                constraints = LayoutConstraints(maxWidth = 60f),
+            ),
+        )
+
+        assertEquals(1, result.lines.size)
+        val line = result.lines.single()
+        assertEquals(0, line.range.start)
+        assertEquals(4, line.range.end)
+        assertEquals(64f, line.naturalWidth)
+        assertEquals(60f, line.adjustedWidth)
+        assertEquals(60f, line.visualWidth)
+        assertEquals(60f, result.clusters.sumOf { it.advance.toDouble() }.toFloat())
+        assertEquals(60f, result.glyphRuns.sumOf { it.advance.toDouble() }.toFloat())
+
+        val stop = result.clusters.single { it.text == "。" }
+        assertEquals(12f, stop.advance)
+        assertEquals("PushIn", result.debug.lineDecisions.single().repair)
+        assertEquals(2, result.debug.lineDecisions.single().repairPenalty)
+        assertTrue(
+            result.debug.lineDecisions.single().notes.any {
+                it.contains("ForbiddenAtLineStart:。") && it.contains("pushed-in=4.0")
+            },
+        )
+    }
+
+    @Test
     fun kinsokuLeavesGreedyBreakAloneWhenNoForbiddenPunctAtLineStart() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(

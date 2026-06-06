@@ -6,13 +6,15 @@
 - `wip` — 有 commit 但还没满足验收清单。
 - `todo` — 还没开始。
 
+中文排版思维约束见 [research/kongque-notes.md](research/kongque-notes.md) 与 [adr/0007-grid-first-explainable-cjk-typography.md](adr/0007-grid-first-explainable-cjk-typography.md)。
+
 「当前位置」一行用来让任何 agent / 维护者一眼知道下一步该做什么。
 
 ## 当前位置
 
 ```text
 Last completed: Slice 5 (justification via glue priority: PunctuationGlue → CjkLatinSpace → WordSpace → CjkInterChar)
-Up next:        Slice 4b 收尾 (PushIn / Hang，现在有 glue 账本了) → Slice 6 (shaping adapter + golden tests)
+Up next:        Slice 4b 验证/收尾 (PushIn via punctuation glue；Hang 仍为 opt-in 后续项) → Slice 6 (shaping adapter + golden tests)
 ```
 
 ## Slice / Milestone 对照表
@@ -24,7 +26,7 @@ Up next:        Slice 4b 收尾 (PushIn / Hang，现在有 glue 账本了) → S
 | 2 | M1 | RawFontMetrics ↔ LayoutFontMetrics 分离；`CenteredCjkVisual` policy 默认开启 | 任意含汉字 fixture | `./gradlew :tiqian-font:jvmTest`；dump `metrics:*` 行显示 `raw(...)->layout(...)` | done |
 | 3 | M2 | PunctuationAtom（ink/body/leadingGlue/trailingGlue）；行尾标点自然半宽；连续标点挤压；引号成对感知 | `中文，中文。` `他说：“你好，世界。”` `中文……中文。` | dump `punct:*` 和 `spacing:*` 行；`QuotePairAnalyzerTest` 等 | wip |
 | 3.5 | — | Explainability hardening：结构化 decision 类型替代 stringly dump；SpacingPlan 替代 advance mutation；classifier 接 profile；可重复标点进 clreq 表；role override 进 dump | 现有所有 fixture 不变 | 所有现有测试绿；`LayoutResult` 暴露结构化 `clusterDecisions / spacingPlan` 字段 | done |
-| 4 | M3 | BreakCandidate / RepairOption；`PushIn` `Hang` `CarryPrevious`；greedy + lookahead(2~3) | 不同宽度下触发不同 repair 的长段落 fixture | dump `line:*` 行，多行非单 placeholder；新测试 | wip (4a done, 4b CarryPrevious + LeaveRagged done, 4c lookahead window 1 done; PushIn / Hang 等 Slice 5 glue 账本) |
+| 4 | M3 | BreakCandidate / RepairOption；`PushIn` `CarryPrevious`；greedy + lookahead(2~3)；`Hang` 仅保留 profile opt-in 路径 | 不同宽度下触发不同 repair 的长段落 fixture | dump `line:*` 行，多行非单 placeholder；新测试 | wip (4a done, 4b CarryPrevious + LeaveRagged done, 4c lookahead window 1 done; PushIn 已接入 punctuation glue 容量，待验证/提交；Hang 推到后续 opt-in slice) |
 | 5 | M4 | 两端对齐：基于 glue 的 AdjustmentOpportunity；优先级 `PunctuationGlue → CjkLatinSpace → WordSpace → CjkInterChar` | 中文正文段落 + 中西混排 fixture | dump 每行 `adjustedWidth` ≈ `maxWidth`；新 golden | done (`Justifier` + `JustificationDecisionInfo`；`textAlign=Justify` 触发；最后一行 skip；priority chain 完整；WordSpace 待 shaping 分词后启用) |
 | 6 | M5 | API 固化；`tiqian-shaping-android` / `tiqian-shaping-skia` 真 adapter；golden test + benchmark | 平台 fixture + screenshot golden | 各平台模块 build + screenshot 测试 | todo |
 

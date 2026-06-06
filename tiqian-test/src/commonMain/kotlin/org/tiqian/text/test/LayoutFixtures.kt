@@ -56,6 +56,12 @@ object EarlyLayoutFixtures {
             notes = "Forces a kinsoku CarryPrevious repair: greedy break would put 。 at line start, so the engine pulls the preceding character down.",
         ),
         LayoutFixture(
+            id = "kinsoku-push-in",
+            text = "中文中。",
+            constraints = LayoutConstraints(maxWidth = 60f),
+            notes = "Forces PushIn: greedy would put 。 at line start, then line-end punctuation glue shrinks enough to keep it on the previous line.",
+        ),
+        LayoutFixture(
             id = "lookahead-avoids-repair",
             text = "中文中文中文。",
             constraints = LayoutConstraints(maxWidth = 48f),

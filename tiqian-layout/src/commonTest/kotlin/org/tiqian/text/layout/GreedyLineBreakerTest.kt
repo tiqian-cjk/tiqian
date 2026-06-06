@@ -86,6 +86,58 @@ class GreedyLineBreakerTest {
     }
 
     @Test
+    fun kinsokuPushesForbiddenPunctuationIntoPreviousLineWhenGlueCapacityCoversOverflow() {
+        val clusters = listOf(
+            cluster(0, 1, "a", 16f),
+            cluster(1, 2, "b", 16f),
+            cluster(2, 3, "c", 16f),
+            cluster(3, 4, "。", 16f), // forbidden at line start per ClreqKinsokuRule
+        )
+        // maxWidth=60f -> greedy line 0 = a,b,c (48f), line 1 = 。 (16f).
+        // Pushing 。 into line 0 would overflow by 4f; punctuation trailing
+        // glue capacity covers that, so PushIn is preferred over CarryPrevious.
+        val solution = GreedyLineBreaker().breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 60f,
+            pushInCapacities = mapOf(3 to 4f),
+        )
+
+        assertEquals(1, solution.lines.size)
+        val line = solution.lines.single()
+        assertEquals(0..3, line.clusterRange)
+        assertEquals(64f, line.naturalWidth)
+        assertEquals(60f, line.adjustedWidth)
+        val repair = line.repair
+        assertEquals(true, repair is RepairOption.PushIn)
+        repair as RepairOption.PushIn
+        assertEquals(3, repair.targetClusterIndex)
+        assertEquals(4f, repair.shrink)
+        assertEquals(2f, solution.totalBadness)
+    }
+
+    @Test
+    fun kinsokuCarriesPreviousWhenPushInCapacityCannotCoverOverflow() {
+        val clusters = listOf(
+            cluster(0, 1, "a", 16f),
+            cluster(1, 2, "b", 16f),
+            cluster(2, 3, "c", 16f),
+            cluster(3, 4, "。", 16f),
+        )
+        val solution = GreedyLineBreaker().breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 59f,
+            pushInCapacities = mapOf(3 to 4f),
+        )
+
+        assertEquals(2, solution.lines.size)
+        assertEquals(0..1, solution.lines[0].clusterRange)
+        assertEquals(2..3, solution.lines[1].clusterRange)
+        assertEquals(true, solution.lines[1].repair is RepairOption.CarryPrevious)
+    }
+
+    @Test
     fun kinsokuLeaveRaggedWhenPrevLineIsSingleCluster() {
         // Force prev line to single cluster: clusters[0] alone is wider than maxWidth.
         val clusters = listOf(

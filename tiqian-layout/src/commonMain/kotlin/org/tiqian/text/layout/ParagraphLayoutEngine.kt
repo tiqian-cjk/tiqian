@@ -111,6 +111,7 @@ class ExplainableStubParagraphLayoutEngine(
         }
         val spacingPlan = punctuationSpacingCompressor.compress(punctuationAtoms)
         val clusters = naturalClusters.withPunctuationSpacingCompression(spacingPlan)
+        val pushInCapacities = clusters.pushInCapacities(punctuationAtoms)
 
         val metricDecisions = fontDecisions.map { decision ->
             val request = FontMetricsRequest(
@@ -143,10 +144,19 @@ class ExplainableStubParagraphLayoutEngine(
                 naturalClusters = naturalClusters,
                 adjustedClusters = clusters,
                 maxWidth = input.constraints.maxWidth,
+                pushInCapacities = pushInCapacities,
             )
         }
 
         val clusterRoles = fontDecisions.map { it.role }
+        val pushInShrinkByCluster = lineSolution.lines
+            .mapNotNull { it.repair as? RepairOption.PushIn }
+            .groupBy { it.targetClusterIndex }
+            .mapValues { (_, repairs) -> repairs.sumOf { it.shrink.toDouble() }.toFloat() }
+        val pushInClusters = clusters.mapIndexed { idx, c ->
+            val shrink = pushInShrinkByCluster[idx] ?: 0f
+            if (shrink == 0f) c else c.copy(advance = (c.advance - shrink).coerceAtLeast(0f))
+        }
         val justify = input.paragraphStyle.textAlign == TextAlign.Justify
         val justificationPlans: List<JustificationPlan?> = lineSolution.lines.mapIndexed { lineIndex, lineCandidate ->
             val isLast = lineIndex == lineSolution.lines.lastIndex
@@ -154,7 +164,7 @@ class ExplainableStubParagraphLayoutEngine(
                 null
             } else {
                 justifier.justify(
-                    adjustedClusters = clusters,
+                    adjustedClusters = pushInClusters,
                     clusterRoles = clusterRoles,
                     lineClusterRange = lineCandidate.clusterRange,
                     maxWidth = input.constraints.maxWidth,
@@ -169,7 +179,7 @@ class ExplainableStubParagraphLayoutEngine(
                 .flatMap { it.allocations }
                 .forEach { alloc -> merge(alloc.targetClusterIndex, alloc.delta) { a, b -> a + b } }
         }
-        val finalClusters = clusters.mapIndexed { idx, c ->
+        val finalClusters = pushInClusters.mapIndexed { idx, c ->
             val extra = justifyDeltaByCluster[idx] ?: 0f
             if (extra == 0f) c else c.copy(advance = c.advance + extra)
         }
@@ -433,6 +443,18 @@ class ExplainableStubParagraphLayoutEngine(
 
     private fun TextRange.isInside(other: TextRange): Boolean =
         start >= other.start && end <= other.end
+
+    private fun List<Cluster>.pushInCapacities(atoms: List<PunctuationAtom>): Map<Int, Float> {
+        if (atoms.isEmpty()) return emptyMap()
+
+        return mapIndexedNotNull { index, cluster ->
+            val capacity = atoms
+                .filter { atom -> atom.range.isInside(cluster.range) }
+                .sumOf { atom -> (atom.trailingGlue.natural - atom.trailingGlue.min).toDouble() }
+                .toFloat()
+            if (capacity > 0f) index to capacity else null
+        }.toMap()
+    }
 
     private fun List<ClusterMetricDecision>.lineMetrics(explicitLineHeight: Float?): ResolvedLineMetrics {
         if (isEmpty()) {

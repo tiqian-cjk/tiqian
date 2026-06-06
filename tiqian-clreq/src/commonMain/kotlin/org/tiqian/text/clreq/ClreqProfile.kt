@@ -15,6 +15,7 @@ data class ClreqProfile(
     val region: ClreqRegion,
     val punctuationGlyphPolicy: CjkPunctuationGlyphPolicy = CjkPunctuationGlyphPolicy.PreferClreqRecommendedCodepoints,
     val coalesceRepeatablePunctuation: Set<Int> = DefaultCoalesceRepeatablePunctuation,
+    val hangingPunctuation: HangingPunctuationPolicy = HangingPunctuationPolicy.Disabled,
 ) {
     companion object {
         // CoalesceRepeatablePunctuation: codepoints that, when written as consecutive
@@ -40,6 +41,27 @@ enum class ClreqRegion {
     Taiwan,
     HongKong,
     Custom,
+}
+
+/**
+ * HangingPunctuationPolicy — controls whether and which punctuation is allowed
+ * to hang past the line-end (悬挂).
+ *
+ * The default is [Disabled] per CLREQ commentary and JIS 4051 precedent:
+ * hanging is an *optional, design-driven* refinement on top of the two
+ * fundamental kinsoku operations (推入 PushIn / 推出 CarryPrevious), not a
+ * generic fallback. See [ADR 0006](docs/adr/0006-hanging-punctuation-opt-in.md).
+ *
+ * When enabled, hanging is restricted to a small allowlist matching widespread
+ * conventions:
+ * - [EnabledForPauseStop]: only 。 and ，  (the JIS 4051 / InDesign default).
+ * - [EnabledForExtendedCjk]: additionally hangs ！？： per mainland convention
+ *   (these glyphs are visually offset in mainland fonts) and curly quotes.
+ */
+enum class HangingPunctuationPolicy {
+    Disabled,
+    EnabledForPauseStop,
+    EnabledForExtendedCjk,
 }
 
 fun interface ClreqProfileResolver {

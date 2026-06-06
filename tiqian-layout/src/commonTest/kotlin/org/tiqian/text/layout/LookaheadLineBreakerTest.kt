@@ -69,6 +69,29 @@ class LookaheadLineBreakerTest {
     }
 
     @Test
+    fun lookaheadKeepsGreedyBreakWhenPushInGlueCoversRepair() {
+        val clusters = listOf(
+            cluster(0, 1, "中", 16f),
+            cluster(1, 2, "文", 16f),
+            cluster(2, 3, "中", 16f),
+            cluster(3, 4, "。", 16f),
+        )
+        val solution = LookaheadLineBreaker().breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 60f,
+            pushInCapacities = mapOf(3 to 4f),
+        )
+
+        assertEquals(1, solution.lines.size)
+        val line = solution.lines.single()
+        assertEquals(0..3, line.clusterRange)
+        assertEquals(60f, line.adjustedWidth)
+        assertEquals(true, line.repair is RepairOption.PushIn)
+        assertEquals(2f, solution.totalBadness)
+    }
+
+    @Test
     fun lookaheadFallsBackToGreedyWhenAlternativesAreWorse() {
         // No forbidden punctuation and an em of raggedness saved by greedy.
         // Lookahead should not prefer earlier breaks here.
