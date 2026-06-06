@@ -27,6 +27,20 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun recordsInjectedLineBreakerStrategyInDebugDecisions() {
+        val result = ExplainableStubParagraphLayoutEngine(
+            lineBreaker = LookaheadLineBreaker(),
+        ).layout(
+            LayoutInput(
+                content = TiqianTextContent("提椠"),
+                constraints = LayoutConstraints(maxWidth = 240f),
+            ),
+        )
+
+        assertEquals("lookahead", result.debug.lineDecisions.single().kind)
+    }
+
+    @Test
     fun recordsFallbackDecisionsPerCluster() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(

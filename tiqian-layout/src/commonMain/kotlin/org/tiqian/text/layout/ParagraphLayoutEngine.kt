@@ -293,7 +293,7 @@ class ExplainableStubParagraphLayoutEngine(
                 lineDecisions = lines.zip(lineSolution.lines).mapIndexed { lineIndex, (line, candidate) ->
                     LineDecisionInfo(
                         range = line.range,
-                        kind = "greedy",
+                        kind = lineBreaker.strategyName,
                         repair = candidate.repair?.let { "${it::class.simpleName}" },
                         repairPenalty = candidate.repair?.penalty ?: 0,
                         notes = listOf(

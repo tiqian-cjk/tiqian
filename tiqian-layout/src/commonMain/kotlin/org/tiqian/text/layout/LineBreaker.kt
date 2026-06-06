@@ -4,6 +4,9 @@ import org.tiqian.text.core.Cluster
 import org.tiqian.text.core.TextRange
 
 interface LineBreaker {
+    val strategyName: String
+        get() = "custom"
+
     fun breakLines(
         naturalClusters: List<Cluster>,
         adjustedClusters: List<Cluster>,
@@ -31,6 +34,8 @@ class GreedyLineBreaker(
     private val carryPreviousPenalty: Int = 10,
     private val leaveRaggedPenalty: Int = 20,
 ) : LineBreaker {
+    override val strategyName: String = "greedy"
+
     override fun breakLines(
         naturalClusters: List<Cluster>,
         adjustedClusters: List<Cluster>,
@@ -134,12 +139,7 @@ class LookaheadLineBreaker(
     private val carryPreviousPenalty: Int = 10,
     private val leaveRaggedPenalty: Int = 20,
 ) : LineBreaker {
-    private val greedy = GreedyLineBreaker(
-        kinsoku = kinsoku,
-        pushInPenalty = pushInPenalty,
-        carryPreviousPenalty = carryPreviousPenalty,
-        leaveRaggedPenalty = leaveRaggedPenalty,
-    )
+    override val strategyName: String = "lookahead"
 
     override fun breakLines(
         naturalClusters: List<Cluster>,
@@ -221,25 +221,17 @@ class LookaheadLineBreaker(
         pushInCapacities: Map<Int, Float>,
     ): Float {
         val firstLine = rebuildLine(s..(e - 1), natural, adjusted)
-        val futureSolution = if (e >= adjusted.size) {
-            LineSolution(emptyList())
-        } else {
-            greedy.breakLines(
-                naturalClusters = natural.subList(e, natural.size),
-                adjustedClusters = adjusted.subList(e, adjusted.size),
-                maxWidth = maxWidth,
-            )
-        }
-        // Re-resolve future lines onto absolute cluster indices.
-        val absoluteFuture = futureSolution.lines.map { l ->
-            l.copy(
-                clusterRange = (l.clusterRange.first + e)..(l.clusterRange.last + e),
-            )
-        }
-        // Apply kinsoku across [firstLine] + absoluteFuture so any conflict at
-        // the splice between firstLine and absoluteFuture[0] is realised here.
+        val future = rawGreedyLinesFrom(
+            start = e,
+            natural = natural,
+            adjusted = adjusted,
+            maxWidth = maxWidth,
+        )
+        // Apply kinsoku once across [firstLine] + future so both splice
+        // conflicts and future-line conflicts are scored with the same PushIn
+        // capacity map as the final repair pass.
         val spliced = applyKinsokuRepairs(
-            initial = listOf(firstLine) + absoluteFuture,
+            initial = listOf(firstLine) + future,
             naturalClusters = natural,
             adjustedClusters = adjusted,
             maxWidth = maxWidth,
@@ -257,6 +249,42 @@ class LookaheadLineBreaker(
             score += badness(spliced[idx], maxWidth, isLast)
         }
         return score
+    }
+
+    private fun rawGreedyLinesFrom(
+        start: Int,
+        natural: List<Cluster>,
+        adjusted: List<Cluster>,
+        maxWidth: Float,
+    ): List<LineCandidate> {
+        if (start >= adjusted.size) return emptyList()
+
+        val lines = mutableListOf<LineCandidate>()
+        var lineStart = start
+        var adjustedAccum = 0f
+
+        for (i in start until adjusted.size) {
+            val nextAdjusted = adjustedAccum + adjusted[i].advance
+            val overflows = nextAdjusted > maxWidth && i > lineStart
+            if (overflows) {
+                lines += rebuildLine(
+                    clusterRange = lineStart..(i - 1),
+                    naturalClusters = natural,
+                    adjustedClusters = adjusted,
+                )
+                lineStart = i
+                adjustedAccum = adjusted[i].advance
+            } else {
+                adjustedAccum = nextAdjusted
+            }
+        }
+
+        lines += rebuildLine(
+            clusterRange = lineStart..adjusted.lastIndex,
+            naturalClusters = natural,
+            adjustedClusters = adjusted,
+        )
+        return lines
     }
 
     private fun badness(line: LineCandidate, maxWidth: Float, isLast: Boolean): Float {
