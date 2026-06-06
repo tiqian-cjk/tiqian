@@ -48,6 +48,13 @@ text -> fallback -> shaping -> metrics -> punctuation atom -> glue -> line layou
 
 不要把 CLREQ、fallback、标点空间、避头尾或两端对齐逻辑写进 Compose 或 Android View 层。
 
+## Roadmap 与 ADR
+
+- [docs/roadmap.md](docs/roadmap.md) — Slice/Milestone 状态表与「当前位置」。
+- [docs/adr/](docs/adr/) — 已确定的取舍（pipeline 边界、字体度量、CLREQ 码点替换、标点 glue 模型）。
+
+新决策走 ADR，散文设计文档负责讲「为什么」，ADR 负责讲「定了什么」。
+
 ## Playground
 
 生成控制台 dump 和 HTML 调试报告：

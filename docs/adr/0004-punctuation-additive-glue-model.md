@@ -1,0 +1,63 @@
+# ADR 0004: 标点空间的加法 glue 模型
+
+- Status: Accepted
+- Date: 2026-06-06
+
+## Context
+
+中文标点传统实现常用「减法模型」：把全角标点视为 1em 的 glyph，行尾再削掉一半、连续标点之间再削掉重叠。结果是规则散落、连续标点之间会出现 1em 空洞、justification 难以参与、调试无法解释。
+
+更根本的问题：标点不是一个固定宽度的字符，而是 `ink + 周围空间`。空间是可调整的资源，应该被显式建模。
+
+## Decision
+
+每个标点显示为一个 `PunctuationAtom`，模型为加法：
+
+```text
+PunctuationAtom
+  glyph
+  advance          // 当前实际宽度
+  inkBounds        // 真实墨迹
+  bodyWidth        // 不可压缩的部分
+  leadingGlue      // 前置可调空间 (natural / min / max)
+  trailingGlue     // 后置可调空间 (natural / min / max)
+  anchor           // line-start / line-end / mid / pair
+  lineStartPolicy
+  lineEndPolicy
+  pairRules
+```
+
+由 `PunctuationAtomBuilder` 建出原子；`PunctuationSpacingCompressor` 负责 adjacent compression；`QuotePairAnalyzer` 负责引号成对感知，使开/闭引号的 glue 决策一致。
+
+下游 justification 看到的是 `AdjustmentOpportunity`，优先级固定为：
+
+```text
+PunctuationGlue -> CjkLatinSpace -> WordSpace -> CjkInterChar
+```
+
+所有原子决策都进 `LayoutDebugInfo.punctuationDecisions` / `punctuationSpacingDecisions`，dump 中可逐条看到 `body / leading / trailing / anchor / reduction / reason`。
+
+## Consequences
+
+- 行尾标点「自然半宽」不是硬编码 `-= 0.5em`，而是 `lineEndPolicy + trailingGlue.min`。
+- 连续标点之间不再出现 1em 空洞：相邻 atom 的 trailing/leading glue 通过 compression 合并。
+- justification 参与时，glue 是天然资源，不需要拉开汉字间距即可吸收宽度差。
+- 行首悬挂、连续标点挤压、引号上下文这类策略都可以拆成具名 heuristic，而不是 if-chain。
+
+## Alternatives considered
+
+- **减法模型 + 大量特例 if。** 否决：项目想避免的反例。
+- **完全依赖 OpenType `chws / palt / halt`。** 部分接受：作为输入之一进入 `PunctuationAtomBuilder`，但字体支持不一致，不能作为唯一来源。
+- **每个标点固定写一个宽度表。** 否决：失去 ink-aware 与 pair-aware 能力，且不利于竖排。
+
+## Follow-up (Slice 3 收尾)
+
+- `inkBounds` 当前来自占位实现；接入真实 shaping 后用 glyph ink box 校正。
+- `pairRules` 已经在 `QuotePairAnalyzer` 覆盖引号，下一步覆盖括号对。
+- `anchor = line-end / line-start` 在引擎实现 Slice 4 (kinsoku) 后才真正被使用；当前 dump 已暴露，先做记账。
+- 引号在嵌套场景（`他说：“你好‘世界’。”`) 的 pair 优先级需要 fixture。
+
+## 跨 ADR
+
+- 与 [ADR 0003](0003-prefer-clreq-recommended-codepoints.md) 协作：display 替换在前，atom 构造在替换后。
+- 与 Slice 4/5（断行、justification）协作：atom 是 break candidate 和 adjustment opportunity 的数据来源。
