@@ -163,6 +163,31 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun compressesAdjacentPunctuationInnerGlue() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("你好，。"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val line = result.lines.single()
+        val stop = result.clusters.first { it.text == "。" }
+
+        assertEquals(64f, line.naturalWidth)
+        assertEquals(60f, line.adjustedWidth)
+        assertEquals(60f, line.visualWidth)
+        assertEquals(60f, result.size.width)
+        assertEquals(12f, stop.advance)
+        assertTrue(line.debug.notes.contains("punctuation-spacing-reduction:4.0"))
+        assertTrue(
+            result.debug.punctuationSpacingDecisions.any {
+                it == "spacing:2-4:，。:naturalInner=8.0,adjustedInner=4.0,reduction=4.0,target=3-4:collapse-adjacent-punctuation-inner-glue"
+            },
+        )
+    }
+
+    @Test
     fun usesNormalizedIdeographicMetricsForCjkLineBox() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(

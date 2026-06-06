@@ -35,7 +35,7 @@ tiqian-test
   早期排版 fixture。
 
 tiqian-playground
-  JVM playground，占位用于后续 layout dump 和可视化调试。
+  JVM playground，用于生成 layout dump 和 HTML 可视化调试报告。
 ```
 
 ## 实现约束
@@ -48,6 +48,20 @@ text -> fallback -> shaping -> metrics -> punctuation atom -> glue -> line layou
 
 不要把 CLREQ、fallback、标点空间、避头尾或两端对齐逻辑写进 Compose 或 Android View 层。
 
+## Playground
+
+生成控制台 dump 和 HTML 调试报告：
+
+```shell
+./gradlew :tiqian-playground:runPlayground
+```
+
+报告输出到：
+
+```text
+tiqian-playground/build/reports/tiqian-layout-playground/index.html
+```
+
 ## 提交格式
 
 提交信息使用单行简化格式：
@@ -57,4 +71,3 @@ type: subject
 ```
 
 不写 description/body，不加 co-author。
-

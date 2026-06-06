@@ -50,6 +50,52 @@ data class AdjustmentOpportunity(
     val glue: Glue,
 )
 
+data class PunctuationSpacingAdjustment(
+    val range: TextRange,
+    val reductionTargetRange: TextRange,
+    val leftChar: Char,
+    val rightChar: Char,
+    val naturalInnerGlue: Float,
+    val adjustedInnerGlue: Float,
+    val reduction: Float,
+    val reason: String,
+)
+
+data class PunctuationSpacingCompressionResult(
+    val adjustments: List<PunctuationSpacingAdjustment>,
+) {
+    val totalReduction: Float =
+        adjustments.sumOf { it.reduction.toDouble() }.toFloat()
+}
+
+class PunctuationSpacingCompressor {
+    fun compress(atoms: List<PunctuationAtom>): PunctuationSpacingCompressionResult {
+        if (atoms.size < 2) return PunctuationSpacingCompressionResult(emptyList())
+
+        val adjustments = atoms.zipWithNext().mapNotNull { (left, right) ->
+            if (left.range.end != right.range.start) return@mapNotNull null
+
+            val naturalInnerGlue = left.trailingGlue.natural + right.leadingGlue.natural
+            val adjustedInnerGlue = maxOf(left.trailingGlue.natural, right.leadingGlue.natural)
+            val reduction = naturalInnerGlue - adjustedInnerGlue
+            if (reduction <= 0f) return@mapNotNull null
+
+            PunctuationSpacingAdjustment(
+                range = TextRange(left.range.start, right.range.end),
+                reductionTargetRange = right.range,
+                leftChar = left.char,
+                rightChar = right.char,
+                naturalInnerGlue = naturalInnerGlue,
+                adjustedInnerGlue = adjustedInnerGlue,
+                reduction = reduction,
+                reason = "collapse-adjacent-punctuation-inner-glue",
+            )
+        }
+
+        return PunctuationSpacingCompressionResult(adjustments)
+    }
+}
+
 class PunctuationAtomBuilder {
     fun build(text: String, index: Int, em: Float): PunctuationAtom? {
         val char = text.getOrNull(index) ?: return null

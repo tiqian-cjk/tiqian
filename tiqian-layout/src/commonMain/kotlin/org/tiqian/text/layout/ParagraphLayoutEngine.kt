@@ -40,6 +40,7 @@ class ExplainableStubParagraphLayoutEngine(
     private val fontMetricsResolver: FontMetricsResolver = StubFontMetricsResolver(),
     private val fontMetricsNormalizer: FontMetricsNormalizer = ScriptAwareFontMetricsNormalizer(),
     private val punctuationAtomBuilder: PunctuationAtomBuilder = PunctuationAtomBuilder(),
+    private val punctuationSpacingCompressor: PunctuationSpacingCompressor = PunctuationSpacingCompressor(),
 ) : ParagraphLayoutEngine {
     override fun layout(input: LayoutInput): LayoutResult {
         val text = input.content.text
@@ -64,7 +65,7 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        val clusters = fontDecisions.map { decision ->
+        val naturalClusters = fontDecisions.map { decision ->
             val sourceText = text.substring(decision.range.start, decision.range.end)
             val substitution = punctuationGlyphSubstitutor.substitute(sourceText)
             Cluster(
@@ -79,12 +80,14 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        val punctuationAtoms = clusters.flatMap { cluster ->
+        val punctuationAtoms = naturalClusters.flatMap { cluster ->
             cluster.punctuationAtoms(
                 em = fontSize,
                 builder = punctuationAtomBuilder,
             )
         }
+        val punctuationSpacingCompression = punctuationSpacingCompressor.compress(punctuationAtoms)
+        val clusters = naturalClusters.withPunctuationSpacingCompression(punctuationSpacingCompression)
 
         val metricDecisions = fontDecisions.map { decision ->
             val request = FontMetricsRequest(
@@ -124,8 +127,9 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        val totalAdvance = glyphRuns.sumOf { it.advance.toDouble() }.toFloat()
-        val naturalWidth = totalAdvance.coerceAtMost(input.constraints.maxWidth)
+        val naturalAdvance = naturalClusters.sumOf { it.advance.toDouble() }.toFloat()
+        val adjustedAdvance = glyphRuns.sumOf { it.advance.toDouble() }.toFloat()
+        val resultWidth = adjustedAdvance.coerceAtMost(input.constraints.maxWidth)
         val lineMetrics = metricDecisions.lineMetrics(input.paragraphStyle.lineHeight)
         val lines = if (text.isEmpty()) {
             emptyList()
@@ -136,14 +140,15 @@ class ExplainableStubParagraphLayoutEngine(
                     baseline = lineMetrics.baseline,
                     top = 0f,
                     bottom = lineMetrics.height,
-                    naturalWidth = naturalWidth,
-                    adjustedWidth = naturalWidth,
-                    visualWidth = naturalWidth,
+                    naturalWidth = naturalAdvance,
+                    adjustedWidth = adjustedAdvance,
+                    visualWidth = adjustedAdvance,
                     debug = LineDebugInfo(
                         repair = null,
                         notes = listOf(
                             "ExplainableStubParagraphLayoutEngine emits one unoptimized line.",
                             "punctuation-atoms:${punctuationAtoms.size}",
+                            "punctuation-spacing-reduction:${punctuationSpacingCompression.totalReduction}",
                         ),
                     ),
                 )
@@ -153,7 +158,7 @@ class ExplainableStubParagraphLayoutEngine(
         return LayoutResult(
             input = input,
             size = Size(
-                width = naturalWidth,
+                width = resultWidth,
                 height = lineMetrics.height,
             ),
             clusters = clusters,
@@ -175,6 +180,12 @@ class ExplainableStubParagraphLayoutEngine(
                     "punct:${atom.range.start}-${atom.range.end}:${atom.char}:${atom.punctuationClass}:" +
                         "advance=${atom.advance},body=${atom.bodyWidth}," +
                         "leading=${atom.leadingGlue.natural},trailing=${atom.trailingGlue.natural},anchor=${atom.anchor}"
+                },
+                punctuationSpacingDecisions = punctuationSpacingCompression.adjustments.map { adjustment ->
+                    "spacing:${adjustment.range.start}-${adjustment.range.end}:${adjustment.leftChar}${adjustment.rightChar}:" +
+                        "naturalInner=${adjustment.naturalInnerGlue},adjustedInner=${adjustment.adjustedInnerGlue}," +
+                        "reduction=${adjustment.reduction},target=${adjustment.reductionTargetRange.start}-${adjustment.reductionTargetRange.end}:" +
+                        adjustment.reason
                 },
                 lineDecisions = listOf("line:single-placeholder"),
             ),
@@ -250,6 +261,27 @@ class ExplainableStubParagraphLayoutEngine(
         } else {
             range
         }
+
+    private fun List<Cluster>.withPunctuationSpacingCompression(
+        compression: PunctuationSpacingCompressionResult,
+    ): List<Cluster> {
+        if (compression.adjustments.isEmpty()) return this
+
+        return map { cluster ->
+            val reduction = compression.adjustments
+                .filter { adjustment -> adjustment.reductionTargetRange.isInside(cluster.range) }
+                .sumOf { it.reduction.toDouble() }
+                .toFloat()
+            if (reduction == 0f) {
+                cluster
+            } else {
+                cluster.copy(advance = (cluster.advance - reduction).coerceAtLeast(0f))
+            }
+        }
+    }
+
+    private fun TextRange.isInside(other: TextRange): Boolean =
+        start >= other.start && end <= other.end
 
     private fun List<ClusterMetricDecision>.lineMetrics(explicitLineHeight: Float?): ResolvedLineMetrics {
         if (isEmpty()) {

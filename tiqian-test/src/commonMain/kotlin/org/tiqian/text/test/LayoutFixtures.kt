@@ -30,6 +30,12 @@ object EarlyLayoutFixtures {
             notes = "Covers opening/closing punctuation and repair planning.",
         ),
         LayoutFixture(
+            id = "adjacent-punctuation-spacing",
+            text = "他说：“你好，世界。”！！",
+            constraints = LayoutConstraints(maxWidth = 220f),
+            notes = "Shows punctuation atoms and adjacent punctuation spacing compression.",
+        ),
+        LayoutFixture(
             id = "fallback-roles",
             text = "提椠……Hello——世界。",
             constraints = LayoutConstraints(maxWidth = 240f),
