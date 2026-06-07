@@ -8,6 +8,7 @@ kotlin {
     sourceSets {
         jvmMain.dependencies {
             implementation(project(":tiqian-layout"))
+            implementation(project(":tiqian-shaping-jvm"))
             implementation(project(":tiqian-test"))
         }
     }

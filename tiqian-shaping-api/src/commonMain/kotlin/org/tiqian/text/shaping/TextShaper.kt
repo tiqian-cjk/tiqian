@@ -28,6 +28,7 @@ interface TextShaper {
 
 enum class ShapingSource {
     Stub,
+    JvmAwt,
     AndroidPaint,
     Skia,
     HarfBuzz,

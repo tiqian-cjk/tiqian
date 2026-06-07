@@ -25,6 +25,7 @@ import org.tiqian.text.core.LineRepairCandidateInfo
 import org.tiqian.text.core.LineRepairDecisionInfo
 import org.tiqian.text.core.MetricDecisionInfo
 import org.tiqian.text.core.PunctuationDecisionInfo
+import org.tiqian.text.core.Rect
 import org.tiqian.text.core.RoleOverrideInfo
 import org.tiqian.text.core.Size
 import org.tiqian.text.core.SpacingDecisionInfo
@@ -122,6 +123,10 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
         val rawNaturalClusters = shapingResults.flatMap { it.clusters }
+        val shapedGlyphsByClusterRange = shapingResults
+            .flatMap { it.glyphRuns }
+            .flatMap { it.glyphs }
+            .groupBy { it.clusterRange }
         val shapingDecisions = shapingResults.flatMap { it.decisions }
         rawNaturalClusters.requireCoveredBy(fontDecisions)
 
@@ -134,7 +139,11 @@ class ExplainableStubParagraphLayoutEngine(
         val autoSpaceDecisions = autoSpaceResult.decisions
 
         val punctuationAtoms = naturalClusters.flatMap { cluster ->
-            cluster.punctuationAtoms(em = fontSize, builder = punctuationAtomBuilder)
+            cluster.punctuationAtoms(
+                em = fontSize,
+                builder = punctuationAtomBuilder,
+                shapedGlyphs = shapedGlyphsByClusterRange[cluster.range].orEmpty(),
+            )
         }
         val spacingPlan = punctuationSpacingCompressor.compress(punctuationAtoms)
         val baseGeometry = PunctuationGeometryLedger.from(
@@ -226,12 +235,16 @@ class ExplainableStubParagraphLayoutEngine(
             GlyphRun(
                 range = TextRange(runClusters.first().range.start, runClusters.last().range.end),
                 fontKey = runClusters.first().fontKey,
-                glyphs = runClusters.mapIndexed { glyphId, cluster ->
-                    Glyph(
-                        id = glyphId.toUInt(),
-                        clusterRange = cluster.range,
-                        advance = cluster.advance,
-                    )
+                glyphs = runClusters.flatMapIndexed { fallbackGlyphId, cluster ->
+                    shapedGlyphsByClusterRange[cluster.range]
+                        ?.mapToResolvedAdvance(cluster)
+                        ?: listOf(
+                            Glyph(
+                                id = fallbackGlyphId.toUInt(),
+                                clusterRange = cluster.range,
+                                advance = cluster.advance,
+                            ),
+                        )
                 },
                 advance = runClusters.sumOf { it.advance.toDouble() }.toFloat(),
             )
@@ -317,6 +330,11 @@ class ExplainableStubParagraphLayoutEngine(
                         leadingGlueNatural = atom.leadingGlue.natural,
                         trailingGlueNatural = atom.trailingGlue.natural,
                         anchor = atom.anchor.name,
+                        inkBounds = atom.inkBounds,
+                        geometrySource = atom.geometrySource,
+                        policyBodyFloor = atom.policyBodyFloor,
+                        inkWidth = atom.inkWidth,
+                        inkCenter = atom.inkCenter,
                     )
                 },
                 geometryDecisions = geometryDecisions,
@@ -450,7 +468,11 @@ class ExplainableStubParagraphLayoutEngine(
     private fun Int.charCount(): Int =
         if (this > 0xFFFF) 2 else 1
 
-    private fun Cluster.punctuationAtoms(em: Float, builder: PunctuationAtomBuilder): List<PunctuationAtom> {
+    private fun Cluster.punctuationAtoms(
+        em: Float,
+        builder: PunctuationAtomBuilder,
+        shapedGlyphs: List<Glyph>,
+    ): List<PunctuationAtom> {
         if (displayText.isEmpty()) return emptyList()
 
         return displayText.mapIndexedNotNull { index, char ->
@@ -458,8 +480,38 @@ class ExplainableStubParagraphLayoutEngine(
                 char = char,
                 range = displayCharSourceRange(index),
                 em = em,
+                inkInput = punctuationInkInputFor(index, shapedGlyphs),
             )
         }
+    }
+
+    private fun Cluster.punctuationInkInputFor(displayIndex: Int, shapedGlyphs: List<Glyph>): PunctuationInkInput? {
+        if (shapedGlyphs.isEmpty()) return null
+        val glyph = when {
+            shapedGlyphs.size == displayText.length -> shapedGlyphs.getOrNull(displayIndex)
+            displayText.length == 1 -> shapedGlyphs.unionAsSingleGlyph()
+            else -> null
+        } ?: return null
+        return PunctuationInkInput(
+            advance = glyph.advance,
+            inkBounds = glyph.bounds,
+        )
+    }
+
+    private fun List<Glyph>.unionAsSingleGlyph(): Glyph? {
+        if (isEmpty()) return null
+        val first = first()
+        val bounds = mapNotNull { it.bounds }
+        if (bounds.isEmpty()) return first
+        return first.copy(
+            advance = sumOf { it.advance.toDouble() }.toFloat(),
+            bounds = Rect(
+                left = bounds.minOf { it.left.toDouble() }.toFloat(),
+                top = bounds.minOf { it.top.toDouble() }.toFloat(),
+                right = bounds.maxOf { it.right.toDouble() }.toFloat(),
+                bottom = bounds.maxOf { it.bottom.toDouble() }.toFloat(),
+            ),
+        )
     }
 
     private fun Cluster.displayCharSourceRange(displayIndex: Int): TextRange =
@@ -489,6 +541,22 @@ class ExplainableStubParagraphLayoutEngine(
             require(cursor == decision.range.end) {
                 "TextShaper must return clusters covering ${decision.range}; coveredUntil=$cursor"
             }
+        }
+    }
+
+    private fun List<Glyph>.mapToResolvedAdvance(cluster: Cluster): List<Glyph> {
+        val sourceAdvance = sumOf { it.advance.toDouble() }.toFloat()
+        if (sourceAdvance <= 0f) {
+            val fallbackAdvance = cluster.advance / size.coerceAtLeast(1)
+            return map { it.copy(advance = fallbackAdvance, clusterRange = cluster.range) }
+        }
+
+        val scale = cluster.advance / sourceAdvance
+        return map { glyph ->
+            glyph.copy(
+                clusterRange = cluster.range,
+                advance = glyph.advance * scale,
+            )
         }
     }
 
@@ -747,6 +815,7 @@ private data class PunctuationGeometryLedger(
                     bodyWidth = atomsForCluster.sumOf { it.bodyWidth.toDouble() }.toFloat(),
                     leadingGlueNatural = atomsForCluster.first().leadingGlue.natural,
                     trailingGlueNatural = atomsForCluster.last().trailingGlue.natural,
+                    reason = atomsForCluster.first().geometrySource,
                 )
             }.toMap()
         }
@@ -856,7 +925,7 @@ private data class PunctuationGeometryLedger(
                 justificationDelta = delta,
                 resolvedAdvance = resolvedAdvance(index, naturalClusters[index]),
                 source = "PunctuationGeometryLedger",
-                reason = "PolicyDerivedPunctuationGeometry",
+                reason = geometry.reason,
             )
         }
 
@@ -895,6 +964,7 @@ private data class PunctuationClusterGeometry(
     val bodyWidth: Float,
     val leadingGlueNatural: Float,
     val trailingGlueNatural: Float,
+    val reason: String,
 )
 
 private data class GlueBudget(
@@ -937,10 +1007,22 @@ private fun Map<Int, GlueBudget>.consumeByRange(
             val targetIdx = clusters.indexOfFirst { adjustment.reductionTargetRange.isInside(it.range) }
             if (targetIdx < 0) return@forEach
             updated[targetIdx]?.let { current ->
-                updated[targetIdx] = current.copy(
-                    leadingConsumed = (current.leadingConsumed + adjustment.reduction)
-                        .coerceAtMost(current.leadingNatural),
-                )
+                // Consume reduction from whichever side has remaining capacity.
+                // With class-based single-sided glue, all glue may be on one
+                // side (e.g. PauseOrStop → trailing only, Opening → leading only).
+                val leadingRemaining = current.leadingNatural - current.leadingConsumed
+                val trailingRemaining = current.trailingNatural - current.trailingConsumed
+                updated[targetIdx] = if (trailingRemaining >= leadingRemaining) {
+                    current.copy(
+                        trailingConsumed = (current.trailingConsumed + adjustment.reduction)
+                            .coerceAtMost(current.trailingNatural),
+                    )
+                } else {
+                    current.copy(
+                        leadingConsumed = (current.leadingConsumed + adjustment.reduction)
+                            .coerceAtMost(current.leadingNatural),
+                    )
+                }
             }
         }
     }

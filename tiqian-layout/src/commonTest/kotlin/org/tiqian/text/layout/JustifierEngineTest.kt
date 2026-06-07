@@ -99,15 +99,20 @@ class JustifierEngineTest {
 
     @Test
     fun justifyDistributesDeficitAcrossPriorityChain() {
-        // Two-line text where line 0 has a punctuation-spacing compression
-        // (so PunctuationGlue capacity > 0) plus CJK-CJK gaps. Engineered
-        // numbers:
-        //   text = "中，。文中文中文中"  (9 clusters, 中文 = 16f, ，。 collapsed -4)
-        //   maxWidth = 80
-        // Greedy line 0: 中(16) ，(32) 。(44) 文(60) 中(76). next 文 -> 92 > 80, break.
-        // Actually 。 advance after compression = 12, so accum: 16, 32, 44, 60, 76.
-        // Line 0 = clusters 0..4 (中，。文中) adjustedWidth 76. naturalWidth 80.
-        // deficit = 80 - 76 = 4. PunctuationGlue cap = 4 -> fully absorbed.
+        // Two-line text where line 0 has punctuation-spacing compression.
+        // text = "中，。文中文中文中"  (9 clusters, CJK = 16f, ，。 collapsed -4)
+        // maxWidth = 80
+        // Class-based glue: ，trailing=8, 。leading=0. Inner=8, adjusted=4,
+        // reduction=4 on ，'s trailing.
+        // Greedy line 0: 中(16) ，(12 after spacing) 。(16) 文(16) 中(16) → 76.
+        // But 。 at non-line-end doesn't get edge trim here.
+        // Actually 。's trailing=8 is only trimmed at line-END. On line 0 middle
+        // position, no trim. So accum: 16+12+16+16+16=76, next 文→92 > 80, break.
+        // Wait — line-end trim for line 0's last cluster (中 at index 4): no punct.
+        // But 。 at position 2 is not at line end.
+        // Line 0 = clusters 0..4, adjustedWidth = 76. deficit = 80 - 76 = 4.
+        // PunctuationGlue cap = ，'s trailing remaining after spacing (8-4=4).
+        // Fully absorbs deficit.
         val result = engine.layout(
             LayoutInput(
                 content = TiqianTextContent("中，。文中文中文中"),
@@ -128,14 +133,13 @@ class JustifierEngineTest {
 
         // Line 0 visualWidth should now equal maxWidth.
         assertEquals(80f, result.lines[0].visualWidth)
-        // Cluster 。 (range 2-3) advance should be restored from 12 to 16.
-        val dotCluster = result.clusters.single { it.text == "。" }
-        assertEquals(16f, dotCluster.advance)
-        val dotGeometry = result.debug.geometryDecisions.single { it.sourceText == "。" }
-        assertEquals(4f, dotGeometry.leadingGlueConsumed)
-        assertEquals(0f, dotGeometry.trailingGlueConsumed)
-        assertEquals(4f, dotGeometry.justificationDelta)
-        assertEquals(16f, dotGeometry.resolvedAdvance)
+        // Cluster ， (range 1-2) advance restored from 12 to 16 by justification.
+        val commaCluster = result.clusters.single { it.text == "，" }
+        assertEquals(16f, commaCluster.advance)
+        val commaGeometry = result.debug.geometryDecisions.single { it.sourceText == "，" }
+        assertEquals(4f, commaGeometry.trailingGlueConsumed)
+        assertEquals(4f, commaGeometry.justificationDelta)
+        assertEquals(16f, commaGeometry.resolvedAdvance)
     }
 
     @Test

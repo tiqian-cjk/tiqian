@@ -20,6 +20,7 @@ include(
     ":tiqian-core",
     ":tiqian-font",
     ":tiqian-shaping-api",
+    ":tiqian-shaping-jvm",
     ":tiqian-linebreak",
     ":tiqian-clreq",
     ":tiqian-layout",
@@ -28,4 +29,3 @@ include(
     ":tiqian-playground",
     ":tiqian-test",
 )
-

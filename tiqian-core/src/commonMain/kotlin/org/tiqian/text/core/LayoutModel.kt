@@ -129,6 +129,11 @@ data class PunctuationDecisionInfo(
     val leadingGlueNatural: Float,
     val trailingGlueNatural: Float,
     val anchor: String,
+    val inkBounds: Rect? = null,
+    val geometrySource: String = "PolicyDerived",
+    val policyBodyFloor: Float = bodyWidth,
+    val inkWidth: Float? = null,
+    val inkCenter: Float? = null,
 )
 
 data class ClusterGeometryDecisionInfo(

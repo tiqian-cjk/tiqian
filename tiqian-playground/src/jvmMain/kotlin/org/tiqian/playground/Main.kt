@@ -4,20 +4,40 @@ import org.tiqian.text.core.Cluster
 import org.tiqian.text.core.LayoutInput
 import org.tiqian.text.core.LayoutResult
 import org.tiqian.text.core.LineBox
+import org.tiqian.text.core.PunctuationDecisionInfo
+import org.tiqian.text.core.Rect
 import org.tiqian.text.core.SpacingDecisionInfo
 import org.tiqian.text.core.TiqianTextContent
 import org.tiqian.text.layout.ExplainableStubParagraphLayoutEngine
 import org.tiqian.text.layout.GreedyLineBreaker
 import org.tiqian.text.layout.LookaheadLineBreaker
+import org.tiqian.text.shaping.ExplainableStubTextShaper
+import org.tiqian.text.shaping.TextShaper
+import org.tiqian.text.shaping.jvm.AwtTextShaper
 import org.tiqian.text.test.EarlyLayoutFixtures
 import org.tiqian.text.test.LayoutFixture
+import java.awt.Font
+import java.awt.font.FontRenderContext
+import java.awt.geom.AffineTransform
+import java.awt.geom.PathIterator
 import java.io.File
 import java.util.Locale
 
 fun main() {
-    val greedyEngine = ExplainableStubParagraphLayoutEngine(lineBreaker = GreedyLineBreaker())
-    val lookaheadEngine = ExplainableStubParagraphLayoutEngine(lineBreaker = LookaheadLineBreaker())
+    val shaperMode = ShaperMode.fromEnvironment()
+    val textShaper = shaperMode.createShaper()
+    val greedyEngine = ExplainableStubParagraphLayoutEngine(
+        lineBreaker = GreedyLineBreaker(),
+        textShaper = textShaper,
+    )
+    val lookaheadEngine = ExplainableStubParagraphLayoutEngine(
+        lineBreaker = LookaheadLineBreaker(),
+        textShaper = textShaper,
+    )
     val reportItems = mutableListOf<PlaygroundReportItem>()
+
+    println("shaper=${shaperMode.id} (${shaperMode.description})")
+    println()
 
     EarlyLayoutFixtures.all.forEach { fixture ->
         val input = LayoutInput(
@@ -34,7 +54,7 @@ fun main() {
 
     val reportFile = File("build/reports/tiqian-layout-playground/index.html")
     reportFile.parentFile.mkdirs()
-    reportFile.writeText(renderHtmlReport(reportItems))
+    reportFile.writeText(renderHtmlReport(reportItems, shaperMode))
     println()
     println("HTML report: ${reportFile.absolutePath}")
 }
@@ -44,6 +64,35 @@ private data class PlaygroundReportItem(
     val greedy: LayoutResult,
     val lookahead: LayoutResult,
 )
+
+private enum class ShaperMode(
+    val id: String,
+    val description: String,
+) {
+    JvmAwt(
+        id = "jvm-awt",
+        description = "JVM AWT Font.layoutGlyphVector real advance",
+    ),
+    Stub(
+        id = "stub",
+        description = "deterministic nominal em advance",
+    );
+
+    fun createShaper(): TextShaper =
+        when (this) {
+            JvmAwt -> AwtTextShaper()
+            Stub -> ExplainableStubTextShaper()
+        }
+
+    companion object {
+        fun fromEnvironment(): ShaperMode =
+            when (System.getenv("TIQIAN_PLAYGROUND_SHAPER")?.lowercase(Locale.ROOT)) {
+                "stub" -> Stub
+                "jvm", "jvm-awt", "awt", null, "" -> JvmAwt
+                else -> JvmAwt
+            }
+    }
+}
 
 private fun printFixtureDump(fixture: LayoutFixture, greedy: LayoutResult, lookahead: LayoutResult) {
     println("${fixture.id}:")
@@ -86,7 +135,7 @@ private fun SpacingDecisionInfo.compactDump(): String =
 private fun Cluster.compactDump(): String =
     "${range.start}-${range.end} '$displayText' ${advance.oneDecimal()} $fontKey"
 
-private fun renderHtmlReport(items: List<PlaygroundReportItem>): String =
+private fun renderHtmlReport(items: List<PlaygroundReportItem>, shaperMode: ShaperMode): String =
     buildString {
         appendLine("<!doctype html>")
         appendLine("<html lang=\"zh-Hans\">")
@@ -111,6 +160,8 @@ private fun renderHtmlReport(items: List<PlaygroundReportItem>): String =
                 --glyph-punct-border: rgba(195, 134, 50, 0.55);
                 --glyph-latin: rgba(140, 200, 140, 0.18);
                 --glyph-latin-border: rgba(80, 160, 80, 0.50);
+                --ink: rgba(210, 55, 55, 0.78);
+                --ink-fill: rgba(210, 55, 55, 0.10);
               }
               body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--fg); }
               main { max-width: 1280px; margin: 0 auto; padding: 32px 24px 64px; }
@@ -132,6 +183,10 @@ private fun renderHtmlReport(items: List<PlaygroundReportItem>): String =
               .sample-engine .glyph.cjk-punct { background: var(--glyph-punct); border-left: 1px solid var(--glyph-punct-border); border-right: 1px solid var(--glyph-punct-border); }
               .sample-engine .glyph.latin { background: var(--glyph-latin); border-left: 1px solid var(--glyph-latin-border); border-right: 1px solid var(--glyph-latin-border); }
               .sample-engine .glyph .ch { font-size: 16px; line-height: 1; transform: translateY(0); }
+              .sample-engine .glyph.cjk-punct .ch.has-measured-layer { color: transparent; }
+              .sample-engine .glyph .measured-layer { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+              .sample-engine .glyph .measured-layer path { fill: var(--fg); }
+              .sample-engine .glyph .measured-layer rect { stroke: var(--ink); fill: var(--ink-fill); vector-effect: non-scaling-stroke; }
               .sample-engine .repair-tag { position: absolute; right: -6px; transform: translate(100%, 0); padding: 1px 6px; font-size: 10px; background: rgba(196, 80, 60, 0.12); color: #b03a2e; border: 1px solid rgba(196, 80, 60, 0.45); border-radius: 3px; white-space: nowrap; pointer-events: none; }
               .sample-engine .justify-tag { position: absolute; right: -6px; transform: translate(100%, 0); padding: 1px 6px; font-size: 10px; background: rgba(60, 140, 90, 0.10); color: #2e7d4f; border: 1px solid rgba(60, 140, 90, 0.40); border-radius: 3px; white-space: nowrap; pointer-events: none; }
               .sample-engine .max-width-rule { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(80, 120, 200, 0.3); pointer-events: none; }
@@ -156,7 +211,8 @@ private fun renderHtmlReport(items: List<PlaygroundReportItem>): String =
                 "<code>cluster.advance</code>，纵向位置 = <code>line.top / bottom</code>。" +
                 "红线 = baseline；蓝色点线 = line box 上下沿；右上红色 <code>↻ 标签</code>表示该行触发了 kinsoku repair。" +
                 "lookahead 会用更小的窗口（默认 ±1 cluster）扫多种断行，挑 raggedness + repair penalty 最低的那种。" +
-                "Latin 字 cluster 在当前 stub 里按 1em/字符计宽，所以 Latin 文字会从 cluster 框里溢出——这是 stub 故意暴露的差异。</p>",
+                "当前 shaper：<code>${shaperMode.id.escapeHtml()}</code>（${shaperMode.description.escapeHtml()}）。" +
+                "如需回到 deterministic stub，对 playground 设置 <code>TIQIAN_PLAYGROUND_SHAPER=stub</code>。</p>",
         )
         items.forEach { item -> appendLine(item.renderSection()) }
         appendLine("</main></body></html>")
@@ -221,7 +277,16 @@ private fun renderEngineColumn(label: String, result: LayoutResult, maxWidth: Fl
             var x = 0f
             lineClusters.forEach { cluster ->
                 val role = result.debug.fontDecisions.firstOrNull { it.range == cluster.range }?.role
-                appendLine(renderGlyphBox(cluster, role, leftPx = x, line = line))
+                appendLine(
+                    renderGlyphBox(
+                        cluster = cluster,
+                        role = role,
+                        inkOverlays = result.debug.punctuationDecisions.inkOverlaysFor(cluster),
+                        fontSize = result.input.textStyle.fontSize,
+                        leftPx = x,
+                        line = line,
+                    ),
+                )
                 x += cluster.advance
             }
             val repair = result.debug.lineDecisions.getOrNull(lineIndex)?.repair
@@ -253,6 +318,25 @@ private fun renderEngineMetadata(label: String, result: LayoutResult): String =
                 appendLine(
                     "<span class=\"metric\">shape ${decision.range.start}-${decision.range.end} " +
                         "'${decision.displayText.escapeHtml()}' ${decision.advance.oneDecimal()} ${decision.source}</span>",
+                )
+            }
+            appendLine("</div>")
+        }
+        if (result.debug.punctuationDecisions.isNotEmpty()) {
+            appendLine("<div class=\"metrics\">")
+            result.debug.punctuationDecisions.forEach { decision ->
+                val ink = decision.inkBounds?.let { " ink=${it.compactDump()}" } ?: ""
+                val inkMeasures = buildList {
+                    add("floor=${decision.policyBodyFloor.oneDecimal()}")
+                    decision.inkWidth?.let { add("inkW=${it.oneDecimal()}") }
+                    decision.inkCenter?.let { add("inkC=${it.oneDecimal()}") }
+                }.joinToString(" ")
+                val sourceTag = decision.geometrySource
+                appendLine(
+                    "<span class=\"metric\">punct ${decision.range.start}-${decision.range.end} " +
+                        "'${decision.char.toString().escapeHtml()}' body=${decision.bodyWidth.oneDecimal()} " +
+                        "lead=${decision.leadingGlueNatural.oneDecimal()} trail=${decision.trailingGlueNatural.oneDecimal()} " +
+                        "$inkMeasures $sourceTag$ink</span>",
                 )
             }
             appendLine("</div>")
@@ -333,7 +417,14 @@ private fun renderLineOverlays(line: LineBox, lineIndex: Int, lastIndex: Int): S
     }
 }
 
-private fun renderGlyphBox(cluster: Cluster, role: String?, leftPx: Float, line: LineBox): String {
+private fun renderGlyphBox(
+    cluster: Cluster,
+    role: String?,
+    inkOverlays: List<InkOverlay>,
+    fontSize: Float,
+    leftPx: Float,
+    line: LineBox,
+): String {
     val klass = when {
         role == "CjkPunctuation" || cluster.text.any { it.isCjkPunctuationLike() } -> "glyph cjk-punct"
         role == "LatinText" -> "glyph latin"
@@ -341,9 +432,132 @@ private fun renderGlyphBox(cluster: Cluster, role: String?, leftPx: Float, line:
         else -> "glyph cjk-text"
     }
     val height = line.bottom - line.top
+    val baselineWithinLine = line.baseline - line.top
     return "<div class=\"$klass\" style=\"left:${leftPx.oneDecimal()}px; top:${line.top.oneDecimal()}px; width:${cluster.advance.oneDecimal()}px; height:${height.oneDecimal()}px\">" +
-        "<span class=\"ch\">${cluster.displayText.escapeHtml()}</span>" +
+        inkOverlays.renderMeasuredLayer(
+            width = cluster.advance,
+            height = height,
+            baselineWithinLine = baselineWithinLine,
+            role = role,
+            fontSize = fontSize,
+        ) +
+        "<span class=\"ch${if (inkOverlays.isNotEmpty()) " has-measured-layer" else ""}\">${cluster.displayText.escapeHtml()}</span>" +
         "</div>"
+}
+
+private data class InkOverlay(
+    val xOffset: Float,
+    val char: Char,
+    val advance: Float,
+    val bounds: Rect,
+)
+
+private fun List<PunctuationDecisionInfo>.inkOverlaysFor(cluster: Cluster): List<InkOverlay> {
+    val decisions = filter { decision ->
+        decision.range.start >= cluster.range.start && decision.range.end <= cluster.range.end
+    }.sortedBy { it.range.start }
+    var x = 0f
+    return decisions.mapNotNull { decision ->
+        val overlay = decision.inkBounds?.let { bounds ->
+            InkOverlay(
+                xOffset = x,
+                char = decision.char,
+                advance = decision.advance,
+                bounds = bounds,
+            )
+        }
+        x += decision.advance
+        overlay
+    }
+}
+
+private fun List<InkOverlay>.renderMeasuredLayer(
+    width: Float,
+    height: Float,
+    baselineWithinLine: Float,
+    role: String?,
+    fontSize: Float,
+): String {
+    if (isEmpty()) return ""
+    return buildString {
+        append(
+            "<svg class=\"measured-layer\" viewBox=\"0 0 ${width.oneDecimal()} ${height.oneDecimal()}\" " +
+                "width=\"${width.oneDecimal()}\" height=\"${height.oneDecimal()}\" aria-hidden=\"true\">",
+        )
+        this@renderMeasuredLayer.forEach { overlay ->
+            val xOffset = overlay.xOffset
+            val bounds = overlay.bounds
+            val pathData = overlay.char.awtGlyphPathData(
+                x = xOffset,
+                baseline = baselineWithinLine,
+                role = role,
+                fontSize = fontSize,
+            )
+            append(
+                "<path d=\"${pathData.escapeHtml()}\" />",
+            )
+            append(
+                "<rect x=\"${(xOffset + bounds.left).oneDecimal()}\" " +
+                    "y=\"${(baselineWithinLine + bounds.top).oneDecimal()}\" " +
+                    "width=\"${bounds.width.oneDecimal()}\" height=\"${bounds.height.oneDecimal()}\" />",
+            )
+        }
+        append("</svg>")
+    }
+}
+
+private val fontRenderContext = FontRenderContext(AffineTransform(), true, true)
+
+private fun Char.awtGlyphPathData(
+    x: Float,
+    baseline: Float,
+    role: String?,
+    fontSize: Float,
+): String {
+    val font = Font(role.awtLogicalFamily(), Font.PLAIN, 1).deriveFont(fontSize)
+    val glyphVector = font.layoutGlyphVector(
+        fontRenderContext,
+        charArrayOf(this),
+        0,
+        1,
+        Font.LAYOUT_LEFT_TO_RIGHT,
+    )
+    return glyphVector
+        .getGlyphOutline(0, x, baseline)
+        .toSvgPathData()
+}
+
+private fun String?.awtLogicalFamily(): String =
+    when (this) {
+        "CjkText",
+        "CjkPunctuation",
+        -> Font.SERIF
+
+        else -> Font.SANS_SERIF
+    }
+
+private fun java.awt.Shape.toSvgPathData(): String {
+    val iterator = getPathIterator(null)
+    val coords = FloatArray(6)
+    return buildString {
+        while (!iterator.isDone) {
+            when (iterator.currentSegment(coords)) {
+                PathIterator.SEG_MOVETO -> append("M ${coords[0].pathNumber()} ${coords[1].pathNumber()} ")
+                PathIterator.SEG_LINETO -> append("L ${coords[0].pathNumber()} ${coords[1].pathNumber()} ")
+                PathIterator.SEG_QUADTO -> append(
+                    "Q ${coords[0].pathNumber()} ${coords[1].pathNumber()} " +
+                        "${coords[2].pathNumber()} ${coords[3].pathNumber()} ",
+                )
+                PathIterator.SEG_CUBICTO -> append(
+                    "C ${coords[0].pathNumber()} ${coords[1].pathNumber()} " +
+                        "${coords[2].pathNumber()} ${coords[3].pathNumber()} " +
+                        "${coords[4].pathNumber()} ${coords[5].pathNumber()} ",
+                )
+                PathIterator.SEG_CLOSE -> append("Z ")
+            }
+            iterator.next()
+        }
+    }.trim()
 }
 
 private fun renderLegend(): String =
@@ -352,6 +566,7 @@ private fun renderLegend(): String =
       <span><span class="swatch" style="background: var(--glyph-cjk); color: var(--glyph-cjk-border)"></span>CJK text</span>
       <span><span class="swatch" style="background: var(--glyph-punct); color: var(--glyph-punct-border)"></span>CJK punct</span>
       <span><span class="swatch" style="background: var(--glyph-latin); color: var(--glyph-latin-border)"></span>Latin</span>
+      <span><span class="swatch" style="background: var(--ink-fill); color: var(--ink)"></span>ink bounds</span>
       <span><span class="swatch baseline-sw" style="color: var(--baseline)"></span>baseline</span>
       <span><span class="swatch linebox-sw" style="color: var(--linebox)"></span>line box</span>
     </div>
@@ -362,6 +577,12 @@ private fun Char.isCjkPunctuationLike(): Boolean =
 
 private fun Float.oneDecimal(): String =
     String.format(Locale.US, "%.1f", this)
+
+private fun Float.pathNumber(): String =
+    String.format(Locale.US, "%.3f", this).trimEnd('0').trimEnd('.')
+
+private fun Rect.compactDump(): String =
+    "[${left.oneDecimal()},${top.oneDecimal()},${right.oneDecimal()},${bottom.oneDecimal()}]"
 
 private fun String.escapeHtml(): String =
     replace("&", "&amp;")

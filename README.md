@@ -1,8 +1,8 @@
-# 提椠 Tiqian
+# 提椠 Tíqiàn
 
 提椠是一个面向中文正文的 CJK paragraph layout engine。第一阶段目标是支持 CLREQ 横排核心需求，并为 Compose Multiplatform 与 Android View 提供前端适配。
 
-当前仓库处于项目骨架阶段：模块边界、核心数据结构、测试 fixture 和可解释占位 layout engine 已建立；真实 shaping、字体 fallback、标点 glue、断行优化和绘制适配尚未实现。
+当前仓库处于项目骨架阶段：模块边界、核心数据结构、测试 fixture 和可解释 layout pipeline 已建立；JVM playground 已有 AWT 真实 advance adapter，标点 atom 能用 shaped glyph bounds 校准 body/glue；字体 fallback、平台 shaping、断行优化和绘制适配仍在逐步替换占位实现。
 
 ## 模块
 
@@ -15,6 +15,9 @@ tiqian-font
 
 tiqian-shaping-api
   平台 shaping adapter 的公共接口。
+
+tiqian-shaping-jvm
+  JVM/AWT 真实 advance 测量 adapter，用于 playground 和早期 contract 验证。
 
 tiqian-linebreak
   断行机会与 line break analyzer 接口。
@@ -67,6 +70,12 @@ text -> fallback -> shaping -> metrics -> punctuation atom -> glue -> line layou
 
 ```text
 tiqian-playground/build/reports/tiqian-layout-playground/index.html
+```
+
+Playground 默认使用 `jvm-awt` shaper；需要回到 deterministic stub 对照时：
+
+```shell
+TIQIAN_PLAYGROUND_SHAPER=stub ./gradlew :tiqian-playground:runPlayground
 ```
 
 ## 提交格式
