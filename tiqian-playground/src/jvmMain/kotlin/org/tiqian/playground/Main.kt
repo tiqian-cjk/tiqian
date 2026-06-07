@@ -16,12 +16,19 @@ import org.tiqian.text.shaping.TextShaper
 import org.tiqian.text.shaping.jvm.AwtTextShaper
 import org.tiqian.text.test.EarlyLayoutFixtures
 import org.tiqian.text.test.LayoutFixture
+import java.awt.Color
 import java.awt.Font
+import java.awt.GraphicsEnvironment
+import java.awt.RenderingHints
 import java.awt.font.FontRenderContext
 import java.awt.geom.AffineTransform
 import java.awt.geom.PathIterator
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.Base64
 import java.util.Locale
+import javax.imageio.ImageIO
 
 fun main() {
     val shaperMode = ShaperMode.fromEnvironment()
@@ -64,6 +71,89 @@ private data class PlaygroundReportItem(
     val greedy: LayoutResult,
     val lookahead: LayoutResult,
 )
+
+/**
+ * Picks one CJK and one Latin AWT font and uses them to actually draw the
+ * engine-computed layout into a PNG. The point of the playground is to let
+ * the reader compare the engine output to the browser-default rendering;
+ * everything else (overlays, boxes, ink dots, decision tags) is debug noise
+ * that lives in `<details>` blocks.
+ */
+private object PlaygroundFontProbe {
+    val cjk: String
+    val latin: String
+
+    init {
+        val available = GraphicsEnvironment.getLocalGraphicsEnvironment()
+            .availableFontFamilyNames.toSet()
+        cjk = listOf(
+            "Source Han Sans CN",
+            "Source Han Sans CN VF",
+            "Noto Sans CJK SC",
+            "PingFang SC",
+            "Hiragino Sans GB",
+            "Sarasa UI SC",
+            "Heiti SC",
+            "STHeiti",
+        ).firstOrNull { it in available } ?: Font.SERIF
+        latin = listOf(
+            "Inter",
+            "SF Pro Text",
+            "SF Pro",
+            "Roboto",
+            "Helvetica Neue",
+        ).firstOrNull { it in available } ?: Font.SANS_SERIF
+    }
+}
+
+private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, scale: Int = 2): String {
+    val maxWidth = fixture.constraints.maxWidth.coerceAtLeast(1f)
+    val height = result.size.height.coerceAtLeast(16f)
+    val widthPx = (maxWidth * scale).toInt().coerceAtLeast(1)
+    val heightPx = (height * scale).toInt().coerceAtLeast(1)
+    val fontSize = result.input.textStyle.fontSize
+
+    val img = BufferedImage(widthPx, heightPx, BufferedImage.TYPE_INT_ARGB)
+    val g = img.createGraphics()
+    try {
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+        g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON)
+        g.scale(scale.toDouble(), scale.toDouble())
+        g.color = Color.WHITE
+        g.fillRect(0, 0, (maxWidth + 1).toInt(), (height + 1).toInt())
+
+        val cjkFont = Font(PlaygroundFontProbe.cjk, Font.PLAIN, 1).deriveFont(fontSize)
+        val latinFont = Font(PlaygroundFontProbe.latin, Font.PLAIN, 1).deriveFont(fontSize)
+
+        for (line in result.lines) {
+            val lineClusters = result.clusters.filter {
+                it.range.start >= line.range.start && it.range.end <= line.range.end
+            }
+            var x = 0f
+            for (cluster in lineClusters) {
+                val role = result.debug.fontDecisions.firstOrNull { it.range == cluster.range }?.role
+                g.font = when (role) {
+                    "LatinText" -> latinFont
+                    else -> cjkFont
+                }
+                g.color = Color.BLACK
+                if (cluster.displayText.isNotEmpty()) {
+                    g.drawString(cluster.displayText, x, line.baseline)
+                }
+                x += cluster.advance
+            }
+        }
+    } finally {
+        g.dispose()
+    }
+
+    val bytes = ByteArrayOutputStream().use {
+        ImageIO.write(img, "PNG", it)
+        it.toByteArray()
+    }
+    return "data:image/png;base64,${Base64.getEncoder().encodeToString(bytes)}"
+}
 
 private enum class ShaperMode(
     val id: String,
@@ -171,29 +261,10 @@ private fun renderHtmlReport(items: List<PlaygroundReportItem>, shaperMode: Shap
               h2 { font-size: 18px; margin: 0 0 4px; }
               .notes { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
               .compare { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; align-items: start; margin: 12px 0 14px; }
+              .render-col { min-width: 0; }
               .col-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
-              .sample-browser { font-size: 16px; line-height: 1; padding: 0; background: var(--panel); border: 1px dashed var(--rule); box-sizing: content-box; word-break: break-word; }
-              .sample-engine { position: relative; font-size: 16px; line-height: 1; background: var(--panel); border: 1px dashed var(--rule); box-sizing: content-box; overflow: visible; }
-              .sample-engine .line-box { position: absolute; left: 0; right: 0; border-top: 1px dotted var(--linebox); pointer-events: none; }
-              .sample-engine .line-box.last { border-bottom: 1px dotted var(--linebox); }
-              .sample-engine .baseline { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid var(--baseline); pointer-events: none; }
-              .sample-engine .glyph { position: absolute; box-sizing: border-box; display: flex; align-items: center; justify-content: center; overflow: visible; }
-              .sample-engine .glyph.latin { justify-content: flex-start; }
-              .sample-engine .glyph.cjk-text { background: var(--glyph-cjk); border-left: 1px solid var(--glyph-cjk-border); border-right: 1px solid var(--glyph-cjk-border); }
-              .sample-engine .glyph.cjk-punct { background: var(--glyph-punct); border-left: 1px solid var(--glyph-punct-border); border-right: 1px solid var(--glyph-punct-border); }
-              .sample-engine .glyph.latin { background: var(--glyph-latin); border-left: 1px solid var(--glyph-latin-border); border-right: 1px solid var(--glyph-latin-border); }
-              .sample-engine .glyph .ch { font-size: 16px; line-height: 1; transform: translateY(0); }
-              .sample-engine .glyph.cjk-punct .ch.has-measured-layer { color: transparent; }
-              .sample-engine .glyph .measured-layer { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
-              .sample-engine .glyph .measured-layer path { fill: var(--fg); }
-              .sample-engine .glyph .measured-layer rect { stroke: var(--ink); fill: var(--ink-fill); vector-effect: non-scaling-stroke; }
-              .sample-engine .repair-tag { position: absolute; right: -6px; transform: translate(100%, 0); padding: 1px 6px; font-size: 10px; background: rgba(196, 80, 60, 0.12); color: #b03a2e; border: 1px solid rgba(196, 80, 60, 0.45); border-radius: 3px; white-space: nowrap; pointer-events: none; }
-              .sample-engine .justify-tag { position: absolute; right: -6px; transform: translate(100%, 0); padding: 1px 6px; font-size: 10px; background: rgba(60, 140, 90, 0.10); color: #2e7d4f; border: 1px solid rgba(60, 140, 90, 0.40); border-radius: 3px; white-space: nowrap; pointer-events: none; }
-              .sample-engine .max-width-rule { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(80, 120, 200, 0.3); pointer-events: none; }
-              .legend { display: flex; gap: 12px; font-size: 11px; color: var(--muted); margin-top: 8px; flex-wrap: wrap; }
-              .legend .swatch { display: inline-block; width: 10px; height: 10px; vertical-align: middle; margin-right: 4px; border: 1px solid currentColor; }
-              .legend .baseline-sw { background: transparent; border-top: 1px solid var(--baseline); border-left: none; border-right: none; border-bottom: none; height: 0; width: 14px; }
-              .legend .linebox-sw { background: transparent; border-top: 1px dotted var(--linebox); border-left: none; border-right: none; border-bottom: none; height: 0; width: 14px; }
+              .sample-browser { line-height: 1; padding: 0; background: var(--panel); border: 1px dashed var(--rule); box-sizing: content-box; word-break: break-word; }
+              .sample-raster { display: block; background: var(--panel); border: 1px dashed var(--rule); image-rendering: -webkit-optimize-contrast; }
               details { margin-top: 14px; }
               summary { cursor: pointer; font-size: 13px; color: var(--muted); user-select: none; }
               .metrics { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; margin: 10px 0; }
@@ -206,13 +277,11 @@ private fun renderHtmlReport(items: List<PlaygroundReportItem>, shaperMode: Shap
         appendLine("<body><main>")
         appendLine("<h1>提椠 layout playground</h1>")
         appendLine(
-            "<p class=\"intro\">每个 fixture 显示三栏：浏览器默认排版 · 提椠 greedy · 提椠 lookahead。" +
-                "中间和右侧是提椠引擎按真实算出的 cluster 位置渲染：每个矩形是一个 cluster，宽度 = " +
-                "<code>cluster.advance</code>，纵向位置 = <code>line.top / bottom</code>。" +
-                "红线 = baseline；蓝色点线 = line box 上下沿；右上红色 <code>↻ 标签</code>表示该行触发了 kinsoku repair。" +
-                "lookahead 会用更小的窗口（默认 ±1 cluster）扫多种断行，挑 raggedness + repair penalty 最低的那种。" +
-                "当前 shaper：<code>${shaperMode.id.escapeHtml()}</code>（${shaperMode.description.escapeHtml()}）。" +
-                "如需回到 deterministic stub，对 playground 设置 <code>TIQIAN_PLAYGROUND_SHAPER=stub</code>。</p>",
+            "<p class=\"intro\">三栏对比：<strong>浏览器默认</strong>排版 · 提椠 <strong>greedy</strong> · 提椠 <strong>lookahead</strong>。" +
+                "中间和右侧都是用 AWT 按引擎计算出的位置直接绘制的 PNG——你看到的就是引擎实际产出的图像，跟浏览器渲染一对一可比。" +
+                "决策细节（line decisions、spacing、justification、几何账本等）折叠在每个 fixture 下方 <code>decisions</code> 块里，按需展开。" +
+                "当前 shaper：<code>${shaperMode.id.escapeHtml()}</code>（${shaperMode.description.escapeHtml()}）；" +
+                "切回 deterministic stub 用 <code>TIQIAN_PLAYGROUND_SHAPER=stub</code>。</p>",
         )
         items.forEach { item -> appendLine(item.renderSection()) }
         appendLine("</main></body></html>")
@@ -221,6 +290,7 @@ private fun renderHtmlReport(items: List<PlaygroundReportItem>, shaperMode: Shap
 private fun PlaygroundReportItem.renderSection(): String {
     val maxWidth = fixture.constraints.maxWidth
     val spacing = greedy.debug.spacingDecisions
+    val fontSize = greedy.input.textStyle.fontSize
 
     return buildString {
         appendLine("<section>")
@@ -230,22 +300,25 @@ private fun PlaygroundReportItem.renderSection(): String {
         appendLine("<div class=\"compare\">")
 
         // Browser default column.
-        appendLine("<div>")
-        appendLine("<div class=\"col-label\">browser default · width ${maxWidth.oneDecimal()}px · font 16px</div>")
-        appendLine("<div class=\"sample-browser\" style=\"width:${maxWidth.oneDecimal()}px\">${fixture.text.escapeHtml()}</div>")
+        appendLine("<div class=\"render-col\">")
+        appendLine(
+            "<div class=\"col-label\">browser default · ${maxWidth.oneDecimal()}px · ${fontSize.oneDecimal()}px font</div>",
+        )
+        appendLine(
+            "<div class=\"sample-browser\" style=\"width:${maxWidth.oneDecimal()}px; font-size:${fontSize.oneDecimal()}px\">${fixture.text.escapeHtml()}</div>",
+        )
         appendLine("</div>")
 
-        // Tiqian engine columns.
-        appendLine(renderEngineColumn("Tiqian greedy", greedy, maxWidth))
-        appendLine(renderEngineColumn("Tiqian lookahead", lookahead, maxWidth))
+        // Tiqian engine columns — actual rasterized output from the engine.
+        appendLine(renderRasterColumn("Tiqian greedy", greedy, fixture))
+        appendLine(renderRasterColumn("Tiqian lookahead", lookahead, fixture))
 
         appendLine("</div>") // .compare
-        appendLine(renderLegend())
 
-        // Metadata block (collapsible).
+        // Decision metadata is collapsed by default — read on demand only.
         appendLine("<details>")
         appendLine(
-            "<summary>metadata · greedy size ${greedy.size.width.oneDecimal()}×${greedy.size.height.oneDecimal()} · lookahead size ${lookahead.size.width.oneDecimal()}×${lookahead.size.height.oneDecimal()} · spacing ${spacing.size}</summary>",
+            "<summary>decisions · greedy size ${greedy.size.width.oneDecimal()}×${greedy.size.height.oneDecimal()} · lookahead size ${lookahead.size.width.oneDecimal()}×${lookahead.size.height.oneDecimal()} · spacing ${spacing.size}</summary>",
         )
         appendLine(renderEngineMetadata("greedy", greedy))
         appendLine(renderEngineMetadata("lookahead", lookahead))
@@ -255,6 +328,28 @@ private fun PlaygroundReportItem.renderSection(): String {
         appendLine("</details>")
 
         appendLine("</section>")
+    }
+}
+
+private fun renderRasterColumn(label: String, result: LayoutResult, fixture: LayoutFixture): String {
+    val maxWidth = fixture.constraints.maxWidth
+    val totalHeight = if (result.lines.isEmpty()) result.size.height else result.lines.last().bottom
+    val repairs = result.debug.lineDecisions.count { it.repair != null }
+    val justifications = result.debug.justificationDecisions.count { it.allocations.isNotEmpty() }
+    val summary = buildList {
+        add("${result.lines.size} lines")
+        if (repairs > 0) add("$repairs repairs")
+        if (justifications > 0) add("$justifications justify")
+    }.joinToString(" · ")
+    val pngUri = rasterizeLayoutToPng(result, fixture)
+
+    return buildString {
+        appendLine("<div class=\"render-col\">")
+        appendLine("<div class=\"col-label\">${label.escapeHtml()} · ${summary.escapeHtml()}</div>")
+        appendLine(
+            "<img class=\"sample-raster\" src=\"$pngUri\" style=\"width:${maxWidth.oneDecimal()}px; height:${totalHeight.oneDecimal()}px\" alt=\"${label.escapeHtml()} raster\">",
+        )
+        appendLine("</div>")
     }
 }
 
