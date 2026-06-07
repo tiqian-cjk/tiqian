@@ -106,12 +106,36 @@ private object PlaygroundFontProbe {
     }
 }
 
-private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, scale: Int = 2): String {
+/** Result of the raster step — the PNG plus the natural canvas dimensions in CSS pixels. */
+private data class RasterResult(val dataUri: String, val widthPx: Float, val heightPx: Float)
+
+private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, scale: Int = 2): RasterResult {
     val maxWidth = fixture.constraints.maxWidth.coerceAtLeast(1f)
     val height = result.size.height.coerceAtLeast(16f)
-    val widthPx = (maxWidth * scale).toInt().coerceAtLeast(1)
-    val heightPx = (height * scale).toInt().coerceAtLeast(1)
     val fontSize = result.input.textStyle.fontSize
+
+    val cjkFont = Font(PlaygroundFontProbe.cjk, Font.PLAIN, 1).deriveFont(fontSize)
+    val latinFont = Font(PlaygroundFontProbe.latin, Font.PLAIN, 1).deriveFont(fontSize)
+
+    // Engine uses CenteredCjkVisual metrics: baseline at em/2, line height = em.
+    // Real AWT fonts have asymmetric ascent/descent (≈14/4 at 16px) so glyph
+    // ink overflows the engine line box top by `fontAscent - engine.ascent`
+    // and the bottom by `fontDescent - engine.descent`. Pad the canvas so the
+    // ink fits inside the PNG instead of getting clipped at y=0 / y=height.
+    val measureCtx = FontRenderContext(AffineTransform(), true, true)
+    val cjkLm = cjkFont.getLineMetrics("中", measureCtx)
+    val latinLm = latinFont.getLineMetrics("Mg", measureCtx)
+    val fontAscent = maxOf(cjkLm.ascent, latinLm.ascent)
+    val fontDescent = maxOf(cjkLm.descent, latinLm.descent)
+    val engineBaseline = result.lines.firstOrNull()?.baseline ?: (fontSize / 2f)
+    val engineDescent = result.lines.lastOrNull()?.let { it.bottom - it.baseline } ?: (fontSize / 2f)
+    val topPad = (fontAscent - engineBaseline).coerceAtLeast(0f)
+    val bottomPad = (fontDescent - engineDescent).coerceAtLeast(0f)
+
+    val canvasWidth = maxWidth
+    val canvasHeight = height + topPad + bottomPad
+    val widthPx = (canvasWidth * scale).toInt().coerceAtLeast(1)
+    val heightPx = (canvasHeight * scale).toInt().coerceAtLeast(1)
 
     val img = BufferedImage(widthPx, heightPx, BufferedImage.TYPE_INT_ARGB)
     val g = img.createGraphics()
@@ -121,16 +145,14 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
         g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON)
         g.scale(scale.toDouble(), scale.toDouble())
         g.color = Color.WHITE
-        g.fillRect(0, 0, (maxWidth + 1).toInt(), (height + 1).toInt())
-
-        val cjkFont = Font(PlaygroundFontProbe.cjk, Font.PLAIN, 1).deriveFont(fontSize)
-        val latinFont = Font(PlaygroundFontProbe.latin, Font.PLAIN, 1).deriveFont(fontSize)
+        g.fillRect(0, 0, (canvasWidth + 1).toInt(), (canvasHeight + 1).toInt())
 
         for (line in result.lines) {
             val lineClusters = result.clusters.filter {
                 it.range.start >= line.range.start && it.range.end <= line.range.end
             }
             var x = 0f
+            val baselineY = line.baseline + topPad
             for (cluster in lineClusters) {
                 val role = result.debug.fontDecisions.firstOrNull { it.range == cluster.range }?.role
                 g.font = when (role) {
@@ -139,7 +161,7 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
                 }
                 g.color = Color.BLACK
                 if (cluster.displayText.isNotEmpty()) {
-                    g.drawString(cluster.displayText, x, line.baseline)
+                    g.drawString(cluster.displayText, x, baselineY)
                 }
                 x += cluster.advance
             }
@@ -152,7 +174,8 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
         ImageIO.write(img, "PNG", it)
         it.toByteArray()
     }
-    return "data:image/png;base64,${Base64.getEncoder().encodeToString(bytes)}"
+    val dataUri = "data:image/png;base64,${Base64.getEncoder().encodeToString(bytes)}"
+    return RasterResult(dataUri = dataUri, widthPx = canvasWidth, heightPx = canvasHeight)
 }
 
 private enum class ShaperMode(
@@ -332,8 +355,6 @@ private fun PlaygroundReportItem.renderSection(): String {
 }
 
 private fun renderRasterColumn(label: String, result: LayoutResult, fixture: LayoutFixture): String {
-    val maxWidth = fixture.constraints.maxWidth
-    val totalHeight = if (result.lines.isEmpty()) result.size.height else result.lines.last().bottom
     val repairs = result.debug.lineDecisions.count { it.repair != null }
     val justifications = result.debug.justificationDecisions.count { it.allocations.isNotEmpty() }
     val summary = buildList {
@@ -341,13 +362,15 @@ private fun renderRasterColumn(label: String, result: LayoutResult, fixture: Lay
         if (repairs > 0) add("$repairs repairs")
         if (justifications > 0) add("$justifications justify")
     }.joinToString(" · ")
-    val pngUri = rasterizeLayoutToPng(result, fixture)
+    val raster = rasterizeLayoutToPng(result, fixture)
 
     return buildString {
         appendLine("<div class=\"render-col\">")
         appendLine("<div class=\"col-label\">${label.escapeHtml()} · ${summary.escapeHtml()}</div>")
         appendLine(
-            "<img class=\"sample-raster\" src=\"$pngUri\" style=\"width:${maxWidth.oneDecimal()}px; height:${totalHeight.oneDecimal()}px\" alt=\"${label.escapeHtml()} raster\">",
+            "<img class=\"sample-raster\" src=\"${raster.dataUri}\" " +
+                "style=\"width:${raster.widthPx.oneDecimal()}px; height:${raster.heightPx.oneDecimal()}px\" " +
+                "alt=\"${label.escapeHtml()} raster\">",
         )
         appendLine("</div>")
     }
