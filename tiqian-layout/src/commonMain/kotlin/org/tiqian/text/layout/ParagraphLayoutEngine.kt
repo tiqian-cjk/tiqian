@@ -697,14 +697,20 @@ class ExplainableStubParagraphLayoutEngine(
             charactersAffected = this,
             reductionPerChar = total / this,
             totalReduction = total,
-            reason = "TextAutoSpaceReplace:cjk-${if (boundaryRole == FontRole.CjkText) "ideograph" else "punctuation"}:n-to-one-gap",
+            reason = "TextAutoSpaceReplace:ideograph-alpha:n-to-one-gap",
         )
         return total
     }
 
+    /**
+     * Per CSS Text 4 `text-autospace`, autospace only fires at
+     * **ideograph ↔ alpha / numeric** boundaries. Punctuation has its own
+     * spacing model (PunctuationAtom + class-derived glue), so a
+     * Latin ↔ CjkPunctuation boundary must NOT get an extra autospace gap.
+     */
     private fun AutoSpacePolicy.modeFor(role: FontRole): AutoSpaceMode? =
         when (role) {
-            FontRole.CjkText, FontRole.CjkPunctuation -> cjkLatin
+            FontRole.CjkText -> cjkLatin
             else -> null
         }
 

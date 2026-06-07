@@ -5,6 +5,7 @@ import org.tiqian.text.core.LayoutInput
 import org.tiqian.text.core.TiqianTextContent
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * `text-autospace: replace` per CSS Text 4 + ADR 0009 must collapse ALL
@@ -76,5 +77,38 @@ class AutoSpaceSingleGapTest {
             ),
         )
         assertEquals(0, result.debug.autoSpaceDecisions.size)
+    }
+
+    @Test
+    fun autospaceDoesNotFireBetweenLatinAndCjkPunctuation() {
+        // Per CSS Text 4, `text-autospace` fires at ideograph ↔ alpha/numeric
+        // boundaries only. Punctuation has its own spacing model. The text
+        // `Tiqian ）说明` has a typed space between Latin and a closing
+        // bracket: there must be no autospace decision for that boundary.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("Tiqian ）说明"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+        // The boundary at the right of the Latin cluster is CjkPunctuation
+        // (the closing bracket), which should NOT trigger autospace. The
+        // left of the Latin cluster is text boundary, also no autospace.
+        assertEquals(0, result.debug.autoSpaceDecisions.size)
+    }
+
+    @Test
+    fun autospaceStillFiresBetweenLatinAndCjkTextEvenWithPunctuationNearby() {
+        // The boundary is between Latin "shaping" and the CjkText `之`. The
+        // closing bracket `）` next to it does not cancel the firing.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("中文 shaping 之后"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+        assertEquals(2, result.debug.autoSpaceDecisions.size) // leading + trailing
+        assertTrue(result.debug.autoSpaceDecisions.all { it.boundaryRole == "CjkText" })
+        assertTrue(result.debug.autoSpaceDecisions.all { it.reason.contains("ideograph-alpha") })
     }
 }
