@@ -542,6 +542,31 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun traditionalProfileCentresPauseStopGlueOnBothSides() {
+        // Per CLREQ 3.1.3, Traditional Chinese places 。 ， at the centre of
+        // the em box, so 。's glue is split symmetrically: 4 leading + 4
+        // trailing, anchor = Center. This is the regional behaviour the
+        // hardcoded Mainland-style assumption used to miss.
+        val engine = ExplainableStubParagraphLayoutEngine(
+            clreqProfileResolver = ClreqProfileResolver { ClreqProfile.TaiwanHorizontal },
+        )
+
+        val result = engine.layout(
+            LayoutInput(
+                content = TiqianTextContent("你好。"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val stop = result.debug.punctuationDecisions.single { it.char == '。' }
+        assertEquals("PauseOrStop", stop.punctuationClass)
+        assertEquals(8f, stop.bodyWidth)
+        assertEquals(4f, stop.leadingGlueNatural)
+        assertEquals(4f, stop.trailingGlueNatural)
+        assertEquals("Center", stop.anchor)
+    }
+
+    @Test
     fun appliesAdjacentPunctuationCompressionToDrawableGeometry() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(

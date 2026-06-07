@@ -1,7 +1,10 @@
 package org.tiqian.text.layout
 
 import org.tiqian.text.clreq.ClreqPunctuationPolicies
+import org.tiqian.text.clreq.GlueSide
 import org.tiqian.text.clreq.PunctuationClass
+import org.tiqian.text.clreq.PunctuationGluePlacement
+import org.tiqian.text.clreq.glueSideFor
 import org.tiqian.text.core.Rect
 import org.tiqian.text.core.TextRange
 
@@ -123,7 +126,9 @@ class PunctuationSpacingCompressor {
     }
 }
 
-class PunctuationAtomBuilder {
+class PunctuationAtomBuilder(
+    private val gluePlacement: PunctuationGluePlacement = PunctuationGluePlacement.MainlandSimplified,
+) {
     fun build(text: String, index: Int, em: Float): PunctuationAtom? {
         val char = text.getOrNull(index) ?: return null
         return build(
@@ -136,10 +141,15 @@ class PunctuationAtomBuilder {
     /**
      * Builds a [PunctuationAtom] whose body is always half-width (from policy).
      *
-     * Glue placement follows CLREQ class, not ink position:
-     * - **Opening** (`「（《`): glue on the leading side (ink is trailing).
-     * - **Closing / PauseOrStop** (`」）。，`): glue on the trailing side (ink is leading).
-     * - **Symmetric** (middle dot, interpunct, etc.): glue split evenly.
+     * Glue placement is decided by [gluePlacement] + CLREQ class per ADR 0014
+     * (and clarified by the regional split in CLREQ 3.1.3):
+     *
+     * - **MainlandSimplified + Opening** (`「（《`): all glue on leading side.
+     * - **MainlandSimplified + Closing / PauseOrStop** (`」）。，`): all glue on trailing side.
+     * - **Traditional + any of the above**: glue split evenly (Traditional convention
+     *   centres `。 ，` etc. within the em box).
+     * - **Symmetric punctuation** (middle dot, interpunct, ellipsis, dash, quote, etc.):
+     *   glue split evenly in both placements.
      *
      * `inkInput` provides the real shaped advance (used instead of the policy
      * advance when available) and glyph ink bounds (retained as diagnostic
@@ -157,6 +167,7 @@ class PunctuationAtomBuilder {
         range: TextRange,
         em: Float,
         inkInput: PunctuationInkInput? = null,
+        gluePlacement: PunctuationGluePlacement = this.gluePlacement,
     ): PunctuationAtom? {
         val policy = ClreqPunctuationPolicies.policyFor(char)
         if (policy.punctuationClass == PunctuationClass.Other) return null
@@ -170,19 +181,19 @@ class PunctuationAtomBuilder {
         val inkWidth = inkBounds?.width?.coerceAtLeast(0f)
         val inkCenter = inkBounds?.let { ((it.left + it.right) / 2f).coerceIn(0f, advance) }
 
-        // Glue direction is determined by punctuation class, not ink position.
+        // Glue direction is determined by profile + punctuation class, not by
+        // ink position.
         val totalGlue = (advance - bodyWidth).coerceAtLeast(0f)
         val (leadingGlueNatural, trailingGlueNatural) = classBasedGlue(
             punctuationClass = policy.punctuationClass,
             totalGlue = totalGlue,
+            gluePlacement = gluePlacement,
         )
 
-        val anchor = when (policy.punctuationClass) {
-            PunctuationClass.Opening -> PunctuationAnchor.Trailing
-            PunctuationClass.Closing,
-            PunctuationClass.PauseOrStop,
-            -> PunctuationAnchor.Leading
-            else -> PunctuationAnchor.Center
+        val anchor = when (gluePlacement.glueSideFor(policy.punctuationClass)) {
+            GlueSide.LeadingOnly -> PunctuationAnchor.Trailing
+            GlueSide.TrailingOnly -> PunctuationAnchor.Leading
+            GlueSide.BothSides -> PunctuationAnchor.Center
         }
 
         return PunctuationAtom(
@@ -221,27 +232,22 @@ class PunctuationAtomBuilder {
     }
 
     /**
-     * Named heuristic: `ClassDerivedGlueDirection`.
+     * Named heuristic: `ProfileDerivedGlueDirection`.
      *
-     * Opening punctuation: all glue on the leading side (body anchored trailing).
-     * Closing / PauseOrStop: all glue on the trailing side (body anchored leading).
-     * Symmetric (MiddleDot, Interpunct, Connector, Solidus, Ellipsis, Dash, Quote):
-     *   glue split evenly on both sides.
+     * The profile's [PunctuationGluePlacement] picks one of three sides
+     * per CLREQ class. Traditional Chinese centres all punctuation; only
+     * Mainland Simplified anchors body to one side for Opening / Closing /
+     * PauseOrStop.
      */
     private fun classBasedGlue(
         punctuationClass: PunctuationClass,
         totalGlue: Float,
+        gluePlacement: PunctuationGluePlacement,
     ): Pair<Float, Float> =
-        when (punctuationClass) {
-            PunctuationClass.Opening ->
-                totalGlue to 0f
-
-            PunctuationClass.Closing,
-            PunctuationClass.PauseOrStop,
-            ->
-                0f to totalGlue
-
-            else -> {
+        when (gluePlacement.glueSideFor(punctuationClass)) {
+            GlueSide.LeadingOnly -> totalGlue to 0f
+            GlueSide.TrailingOnly -> 0f to totalGlue
+            GlueSide.BothSides -> {
                 val sideGlue = totalGlue / 2f
                 sideGlue to sideGlue
             }

@@ -17,6 +17,7 @@ data class ClreqProfile(
     val coalesceRepeatablePunctuation: Set<Int> = DefaultCoalesceRepeatablePunctuation,
     val hangingPunctuation: HangingPunctuationPolicy = HangingPunctuationPolicy.Disabled,
     val autoSpace: AutoSpacePolicy = AutoSpacePolicy.Default,
+    val gluePlacement: PunctuationGluePlacement = PunctuationGluePlacement.forRegion(region),
 ) {
     companion object {
         // CoalesceRepeatablePunctuation: codepoints that, when written as consecutive
@@ -33,6 +34,18 @@ data class ClreqProfile(
             id = "clreq-mainland-horizontal",
             strictness = ClreqStrictness.Normal,
             region = ClreqRegion.Mainland,
+        )
+
+        val TaiwanHorizontal = ClreqProfile(
+            id = "clreq-taiwan-horizontal",
+            strictness = ClreqStrictness.Normal,
+            region = ClreqRegion.Taiwan,
+        )
+
+        val HongKongHorizontal = ClreqProfile(
+            id = "clreq-hongkong-horizontal",
+            strictness = ClreqStrictness.Normal,
+            region = ClreqRegion.HongKong,
         )
     }
 }
@@ -64,6 +77,71 @@ enum class HangingPunctuationPolicy {
     EnabledForPauseStop,
     EnabledForExtendedCjk,
 }
+
+/**
+ * Where the half-width body of a punctuation atom sits within its em box,
+ * and therefore which side(s) receive the rest as glue. Per CLREQ 3.1.3
+ * (Punctuation Position) the same character can sit in different positions
+ * depending on region:
+ *
+ * - 简体中文 (Mainland): 句号 / 逗号 居于格内左下 → body anchored leading,
+ *   glue all trailing → [TrailingOnly].
+ * - 繁体中文 (Taiwan / Hong Kong): 句号 / 逗号 居于格内中央 → body centered,
+ *   glue split on both sides → [BothSides].
+ * - Opening marks (`「（《〈『`) mirror this: body anchored trailing under
+ *   Mainland; centered under Traditional. Leading-only is the regional
+ *   default for Mainland opening marks → [LeadingOnly].
+ *
+ * Per ADR 0014, this is a typography decision driven by region/profile,
+ * not by the font's glyph position. Low-quality fonts that draw all
+ * punctuation glyphs centered regardless of region (early Microsoft YaHei,
+ * some Founder fonts) are handled by the rendering layer using ink bounds
+ * to translate the glyph into the position the profile asks for; the
+ * additive glue model continues to derive its directions from here.
+ */
+enum class PunctuationGluePlacement {
+    /** Mainland / Simplified convention. */
+    MainlandSimplified,
+
+    /** Traditional Chinese convention (Taiwan, Hong Kong). */
+    Traditional;
+
+    companion object {
+        fun forRegion(region: ClreqRegion): PunctuationGluePlacement =
+            when (region) {
+                ClreqRegion.Mainland -> MainlandSimplified
+                ClreqRegion.Taiwan, ClreqRegion.HongKong -> Traditional
+                ClreqRegion.Custom -> MainlandSimplified
+            }
+    }
+}
+
+/** Where the glue sits relative to the body for a given punctuation class. */
+enum class GlueSide {
+    LeadingOnly,
+    TrailingOnly,
+    BothSides,
+}
+
+fun PunctuationGluePlacement.glueSideFor(punctuationClass: PunctuationClass): GlueSide =
+    when (this) {
+        PunctuationGluePlacement.MainlandSimplified -> when (punctuationClass) {
+            PunctuationClass.Opening -> GlueSide.LeadingOnly
+            PunctuationClass.Closing,
+            PunctuationClass.PauseOrStop,
+            -> GlueSide.TrailingOnly
+
+            else -> GlueSide.BothSides
+        }
+
+        PunctuationGluePlacement.Traditional -> when (punctuationClass) {
+            // Per CLREQ 3.1.3, Traditional places 。 ， etc. at the centre,
+            // so both Opening and Closing/PauseOrStop become BothSides.
+            // The "anchor to one side" behaviour is a Simplified-only style.
+            else -> GlueSide.BothSides
+        }
+    }
+
 
 /**
  * AutoSpacePolicy — controls how spacing between CJK ideographs and Latin /

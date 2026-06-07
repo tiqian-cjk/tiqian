@@ -5,6 +5,7 @@ import org.tiqian.text.clreq.AutoSpacePolicy
 import org.tiqian.text.clreq.BuiltInClreqProfileResolver
 import org.tiqian.text.clreq.ClreqProfile
 import org.tiqian.text.clreq.ClreqProfileResolver
+import org.tiqian.text.clreq.PunctuationGluePlacement
 import org.tiqian.text.clreq.ClreqPunctuationGlyphSubstitutor
 import org.tiqian.text.core.AutoSpaceDecisionInfo
 import org.tiqian.text.core.Cluster
@@ -143,6 +144,7 @@ class ExplainableStubParagraphLayoutEngine(
                 em = fontSize,
                 builder = punctuationAtomBuilder,
                 shapedGlyphs = shapedGlyphsByClusterRange[cluster.range].orEmpty(),
+                gluePlacement = clreqProfile.gluePlacement,
             )
         }
         val spacingPlan = punctuationSpacingCompressor.compress(punctuationAtoms)
@@ -472,6 +474,7 @@ class ExplainableStubParagraphLayoutEngine(
         em: Float,
         builder: PunctuationAtomBuilder,
         shapedGlyphs: List<Glyph>,
+        gluePlacement: PunctuationGluePlacement,
     ): List<PunctuationAtom> {
         if (displayText.isEmpty()) return emptyList()
 
@@ -481,6 +484,7 @@ class ExplainableStubParagraphLayoutEngine(
                 range = displayCharSourceRange(index),
                 em = em,
                 inkInput = punctuationInkInputFor(index, shapedGlyphs),
+                gluePlacement = gluePlacement,
             )
         }
     }
