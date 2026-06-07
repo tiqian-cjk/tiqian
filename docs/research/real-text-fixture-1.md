@@ -57,7 +57,7 @@ spacing decisions (整段共 2 处):
 - visual-sum 3656 → 3620（-36px，14 个空格中位于边界的部分被吸收）
 - size.height 268.8 → 249.6（line-height 收紧 1.6px × 12 行 = 19.2px；不再被 Unknown role 的 ascent=14.4 撑高）
 - greedy justifications 5 → 8 / lookahead 8 → 10（Latin run 不再虚胖，更多行需要少量填充，分配更均匀）
-- 2 处 CarryPrevious 仍在，溢出仍在——观察 #2 没修，独立 follow-up
+- CarryPrevious overflow 已由 [ADR 0012](../adr/0012-carry-previous-overflow-validation.md) 修掉：原 greedy `line[6] adjusted=336` 现在退回 `LeaveRagged adjusted=320`，并在 candidate 中记录 `carry-overflows`。
 
 下面是改前的诊断笔记，留作上下文。
 
@@ -75,7 +75,17 @@ playground HTML 里之所以**看起来正常**，是因为 [`renderGlyphBox`](.
 
 修复方向：空格属于「结构性分隔符」类，不是字形也不是 CJK 标点。应该新增 `FontRole.Space`（或扩 `LatinText` 的范围），并在 cluster 聚合阶段让它跟相邻 Latin run 合并。Justifier 在 CJK-Latin 边界遇到已经有空格 cluster 时不再额外加 `CjkLatinSpace`。
 
-#### 2. `CarryPrevious` 后行宽溢出 `maxWidth`
+#### 2. ~~`CarryPrevious` 后行宽溢出 `maxWidth`~~ — **已修（[ADR 0012](../adr/0012-carry-previous-overflow-validation.md)）**
+
+ADR 0012 要求 `CarryPrevious` 被接受前必须重建 carried current line 并验证 `adjustedWidth <= maxWidth`。如果 carried line 会超宽，`CarryPrevious` candidate 变为 rejected，`rejectionReason = "carry-overflows"`，当前冲突退回 `LeaveRagged`。
+
+real-paragraph-1 实测变化：
+
+- greedy `line[6] adjusted=336 repair=CarryPrevious` → `line[6] adjusted=320 repair=LeaveRagged`。
+- HTML metadata 可见：`candidate CarryPrevious rejected:carry-overflows carried 82`。
+- greedy repairs 2 → 3：其中新增的不是更“好看”的排版，而是把原来伪装成成功的 over-budget CarryPrevious 显式暴露为 LeaveRagged。
+
+下面是改前的诊断笔记，留作上下文。
 
 `line[6]` greedy：`adjusted=336, maxWidth=320`。原因：[`applyKinsokuRepairs`](../../tiqian-layout/src/commonMain/kotlin/org/tiqian/text/layout/LineBreaker.kt) 把 prev 行末尾 cluster carry 到 curr 行头时，只重算 prev/curr 两侧的 `naturalWidth/adjustedWidth`，不再检查 curr 是否超 `maxWidth`。
 

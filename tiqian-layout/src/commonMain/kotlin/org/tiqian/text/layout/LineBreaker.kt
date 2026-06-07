@@ -19,7 +19,7 @@ interface LineBreaker {
  * GreedyLineBreaker — fills each line until the next cluster would overflow,
  * then starts a new line. After the greedy pass, [kinsoku] is consulted to
  * detect breaks that would place a forbidden-at-line-start cluster at the
- * beginning of a line; such breaks trigger [RepairOption.CarryPrevious]
+ * beginning of a line; such breaks try PushIn first, then CarryPrevious
  * (move the previous cluster onto the next line together with the offender).
  *
  * Repairs that cannot be applied without leaving a line empty fall back to
@@ -371,6 +371,36 @@ internal fun applyKinsokuRepairs(
         val carriedIndex = prev.clusterRange.last
         val newPrevRange = prev.clusterRange.first..(carriedIndex - 1)
         val newCurrRange = carriedIndex..curr.clusterRange.last
+        val carriedCurrent = rebuildLine(newCurrRange, naturalClusters, adjustedClusters)
+        if (carriedCurrent.adjustedWidth > maxWidth) {
+            repairCandidates += RepairCandidate(
+                kind = "CarryPrevious",
+                reasonCode = "ForbiddenAtLineStart",
+                offenderClusterIndex = curr.clusterRange.first,
+                penalty = carryPreviousPenalty,
+                accepted = false,
+                rejectionReason = "carry-overflows",
+                carriedClusterIndex = carriedIndex,
+            )
+            repairCandidates += RepairCandidate(
+                kind = "LeaveRagged",
+                reasonCode = "ForbiddenAtLineStart",
+                offenderClusterIndex = curr.clusterRange.first,
+                penalty = leaveRaggedPenalty,
+                accepted = true,
+            )
+            mutable[i] = curr.copy(
+                repair = RepairOption.LeaveRagged(
+                    penalty = leaveRaggedPenalty,
+                    reason = "ForbiddenAtLineStart:${firstCluster.text}:carry-overflows",
+                    offenderClusterIndex = curr.clusterRange.first,
+                ),
+                repairCandidates = repairCandidates,
+            )
+            i += 1
+            continue
+        }
+
         repairCandidates += RepairCandidate(
             kind = "CarryPrevious",
             reasonCode = "ForbiddenAtLineStart",
@@ -380,10 +410,7 @@ internal fun applyKinsokuRepairs(
             carriedClusterIndex = carriedIndex,
         )
         mutable[i - 1] = rebuildLine(newPrevRange, naturalClusters, adjustedClusters)
-        mutable[i] = rebuildLine(
-            newCurrRange,
-            naturalClusters,
-            adjustedClusters,
+        mutable[i] = carriedCurrent.copy(
             repair = RepairOption.CarryPrevious(
                 penalty = carryPreviousPenalty,
                 reason = "ForbiddenAtLineStart:${firstCluster.text}:carried=${adjustedClusters[carriedIndex].text}",

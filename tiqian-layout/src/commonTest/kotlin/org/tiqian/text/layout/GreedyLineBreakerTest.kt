@@ -148,6 +148,42 @@ class GreedyLineBreakerTest {
     }
 
     @Test
+    fun kinsokuRejectsCarryPreviousWhenCarriedLineWouldOverflow() {
+        val clusters = listOf(
+            cluster(0, 1, "a", 16f),
+            cluster(1, 2, "b", 16f),
+            cluster(2, 3, "c", 16f),
+            cluster(3, 4, "d", 16f),
+            cluster(4, 5, "。", 16f),
+            cluster(5, 6, "e", 16f),
+            cluster(6, 7, "f", 16f),
+            cluster(7, 8, "g", 16f),
+        )
+        val solution = GreedyLineBreaker().breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 64f,
+        )
+
+        assertEquals(2, solution.lines.size)
+        assertEquals(0..3, solution.lines[0].clusterRange)
+        assertEquals(4..7, solution.lines[1].clusterRange)
+        assertEquals(64f, solution.lines[1].adjustedWidth)
+        assertEquals(true, solution.lines[1].repair is RepairOption.LeaveRagged)
+        assertEquals(3, solution.lines[1].repairCandidates.size)
+        assertEquals("PushIn", solution.lines[1].repairCandidates[0].kind)
+        assertEquals(false, solution.lines[1].repairCandidates[0].accepted)
+        assertEquals("insufficient-capacity", solution.lines[1].repairCandidates[0].rejectionReason)
+        assertEquals("CarryPrevious", solution.lines[1].repairCandidates[1].kind)
+        assertEquals(false, solution.lines[1].repairCandidates[1].accepted)
+        assertEquals("carry-overflows", solution.lines[1].repairCandidates[1].rejectionReason)
+        assertEquals(3, solution.lines[1].repairCandidates[1].carriedClusterIndex)
+        assertEquals("LeaveRagged", solution.lines[1].repairCandidates[2].kind)
+        assertEquals(true, solution.lines[1].repairCandidates[2].accepted)
+        assertEquals(20f, solution.totalBadness)
+    }
+
+    @Test
     fun kinsokuLeaveRaggedWhenPrevLineIsSingleCluster() {
         // Force prev line to single cluster: clusters[0] alone is wider than maxWidth.
         val clusters = listOf(
