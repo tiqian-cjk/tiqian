@@ -93,5 +93,12 @@ object EarlyLayoutFixtures {
             constraints = LayoutConstraints(maxWidth = 240f),
             notes = "ASCII (, ), [, ] do not share code points with the CJK fullwidth forms （）【】, so they always classify as Latin. (English) and [mixed] cluster as Latin runs and render in latin-primary even when surrounded by CJK content.",
         ),
+        LayoutFixture(
+            id = "real-paragraph-1",
+            text = "提椠（Tiqian）是一个面向中文正文的 CJK 段落排版引擎。第一阶段的目标不是复刻浏览器级文本系统，而是在 shaping 之后、绘制之前的薄薄一层里——字体 fallback、CJK 度量、标点 atom、避头尾修复、两端对齐——做出一个可观察、可调试、可扩展的物理模型。换句话说，「功能可以窄，模型必须真」。第一阶段并不试图同时覆盖竖排、JLREQ、ruby、纵中横、编辑器、IME……这些不是被遗忘，而是被故意推后到模型稳定之后。",
+            constraints = LayoutConstraints(maxWidth = 320f),
+            notes = "Real-text stress test: ~200 chars of authentic Chinese with Latin words, fullwidth/halfwidth brackets, em-dash pair, ellipsis, Chinese quotes, and multiple comma-stop sequences. Triggers multi-line greedy + justification + adjacent punctuation compression simultaneously.",
+            textAlign = TextAlign.Justify,
+        ),
     )
 }
