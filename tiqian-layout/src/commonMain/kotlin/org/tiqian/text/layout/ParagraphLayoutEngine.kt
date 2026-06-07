@@ -147,7 +147,7 @@ class ExplainableStubParagraphLayoutEngine(
                 gluePlacement = clreqProfile.gluePlacement,
             )
         }
-        val spacingPlan = punctuationSpacingCompressor.compress(punctuationAtoms)
+        val spacingPlan = punctuationSpacingCompressor.compress(punctuationAtoms, em = fontSize)
         val baseGeometry = PunctuationGeometryLedger.from(
             naturalClusters = naturalClusters,
             punctuationAtoms = punctuationAtoms,
@@ -625,6 +625,19 @@ class ExplainableStubParagraphLayoutEngine(
         return AutoSpaceApplicationResult(updated, decisions)
     }
 
+    /**
+     * `TextAutoSpaceReplace` per CSS Text 4 + ADR 0009: a CJK ↔ Latin (or
+     * Latin ↔ CJK) boundary needs ONE autospace gap, regardless of how many
+     * typed U+0020 the author placed at the boundary. Earlier implementation
+     * scaled the gap by the typed-space count, which violated the spec: two
+     * typed spaces should be folded into the same single autospace, not
+     * widen the boundary to `2 × gapEm`.
+     *
+     * Receiver `this` is the number of edge spaces in the Latin cluster on
+     * this side. Return value is the total advance reduction to apply to
+     * the Latin cluster: `count × spaceAdvance - 1 × autospaceGap`,
+     * floored at zero so 0-count is a no-op.
+     */
     private fun Int.boundaryReduction(
         boundaryRole: FontRole?,
         cluster: Cluster,
@@ -637,18 +650,21 @@ class ExplainableStubParagraphLayoutEngine(
         val mode = policy.modeFor(boundaryRole) ?: return 0f
         if (mode != AutoSpaceMode.Replace) return 0f
 
-        val reductionPerSpace = (fontSize - policy.gapEm * fontSize).coerceAtLeast(0f)
-        if (reductionPerSpace == 0f) return 0f
-        val total = this * reductionPerSpace
+        // Stub shaper assigns 1em per typed U+0020. The autospace replaces
+        // ALL of them (whether 1 or N) with a single gap of policy.gapEm × em.
+        val typedAdvance = this * fontSize
+        val replacementGap = policy.gapEm * fontSize
+        val total = (typedAdvance - replacementGap).coerceAtLeast(0f)
+        if (total == 0f) return 0f
         decisions += AutoSpaceDecisionInfo(
             clusterRange = cluster.range,
             side = side,
             boundaryRole = boundaryRole.name,
             mode = mode.name,
             charactersAffected = this,
-            reductionPerChar = reductionPerSpace,
+            reductionPerChar = total / this,
             totalReduction = total,
-            reason = "TextAutoSpaceReplace:cjk-${if (boundaryRole == FontRole.CjkText) "ideograph" else "punctuation"}",
+            reason = "TextAutoSpaceReplace:cjk-${if (boundaryRole == FontRole.CjkText) "ideograph" else "punctuation"}:n-to-one-gap",
         )
         return total
     }

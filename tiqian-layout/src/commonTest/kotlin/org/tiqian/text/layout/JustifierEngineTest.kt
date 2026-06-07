@@ -122,23 +122,27 @@ class JustifierEngineTest {
         )
         assertTrue(result.lines.size >= 2)
         val firstDecision = result.debug.justificationDecisions.first()
-        assertEquals(4f, firstDecision.deficitBefore)
+        // With the CLREQ collapse rule (half-em capped), the `，。` pair's
+        // inner glue collapses to 0 rather than half-halved to 4; deficit on
+        // line 0 grows from 4 → 8, justifier fills it from the same comma's
+        // trailing glue (now fully consumed by spacing).
+        assertEquals(8f, firstDecision.deficitBefore)
         assertEquals(0f, firstDecision.deficitAfter)
         assertEquals(1, firstDecision.allocations.size)
         val alloc = firstDecision.allocations.single()
         assertEquals("PunctuationTrailing", alloc.kind)
         assertEquals(0, alloc.priority)
-        assertEquals(4f, alloc.delta)
+        assertEquals(8f, alloc.delta)
         assertEquals("PunctuationGlueFirstJustification", alloc.reason)
 
         // Line 0 visualWidth should now equal maxWidth.
         assertEquals(80f, result.lines[0].visualWidth)
-        // Cluster ， (range 1-2) advance restored from 12 to 16 by justification.
+        // Cluster ， (range 1-2) advance restored from 8 (post-spacing) to 16 by justification.
         val commaCluster = result.clusters.single { it.text == "，" }
         assertEquals(16f, commaCluster.advance)
         val commaGeometry = result.debug.geometryDecisions.single { it.sourceText == "，" }
-        assertEquals(4f, commaGeometry.trailingGlueConsumed)
-        assertEquals(4f, commaGeometry.justificationDelta)
+        assertEquals(8f, commaGeometry.trailingGlueConsumed)
+        assertEquals(8f, commaGeometry.justificationDelta)
         assertEquals(16f, commaGeometry.resolvedAdvance)
     }
 

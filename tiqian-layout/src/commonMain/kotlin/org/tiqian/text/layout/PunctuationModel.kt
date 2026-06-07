@@ -84,17 +84,28 @@ class PunctuationSpacingCompressor {
     /**
      * Named heuristic: `CollapseAdjacentPunctuationInnerGlue`.
      *
-     * When two punctuation atoms are adjacent, the inner glue between
-     * them (left's trailing + right's leading) should be halved to
-     * achieve the CLREQ target of 1.5em for two adjacent half-width
-     * punctuation marks.
+     * CLREQ rule for two adjacent half-width punctuation marks: the visible
+     * inner gap is collapsed by **one half-em** (capped at zero, never
+     * negative). The previous halving implementation (`natural / 2`) was
+     * wrong for several common pairs — see ADR 0014 amendment notes.
      *
-     * With class-based single-sided glue, the inner gap might be
-     * entirely on one side (e.g. `，。` → trailing=8 + leading=0 = 8).
-     * The compression target is half of the natural inner glue.
+     * Walking through the class-derived glue cases at fontSize=16:
+     * - `」。` closing+closing → natural inner = trailing(8) + leading(0) = 8.
+     *   Halving says adjusted=4; CLREQ says **0** (bodies touch). The
+     *   half-em subtraction gives `max(0, 8 - 8) = 0` ✓.
+     * - `「（` opening+opening → natural inner = trailing(0) + leading(8) = 8.
+     *   Same as above → 0 ✓.
+     * - `。「` closing+opening → natural inner = 8 + 8 = 16. CLREQ says **8**
+     *   (half-em gap remains). `max(0, 16 - 8) = 8` ✓.
+     * - `。「」` chain handled per pair via `zipWithNext`.
+     *
+     * The collapse amount (`emHalf`) is supplied by the caller because the
+     * atom alone doesn't know its design em — `atom.advance` reflects the
+     * shaped advance, not the design em box.
      */
-    fun compress(atoms: List<PunctuationAtom>): PunctuationSpacingCompressionResult {
+    fun compress(atoms: List<PunctuationAtom>, em: Float): PunctuationSpacingCompressionResult {
         if (atoms.size < 2) return PunctuationSpacingCompressionResult(emptyList())
+        val emHalf = em / 2f
 
         val adjustments = atoms.zipWithNext().mapNotNull { (left, right) ->
             if (left.range.end != right.range.start) return@mapNotNull null
@@ -102,7 +113,7 @@ class PunctuationSpacingCompressor {
             val naturalInnerGlue = left.trailingGlue.natural + right.leadingGlue.natural
             if (naturalInnerGlue <= 0f) return@mapNotNull null
 
-            val adjustedInnerGlue = naturalInnerGlue / 2f
+            val adjustedInnerGlue = (naturalInnerGlue - emHalf).coerceAtLeast(0f)
             val reduction = naturalInnerGlue - adjustedInnerGlue
             if (reduction <= 0f) return@mapNotNull null
 

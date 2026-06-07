@@ -580,18 +580,19 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         // Class-based glue: ， trailing=8, 。 trailing=8.
         // Spacing compression: inner glue = ，.trailing(8) + 。.leading(0) = 8
-        //   → adjusted=4, reduction=4, target=，(has trailing glue).
+        //   → adjusted = max(0, 8 - 0.5em) = 0 (CLREQ: closing+pause-stop bodies touch),
+        //   reduction=8, target=，(has trailing glue).
         // Line-end trim: 。 trailing(8) fully consumed → 。 advance = 8.
-        // ，: 16 - 4(spacing) = 12. 。: 16 - 8(edge trim) = 8.
-        // Total: 16 + 16 + 12 + 8 = 52.
+        // ，: 16 - 8(spacing) = 8 (body only). 。: 16 - 8(edge trim) = 8.
+        // Total: 16 + 16 + 8 + 8 = 48.
         assertEquals(64f, line.naturalWidth)
-        assertEquals(52f, line.adjustedWidth)
-        assertEquals(52f, line.visualWidth)
-        assertEquals(52f, result.size.width)
+        assertEquals(48f, line.adjustedWidth)
+        assertEquals(48f, line.visualWidth)
+        assertEquals(48f, result.size.width)
         assertEquals(8f, stop.advance)
-        assertEquals(52f, result.clusters.sumOf { it.advance.toDouble() }.toFloat())
-        assertEquals(52f, result.glyphRuns.sumOf { it.advance.toDouble() }.toFloat())
-        assertEquals(4f, result.debug.spacingDecisions.sumOf { it.reduction.toDouble() }.toFloat())
+        assertEquals(48f, result.clusters.sumOf { it.advance.toDouble() }.toFloat())
+        assertEquals(48f, result.glyphRuns.sumOf { it.advance.toDouble() }.toFloat())
+        assertEquals(8f, result.debug.spacingDecisions.sumOf { it.reduction.toDouble() }.toFloat())
         val edgeTrim = result.debug.lineEdgeTrimDecisions.single()
         assertEquals("trailing", edgeTrim.side)
         assertEquals("LineEndHalfWidthPunctuation", edgeTrim.reason)
@@ -618,8 +619,8 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals('，', spacing.leftChar)
         assertEquals('。', spacing.rightChar)
         assertEquals(8f, spacing.naturalInnerGlue)
-        assertEquals(4f, spacing.adjustedInnerGlue)
-        assertEquals(4f, spacing.reduction)
+        assertEquals(0f, spacing.adjustedInnerGlue)
+        assertEquals(8f, spacing.reduction)
         // Reduction targets ， (which has the trailing glue)
         assertEquals(2, spacing.reductionTargetRange.start)
         assertEquals(3, spacing.reductionTargetRange.end)
