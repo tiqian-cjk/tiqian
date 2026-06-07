@@ -419,14 +419,36 @@ class ExplainableStubParagraphLayoutEngineTest {
         val line = result.lines.single()
         val stop = result.clusters.first { it.text == "。" }
 
+        // After ADR 0010 LineEndGlueTrim: 。 sits at line end so its full
+        // trailing glue (4) is also consumed in addition to the spacing
+        // compression that already ate the leading 4. So 。 advance drops
+        // from 16em-nominal → 12 (spacing) → 8 (line-end trim).
         assertEquals(64f, line.naturalWidth)
-        assertEquals(60f, line.adjustedWidth)
-        assertEquals(60f, line.visualWidth)
-        assertEquals(60f, result.size.width)
-        assertEquals(12f, stop.advance)
-        assertEquals(60f, result.clusters.sumOf { it.advance.toDouble() }.toFloat())
-        assertEquals(60f, result.glyphRuns.sumOf { it.advance.toDouble() }.toFloat())
+        assertEquals(56f, line.adjustedWidth)
+        assertEquals(56f, line.visualWidth)
+        assertEquals(56f, result.size.width)
+        assertEquals(8f, stop.advance)
+        assertEquals(56f, result.clusters.sumOf { it.advance.toDouble() }.toFloat())
+        assertEquals(56f, result.glyphRuns.sumOf { it.advance.toDouble() }.toFloat())
         assertEquals(4f, result.debug.spacingDecisions.sumOf { it.reduction.toDouble() }.toFloat())
+        val edgeTrim = result.debug.lineEdgeTrimDecisions.single()
+        assertEquals("trailing", edgeTrim.side)
+        assertEquals("LineEndHalfWidthPunctuation", edgeTrim.reason)
+        assertEquals(4f, edgeTrim.trimAmount)
+        assertEquals(3, edgeTrim.clusterRange.start)
+        assertEquals(4, edgeTrim.clusterRange.end)
+
+        val stopGeometry = result.debug.geometryDecisions.single { it.sourceText == "。" }
+        assertEquals("PunctuationGeometryLedger", stopGeometry.source)
+        assertEquals("PolicyDerivedPunctuationGeometry", stopGeometry.reason)
+        assertEquals(16f, stopGeometry.baseAdvance)
+        assertEquals(8f, stopGeometry.bodyWidth)
+        assertEquals(4f, stopGeometry.leadingGlueNatural)
+        assertEquals(4f, stopGeometry.leadingGlueConsumed)
+        assertEquals(4f, stopGeometry.trailingGlueNatural)
+        assertEquals(4f, stopGeometry.trailingGlueConsumed)
+        assertEquals(0f, stopGeometry.justificationDelta)
+        assertEquals(8f, stopGeometry.resolvedAdvance)
 
         val spacing = result.debug.spacingDecisions.single()
         assertEquals(2, spacing.range.start)
@@ -508,7 +530,9 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals(3, result.lines[1].range.start)
         assertEquals(5, result.lines[1].range.end)
         assertEquals(48f, result.lines[0].adjustedWidth)
-        assertEquals(32f, result.lines[1].adjustedWidth)
+        // Line 1 ends with 。 → LineEndGlueTrim takes 4 from its trailing
+        // glue (no PushIn / spacing consumed it). 文(16) + 。(12) = 28.
+        assertEquals(28f, result.lines[1].adjustedWidth)
 
         assertEquals(null, result.debug.lineDecisions[0].repair)
         assertEquals("CarryPrevious", result.debug.lineDecisions[1].repair)
@@ -558,6 +582,10 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         val stop = result.clusters.single { it.text == "。" }
         assertEquals(12f, stop.advance)
+        val stopGeometry = result.debug.geometryDecisions.single { it.sourceText == "。" }
+        assertEquals(4f, stopGeometry.trailingGlueConsumed)
+        assertEquals(12f, stopGeometry.resolvedAdvance)
+        assertEquals(0, result.debug.lineEdgeTrimDecisions.size)
         assertEquals("PushIn", result.debug.lineDecisions.single().repair)
         assertEquals(2, result.debug.lineDecisions.single().repairPenalty)
         val repairDecision = result.debug.lineDecisions.single().repairDecision

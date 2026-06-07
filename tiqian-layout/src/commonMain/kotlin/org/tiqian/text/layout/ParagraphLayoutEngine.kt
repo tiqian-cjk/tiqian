@@ -8,7 +8,9 @@ import org.tiqian.text.clreq.ClreqProfileResolver
 import org.tiqian.text.clreq.ClreqPunctuationGlyphSubstitutor
 import org.tiqian.text.core.AutoSpaceDecisionInfo
 import org.tiqian.text.core.Cluster
+import org.tiqian.text.core.ClusterGeometryDecisionInfo
 import org.tiqian.text.core.FontDecisionInfo
+import org.tiqian.text.core.LineEdgeTrimDecisionInfo
 import org.tiqian.text.core.Glyph
 import org.tiqian.text.core.GlyphRun
 import org.tiqian.text.core.JustificationAllocationInfo
@@ -135,8 +137,13 @@ class ExplainableStubParagraphLayoutEngine(
             cluster.punctuationAtoms(em = fontSize, builder = punctuationAtomBuilder)
         }
         val spacingPlan = punctuationSpacingCompressor.compress(punctuationAtoms)
-        val clusters = naturalClusters.withPunctuationSpacingCompression(spacingPlan)
-        val pushInCapacities = clusters.pushInCapacities(punctuationAtoms)
+        val baseGeometry = PunctuationGeometryLedger.from(
+            naturalClusters = naturalClusters,
+            punctuationAtoms = punctuationAtoms,
+            spacingPlan = spacingPlan,
+        )
+        val clusters = baseGeometry.resolveClusters()
+        val pushInCapacities = baseGeometry.pushInCapacities()
 
         val metricDecisions = fontDecisions.map { decision ->
             val request = FontMetricsRequest(
@@ -180,10 +187,15 @@ class ExplainableStubParagraphLayoutEngine(
             .mapNotNull { it.repair as? RepairOption.PushIn }
             .groupBy { it.targetClusterIndex }
             .mapValues { (_, repairs) -> repairs.sumOf { it.shrink.toDouble() }.toFloat() }
-        val pushInClusters = clusters.mapIndexed { idx, c ->
-            val shrink = pushInShrinkByCluster[idx] ?: 0f
-            if (shrink == 0f) c else c.copy(advance = (c.advance - shrink).coerceAtLeast(0f))
-        }
+        val pushInGeometry = baseGeometry.consumeTrailingByCluster(pushInShrinkByCluster)
+        val pushInClusters = pushInGeometry.resolveClusters()
+        val edgeTrimResult = pushInGeometry.consumeLineEdgeGlue(
+            lines = lineSolution.lines,
+        )
+        val trimmedGeometry = edgeTrimResult.geometry
+        val trimmedClusters = trimmedGeometry.resolveClusters()
+        val edgeTrimDecisions = edgeTrimResult.decisions
+
         val justify = input.paragraphStyle.textAlign == TextAlign.Justify
         val justificationPlans: List<JustificationPlan?> = lineSolution.lines.mapIndexed { lineIndex, lineCandidate ->
             val isLast = lineIndex == lineSolution.lines.lastIndex
@@ -191,7 +203,7 @@ class ExplainableStubParagraphLayoutEngine(
                 null
             } else {
                 justifier.justify(
-                    adjustedClusters = pushInClusters,
+                    adjustedClusters = trimmedClusters,
                     clusterRoles = clusterRoles,
                     lineClusterRange = lineCandidate.clusterRange,
                     maxWidth = input.constraints.maxWidth,
@@ -206,10 +218,9 @@ class ExplainableStubParagraphLayoutEngine(
                 .flatMap { it.allocations }
                 .forEach { alloc -> merge(alloc.targetClusterIndex, alloc.delta) { a, b -> a + b } }
         }
-        val finalClusters = pushInClusters.mapIndexed { idx, c ->
-            val extra = justifyDeltaByCluster[idx] ?: 0f
-            if (extra == 0f) c else c.copy(advance = c.advance + extra)
-        }
+        val finalGeometry = trimmedGeometry.addJustificationDeltas(justifyDeltaByCluster)
+        val finalClusters = finalGeometry.resolveClusters()
+        val geometryDecisions = finalGeometry.toDecisionInfo()
 
         val glyphRuns = finalClusters.groupAdjacentBy { it.fontKey }.map { runClusters ->
             GlyphRun(
@@ -227,6 +238,9 @@ class ExplainableStubParagraphLayoutEngine(
         }
 
         val lines = lineSolution.lines.mapIndexed { lineIndex, lineCandidate ->
+            val adjustedWidth = lineCandidate.clusterRange
+                .sumOf { trimmedClusters[it].advance.toDouble() }
+                .toFloat()
             val visualWidth = lineCandidate.clusterRange
                 .sumOf { finalClusters[it].advance.toDouble() }
                 .toFloat()
@@ -236,7 +250,7 @@ class ExplainableStubParagraphLayoutEngine(
                 top = lineIndex * lineMetrics.height,
                 bottom = (lineIndex + 1) * lineMetrics.height,
                 naturalWidth = lineCandidate.naturalWidth,
-                adjustedWidth = lineCandidate.adjustedWidth,
+                adjustedWidth = adjustedWidth,
                 visualWidth = visualWidth,
                 debug = LineDebugInfo(
                     repair = lineCandidate.repair?.let { "${it::class.simpleName}:${it.reason}" },
@@ -305,6 +319,7 @@ class ExplainableStubParagraphLayoutEngine(
                         anchor = atom.anchor.name,
                     )
                 },
+                geometryDecisions = geometryDecisions,
                 spacingDecisions = spacingPlan.adjustments.map { adjustment ->
                     SpacingDecisionInfo(
                         range = adjustment.range,
@@ -356,6 +371,7 @@ class ExplainableStubParagraphLayoutEngine(
                             }
                     },
                 autoSpaceDecisions = autoSpaceDecisions,
+                lineEdgeTrimDecisions = edgeTrimDecisions,
             ),
         )
     }
@@ -455,24 +471,6 @@ class ExplainableStubParagraphLayoutEngine(
         } else {
             range
         }
-
-    private fun List<Cluster>.withPunctuationSpacingCompression(
-        compression: PunctuationSpacingCompressionResult,
-    ): List<Cluster> {
-        if (compression.adjustments.isEmpty()) return this
-
-        return map { cluster ->
-            val reduction = compression.adjustments
-                .filter { adjustment -> adjustment.reductionTargetRange.isInside(cluster.range) }
-                .sumOf { it.reduction.toDouble() }
-                .toFloat()
-            if (reduction == 0f) {
-                cluster
-            } else {
-                cluster.copy(advance = (cluster.advance - reduction).coerceAtLeast(0f))
-            }
-        }
-    }
 
     private fun TextRange.isInside(other: TextRange): Boolean =
         start >= other.start && end <= other.end
@@ -589,18 +587,6 @@ class ExplainableStubParagraphLayoutEngine(
             else -> null
         }
 
-    private fun List<Cluster>.pushInCapacities(atoms: List<PunctuationAtom>): Map<Int, Float> {
-        if (atoms.isEmpty()) return emptyMap()
-
-        return mapIndexedNotNull { index, cluster ->
-            val capacity = atoms
-                .filter { atom -> atom.range.isInside(cluster.range) }
-                .sumOf { atom -> (atom.trailingGlue.natural - atom.trailingGlue.min).toDouble() }
-                .toFloat()
-            if (capacity > 0f) index to capacity else null
-        }.toMap()
-    }
-
     private fun RepairCandidate.toDecisionInfo(clusters: List<Cluster>): LineRepairCandidateInfo =
         LineRepairCandidateInfo(
             kind = kind,
@@ -712,3 +698,253 @@ private data class AutoSpaceApplicationResult(
     val clusters: List<Cluster>,
     val decisions: List<AutoSpaceDecisionInfo>,
 )
+
+private data class PunctuationGeometryLedger(
+    private val naturalClusters: List<Cluster>,
+    private val geometries: Map<Int, PunctuationClusterGeometry>,
+    private val budgets: Map<Int, GlueBudget>,
+    private val justificationDeltaByCluster: Map<Int, Float> = emptyMap(),
+) {
+    companion object {
+        fun from(
+            naturalClusters: List<Cluster>,
+            punctuationAtoms: List<PunctuationAtom>,
+            spacingPlan: PunctuationSpacingCompressionResult,
+        ): PunctuationGeometryLedger {
+            val geometries = buildPunctuationClusterGeometries(
+                naturalClusters = naturalClusters,
+                punctuationAtoms = punctuationAtoms,
+            )
+            val budgets = geometries.mapValues { (_, geometry) ->
+                GlueBudget(
+                    leadingNatural = geometry.leadingGlueNatural,
+                    leadingConsumed = 0f,
+                    trailingNatural = geometry.trailingGlueNatural,
+                    trailingConsumed = 0f,
+                )
+            }
+            return PunctuationGeometryLedger(
+                naturalClusters = naturalClusters,
+                geometries = geometries,
+                budgets = budgets,
+            ).consumeSpacing(spacingPlan)
+        }
+
+        private fun buildPunctuationClusterGeometries(
+            naturalClusters: List<Cluster>,
+            punctuationAtoms: List<PunctuationAtom>,
+        ): Map<Int, PunctuationClusterGeometry> {
+            if (punctuationAtoms.isEmpty()) return emptyMap()
+
+            return naturalClusters.mapIndexedNotNull { index, cluster ->
+                val atomsForCluster = punctuationAtoms.filter { it.range.isInside(cluster.range) }
+                if (atomsForCluster.isEmpty()) return@mapIndexedNotNull null
+                index to PunctuationClusterGeometry(
+                    range = cluster.range,
+                    sourceText = cluster.text,
+                    displayText = cluster.displayText,
+                    baseAdvance = cluster.advance,
+                    bodyWidth = atomsForCluster.sumOf { it.bodyWidth.toDouble() }.toFloat(),
+                    leadingGlueNatural = atomsForCluster.first().leadingGlue.natural,
+                    trailingGlueNatural = atomsForCluster.last().trailingGlue.natural,
+                )
+            }.toMap()
+        }
+    }
+
+    fun resolveClusters(): List<Cluster> =
+        naturalClusters.mapIndexed { index, cluster ->
+            val resolved = resolvedAdvance(index, cluster)
+            if (resolved == cluster.advance) cluster else cluster.copy(advance = resolved)
+        }
+
+    fun pushInCapacities(): Map<Int, Float> =
+        budgets.mapNotNull { (index, budget) ->
+            val capacity = budget.trailingRemaining
+            if (capacity > 0f) index to capacity else null
+        }.toMap()
+
+    fun consumeTrailingByCluster(consumptionByCluster: Map<Int, Float>): PunctuationGeometryLedger =
+        copy(
+            budgets = budgets.consume(consumptionByCluster) { budget, amount ->
+                budget.copy(
+                    trailingConsumed = (budget.trailingConsumed + amount)
+                        .coerceAtMost(budget.trailingNatural),
+                )
+            },
+        )
+
+    fun addJustificationDeltas(deltaByCluster: Map<Int, Float>): PunctuationGeometryLedger =
+        copy(justificationDeltaByCluster = deltaByCluster)
+
+    fun consumeLineEdgeGlue(lines: List<LineCandidate>): LineEdgeTrimResult {
+        if (lines.isEmpty() || budgets.isEmpty()) {
+            return LineEdgeTrimResult(this, emptyList())
+        }
+
+        val decisions = mutableListOf<LineEdgeTrimDecisionInfo>()
+        val leadingConsumptionByCluster = HashMap<Int, Float>()
+        val trailingConsumptionByCluster = HashMap<Int, Float>()
+        lines.forEach { line ->
+            val lastIdx = line.clusterRange.last
+            budgets[lastIdx]?.let { budget ->
+                val remaining = budget.trailingRemaining
+                if (remaining > 0f) {
+                    trailingConsumptionByCluster.merge(lastIdx, remaining) { a, b -> a + b }
+                    decisions += LineEdgeTrimDecisionInfo(
+                        lineRange = line.sourceRange,
+                        clusterRange = naturalClusters[lastIdx].range,
+                        side = "trailing",
+                        trimAmount = remaining,
+                        consumedBefore = budget.trailingConsumed,
+                        naturalGlue = budget.trailingNatural,
+                        reason = "LineEndHalfWidthPunctuation",
+                    )
+                }
+            }
+
+            val firstIdx = line.clusterRange.first
+            budgets[firstIdx]?.let { budget ->
+                val remaining = budget.leadingRemaining
+                if (remaining > 0f) {
+                    leadingConsumptionByCluster.merge(firstIdx, remaining) { a, b -> a + b }
+                    decisions += LineEdgeTrimDecisionInfo(
+                        lineRange = line.sourceRange,
+                        clusterRange = naturalClusters[firstIdx].range,
+                        side = "leading",
+                        trimAmount = remaining,
+                        consumedBefore = budget.leadingConsumed,
+                        naturalGlue = budget.leadingNatural,
+                        reason = "LineStartHalfWidthPunctuation",
+                    )
+                }
+            }
+        }
+
+        val updated = copy(
+            budgets = budgets
+                .consume(leadingConsumptionByCluster) { budget, amount ->
+                    budget.copy(
+                        leadingConsumed = (budget.leadingConsumed + amount)
+                            .coerceAtMost(budget.leadingNatural),
+                    )
+                }
+                .consume(trailingConsumptionByCluster) { budget, amount ->
+                    budget.copy(
+                        trailingConsumed = (budget.trailingConsumed + amount)
+                            .coerceAtMost(budget.trailingNatural),
+                    )
+                },
+        )
+        return LineEdgeTrimResult(updated, decisions)
+    }
+
+    fun toDecisionInfo(): List<ClusterGeometryDecisionInfo> =
+        geometries.map { (index, geometry) ->
+            val budget = budgets.getValue(index)
+            val delta = justificationDeltaByCluster[index] ?: 0f
+            ClusterGeometryDecisionInfo(
+                range = geometry.range,
+                sourceText = geometry.sourceText,
+                displayText = geometry.displayText,
+                baseAdvance = geometry.baseAdvance,
+                bodyWidth = geometry.bodyWidth,
+                leadingGlueNatural = budget.leadingNatural,
+                leadingGlueConsumed = budget.leadingConsumed,
+                trailingGlueNatural = budget.trailingNatural,
+                trailingGlueConsumed = budget.trailingConsumed,
+                justificationDelta = delta,
+                resolvedAdvance = resolvedAdvance(index, naturalClusters[index]),
+                source = "PunctuationGeometryLedger",
+                reason = "PolicyDerivedPunctuationGeometry",
+            )
+        }
+
+    private fun consumeSpacing(
+        spacingPlan: PunctuationSpacingCompressionResult,
+    ): PunctuationGeometryLedger =
+        copy(
+            budgets = budgets.consumeByRange(
+                clusters = naturalClusters,
+                adjustments = spacingPlan.adjustments,
+            ),
+        )
+
+    private fun resolvedAdvance(index: Int, cluster: Cluster): Float {
+        val geometry = geometries[index] ?: run {
+            val delta = justificationDeltaByCluster[index] ?: 0f
+            return (cluster.advance + delta).coerceAtLeast(0f)
+        }
+        val budget = budgets[index]
+            ?: return (geometry.bodyWidth + (justificationDeltaByCluster[index] ?: 0f)).coerceAtLeast(0f)
+        val delta = justificationDeltaByCluster[index] ?: 0f
+        return (
+            geometry.bodyWidth +
+                budget.leadingRemaining +
+                budget.trailingRemaining +
+                delta
+            ).coerceAtLeast(0f)
+    }
+}
+
+private data class PunctuationClusterGeometry(
+    val range: TextRange,
+    val sourceText: String,
+    val displayText: String,
+    val baseAdvance: Float,
+    val bodyWidth: Float,
+    val leadingGlueNatural: Float,
+    val trailingGlueNatural: Float,
+)
+
+private data class GlueBudget(
+    val leadingNatural: Float,
+    val leadingConsumed: Float,
+    val trailingNatural: Float,
+    val trailingConsumed: Float,
+) {
+    val leadingRemaining: Float get() = (leadingNatural - leadingConsumed).coerceAtLeast(0f)
+    val trailingRemaining: Float get() = (trailingNatural - trailingConsumed).coerceAtLeast(0f)
+}
+
+private data class LineEdgeTrimResult(
+    val geometry: PunctuationGeometryLedger,
+    val decisions: List<LineEdgeTrimDecisionInfo>,
+)
+
+private fun Map<Int, GlueBudget>.consume(
+    consumptionByCluster: Map<Int, Float>,
+    apply: (GlueBudget, Float) -> GlueBudget,
+): Map<Int, GlueBudget> {
+    if (consumptionByCluster.isEmpty()) return this
+
+    return toMutableMap().also { updated ->
+        consumptionByCluster.forEach { (index, amount) ->
+            if (amount <= 0f) return@forEach
+            updated[index]?.let { budget -> updated[index] = apply(budget, amount) }
+        }
+    }
+}
+
+private fun Map<Int, GlueBudget>.consumeByRange(
+    clusters: List<Cluster>,
+    adjustments: List<PunctuationSpacingAdjustment>,
+): Map<Int, GlueBudget> {
+    if (adjustments.isEmpty()) return this
+
+    return toMutableMap().also { updated ->
+        adjustments.forEach { adjustment ->
+            val targetIdx = clusters.indexOfFirst { adjustment.reductionTargetRange.isInside(it.range) }
+            if (targetIdx < 0) return@forEach
+            updated[targetIdx]?.let { current ->
+                updated[targetIdx] = current.copy(
+                    leadingConsumed = (current.leadingConsumed + adjustment.reduction)
+                        .coerceAtMost(current.leadingNatural),
+                )
+            }
+        }
+    }
+}
+
+private fun TextRange.isInside(other: TextRange): Boolean =
+    start >= other.start && end <= other.end

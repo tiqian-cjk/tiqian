@@ -257,6 +257,19 @@ private fun renderEngineMetadata(label: String, result: LayoutResult): String =
             }
             appendLine("</div>")
         }
+        if (result.debug.geometryDecisions.isNotEmpty()) {
+            appendLine("<div class=\"metrics\">")
+            result.debug.geometryDecisions.forEach { decision ->
+                appendLine(
+                    "<span class=\"metric\">geom ${decision.range.start}-${decision.range.end} " +
+                        "'${decision.displayText.escapeHtml()}' body=${decision.bodyWidth.oneDecimal()} " +
+                        "lead=${decision.leadingGlueConsumed.oneDecimal()}/${decision.leadingGlueNatural.oneDecimal()} " +
+                        "trail=${decision.trailingGlueConsumed.oneDecimal()}/${decision.trailingGlueNatural.oneDecimal()} " +
+                        "justify=+${decision.justificationDelta.oneDecimal()} resolved=${decision.resolvedAdvance.oneDecimal()}</span>",
+                )
+            }
+            appendLine("</div>")
+        }
         result.lines.forEachIndexed { lineIndex, line ->
             val repair = result.debug.lineDecisions.getOrNull(lineIndex)
             val justification = result.debug.justificationDecisions.firstOrNull { it.lineRange == line.range }

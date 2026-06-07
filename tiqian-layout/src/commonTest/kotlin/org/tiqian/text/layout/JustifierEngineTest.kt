@@ -131,6 +131,11 @@ class JustifierEngineTest {
         // Cluster 。 (range 2-3) advance should be restored from 12 to 16.
         val dotCluster = result.clusters.single { it.text == "。" }
         assertEquals(16f, dotCluster.advance)
+        val dotGeometry = result.debug.geometryDecisions.single { it.sourceText == "。" }
+        assertEquals(4f, dotGeometry.leadingGlueConsumed)
+        assertEquals(0f, dotGeometry.trailingGlueConsumed)
+        assertEquals(4f, dotGeometry.justificationDelta)
+        assertEquals(16f, dotGeometry.resolvedAdvance)
     }
 
     @Test

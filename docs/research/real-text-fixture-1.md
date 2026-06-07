@@ -83,7 +83,20 @@ playground HTML 里之所以**看起来正常**，是因为 [`renderGlyphBox`](.
 
 修复方向：CarryPrevious 应至少标记 `LineCandidate.repair` 为 `LeaveRagged + over-budget-after-carry`，或者在 `applyKinsokuRepairs` 里 carry 之后再次评估 PushIn 的可行性。最差也应该 emit 一条 `RepairCandidate.rejectionReason = "carry-overflows"` 进 debug。
 
-#### 3. 行尾标点半宽 (`LineEndHalfWidthPunctuation`) 未实现
+#### 3. ~~行尾标点半宽 (`LineEndHalfWidthPunctuation`) 未实现~~ — **已修（[ADR 0010](../adr/0010-line-edge-glue-trim.md)）**
+
+ADR 0010 把 ADR 0004 加法模型的「edge glue 在 line 边缘被消耗」语义补上，作为 `ParagraphLayoutEngine` 在 lineBreak 之后、justifier 之前的 `LineEdgeGlueTrim` 步骤。ADR 0011 进一步把 SpacingCompressor、PushIn、LineEdgeGlueTrim 和 justification 都收进 `PunctuationGeometryLedger`：标点 render advance 由 `body + remaining leading glue + remaining trailing glue + justification delta` 解析，而不是每一步各自改 `Cluster.advance`。
+
+real-paragraph-1 实测变化：
+
+- visual-sum 3620 → 3616（greedy）/ 3624 → 3620（lookahead）：last line 直接收紧 4px；其它以标点结尾的非末行省下的 4px 被 justifier 复用，visualWidth 维持 maxWidth 但分配更松。
+- line[11]（last line，`稳定之后。` 结尾）从 128 → 124 px。
+- `appliesAdjacentPunctuationCompressionToDrawableGeometry` 测试更新：`你好，。` line.adjustedWidth 60 → 56，stop.advance 12 → 8（spacing 已吃 leading 4，trim 再吃 trailing 4）。
+- `kinsokuCarriesPreviousClusterWhenLineWouldStartWithForbiddenPunctuation`：line 1 `文。` 末尾再 trim 4，adjustedWidth 32 → 28。
+- PushIn 测试 `kinsokuPushesLineStartPunctuationIntoPreviousLineWhenTrailingGlueCanShrink` 不变：PushIn 已吃满 trailing，trim 拿 0。GlueBudget 自动避免双账。
+
+下面是改前的诊断笔记，留作上下文。
+
 
 `line[11]` 结尾 `。`：`adjusted=128`，`。` 仍占 16f 完整 advance。但 [ADR 0004](../adr/0004-punctuation-additive-glue-model.md) 的 follow-up 与 [research/kongque-notes.md](kongque-notes.md) 明确写过「行尾标点自然半宽」是核心目标，[`PunctuationAtomBuilder`](../../tiqian-layout/src/commonMain/kotlin/org/tiqian/text/layout/PunctuationModel.kt) 也给标点设了 `trailingGlue.natural = sideGlue`——但 `LineBreaker` 在 commit 行的时候从不消耗这条 glue。
 

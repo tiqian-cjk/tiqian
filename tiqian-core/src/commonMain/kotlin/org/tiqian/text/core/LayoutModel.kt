@@ -52,11 +52,23 @@ data class LayoutDebugInfo(
     val shapingDecisions: List<ShapingDecisionInfo> = emptyList(),
     val metricDecisions: List<MetricDecisionInfo> = emptyList(),
     val punctuationDecisions: List<PunctuationDecisionInfo> = emptyList(),
+    val geometryDecisions: List<ClusterGeometryDecisionInfo> = emptyList(),
     val spacingDecisions: List<SpacingDecisionInfo> = emptyList(),
     val roleOverrides: List<RoleOverrideInfo> = emptyList(),
     val lineDecisions: List<LineDecisionInfo> = emptyList(),
     val justificationDecisions: List<JustificationDecisionInfo> = emptyList(),
     val autoSpaceDecisions: List<AutoSpaceDecisionInfo> = emptyList(),
+    val lineEdgeTrimDecisions: List<LineEdgeTrimDecisionInfo> = emptyList(),
+)
+
+data class LineEdgeTrimDecisionInfo(
+    val lineRange: TextRange,
+    val clusterRange: TextRange,
+    val side: String,
+    val trimAmount: Float,
+    val consumedBefore: Float,
+    val naturalGlue: Float,
+    val reason: String,
 )
 
 data class AutoSpaceDecisionInfo(
@@ -117,6 +129,22 @@ data class PunctuationDecisionInfo(
     val leadingGlueNatural: Float,
     val trailingGlueNatural: Float,
     val anchor: String,
+)
+
+data class ClusterGeometryDecisionInfo(
+    val range: TextRange,
+    val sourceText: String,
+    val displayText: String,
+    val baseAdvance: Float,
+    val bodyWidth: Float,
+    val leadingGlueNatural: Float,
+    val leadingGlueConsumed: Float,
+    val trailingGlueNatural: Float,
+    val trailingGlueConsumed: Float,
+    val justificationDelta: Float,
+    val resolvedAdvance: Float,
+    val source: String,
+    val reason: String,
 )
 
 data class SpacingDecisionInfo(
