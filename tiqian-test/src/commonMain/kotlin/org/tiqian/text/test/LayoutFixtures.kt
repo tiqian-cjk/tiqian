@@ -87,5 +87,11 @@ object EarlyLayoutFixtures {
             notes = "Justification uses CjkLatinSpace at the CJK↔Latin boundary plus PunctuationGlue if a spacing reduction landed on the line. textAlign=Justify.",
             textAlign = TextAlign.Justify,
         ),
+        LayoutFixture(
+            id = "ascii-brackets-in-cjk",
+            text = "中文段落(English)和[mixed]说明。",
+            constraints = LayoutConstraints(maxWidth = 240f),
+            notes = "ASCII parentheses and square brackets inside CJK text: BracketPairAnalyzer assigns them CjkPunctuation so they pick the CJK font instead of the symbol fallback.",
+        ),
     )
 }

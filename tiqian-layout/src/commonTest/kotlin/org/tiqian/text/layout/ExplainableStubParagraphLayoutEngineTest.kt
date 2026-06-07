@@ -206,6 +206,54 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun classifiesAsciiBracketsByOuterCjkContext() {
+        // 中文(English)中文 — without BracketPairAnalyzer, ( and ) would fall
+        // through to FontRole.Unknown and land on the symbol fallback font.
+        // With it, the pair inherits the CJK context from `文` on the left.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("中文(English)中文"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val openParen = result.clusters.single { it.text == "(" }
+        val closeParen = result.clusters.single { it.text == ")" }
+        assertEquals("cjk-primary", openParen.fontKey)
+        assertEquals("cjk-primary", closeParen.fontKey)
+        assertTrue(
+            result.debug.roleOverrides.any {
+                it.range.start == 2 &&
+                    it.source == "BracketPairAwareLatinContext" &&
+                    it.overriddenRole == "CjkPunctuation"
+            },
+        )
+        assertTrue(
+            result.debug.roleOverrides.any {
+                it.range.start == 10 &&
+                    it.source == "BracketPairAwareLatinContext" &&
+                    it.overriddenRole == "CjkPunctuation"
+            },
+        )
+    }
+
+    @Test
+    fun classifiesAsciiBracketsByOuterLatinContext() {
+        // he said (hello) — Latin both sides; brackets stay Latin.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("he said (hello) world"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        // ( and ) should be classified Latin and consumed into the surrounding
+        // Latin run by cluster aggregation.
+        val latinRun = result.clusters.single { it.text.contains("(hello)") }
+        assertEquals("latin-primary", latinRun.fontKey)
+    }
+
+    @Test
     fun keepsTextStartLatinQuotePairInLatinRun() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
