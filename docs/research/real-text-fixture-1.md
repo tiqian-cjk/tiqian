@@ -48,7 +48,19 @@ spacing decisions (整段共 2 处):
 
 ### High：真文本立刻触发，必须修
 
-#### 1. 空格 U+0020 落到 `Unknown` → `symbol-fallback`
+#### 1. ~~空格 U+0020 落到 `Unknown` → `symbol-fallback`~~ — **已修（[ADR 0009](../adr/0009-autospace-policy.md)）**
+
+按 CSS Text 4 `text-autospace` 模型抬高到 profile 层级：`ClreqProfile.autoSpace`（`AutoSpaceMode { Disabled / Replace / Insert }`）+ U+0020 归 `LatinText` + `ParagraphLayoutEngine.applyAutoSpacePolicy` 在 CJK 边界把 typed space 从 1em 缩到 `gapEm`（默认 0.25em）。
+
+实测效果（real-paragraph-1）：
+
+- visual-sum 3656 → 3620（-36px，14 个空格中位于边界的部分被吸收）
+- size.height 268.8 → 249.6（line-height 收紧 1.6px × 12 行 = 19.2px；不再被 Unknown role 的 ascent=14.4 撑高）
+- greedy justifications 5 → 8 / lookahead 8 → 10（Latin run 不再虚胖，更多行需要少量填充，分配更均匀）
+- 2 处 CarryPrevious 仍在，溢出仍在——观察 #2 没修，独立 follow-up
+
+下面是改前的诊断笔记，留作上下文。
+
 
 整段 14 个 ASCII 空格（每个中西交界点都有一个）当前在 [`CjkFontRoleClassifier`](../../tiqian-font/src/commonMain/kotlin/org/tiqian/text/font/FontPolicy.kt) 里依次：
 不是 CJK 码点；不是 `isAmbiguousAsciiPunctuation`（只有 `- / ~`）；不是 curly quote；不是 CJK 标点；不是 `isLatinCodePoint`（只覆盖字母数字）；不是 `isAsciiLatinPunctuation`（刚加的括号集）；不是 emoji；`isSymbolCodePoint` 不命中（SPACE_SEPARATOR 不在 math/currency/modifier/other_symbol）。最终 → `FontRole.Unknown` → `PreferCjkForAmbiguousPunctuationResolver` 给出 `symbol-fallback`。

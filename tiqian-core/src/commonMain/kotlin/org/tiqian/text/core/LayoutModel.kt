@@ -56,6 +56,18 @@ data class LayoutDebugInfo(
     val roleOverrides: List<RoleOverrideInfo> = emptyList(),
     val lineDecisions: List<LineDecisionInfo> = emptyList(),
     val justificationDecisions: List<JustificationDecisionInfo> = emptyList(),
+    val autoSpaceDecisions: List<AutoSpaceDecisionInfo> = emptyList(),
+)
+
+data class AutoSpaceDecisionInfo(
+    val clusterRange: TextRange,
+    val side: String,
+    val boundaryRole: String,
+    val mode: String,
+    val charactersAffected: Int,
+    val reductionPerChar: Float,
+    val totalReduction: Float,
+    val reason: String,
 )
 
 data class FontDecisionInfo(

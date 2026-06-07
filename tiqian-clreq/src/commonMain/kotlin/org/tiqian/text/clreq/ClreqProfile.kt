@@ -16,6 +16,7 @@ data class ClreqProfile(
     val punctuationGlyphPolicy: CjkPunctuationGlyphPolicy = CjkPunctuationGlyphPolicy.PreferClreqRecommendedCodepoints,
     val coalesceRepeatablePunctuation: Set<Int> = DefaultCoalesceRepeatablePunctuation,
     val hangingPunctuation: HangingPunctuationPolicy = HangingPunctuationPolicy.Disabled,
+    val autoSpace: AutoSpacePolicy = AutoSpacePolicy.Default,
 ) {
     companion object {
         // CoalesceRepeatablePunctuation: codepoints that, when written as consecutive
@@ -62,6 +63,53 @@ enum class HangingPunctuationPolicy {
     Disabled,
     EnabledForPauseStop,
     EnabledForExtendedCjk,
+}
+
+/**
+ * AutoSpacePolicy — controls how spacing between CJK ideographs and Latin /
+ * digit runs is materialised. Mirrors the CSS Text Module Level 4
+ * `text-autospace` model (per-boundary mode + a configurable gap width)
+ * rather than the project's earlier ad-hoc approach of treating typed
+ * U+0020 spaces as opaque clusters.
+ *
+ * See [ADR 0009](docs/adr/0009-autospace-policy.md).
+ *
+ * Per-boundary [AutoSpaceMode] decides:
+ * - `Disabled`: no engine-inserted space; typed U+0020 renders at its
+ *    nominal 1em advance (i.e. classic stub behaviour).
+ * - `Replace` (default): typed U+0020 at a CJK ↔ Latin / digit boundary is
+ *    absorbed into the autospace gap. The space cluster's advance shrinks
+ *    from 1em to [gapEm] so the visible result is a single configurable gap,
+ *    not 1em + autospace double-count.
+ * - `Insert`: typed U+0020 is preserved at full 1em AND an autospace gap is
+ *    added on top. Used by editorial workflows that need the U+0020 to
+ *    round-trip through copy/paste. Reserved; not implemented in current
+ *    slice (requires virtual cluster injection).
+ *
+ * [gapEm] is the autospace gap width in em, applied uniformly across both
+ * boundary types unless overridden. CSS default `text-autospace: normal`
+ * lands around 0.125–0.25 em depending on font; we pick `0.25` to match the
+ * existing `Justifier.cjkLatinSpaceEm` so the same number governs typed-
+ * space replacement and justification stretch capacity.
+ */
+data class AutoSpacePolicy(
+    val cjkLatin: AutoSpaceMode = AutoSpaceMode.Replace,
+    val cjkDigit: AutoSpaceMode = AutoSpaceMode.Replace,
+    val gapEm: Float = 0.25f,
+) {
+    companion object {
+        val Default = AutoSpacePolicy()
+        val Disabled = AutoSpacePolicy(
+            cjkLatin = AutoSpaceMode.Disabled,
+            cjkDigit = AutoSpaceMode.Disabled,
+        )
+    }
+}
+
+enum class AutoSpaceMode {
+    Disabled,
+    Replace,
+    Insert,
 }
 
 fun interface ClreqProfileResolver {

@@ -1,9 +1,12 @@
 package org.tiqian.text.layout
 
+import org.tiqian.text.clreq.AutoSpaceMode
+import org.tiqian.text.clreq.AutoSpacePolicy
 import org.tiqian.text.clreq.BuiltInClreqProfileResolver
 import org.tiqian.text.clreq.ClreqProfile
 import org.tiqian.text.clreq.ClreqProfileResolver
 import org.tiqian.text.clreq.ClreqPunctuationGlyphSubstitutor
+import org.tiqian.text.core.AutoSpaceDecisionInfo
 import org.tiqian.text.core.Cluster
 import org.tiqian.text.core.FontDecisionInfo
 import org.tiqian.text.core.Glyph
@@ -116,9 +119,17 @@ class ExplainableStubParagraphLayoutEngine(
                 ),
             )
         }
-        val naturalClusters = shapingResults.flatMap { it.clusters }
+        val rawNaturalClusters = shapingResults.flatMap { it.clusters }
         val shapingDecisions = shapingResults.flatMap { it.decisions }
-        naturalClusters.requireCoveredBy(fontDecisions)
+        rawNaturalClusters.requireCoveredBy(fontDecisions)
+
+        val autoSpaceResult = rawNaturalClusters.applyAutoSpacePolicy(
+            fontDecisions = fontDecisions,
+            policy = clreqProfile.autoSpace,
+            fontSize = fontSize,
+        )
+        val naturalClusters = autoSpaceResult.clusters
+        val autoSpaceDecisions = autoSpaceResult.decisions
 
         val punctuationAtoms = naturalClusters.flatMap { cluster ->
             cluster.punctuationAtoms(em = fontSize, builder = punctuationAtomBuilder)
@@ -344,6 +355,7 @@ class ExplainableStubParagraphLayoutEngine(
                                 )
                             }
                     },
+                autoSpaceDecisions = autoSpaceDecisions,
             ),
         )
     }
@@ -482,6 +494,101 @@ class ExplainableStubParagraphLayoutEngine(
         }
     }
 
+    /**
+     * Applies `AutoSpacePolicy` to natural clusters. The named heuristic is
+     * `TextAutoSpaceReplace` — at CJK ↔ Latin / digit boundaries, typed
+     * U+0020 SPACE characters that sit at the edge of a Latin-classified
+     * cluster have their contribution to the cluster's advance reduced from
+     * the stub shaper's 1em down to `policy.gapEm`.
+     *
+     * This mirrors CSS Text Module Level 4 `text-autospace`: the autospace
+     * gap REPLACES the typed space rather than adding to it (avoiding the
+     * "1em space + 0.25em autospace = 1.25em double gap" problem).
+     *
+     * Only `AutoSpaceMode.Replace` is implemented in this slice. `Insert`
+     * requires virtual cluster injection (typed space stays at 1em and an
+     * additional 0.25em is inserted) and is deferred to a future slice.
+     */
+    private fun List<Cluster>.applyAutoSpacePolicy(
+        fontDecisions: List<FontDecision>,
+        policy: AutoSpacePolicy,
+        fontSize: Float,
+    ): AutoSpaceApplicationResult {
+        if (isEmpty()) return AutoSpaceApplicationResult(emptyList(), emptyList())
+
+        val decisions = mutableListOf<AutoSpaceDecisionInfo>()
+        val updated = mapIndexed { idx, cluster ->
+            val role = fontDecisions.firstOrNull { it.range == cluster.range }?.role
+                ?: return@mapIndexed cluster
+            if (role != FontRole.LatinText) return@mapIndexed cluster
+
+            val prevRole = if (idx > 0) fontDecisions.firstOrNull { it.range == this[idx - 1].range }?.role else null
+            val nextRole = if (idx < lastIndex) fontDecisions.firstOrNull { it.range == this[idx + 1].range }?.role else null
+
+            val leadingSpaces = cluster.text.takeWhile { it == ' ' }.length
+            val trailingSpaces = cluster.text.takeLastWhile { it == ' ' }.length
+                .let { count -> if (cluster.text.length == leadingSpaces) 0 else count }
+
+            val leadingReduction = leadingSpaces.boundaryReduction(
+                boundaryRole = prevRole,
+                cluster = cluster,
+                side = "leading",
+                policy = policy,
+                fontSize = fontSize,
+                decisions = decisions,
+            )
+            val trailingReduction = trailingSpaces.boundaryReduction(
+                boundaryRole = nextRole,
+                cluster = cluster,
+                side = "trailing",
+                policy = policy,
+                fontSize = fontSize,
+                decisions = decisions,
+            )
+            val totalReduction = leadingReduction + trailingReduction
+            if (totalReduction == 0f) {
+                cluster
+            } else {
+                cluster.copy(advance = (cluster.advance - totalReduction).coerceAtLeast(0f))
+            }
+        }
+        return AutoSpaceApplicationResult(updated, decisions)
+    }
+
+    private fun Int.boundaryReduction(
+        boundaryRole: FontRole?,
+        cluster: Cluster,
+        side: String,
+        policy: AutoSpacePolicy,
+        fontSize: Float,
+        decisions: MutableList<AutoSpaceDecisionInfo>,
+    ): Float {
+        if (this == 0 || boundaryRole == null) return 0f
+        val mode = policy.modeFor(boundaryRole) ?: return 0f
+        if (mode != AutoSpaceMode.Replace) return 0f
+
+        val reductionPerSpace = (fontSize - policy.gapEm * fontSize).coerceAtLeast(0f)
+        if (reductionPerSpace == 0f) return 0f
+        val total = this * reductionPerSpace
+        decisions += AutoSpaceDecisionInfo(
+            clusterRange = cluster.range,
+            side = side,
+            boundaryRole = boundaryRole.name,
+            mode = mode.name,
+            charactersAffected = this,
+            reductionPerChar = reductionPerSpace,
+            totalReduction = total,
+            reason = "TextAutoSpaceReplace:cjk-${if (boundaryRole == FontRole.CjkText) "ideograph" else "punctuation"}",
+        )
+        return total
+    }
+
+    private fun AutoSpacePolicy.modeFor(role: FontRole): AutoSpaceMode? =
+        when (role) {
+            FontRole.CjkText, FontRole.CjkPunctuation -> cjkLatin
+            else -> null
+        }
+
     private fun List<Cluster>.pushInCapacities(atoms: List<PunctuationAtom>): Map<Int, Float> {
         if (atoms.isEmpty()) return emptyMap()
 
@@ -599,4 +706,9 @@ private data class ClusterMetricDecision(
 private data class ResolvedLineMetrics(
     val baseline: Float,
     val height: Float,
+)
+
+private data class AutoSpaceApplicationResult(
+    val clusters: List<Cluster>,
+    val decisions: List<AutoSpaceDecisionInfo>,
 )

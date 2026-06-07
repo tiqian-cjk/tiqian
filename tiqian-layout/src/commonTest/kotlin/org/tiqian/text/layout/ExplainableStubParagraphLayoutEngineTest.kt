@@ -206,6 +206,71 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun autoSpaceReplacesTypedSpaceAtCjkLatinBoundary() {
+        // " CJK " becomes one Latin cluster (5 chars * 16 = 80px nominal).
+        // At maxWidth large enough, default AutoSpacePolicy.Replace shrinks
+        // each boundary space from 1em (16) to 0.25em (4), saving 24px total.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("中文 CJK 段落"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val cjkSpaced = result.clusters.single { it.text == " CJK " }
+        // 5 chars * 16 nominal = 80; minus 2 boundary-space replacements of
+        // (16 - 4) = 12 each → 80 - 24 = 56.
+        assertEquals(56f, cjkSpaced.advance)
+        assertEquals(2, result.debug.autoSpaceDecisions.size)
+        assertTrue(
+            result.debug.autoSpaceDecisions.all {
+                it.mode == "Replace" && it.charactersAffected == 1 && it.reductionPerChar == 12f
+            },
+        )
+    }
+
+    @Test
+    fun autoSpaceDoesNotShrinkSpacesBetweenLatinWords() {
+        // "Hello world" — space between two Latin words, no CJK boundary.
+        // AutoSpace.Replace only applies at CJK boundaries; word-internal
+        // spaces stay at their nominal 1em.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("Hello world"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val latin = result.clusters.single()
+        assertEquals("Hello world", latin.text)
+        assertEquals(176f, latin.advance) // 11 chars * 16 = 176, no reduction
+        assertEquals(0, result.debug.autoSpaceDecisions.size)
+    }
+
+    @Test
+    fun autoSpaceDisabledKeepsTypedSpacesAtOneEm() {
+        val engine = ExplainableStubParagraphLayoutEngine(
+            clreqProfileResolver = ClreqProfileResolver {
+                ClreqProfile.MainlandHorizontal.copy(
+                    autoSpace = org.tiqian.text.clreq.AutoSpacePolicy.Disabled,
+                )
+            },
+        )
+
+        val result = engine.layout(
+            LayoutInput(
+                content = TiqianTextContent("中文 CJK 段落"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val cjkSpaced = result.clusters.single { it.text == " CJK " }
+        // No shrink: 5 chars * 16 = 80.
+        assertEquals(80f, cjkSpaced.advance)
+        assertEquals(0, result.debug.autoSpaceDecisions.size)
+    }
+
+    @Test
     fun classifiesAsciiBracketsAsLatinRegardlessOfSurroundingContext() {
         // ASCII parens/brackets do NOT share a code point with CJK fullwidth
         // forms (（）「」 etc), so they are always Latin by typed intent.
@@ -253,13 +318,14 @@ class ExplainableStubParagraphLayoutEngineTest {
             ),
         )
 
-        val quoted = result.clusters.first()
-
-        assertEquals("“Hello”", quoted.text)
+        // With U+0020 now classified as Latin (ADR 0009 autospace model), the
+        // entire `"Hello" world` aggregates into a single Latin cluster.
+        val quoted = result.clusters.single()
+        assertEquals("“Hello” world", quoted.text)
         assertEquals("latin-primary", quoted.fontKey)
         assertTrue(
             result.debug.fontDecisions.any {
-                it.sourceText == "“Hello”" && it.role == FontRole.LatinText.name
+                it.sourceText == "“Hello” world" && it.role == FontRole.LatinText.name
             },
         )
     }
@@ -273,8 +339,10 @@ class ExplainableStubParagraphLayoutEngineTest {
             ),
         )
 
-        val quoted = result.clusters.first { it.text == "“hello”" }
-
+        // With autospace, the trailing space before — joins "English", and
+        // the leading space after — joins " “hello”". The em-dash sits between
+        // these two Latin clusters as a CJK punctuation cluster of its own.
+        val quoted = result.clusters.first { it.text.contains("“hello”") }
         assertEquals("latin-primary", quoted.fontKey)
     }
 

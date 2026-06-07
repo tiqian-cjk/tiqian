@@ -140,11 +140,17 @@ class CjkFontRoleClassifier : FontRoleClassifier {
      * Latin runs) instead of falling through to [FontRole.Unknown] and
      * landing on the symbol fallback font.
      *
+     * U+0020 SPACE is also included: per ADR 0009 it joins the Latin run for
+     * cluster aggregation and its advance is later adjusted by
+     * `ClreqProfile.autoSpace` when it sits at a CJK ↔ Latin boundary
+     * (typed-space-as-autospace).
+     *
      * Pair-aware analyzers ([QuotePairAnalyzer]) are reserved for genuinely
      * shared code points (U+2018–201D curly quotes), not for these.
      */
     private fun Int.isAsciiLatinPunctuation(): Boolean =
-        this == 0x0028 || // (
+        this == 0x0020 || // SPACE
+            this == 0x0028 || // (
             this == 0x0029 || // )
             this == 0x005B || // [
             this == 0x005D || // ]
