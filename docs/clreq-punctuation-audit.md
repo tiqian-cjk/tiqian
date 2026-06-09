@@ -44,10 +44,9 @@ source "•" -> display "·"
 
 - Mainland / Traditional profile 下 `/` 与 `／` 的显示偏好。
 - 连接号在日期、范围、外来词、表格编号等语义中的不同宽度。
-- `！！！`、`？？？` 的二字宽压缩策略。在策略落地前，`PunctuationSpacingCompressor`
-  对 PauseOrStop+PauseOrStop 连用**不做折叠**（`ConsecutivePauseOrStopKeepsFullWidth`）：
-  CLREQ 的相邻标点挤压覆盖的是点号↔引号/括号组合；之前无差别折叠把每个 `！` 压成
-  半宽贴紧，视觉上明显过窄。
+- `！！！`、`？？？` 的二字宽压缩策略（整组占两字宽的专门规则）。注意：这条推迟的
+  只是「整组二字宽」策略本身；连用点号的**逐对挤压**是简体横排的预期行为，
+  `PunctuationSpacingCompressor` 对 `！！` 这类相邻对照常折叠。
 - 竖排时破折号、省略号、连接号顺时针旋转 90 度。
 - 简体横排常用弯引号，繁体和竖排常用角引号；这属于 writing mode 与 region policy，不应作为当前横排默认替换。
 

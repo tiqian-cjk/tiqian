@@ -122,13 +122,11 @@ class PunctuationSpacingCompressor {
      * atom alone doesn't know its design em — `atom.advance` reflects the
      * shaped advance, not the design em box.
      *
-     * `ConsecutivePauseOrStopKeepsFullWidth`: a PauseOrStop followed by
-     * another PauseOrStop (`！！` `？！` `？？`…) is NOT collapsed. CLREQ's
-     * adjacent-punctuation compression covers 点号↔引号/括号 combinations;
-     * the two-em-wide compression strategy for `！！！`/`？？？` is explicitly
-     * deferred to a future profile decision — see
-     * clreq-punctuation-audit.md「后续需要 profile 化的事项」. Collapsing them
-     * today rendered each mark at half width, visibly cramped.
+     * Consecutive PauseOrStop marks (`！！` `？！`…) compress like any other
+     * adjacent pair — this is expected MainlandSimplified horizontal
+     * behaviour. The audit doc's deferred item is only the dedicated
+     * two-em-width strategy for `！！！`/`？？？` runs, not the per-pair
+     * collapse itself.
      */
     fun compress(atoms: List<PunctuationAtom>, em: Float): PunctuationSpacingCompressionResult {
         if (atoms.size < 2) return PunctuationSpacingCompressionResult(emptyList())
@@ -136,12 +134,6 @@ class PunctuationSpacingCompressor {
 
         val adjustments = atoms.zipWithNext().mapNotNull { (left, right) ->
             if (left.range.end != right.range.start) return@mapNotNull null
-
-            if (left.punctuationClass == PunctuationClass.PauseOrStop &&
-                right.punctuationClass == PunctuationClass.PauseOrStop
-            ) {
-                return@mapNotNull null
-            }
 
             val naturalInnerGlue = left.trailingGlue.natural + right.leadingGlue.natural
             if (naturalInnerGlue <= 0f) return@mapNotNull null

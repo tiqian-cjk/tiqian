@@ -79,14 +79,18 @@ class PunctuationSpacingRuleTest {
     }
 
     @Test
-    fun consecutivePauseOrStopMarksAreNotCompressed() {
-        // ！ + ！ (PauseOrStop + PauseOrStop): CLREQ's adjacent compression
-        // covers 点号↔引号/括号 combos; the `！！！` two-em strategy is
-        // deferred (clreq-punctuation-audit.md). Each mark keeps its full
-        // width — collapsing made every `！` half-width and cramped.
+    fun consecutivePauseOrStopMarksCompressLikeAnyAdjacentPair() {
+        // ！ + ！ (PauseOrStop + PauseOrStop): expected MainlandSimplified
+        // horizontal behaviour — adjacent marks compress; inner glue
+        // ！.trailing(8) + ！.leading(0) = 8 collapses to 0. (The dedicated
+        // two-em-width strategy for `！！！` runs is a separate, still-open
+        // profile item — see clreq-punctuation-audit.md.)
         val atoms = listOf(atom('！', 0), atom('！', 1))
         val plan = compressor.compress(atoms, em)
-        assertEquals(0, plan.adjustments.size)
+        val adj = plan.adjustments.single()
+        assertEquals(8f, adj.naturalInnerGlue)
+        assertEquals(0f, adj.adjustedInnerGlue)
+        assertEquals(8f, adj.reduction)
     }
 
     @Test
