@@ -21,9 +21,16 @@ sealed interface RepairOption {
         override val penalty: Int,
         override val reason: String,
         val offenderClusterIndex: Int,
-        val targetClusterIndex: Int,
-        val shrink: Float,
-        val availableCapacity: Float,
+        /**
+         * CLREQ 推入 semantics — compress in-line glue to make the offender
+         * fit on the previous line. The shrink is distributed across every
+         * cluster in the merged line whose punctuation atoms still have
+         * compressible trailing glue (after spacing-compression and edge-trim
+         * have run). Listed in cluster order.
+         */
+        val allocations: List<PushInAllocation>,
+        val totalShrink: Float,
+        val totalAvailableCapacity: Float,
     ) : RepairOption
 
     data class Hang(
@@ -45,6 +52,12 @@ sealed interface RepairOption {
         val offenderClusterIndex: Int,
     ) : RepairOption
 }
+
+data class PushInAllocation(
+    val clusterIndex: Int,
+    val shrink: Float,
+    val availableCapacity: Float,
+)
 
 data class LineCandidate(
     val clusterRange: IntRange,

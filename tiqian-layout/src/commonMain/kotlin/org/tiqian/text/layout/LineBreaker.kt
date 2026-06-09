@@ -373,6 +373,12 @@ internal fun applyKinsokuRepairs(
         val newCurrRange = carriedIndex..curr.clusterRange.last
         val carriedCurrent = rebuildLine(newCurrRange, naturalClusters, adjustedClusters)
         if (carriedCurrent.adjustedWidth > maxWidth) {
+            // CLREQ 推出 may not overflow maxWidth — that would be effectively
+            // hanging punctuation, which is opt-in per ADR 0006. When the
+            // receiving line is already at capacity, this fallback leaves
+            // the offender at line start with a LeaveRagged marker. The
+            // lookahead breaker is expected to avoid hitting this case by
+            // picking a break that has room downstream.
             repairCandidates += RepairCandidate(
                 kind = "CarryPrevious",
                 reasonCode = "ForbiddenAtLineStart",
@@ -433,19 +439,23 @@ private data class PushInResult(
 )
 
 /**
+ * CLREQ 推入 — compress IN-LINE glue (across every cluster on the merged
+ * line) to fit the offender. The offender's own trailing glue is one of
+ * many possible contributors; the previous line's `、`, `，`, etc. all
+ * count.
+ *
  * Single-source contract:
- *   `shrink` is the canonical amount of trailing glue this PushIn consumes.
- *   - [RepairOption.PushIn.shrink] is the field of record (engine reads it to
- *     subtract from the offender cluster's advance — see
- *     `ParagraphLayoutEngine.pushInShrinkByCluster`).
+ *   `totalShrink` is the canonical amount of glue this PushIn consumes
+ *   across the whole line. `allocations` records per-cluster shrink so the
+ *   engine can subtract from each cluster's advance independently.
  *   - [LineCandidate.adjustedWidth] is recomputed here as
- *     `expanded.adjustedWidth - shrink` to keep ADR 0005's drawable-cluster
- *     invariant: the line candidate already reflects the post-shrink
- *     geometry the breaker decided. The engine MUST NOT subtract `shrink`
- *     from cluster advance and ALSO subtract it from `adjustedWidth` —
- *     pick one consumer per derived field.
- *   - Today `shrink == overflow`. If a future partial-PushIn lands
- *     (`shrink < overflow`), update `shrink` here and rely on it as the
+ *     `expanded.adjustedWidth - totalShrink` to keep ADR 0005's drawable-
+ *     cluster invariant: the line candidate already reflects the post-
+ *     shrink geometry the breaker decided. The engine MUST NOT subtract
+ *     allocation shrink from cluster advance and ALSO subtract it from
+ *     `adjustedWidth` — pick one consumer per derived field.
+ *   - Today `totalShrink == overflow`. If a future partial-PushIn lands
+ *     (`totalShrink < overflow`), update it here and rely on it as the
  *     only knob; do not reintroduce a second `overflow`-based path.
  */
 private fun tryPushIn(
@@ -462,8 +472,13 @@ private fun tryPushIn(
     val expanded = rebuildLine(expandedRange, naturalClusters, adjustedClusters)
     val overflow = expanded.adjustedWidth - maxWidth
 
-    val capacity = pushInCapacities[offenderIndex] ?: 0f
-    if (overflow <= 0f || overflow > capacity) {
+    // Aggregate compressible glue across the merged line. Every cluster on
+    // the new line contributes whatever its punctuation atoms still have
+    // available (after spacing-compression but before edge-trim).
+    val perCluster = expandedRange.associateWith { (pushInCapacities[it] ?: 0f) }
+    val totalCapacity = perCluster.values.sum()
+
+    if (overflow <= 0f || overflow > totalCapacity) {
         return PushInResult(
             previous = prev,
             current = curr,
@@ -476,12 +491,13 @@ private fun tryPushIn(
                 rejectionReason = if (overflow <= 0f) "no-overflow" else "insufficient-capacity",
                 targetClusterIndex = offenderIndex,
                 requiredShrink = overflow.coerceAtLeast(0f),
-                availableCapacity = capacity,
+                availableCapacity = totalCapacity,
             ),
         )
     }
 
     val shrink = overflow
+    val allocations = distributePushInShrink(perCluster, shrink)
     val offender = adjustedClusters[offenderIndex]
     val candidate = RepairCandidate(
         kind = "PushIn",
@@ -492,17 +508,17 @@ private fun tryPushIn(
         targetClusterIndex = offenderIndex,
         shrink = shrink,
         requiredShrink = overflow,
-        availableCapacity = capacity,
+        availableCapacity = totalCapacity,
     )
     val repairedPrevious = expanded.copy(
         adjustedWidth = expanded.adjustedWidth - shrink,
         repair = RepairOption.PushIn(
             penalty = pushInPenalty,
-            reason = "ForbiddenAtLineStart:${offender.text}:pushed-in=$shrink",
+            reason = "ForbiddenAtLineStart:${offender.text}:pushed-in=$shrink/${totalCapacity}",
             offenderClusterIndex = offenderIndex,
-            targetClusterIndex = offenderIndex,
-            shrink = shrink,
-            availableCapacity = capacity,
+            allocations = allocations,
+            totalShrink = shrink,
+            totalAvailableCapacity = totalCapacity,
         ),
         repairCandidates = listOf(candidate),
     )
@@ -512,6 +528,45 @@ private fun tryPushIn(
         rebuildLine((offenderIndex + 1)..curr.clusterRange.last, naturalClusters, adjustedClusters)
     }
     return PushInResult(repairedPrevious, repairedCurrent, candidate)
+}
+
+/**
+ * Distribute [totalShrink] across the active (capacity > 0) entries of
+ * [perCluster] proportionally to each cluster's available capacity. Each
+ * allocation is capped by its own capacity; any rounding remainder lands
+ * on the last active entry so the sum equals [totalShrink] exactly.
+ *
+ * Returned in cluster order. Clusters with zero capacity are omitted.
+ */
+private fun distributePushInShrink(
+    perCluster: Map<Int, Float>,
+    totalShrink: Float,
+): List<PushInAllocation> {
+    val active = perCluster.entries
+        .filter { it.value > 0f }
+        .sortedBy { it.key }
+    if (active.isEmpty() || totalShrink <= 0f) return emptyList()
+
+    val totalActive = active.sumOf { it.value.toDouble() }.toFloat()
+    val allocations = mutableListOf<PushInAllocation>()
+    var remaining = totalShrink
+    active.forEachIndexed { i, entry ->
+        val isLast = (i == active.lastIndex)
+        val share = if (isLast) {
+            remaining.coerceAtMost(entry.value)
+        } else {
+            (totalShrink * entry.value / totalActive).coerceAtMost(entry.value)
+        }
+        if (share > 0f) {
+            allocations += PushInAllocation(
+                clusterIndex = entry.key,
+                shrink = share,
+                availableCapacity = entry.value,
+            )
+            remaining -= share
+        }
+    }
+    return allocations
 }
 
 internal fun rebuildLine(

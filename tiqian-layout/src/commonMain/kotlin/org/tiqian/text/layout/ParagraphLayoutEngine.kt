@@ -22,6 +22,7 @@ import org.tiqian.text.core.LayoutResult
 import org.tiqian.text.core.LineBox
 import org.tiqian.text.core.LineDebugInfo
 import org.tiqian.text.core.LineDecisionInfo
+import org.tiqian.text.core.LineRepairAllocationInfo
 import org.tiqian.text.core.LineRepairCandidateInfo
 import org.tiqian.text.core.LineRepairDecisionInfo
 import org.tiqian.text.core.MetricDecisionInfo
@@ -197,8 +198,9 @@ class ExplainableStubParagraphLayoutEngine(
         }
         val pushInShrinkByCluster = lineSolution.lines
             .mapNotNull { it.repair as? RepairOption.PushIn }
-            .groupBy { it.targetClusterIndex }
-            .mapValues { (_, repairs) -> repairs.sumOf { it.shrink.toDouble() }.toFloat() }
+            .flatMap { it.allocations }
+            .groupBy { it.clusterIndex }
+            .mapValues { (_, allocs) -> allocs.sumOf { it.shrink.toDouble() }.toFloat() }
         val pushInGeometry = baseGeometry.consumeTrailingByCluster(pushInShrinkByCluster)
         val pushInClusters = pushInGeometry.resolveClusters()
         val edgeTrimResult = pushInGeometry.consumeLineEdgeGlue(
@@ -736,9 +738,16 @@ class ExplainableStubParagraphLayoutEngine(
                 reasonCode = "ForbiddenAtLineStart",
                 offenderRange = clusters[offenderClusterIndex].range,
                 penalty = penalty,
-                targetClusterIndex = targetClusterIndex,
-                shrink = shrink,
-                availableCapacity = availableCapacity,
+                targetClusterIndex = offenderClusterIndex,
+                shrink = totalShrink,
+                availableCapacity = totalAvailableCapacity,
+                pushInAllocations = allocations.map { alloc ->
+                    LineRepairAllocationInfo(
+                        clusterRange = clusters[alloc.clusterIndex].range,
+                        shrink = alloc.shrink,
+                        availableCapacity = alloc.availableCapacity,
+                    )
+                },
             )
 
             is RepairOption.CarryPrevious -> LineRepairDecisionInfo(

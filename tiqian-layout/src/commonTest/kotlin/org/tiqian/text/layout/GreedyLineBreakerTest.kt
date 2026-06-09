@@ -111,9 +111,12 @@ class GreedyLineBreakerTest {
         val repair = line.repair
         assertEquals(true, repair is RepairOption.PushIn)
         repair as RepairOption.PushIn
-        assertEquals(3, repair.targetClusterIndex)
-        assertEquals(4f, repair.shrink)
-        assertEquals(4f, repair.availableCapacity)
+        assertEquals(3, repair.offenderClusterIndex)
+        assertEquals(4f, repair.totalShrink)
+        assertEquals(4f, repair.totalAvailableCapacity)
+        assertEquals(listOf(3), repair.allocations.map { it.clusterIndex })
+        assertEquals(4f, repair.allocations.single().shrink)
+        assertEquals(4f, repair.allocations.single().availableCapacity)
         assertEquals(1, line.repairCandidates.size)
         assertEquals("PushIn", line.repairCandidates.single().kind)
         assertEquals(true, line.repairCandidates.single().accepted)

@@ -189,8 +189,21 @@ data class LineRepairDecisionInfo(
     val penalty: Int,
     val targetClusterIndex: Int? = null,
     val carriedClusterIndex: Int? = null,
+    /** PushIn total shrink across all allocations; 0 for other repair kinds. */
     val shrink: Float = 0f,
+    /** PushIn aggregated line-wide capacity at decision time. */
     val availableCapacity: Float = 0f,
+    /**
+     * Per-cluster PushIn distribution for CLREQ 推入. Empty for non-PushIn
+     * repairs. Listed in cluster order; `shrink` values sum to [shrink].
+     */
+    val pushInAllocations: List<LineRepairAllocationInfo> = emptyList(),
+)
+
+data class LineRepairAllocationInfo(
+    val clusterRange: TextRange,
+    val shrink: Float,
+    val availableCapacity: Float,
 )
 
 data class LineRepairCandidateInfo(
