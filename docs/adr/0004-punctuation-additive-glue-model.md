@@ -37,6 +37,24 @@ PunctuationGlue -> CjkLatinSpace -> WordSpace -> CjkInterChar
 
 所有原子决策都进 `LayoutDebugInfo.punctuationDecisions` / `punctuationSpacingDecisions`，dump 中可逐条看到 `body / leading / trailing / anchor / reduction / reason`。
 
+### Amendment (2026-06-10): PunctuationGlue 档的语义澄清
+
+初版 Justifier 把 `PunctuationGlue` 实现为「把 `PunctuationSpacingCompressor`
+压掉的量还回去」。这是错的：相邻标点收缩（`」。` `，「` → body 贴紧）是 CLREQ
+的**硬规则**，不是弹性资源——两端对齐的行里 `」。` 被重新拉开，视觉上立即穿帮。
+
+修正后的语义（`GlueSideAwareJustification`）：
+
+- `PunctuationGlue` 档 = 在标点 atom 的 **glue 侧** 上做受限扩展
+  （`。，、` 之后、`（「` 之前；anchor 的实心侧永不扩展，括号内侧因此天然免疫）。
+- 被 spacing plan 收缩过的相邻标点边界**排除在外**，collapse 不可逆。
+- 扩展 cap 取 `0.125em`（inter-char cap 的一半）：标点空白本来就有 0.5em，
+  叠加 0.25em 会在视觉上形成「空了一格」的洞。
+- `CjkInterChar` 档只在 **汉字 ↔ 汉字** 边界开口；标点相邻边界归
+  `PunctuationGlue` 档管，避免同一空隙吃两份配额。
+- `CjkLatinSpace` 档只在 ideograph ↔ alpha 边界开口（与 ADR 0009 autospace
+  同一边界判定），且边界已有作者键入的 U+0020 时让位给未来的 `WordSpace` 档。
+
 ## Consequences
 
 - 行尾标点「自然半宽」不是硬编码 `-= 0.5em`，而是 `lineEndPolicy + trailingGlue.min`。

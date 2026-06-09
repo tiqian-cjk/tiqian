@@ -7,14 +7,20 @@ import org.tiqian.text.font.FontRole
  * Justifier — distributes a line's deficit (maxWidth - adjustedWidth) across
  * glue resources in priority order:
  *
- *   1. PunctuationGlue   — restores room that PunctuationSpacingCompressor
- *                          took away (capacity = the spacing plan's reduction).
+ *   1. PunctuationGlue   — opens a bounded extra slice on the glue side of
+ *                          punctuation atoms (after `。，、`, before `（「`).
+ *                          Boundaries collapsed by PunctuationSpacingCompressor
+ *                          are EXCLUDED: the CLREQ adjacent-punctuation collapse
+ *                          is a hard rule, never elastic — justification must
+ *                          not re-open `」。` / `，「`.
  *   2. CjkLatinSpace     — small extra space at CJK ↔ Latin boundaries.
  *   3. WordSpace         — space inside Latin runs. Stub Latin clusters are
  *                          treated as single units, so this is a no-op until
  *                          a real shaping adapter splits them into words.
  *   4. CjkInterChar      — last resort: evenly add a small slice between
- *                          adjacent CJK clusters.
+ *                          adjacent ideograph (CjkText ↔ CjkText) clusters.
+ *                          Punctuation boundaries belong to tier 1, keeping
+ *                          the expansion colour uniform.
  *
  * The default heuristic name for this policy chain is
  * `PunctuationGlueFirstJustification` (see ADR notes).
@@ -38,6 +44,13 @@ import org.tiqian.text.font.FontRole
 class Justifier(
     private val cjkLatinSpaceEm: Float = 0.25f,
     private val cjkInterCharMaxEm: Float = 0.25f,
+    /**
+     * Cap for tier-1 punctuation glue expansion. Deliberately HALF the
+     * inter-char cap: the punctuation blank is already 0.5em, so a 0.25em
+     * stretch reads as a hole (`提椠 （` looked like a typed space).
+     * 0.125em keeps tier 1 first-in-line but visually subtle.
+     */
+    private val punctuationGlueExpandEm: Float = 0.125f,
 ) {
     fun justify(
         adjustedClusters: List<Cluster>,
@@ -70,11 +83,14 @@ class Justifier(
         var remaining = deficitBefore
         val allocations = mutableListOf<JustificationAllocation>()
 
-        // 1. PunctuationGlue — give back what was compressed within this line.
-        val punctOpps = buildPunctuationOpportunities(
+        // 1. PunctuationGlue — bounded expansion on punctuation glue sides.
+        val punctOpps = buildPunctuationGlueOpportunities(
             adjustedClusters = adjustedClusters,
+            clusterRoles = clusterRoles,
             lineClusterRange = lineClusterRange,
             spacingPlan = spacingPlan,
+            clusterEdgeAnchors = clusterEdgeAnchors,
+            capacity = punctuationGlueExpandEm * fontSize,
         )
         remaining = allocate(
             deficit = remaining,
@@ -113,9 +129,9 @@ class Justifier(
 
         // 3. WordSpace — no-op until Latin clusters split into words.
 
-        // 4. CjkInterChar — last resort. GlueSideAwareJustification: a
-        // boundary touching a punctuation cluster is only eligible on the
-        // atom's glue side (see class KDoc).
+        // 4. CjkInterChar — last resort, ideograph ↔ ideograph only.
+        // Punctuation-adjacent boundaries are tier-1 territory: mixing them
+        // here gave punctuation gaps double weight and uneven colour.
         val cjkInterOpps = buildBoundaryOpportunities(
             adjustedClusters = adjustedClusters,
             lineClusterRange = lineClusterRange,
@@ -123,9 +139,7 @@ class Justifier(
             priority = 3,
             capacity = cjkInterCharMaxEm * fontSize,
         ) { leftIdx, rightIdx ->
-            clusterRoles[leftIdx].isCjkLike() &&
-                clusterRoles[rightIdx].isCjkLike() &&
-                boundaryOnGlueSide(leftIdx, rightIdx, clusterRoles, clusterEdgeAnchors)
+            clusterRoles[leftIdx] == FontRole.CjkText && clusterRoles[rightIdx] == FontRole.CjkText
         }
         remaining = allocate(
             deficit = remaining,
@@ -137,27 +151,46 @@ class Justifier(
         return finalize(lineClusterRange, deficitBefore, remaining, allocations)
     }
 
-    private fun buildPunctuationOpportunities(
+    /**
+     * Tier-1 punctuation glue expansion. A boundary qualifies when at least
+     * one side is a punctuation cluster AND `GlueSideAwareJustification`
+     * holds (only the atom's glue side may stretch — see [boundaryOnGlueSide]).
+     *
+     * Boundaries collapsed by the spacing plan (`」。` `，「` …) are excluded:
+     * CLREQ's adjacent-punctuation collapse is mandatory, so justification
+     * must never buy width back from it.
+     *
+     * The reported kind names the side that supplied the glue: trailing glue
+     * of the left atom (`。→第`) or leading glue of the right atom (`中→（`).
+     */
+    private fun buildPunctuationGlueOpportunities(
         adjustedClusters: List<Cluster>,
+        clusterRoles: List<FontRole>,
         lineClusterRange: IntRange,
         spacingPlan: PunctuationSpacingCompressionResult,
+        clusterEdgeAnchors: Map<Int, ClusterEdgeAnchors>,
+        capacity: Float,
     ): List<JustificationOpportunity> {
-        val lineStart = adjustedClusters[lineClusterRange.first].range.start
-        val lineEnd = adjustedClusters[lineClusterRange.last].range.end
-        return spacingPlan.adjustments
-            .filter { it.reductionTargetRange.start >= lineStart && it.reductionTargetRange.end <= lineEnd }
-            .mapNotNull { adj ->
-                val targetIdx = (lineClusterRange.first..lineClusterRange.last).firstOrNull { idx ->
-                    val cr = adjustedClusters[idx].range
-                    adj.reductionTargetRange.start >= cr.start && adj.reductionTargetRange.end <= cr.end
-                } ?: return@mapNotNull null
-                JustificationOpportunity(
-                    targetClusterIndex = targetIdx,
-                    kind = GlueKind.PunctuationTrailing,
-                    priority = 0,
-                    capacity = adj.reduction,
-                )
-            }
+        if (capacity <= 0f) return emptyList()
+        val collapsedBoundaries = spacingPlan.adjustments
+            .map { it.range.start to it.range.end }
+            .toSet()
+        val opps = mutableListOf<JustificationOpportunity>()
+        for (idx in lineClusterRange.first until lineClusterRange.last) {
+            val leftPunct = clusterRoles[idx] == FontRole.CjkPunctuation
+            val rightPunct = clusterRoles[idx + 1] == FontRole.CjkPunctuation
+            if (!leftPunct && !rightPunct) continue
+            if (!boundaryOnGlueSide(idx, idx + 1, clusterRoles, clusterEdgeAnchors)) continue
+            val boundary = adjustedClusters[idx].range.start to adjustedClusters[idx + 1].range.end
+            if (boundary in collapsedBoundaries) continue
+            opps += JustificationOpportunity(
+                targetClusterIndex = idx,
+                kind = if (leftPunct) GlueKind.PunctuationTrailing else GlueKind.PunctuationLeading,
+                priority = 0,
+                capacity = capacity,
+            )
+        }
+        return opps
     }
 
     private inline fun buildBoundaryOpportunities(
@@ -266,9 +299,6 @@ class Justifier(
     private fun FontRole.isIdeographAlphaBoundaryWith(other: FontRole): Boolean =
         (this == FontRole.CjkText && other == FontRole.LatinText) ||
             (this == FontRole.LatinText && other == FontRole.CjkText)
-
-    private fun FontRole.isCjkLike(): Boolean =
-        this == FontRole.CjkText || this == FontRole.CjkPunctuation
 }
 
 /**

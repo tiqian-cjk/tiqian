@@ -206,9 +206,36 @@ class ExplainableStubParagraphLayoutEngine(
         val edgeTrimResult = pushInGeometry.consumeLineEdgeGlue(
             lines = lineSolution.lines,
         )
-        val trimmedGeometry = edgeTrimResult.geometry
+        // TextAutoSpaceLineEdgeTrim: the autospace replacement gap lives in
+        // the Latin cluster's advance, not in punctuation glue, so the edge
+        // trim above can't see it. A typed-space boundary gap landing on a
+        // line edge must disappear like any other line-edge blank — without
+        // this, justified lines stop one gap short of the right edge.
+        val autoSpaceGap = clreqProfile.autoSpace.gapEm * fontSize
+        val autoSpaceEdgeTrims = HashMap<Int, Float>()
+        val autoSpaceEdgeDecisions = mutableListOf<LineEdgeTrimDecisionInfo>()
+        lineSolution.lines.forEach { line ->
+            fun trimEdge(clusterIdx: Int, side: String) {
+                val decision = autoSpaceDecisions.firstOrNull {
+                    it.clusterRange == naturalClusters[clusterIdx].range && it.side == side
+                } ?: return
+                autoSpaceEdgeTrims.merge(clusterIdx, autoSpaceGap) { a, b -> a + b }
+                autoSpaceEdgeDecisions += LineEdgeTrimDecisionInfo(
+                    lineRange = line.sourceRange,
+                    clusterRange = decision.clusterRange,
+                    side = side,
+                    trimAmount = autoSpaceGap,
+                    consumedBefore = 0f,
+                    naturalGlue = autoSpaceGap,
+                    reason = "TextAutoSpaceLineEdgeTrim",
+                )
+            }
+            trimEdge(line.clusterRange.last, "trailing")
+            trimEdge(line.clusterRange.first, "leading")
+        }
+        val trimmedGeometry = edgeTrimResult.geometry.withRawEdgeTrims(autoSpaceEdgeTrims)
         val trimmedClusters = trimmedGeometry.resolveClusters()
-        val edgeTrimDecisions = edgeTrimResult.decisions
+        val edgeTrimDecisions = edgeTrimResult.decisions + autoSpaceEdgeDecisions
 
         val justify = input.paragraphStyle.textAlign == TextAlign.Justify
         // GlueSideAwareJustification input: which punctuation anchors sit
@@ -873,6 +900,13 @@ private data class PunctuationGeometryLedger(
     private val geometries: Map<Int, PunctuationClusterGeometry>,
     private val budgets: Map<Int, GlueBudget>,
     private val justificationDeltaByCluster: Map<Int, Float> = emptyMap(),
+    /**
+     * Raw advance reductions that are NOT punctuation glue — currently only
+     * `TextAutoSpaceLineEdgeTrim` (the autospace replacement gap baked into a
+     * Latin cluster's advance, removed again when the boundary lands on a
+     * line edge). Applied unconditionally in [resolvedAdvance].
+     */
+    private val rawEdgeTrimByCluster: Map<Int, Float> = emptyMap(),
 ) {
     companion object {
         fun from(
@@ -946,6 +980,9 @@ private data class PunctuationGeometryLedger(
 
     fun addJustificationDeltas(deltaByCluster: Map<Int, Float>): PunctuationGeometryLedger =
         copy(justificationDeltaByCluster = deltaByCluster)
+
+    fun withRawEdgeTrims(trimByCluster: Map<Int, Float>): PunctuationGeometryLedger =
+        if (trimByCluster.isEmpty()) this else copy(rawEdgeTrimByCluster = trimByCluster)
 
     fun consumeLineEdgeGlue(lines: List<LineCandidate>): LineEdgeTrimResult {
         if (lines.isEmpty() || budgets.isEmpty()) {
@@ -1041,18 +1078,20 @@ private data class PunctuationGeometryLedger(
         )
 
     private fun resolvedAdvance(index: Int, cluster: Cluster): Float {
+        val rawTrim = rawEdgeTrimByCluster[index] ?: 0f
         val geometry = geometries[index] ?: run {
             val delta = justificationDeltaByCluster[index] ?: 0f
-            return (cluster.advance + delta).coerceAtLeast(0f)
+            return (cluster.advance + delta - rawTrim).coerceAtLeast(0f)
         }
         val budget = budgets[index]
-            ?: return (geometry.bodyWidth + (justificationDeltaByCluster[index] ?: 0f)).coerceAtLeast(0f)
+            ?: return (geometry.bodyWidth + (justificationDeltaByCluster[index] ?: 0f) - rawTrim).coerceAtLeast(0f)
         val delta = justificationDeltaByCluster[index] ?: 0f
         return (
             geometry.bodyWidth +
                 budget.leadingRemaining +
                 budget.trailingRemaining +
-                delta
+                delta -
+                rawTrim
             ).coerceAtLeast(0f)
     }
 }

@@ -159,7 +159,7 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
             }
             var x = 0f
             val baselineY = line.baseline + topPad
-            for (cluster in lineClusters) {
+            for ((clusterIndexInLine, cluster) in lineClusters.withIndex()) {
                 val role = result.debug.fontDecisions.firstOrNull { it.range == cluster.range }?.role
                 g.font = when (role) {
                     "LatinText" -> latinFont
@@ -179,8 +179,12 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
                     .filter { it.clusterRange == cluster.range }
                 val leadingStrip = autoSpaces.firstOrNull { it.side == "leading" }?.charactersAffected ?: 0
                 val trailingStrip = autoSpaces.firstOrNull { it.side == "trailing" }?.charactersAffected ?: 0
-                val leadingGap = if (leadingStrip > 0) defaultAutoSpaceGap else 0f
-                val trailingGap = if (trailingStrip > 0) defaultAutoSpaceGap else 0f
+                // TextAutoSpaceLineEdgeTrim: the engine removes the autospace
+                // gap at line edges, so the rasterizer must not paint it.
+                val isLineStart = clusterIndexInLine == 0
+                val isLineEnd = clusterIndexInLine == lineClusters.lastIndex
+                val leadingGap = if (leadingStrip > 0 && !isLineStart) defaultAutoSpaceGap else 0f
+                val trailingGap = if (trailingStrip > 0 && !isLineEnd) defaultAutoSpaceGap else 0f
                 val paintText = cluster.displayText
                     .drop(leadingStrip)
                     .let { if (trailingStrip > 0) it.dropLast(trailingStrip) else it }

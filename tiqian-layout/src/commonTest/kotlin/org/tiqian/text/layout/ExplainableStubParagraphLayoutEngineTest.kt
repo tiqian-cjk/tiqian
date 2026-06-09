@@ -911,6 +911,33 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun autoSpaceGapAtLineEndIsTrimmedLikeAnyLineEdgeBlank() {
+        // text = "中文 AB 中文中文中文"; the Latin cluster " AB " (source 2-6)
+        // keeps a 0.25em autospace gap per typed-space boundary (stub space =
+        // 1em → reduction 12 per side, advance 64 → 40).
+        // maxWidth=80 → greedy line 0 = [中 文 ' AB '] (72); the cluster's
+        // trailing gap now sits at the line END and must be trimmed:
+        // ' AB ' 40 → 36, line adjusted width 72 → 68.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("中文 AB 中文中文中文"),
+                constraints = LayoutConstraints(maxWidth = 80f),
+            ),
+        )
+
+        val latinCluster = result.clusters.single { it.text == " AB " }
+        assertEquals(36f, latinCluster.advance)
+        assertEquals(68f, result.lines.first().adjustedWidth)
+
+        val autoTrim = result.debug.lineEdgeTrimDecisions
+            .single { it.reason == "TextAutoSpaceLineEdgeTrim" }
+        assertEquals("trailing", autoTrim.side)
+        assertEquals(4f, autoTrim.trimAmount)
+        assertEquals(2, autoTrim.clusterRange.start)
+        assertEquals(6, autoTrim.clusterRange.end)
+    }
+
+    @Test
     fun ambiguousGlyphClusterMappingFallsBackToPolicyWithRecordedReason() {
         // A multi-character punctuation cluster shaped into a single glyph:
         // per-character ink cannot be attributed, so geometry must fall back

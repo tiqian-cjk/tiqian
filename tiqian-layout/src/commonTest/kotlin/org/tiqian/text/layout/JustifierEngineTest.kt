@@ -123,27 +123,35 @@ class JustifierEngineTest {
         assertTrue(result.lines.size >= 2)
         val firstDecision = result.debug.justificationDecisions.first()
         // With the CLREQ collapse rule (half-em capped), the `，。` pair's
-        // inner glue collapses to 0 rather than half-halved to 4; deficit on
-        // line 0 grows from 4 → 8, justifier fills it from the same comma's
-        // trailing glue (now fully consumed by spacing).
+        // inner glue collapses to 0; deficit on line 0 is 8. The collapse is
+        // MANDATORY — justification must not re-open `，。`. The deficit is
+        // filled by tier-1 punctuation glue expansion on 。's trailing side
+        // (。→文, capped at 0.125em = 2) and CjkInterChar (文→中, +4); the
+        // remaining 2 stays unfilled rather than re-opening the collapse.
         assertEquals(8f, firstDecision.deficitBefore)
-        assertEquals(0f, firstDecision.deficitAfter)
-        assertEquals(1, firstDecision.allocations.size)
-        val alloc = firstDecision.allocations.single()
-        assertEquals("PunctuationTrailing", alloc.kind)
-        assertEquals(0, alloc.priority)
-        assertEquals(8f, alloc.delta)
-        assertEquals("PunctuationGlueFirstJustification", alloc.reason)
+        assertEquals(2f, firstDecision.deficitAfter)
+        assertEquals(2, firstDecision.allocations.size)
+        val punctAlloc = firstDecision.allocations.single { it.kind == "PunctuationTrailing" }
+        assertEquals(0, punctAlloc.priority)
+        assertEquals(2f, punctAlloc.delta)
+        assertEquals("PunctuationGlueFirstJustification", punctAlloc.reason)
+        // The expanded gap is 。→文 (cluster 。 at source 2-3), NOT the
+        // collapsed ，。 inner boundary.
+        assertEquals(2, punctAlloc.clusterRange.start)
+        val interAlloc = firstDecision.allocations.single { it.kind == "CjkInterChar" }
+        assertEquals(4f, interAlloc.delta)
 
-        // Line 0 visualWidth should now equal maxWidth.
-        assertEquals(80f, result.lines[0].visualWidth)
-        // Cluster ， (range 1-2) advance restored from 8 (post-spacing) to 16 by justification.
+        // Line 0 reaches 78 of 80: capacity exhausted without touching the
+        // collapsed pair.
+        assertEquals(78f, result.lines[0].visualWidth)
+        // Cluster ， (range 1-2) stays at its collapsed advance: the spacing
+        // compression is not elastic.
         val commaCluster = result.clusters.single { it.text == "，" }
-        assertEquals(16f, commaCluster.advance)
+        assertEquals(8f, commaCluster.advance)
         val commaGeometry = result.debug.geometryDecisions.single { it.sourceText == "，" }
         assertEquals(8f, commaGeometry.trailingGlueConsumed)
-        assertEquals(8f, commaGeometry.justificationDelta)
-        assertEquals(16f, commaGeometry.resolvedAdvance)
+        assertEquals(0f, commaGeometry.justificationDelta)
+        assertEquals(8f, commaGeometry.resolvedAdvance)
     }
 
     @Test
@@ -180,12 +188,12 @@ class JustifierEngineTest {
     fun glueSideAwareJustificationNeverExpandsInsideBrackets() {
         // text = "中（中文）文中文中文中"  (11 CJK-width clusters @16f)
         // maxWidth=100 → greedy line 0 = clusters 0..5 (96), deficit 4.
-        // CjkInterChar boundaries inside line 0:
+        // Tier-1 punctuation glue boundaries inside line 0:
         //   中→（  eligible   (（ leading edge carries its glue)
         //   （→中  FORBIDDEN  (（ anchor=Trailing: inner side is solid body)
-        //   中→文  eligible
         //   文→）  FORBIDDEN  (） anchor=Leading: inner side is solid body)
         //   ）→文  eligible   (） trailing edge carries its glue)
+        // Tier-1 capacity (2 × 4) covers the deficit before CjkInterChar.
         val result = engine.layout(
             LayoutInput(
                 content = TiqianTextContent("中（中文）文中文中文中"),
@@ -196,11 +204,14 @@ class JustifierEngineTest {
         assertEquals(2, result.lines.size)
         val decision = result.debug.justificationDecisions.single()
         assertEquals(0f, decision.deficitAfter)
-        assertTrue(decision.allocations.all { it.kind == "CjkInterChar" })
         // Allocation target = left cluster of the boundary; the bracket
         // inner sides (（ at 1-2 trailing, 文 at 3-4 trailing) must be absent.
         val targets = decision.allocations.map { it.clusterRange.start }
-        assertEquals(listOf(0, 2, 4), targets.sorted())
+        assertEquals(listOf(0, 4), targets.sorted())
+        assertEquals(
+            listOf("PunctuationLeading", "PunctuationTrailing"),
+            decision.allocations.sortedBy { it.clusterRange.start }.map { it.kind },
+        )
     }
 
     @Test

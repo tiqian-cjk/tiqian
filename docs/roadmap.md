@@ -13,7 +13,7 @@
 ## 当前位置
 
 ```text
-Last completed: Slice 4 续 (PushIn 全行 glue capacity 聚合分配), Slice 6b 续 (MissingInkBoundsFallback: 缺失 ink bounds 时 shaping/punctuation decision + dump 记录 fallback 原因)
+Last completed: Slice 5 修正 (GlueSideAwareJustification: collapse 不可逆 / glue 侧扩展 / TextAutoSpaceLineEdgeTrim, ADR 0004 amendment), Slice 6b 续 (MissingInkBoundsFallback)
 Up next:        Slice 6b 续 (准备 Android/Skia adapter 对照)
 ```
 
@@ -27,7 +27,7 @@ Up next:        Slice 6b 续 (准备 Android/Skia adapter 对照)
 | 3 | M2 | PunctuationAtom（ink/body/leadingGlue/trailingGlue）；行尾标点自然半宽；连续标点挤压；引号 / 括号成对感知 | `中文，中文。` `他说：“你好，世界。”` `中文……中文。` `中文(English)中文` | dump `punct:*` / `spacing:*` / `geom:*` 行；`QuotePairAnalyzerTest` `BracketPairAnalyzerTest` | wip (`PunctuationAtomBuilder` / spacing compression / quote pair / bracket pair / `LineEdgeGlueTrim` / `PunctuationGeometryLedger` / AWT shaped `inkBounds` 校准都 done；剩余平台 adapter 对照与 ink box 可视化) |
 | 3.5 | — | Explainability hardening：结构化 decision 类型替代 stringly dump；SpacingPlan 替代 advance mutation；classifier 接 profile；可重复标点进 clreq 表；role override 进 dump | 现有所有 fixture 不变 | 所有现有测试绿；`LayoutResult` 暴露结构化 `clusterDecisions / spacingPlan` 字段 | done |
 | 4 | M3 | BreakCandidate / RepairOption；`PushIn` `CarryPrevious`；greedy + lookahead；`Hang` 仅保留 profile opt-in 路径 | `kinsoku-carry-previous` `kinsoku-push-in` `lookahead-future-push-in` `lookahead-avoids-repair` | `./gradlew :tiqian-layout:jvmTest` + `./gradlew :tiqian-playground:runPlayground`；dump `line:*` 行，多行非单 placeholder | done (`PushIn` / `CarryPrevious` / `LeaveRagged` 有结构化 chosen repair + candidates；CarryPrevious 会验证 carried line 不超宽；lookahead window 1；window 2~3 改列后续 opt-in optimization；Hang 推到后续 opt-in slice) |
-| 5 | M4 | 两端对齐：基于 glue 的 AdjustmentOpportunity；优先级 `PunctuationGlue → CjkLatinSpace → WordSpace → CjkInterChar` | 中文正文段落 + 中西混排 fixture | dump 每行 `adjustedWidth` ≈ `maxWidth`；新 golden | done (`Justifier` + `JustificationDecisionInfo`；`textAlign=Justify` 触发；最后一行 skip；priority chain 完整；WordSpace 待 shaping 分词后启用) |
+| 5 | M4 | 两端对齐：基于 glue 的 AdjustmentOpportunity；优先级 `PunctuationGlue → CjkLatinSpace → WordSpace → CjkInterChar` | 中文正文段落 + 中西混排 fixture | dump 每行 `adjustedWidth` ≈ `maxWidth`；新 golden | done (`Justifier` + `JustificationDecisionInfo`；`textAlign=Justify` 触发；最后一行 skip；priority chain 完整；`GlueSideAwareJustification`：collapse 不可逆、扩展只在 glue 侧、括号内侧免疫，见 ADR 0004 amendment；WordSpace 待 shaping 分词后启用) |
 | 6 | M5 | API 固化；`tiqian-shaping-android` / `tiqian-shaping-skia` 真 adapter；golden test + benchmark | 平台 fixture + screenshot golden | 各平台模块 build + screenshot 测试 | wip (6a: shaping contract + `ExplainableStubTextShaper` + debug decisions；6b: `tiqian-shaping-jvm` + `AwtTextShaper` + playground 默认 real advance + punctuation atom 消费 shaped glyph bounds + `MissingInkBoundsFallback` 缺失 bounds 留痕；ADR 0008/0013/0014；Android / Skia adapter 未接) |
 
 Slice 4 的 `done` 范围是当前默认 kinsoku repair：`PushIn` / `CarryPrevious` / `LeaveRagged` 均可解释，`LineDecisionInfo` 暴露 chosen repair 与 candidate repairs。lookahead window 2~3 属于后续优化，不再阻塞当前 Slice 4 的模型收口。
