@@ -211,6 +211,20 @@ class ExplainableStubParagraphLayoutEngine(
         val edgeTrimDecisions = edgeTrimResult.decisions
 
         val justify = input.paragraphStyle.textAlign == TextAlign.Justify
+        // GlueSideAwareJustification input: which punctuation anchors sit
+        // flush at each cluster's edges, so the justifier can refuse to
+        // expand a punctuation body's solid side (e.g. inside brackets).
+        val clusterEdgeAnchors: Map<Int, ClusterEdgeAnchors> = naturalClusters.mapIndexedNotNull { idx, cluster ->
+            val atoms = punctuationAtoms.filter { it.range.isInside(cluster.range) }
+            if (atoms.isEmpty()) {
+                null
+            } else {
+                idx to ClusterEdgeAnchors(
+                    leading = atoms.first().anchor.takeIf { atoms.first().range.start == cluster.range.start },
+                    trailing = atoms.last().anchor.takeIf { atoms.last().range.end == cluster.range.end },
+                )
+            }
+        }.toMap()
         val justificationPlans: List<JustificationPlan?> = lineSolution.lines.mapIndexed { lineIndex, lineCandidate ->
             val isLast = lineIndex == lineSolution.lines.lastIndex
             if (!justify || isLast) {
@@ -224,6 +238,7 @@ class ExplainableStubParagraphLayoutEngine(
                     spacingPlan = spacingPlan,
                     fontSize = fontSize,
                     skip = false,
+                    clusterEdgeAnchors = clusterEdgeAnchors,
                 )
             }
         }

@@ -255,6 +255,15 @@ private fun printFixtureDump(fixture: LayoutFixture, greedy: LayoutResult, looka
         println("  spacing (paragraph-wide, identical across engines):")
         greedy.debug.spacingDecisions.forEach { println("    ${it.compactDump()}") }
     }
+    if (greedy.debug.autoSpaceDecisions.isNotEmpty()) {
+        println("  autospace (paragraph-wide, identical across engines):")
+        greedy.debug.autoSpaceDecisions.forEach {
+            println(
+                "    ${it.clusterRange.start}-${it.clusterRange.end} side=${it.side} boundary=${it.boundaryRole} " +
+                    "affected=${it.charactersAffected} reduction=${it.totalReduction} ${it.reason}",
+            )
+        }
+    }
     println()
 }
 
@@ -480,6 +489,17 @@ private fun renderEngineMetadata(label: String, result: LayoutResult): String =
                 appendLine(
                     "<span class=\"metric\">shape ${decision.range.start}-${decision.range.end} " +
                         "'${decision.displayText.escapeHtml()}' ${decision.advance.oneDecimal()} ${decision.source}$noBounds</span>",
+                )
+            }
+            appendLine("</div>")
+        }
+        if (result.debug.autoSpaceDecisions.isNotEmpty()) {
+            appendLine("<div class=\"metrics\">")
+            result.debug.autoSpaceDecisions.forEach { decision ->
+                appendLine(
+                    "<span class=\"metric\">aspace ${decision.clusterRange.start}-${decision.clusterRange.end} " +
+                        "side=${decision.side} boundary=${decision.boundaryRole} affected=${decision.charactersAffected} " +
+                        "reduction=${decision.totalReduction.oneDecimal()}</span>",
                 )
             }
             appendLine("</div>")

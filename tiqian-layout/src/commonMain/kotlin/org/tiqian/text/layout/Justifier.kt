@@ -21,6 +21,19 @@ import org.tiqian.text.font.FontRole
  *
  * Each [JustificationAllocation] targets a specific cluster: the delta is
  * understood as trailing space added to that cluster's advance.
+ *
+ * Boundary eligibility — named heuristic `GlueSideAwareJustification`:
+ * expansion may only open on a punctuation atom's glue side, never the
+ * body-anchored (solid) side. Concretely, for MainlandSimplified:
+ *
+ * - after an Opening mark (`（「`) — the bracket's inner side — is solid:
+ *   no CjkInterChar / CjkLatinSpace expansion there;
+ * - before a Closing / PauseOrStop mark (`）。，`) is solid: no expansion;
+ * - the opposite sides (before Opening, after Closing) carry the atom's
+ *   glue and may expand.
+ *
+ * Without this rule, justification visibly pushed `（Tiqian）` apart from
+ * the inside — see clreq-punctuation-audit.md.
  */
 class Justifier(
     private val cjkLatinSpaceEm: Float = 0.25f,
@@ -34,6 +47,7 @@ class Justifier(
         spacingPlan: PunctuationSpacingCompressionResult,
         fontSize: Float,
         skip: Boolean,
+        clusterEdgeAnchors: Map<Int, ClusterEdgeAnchors> = emptyMap(),
     ): JustificationPlan {
         require(clusterRoles.size == adjustedClusters.size) {
             "clusterRoles must align with adjustedClusters."
@@ -71,14 +85,24 @@ class Justifier(
         if (remaining <= 0f) return finalize(lineClusterRange, deficitBefore, remaining, allocations)
 
         // 2. CjkLatinSpace — open the boundary between CJK and Latin clusters.
+        // `IdeographAlphaJustifyBoundary`: same boundary rule as autospace
+        // (ADR 0009) — only ideograph ↔ alpha. CjkPunctuation ↔ Latin is
+        // punctuation-glue territory and must not get an extra space here.
+        // `TypedSpaceBoundaryDefersToWordSpace`: when the author already
+        // typed a U+0020 at the boundary, the gap is a WordSpace opportunity
+        // (deferred until Latin word splitting) — stacking CjkLatinSpace on
+        // top doubled the visible gap.
         val cjkLatinOpps = buildBoundaryOpportunities(
             adjustedClusters = adjustedClusters,
-            clusterRoles = clusterRoles,
             lineClusterRange = lineClusterRange,
             kind = GlueKind.CjkLatinSpace,
             priority = 1,
             capacity = cjkLatinSpaceEm * fontSize,
-        ) { left, right -> left.isCjkLatinBoundaryWith(right) }
+        ) { leftIdx, rightIdx ->
+            clusterRoles[leftIdx].isIdeographAlphaBoundaryWith(clusterRoles[rightIdx]) &&
+                !adjustedClusters[leftIdx].text.endsWith(' ') &&
+                !adjustedClusters[rightIdx].text.startsWith(' ')
+        }
         remaining = allocate(
             deficit = remaining,
             opportunities = cjkLatinOpps,
@@ -89,15 +113,20 @@ class Justifier(
 
         // 3. WordSpace — no-op until Latin clusters split into words.
 
-        // 4. CjkInterChar — last resort.
+        // 4. CjkInterChar — last resort. GlueSideAwareJustification: a
+        // boundary touching a punctuation cluster is only eligible on the
+        // atom's glue side (see class KDoc).
         val cjkInterOpps = buildBoundaryOpportunities(
             adjustedClusters = adjustedClusters,
-            clusterRoles = clusterRoles,
             lineClusterRange = lineClusterRange,
             kind = GlueKind.CjkInterChar,
             priority = 3,
             capacity = cjkInterCharMaxEm * fontSize,
-        ) { left, right -> left.isCjkLike() && right.isCjkLike() }
+        ) { leftIdx, rightIdx ->
+            clusterRoles[leftIdx].isCjkLike() &&
+                clusterRoles[rightIdx].isCjkLike() &&
+                boundaryOnGlueSide(leftIdx, rightIdx, clusterRoles, clusterEdgeAnchors)
+        }
         remaining = allocate(
             deficit = remaining,
             opportunities = cjkInterOpps,
@@ -133,19 +162,16 @@ class Justifier(
 
     private inline fun buildBoundaryOpportunities(
         adjustedClusters: List<Cluster>,
-        clusterRoles: List<FontRole>,
         lineClusterRange: IntRange,
         kind: GlueKind,
         priority: Int,
         capacity: Float,
-        predicate: (left: FontRole, right: FontRole) -> Boolean,
+        predicate: (leftIdx: Int, rightIdx: Int) -> Boolean,
     ): List<JustificationOpportunity> {
         if (capacity <= 0f) return emptyList()
         val opps = mutableListOf<JustificationOpportunity>()
         for (idx in lineClusterRange.first until lineClusterRange.last) {
-            val left = clusterRoles[idx]
-            val right = clusterRoles[idx + 1]
-            if (predicate(left, right)) {
+            if (predicate(idx, idx + 1)) {
                 opps += JustificationOpportunity(
                     targetClusterIndex = idx,
                     kind = kind,
@@ -155,6 +181,33 @@ class Justifier(
             }
         }
         return opps
+    }
+
+    /**
+     * `GlueSideAwareJustification` eligibility for the boundary between
+     * [leftIdx] and [rightIdx]. The allocation renders as space *between*
+     * the two clusters (trailing delta on the left cluster), so:
+     *
+     * - left punctuation must carry glue on its trailing side — anchor
+     *   Leading (`。，）」` body sits left) or Center; anchor Trailing
+     *   (`（「` body sits right, boundary is the solid inner side) forbids;
+     * - right punctuation must carry glue on its leading side — anchor
+     *   Trailing or Center; anchor Leading forbids.
+     *
+     * A punctuation-role cluster without recorded edge anchors is treated
+     * as solid on both sides (conservative: no expansion).
+     */
+    private fun boundaryOnGlueSide(
+        leftIdx: Int,
+        rightIdx: Int,
+        clusterRoles: List<FontRole>,
+        clusterEdgeAnchors: Map<Int, ClusterEdgeAnchors>,
+    ): Boolean {
+        val leftOk = clusterRoles[leftIdx] != FontRole.CjkPunctuation ||
+            clusterEdgeAnchors[leftIdx]?.trailing.let { it != null && it != PunctuationAnchor.Trailing }
+        val rightOk = clusterRoles[rightIdx] != FontRole.CjkPunctuation ||
+            clusterEdgeAnchors[rightIdx]?.leading.let { it != null && it != PunctuationAnchor.Leading }
+        return leftOk && rightOk
     }
 
     private fun allocate(
@@ -210,13 +263,24 @@ class Justifier(
         unfilledDeficit = unfilled.coerceAtLeast(0f),
     )
 
-    private fun FontRole.isCjkLatinBoundaryWith(other: FontRole): Boolean =
-        (isCjkLike() && other == FontRole.LatinText) ||
-            (this == FontRole.LatinText && other.isCjkLike())
+    private fun FontRole.isIdeographAlphaBoundaryWith(other: FontRole): Boolean =
+        (this == FontRole.CjkText && other == FontRole.LatinText) ||
+            (this == FontRole.LatinText && other == FontRole.CjkText)
 
     private fun FontRole.isCjkLike(): Boolean =
         this == FontRole.CjkText || this == FontRole.CjkPunctuation
 }
+
+/**
+ * Edge anchors of a cluster's punctuation atoms, used by
+ * `GlueSideAwareJustification`. `leading` / `trailing` are the anchors of
+ * the atoms sitting flush at the cluster's start / end; null when that edge
+ * is not punctuation.
+ */
+data class ClusterEdgeAnchors(
+    val leading: PunctuationAnchor?,
+    val trailing: PunctuationAnchor?,
+)
 
 data class JustificationOpportunity(
     val targetClusterIndex: Int,

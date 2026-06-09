@@ -175,4 +175,74 @@ class JustifierEngineTest {
 
         assertEquals(100f, result.lines[0].visualWidth)
     }
+
+    @Test
+    fun glueSideAwareJustificationNeverExpandsInsideBrackets() {
+        // text = "中（中文）文中文中文中"  (11 CJK-width clusters @16f)
+        // maxWidth=100 → greedy line 0 = clusters 0..5 (96), deficit 4.
+        // CjkInterChar boundaries inside line 0:
+        //   中→（  eligible   (（ leading edge carries its glue)
+        //   （→中  FORBIDDEN  (（ anchor=Trailing: inner side is solid body)
+        //   中→文  eligible
+        //   文→）  FORBIDDEN  (） anchor=Leading: inner side is solid body)
+        //   ）→文  eligible   (） trailing edge carries its glue)
+        val result = engine.layout(
+            LayoutInput(
+                content = TiqianTextContent("中（中文）文中文中文中"),
+                constraints = LayoutConstraints(maxWidth = 100f),
+                paragraphStyle = ParagraphStyle(textAlign = TextAlign.Justify),
+            ),
+        )
+        assertEquals(2, result.lines.size)
+        val decision = result.debug.justificationDecisions.single()
+        assertEquals(0f, decision.deficitAfter)
+        assertTrue(decision.allocations.all { it.kind == "CjkInterChar" })
+        // Allocation target = left cluster of the boundary; the bracket
+        // inner sides (（ at 1-2 trailing, 文 at 3-4 trailing) must be absent.
+        val targets = decision.allocations.map { it.clusterRange.start }
+        assertEquals(listOf(0, 2, 4), targets.sorted())
+    }
+
+    @Test
+    fun cjkLatinSpaceFiresOnlyAtIdeographAlphaBoundaryNotPunctuation() {
+        // text = "中文（Hello）中文中文"; stub Latin advance = 5em = 80.
+        // maxWidth=170 → line 0 = 中文（Hello）中 (160), deficit 10.
+        // （→Hello and Hello→） are CjkPunctuation↔Latin boundaries: neither
+        // CjkLatinSpace (ideograph-alpha only) nor CjkInterChar (needs CJK on
+        // both sides) may open them — the bracket interior stays tight.
+        val result = engine.layout(
+            LayoutInput(
+                content = TiqianTextContent("中文（Hello）中文中文"),
+                constraints = LayoutConstraints(maxWidth = 170f),
+                paragraphStyle = ParagraphStyle(textAlign = TextAlign.Justify),
+            ),
+        )
+        assertEquals(2, result.lines.size)
+        val decision = result.debug.justificationDecisions.single()
+        assertTrue(decision.allocations.none { it.kind == "CjkLatinSpace" })
+        // No expansion may target the bracket inner sides: （ cluster (2-3)
+        // and the Latin cluster (3-8).
+        assertTrue(decision.allocations.none { it.clusterRange.start == 2 })
+        assertTrue(decision.allocations.none { it.clusterRange.start == 3 })
+    }
+
+    @Test
+    fun typedSpaceBoundaryDefersToWordSpaceInsteadOfStackingCjkLatinSpace() {
+        // text = "中文 Hello 中文中文中文"; the Latin cluster keeps its typed
+        // U+0020 at both edges (" Hello " = 7 codepoints, stub 112f).
+        // maxWidth=180 → line 0 = 中文 Hello 中文 (176), deficit 4.
+        // The typed-space boundaries must NOT receive CjkLatinSpace on top of
+        // the space the author already typed.
+        val result = engine.layout(
+            LayoutInput(
+                content = TiqianTextContent("中文 Hello 中文中文中文"),
+                constraints = LayoutConstraints(maxWidth = 180f),
+                paragraphStyle = ParagraphStyle(textAlign = TextAlign.Justify),
+            ),
+        )
+        assertTrue(result.lines.size >= 2)
+        val decision = result.debug.justificationDecisions.first()
+        assertTrue(decision.allocations.none { it.kind == "CjkLatinSpace" })
+        assertTrue(decision.allocations.all { it.kind == "CjkInterChar" })
+    }
 }
