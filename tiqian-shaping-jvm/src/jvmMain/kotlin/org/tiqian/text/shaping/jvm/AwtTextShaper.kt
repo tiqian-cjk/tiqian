@@ -72,6 +72,10 @@ class AwtTextShaper(
             advance = advance,
             source = ShapingSource.JvmAwt.name,
             reason = "AwtTextShaper:${font.family}:${font.fontName}",
+            // AWT reports empty visual bounds for blank glyphs (spaces) and
+            // for fonts without outlines; downstream punctuation geometry
+            // records this as a MissingInkBoundsFallback.
+            glyphsWithoutInkBounds = glyphs.count { it.bounds == null },
         )
         return ShapingResult(
             clusters = listOf(cluster),

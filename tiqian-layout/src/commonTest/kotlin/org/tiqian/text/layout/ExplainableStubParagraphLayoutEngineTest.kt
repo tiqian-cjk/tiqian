@@ -852,6 +852,8 @@ class ExplainableStubParagraphLayoutEngineTest {
                 p.geometrySource,
                 "Stub shaper provides advance but no bounds for '${p.char}'",
             )
+            // MissingInkBoundsFallback: the degradation reason is recorded.
+            assertEquals("shaper-no-ink-bounds", p.inkBoundsFallback, "fallback for '${p.char}'")
             // PauseOrStop: all glue on trailing side
             assertEquals(0f, p.leadingGlueNatural, "leading glue for '${p.char}'")
             assertEquals(8f, p.trailingGlueNatural, "trailing glue for '${p.char}'")
@@ -901,9 +903,67 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         val punctuation = result.debug.punctuationDecisions.single()
         assertEquals("ClassDerivedWithShapedAdvance", punctuation.geometrySource)
+        assertEquals("shaper-no-ink-bounds", punctuation.inkBoundsFallback)
         assertEquals(8f, punctuation.bodyWidth)
         // PauseOrStop: all glue on trailing side (class-based, not ink-based)
         assertEquals(0f, punctuation.leadingGlueNatural)
         assertEquals(8f, punctuation.trailingGlueNatural)
+    }
+
+    @Test
+    fun ambiguousGlyphClusterMappingFallsBackToPolicyWithRecordedReason() {
+        // A multi-character punctuation cluster shaped into a single glyph:
+        // per-character ink cannot be attributed, so geometry must fall back
+        // to pure policy AND record glyph-cluster-mapping-ambiguous instead
+        // of silently looking like the no-shaping path.
+        val engine = ExplainableStubParagraphLayoutEngine(
+            textShaper = object : TextShaper {
+                override fun shape(input: ShapingInput): ShapingResult =
+                    ShapingResult(
+                        clusters = listOf(
+                            Cluster(
+                                range = input.range,
+                                text = input.text.substring(input.range.start, input.range.end),
+                                displayText = input.displayText,
+                                fontKey = input.fontDecision.candidate.key,
+                                advance = 32f,
+                            ),
+                        ),
+                        glyphRuns = listOf(
+                            GlyphRun(
+                                range = input.range,
+                                fontKey = input.fontDecision.candidate.key,
+                                glyphs = listOf(
+                                    Glyph(
+                                        id = 0u,
+                                        clusterRange = input.range,
+                                        advance = 32f,
+                                        bounds = Rect(left = 2f, top = -10f, right = 30f, bottom = -6f),
+                                    ),
+                                ),
+                                advance = 32f,
+                            ),
+                        ),
+                    )
+            },
+        )
+
+        val result = engine.layout(
+            LayoutInput(
+                content = TiqianTextContent("……"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val punctuationDecisions = result.debug.punctuationDecisions
+        assertEquals(2, punctuationDecisions.size)
+        for (p in punctuationDecisions) {
+            assertEquals("PolicyDerived", p.geometrySource, "source for '${p.char}'")
+            assertEquals(
+                "glyph-cluster-mapping-ambiguous",
+                p.inkBoundsFallback,
+                "fallback for '${p.char}'",
+            )
+        }
     }
 }

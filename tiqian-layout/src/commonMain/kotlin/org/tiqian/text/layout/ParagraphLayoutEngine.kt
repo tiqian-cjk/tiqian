@@ -340,6 +340,7 @@ class ExplainableStubParagraphLayoutEngine(
                         policyBodyFloor = atom.policyBodyFloor,
                         inkWidth = atom.inkWidth,
                         inkCenter = atom.inkCenter,
+                        inkBoundsFallback = atom.inkBoundsFallback,
                     )
                 },
                 geometryDecisions = geometryDecisions,
@@ -492,16 +493,33 @@ class ExplainableStubParagraphLayoutEngine(
         }
     }
 
+    /**
+     * Named heuristic: `MissingInkBoundsFallback` (recording side).
+     *
+     * Returns null only when no shaping information exists at all — the
+     * expected pure-policy path. When shaping ran but ink cannot be
+     * attributed, this returns a [PunctuationInkInput] carrying a
+     * `boundsFallbackReason` so the punctuation decision records *why*
+     * geometry degraded instead of silently looking like the policy path.
+     */
     private fun Cluster.punctuationInkInputFor(displayIndex: Int, shapedGlyphs: List<Glyph>): PunctuationInkInput? {
         if (shapedGlyphs.isEmpty()) return null
         val glyph = when {
             shapedGlyphs.size == displayText.length -> shapedGlyphs.getOrNull(displayIndex)
             displayText.length == 1 -> shapedGlyphs.unionAsSingleGlyph()
             else -> null
-        } ?: return null
+        } ?: return PunctuationInkInput(
+            // Glyph count does not line up with display characters, so per-
+            // character advance/ink cannot be attributed. Advance 0 keeps the
+            // builder on the policy advance; only the reason is recorded.
+            advance = 0f,
+            inkBounds = null,
+            boundsFallbackReason = "glyph-cluster-mapping-ambiguous",
+        )
         return PunctuationInkInput(
             advance = glyph.advance,
             inkBounds = glyph.bounds,
+            boundsFallbackReason = if (glyph.bounds == null) "shaper-no-ink-bounds" else null,
         )
     }
 

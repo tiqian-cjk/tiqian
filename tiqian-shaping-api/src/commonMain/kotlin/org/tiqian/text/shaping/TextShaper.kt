@@ -69,6 +69,9 @@ class ExplainableStubTextShaper : TextShaper {
             advance = advance,
             source = ShapingSource.Stub.name,
             reason = "ExplainableStubTextShaper:nominal-em-advance",
+            // The stub never measures ink; report all glyphs as boundless so
+            // the dump honestly shows this path provides no ink diagnostics.
+            glyphsWithoutInkBounds = glyphCount,
         )
         return ShapingResult(
             clusters = listOf(cluster),

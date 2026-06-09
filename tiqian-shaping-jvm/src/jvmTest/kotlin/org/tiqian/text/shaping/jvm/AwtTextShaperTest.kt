@@ -52,6 +52,19 @@ class AwtTextShaperTest {
         val glyph = result.glyphRuns.single().glyphs.single()
         assertTrue(glyph.advance > 0f)
         assertNotNull(glyph.bounds)
+        assertEquals(0, result.decisions.single().glyphsWithoutInkBounds)
+    }
+
+    @Test
+    fun reportsGlyphsWithoutInkBoundsForBlankGlyphs() {
+        // A space has empty visual bounds in AWT; the decision must count it
+        // so downstream MissingInkBoundsFallback recording stays explainable.
+        val result = shaper.shape(input(text = "a b", role = FontRole.LatinText))
+
+        val glyphs = result.glyphRuns.single().glyphs
+        val boundless = glyphs.count { it.bounds == null }
+        assertTrue(boundless > 0, "Expected the space glyph to lack ink bounds")
+        assertEquals(boundless, result.decisions.single().glyphsWithoutInkBounds)
     }
 
     private fun input(

@@ -101,6 +101,12 @@ data class ShapingDecisionInfo(
     val advance: Float,
     val source: String,
     val reason: String,
+    /**
+     * How many of [glyphCount] glyphs came back without ink bounds from the
+     * shaper. Non-zero values feed the `MissingInkBoundsFallback` heuristic
+     * downstream — punctuation geometry falls back to shaped-advance-only.
+     */
+    val glyphsWithoutInkBounds: Int = 0,
 )
 
 data class MetricDecisionInfo(
@@ -134,6 +140,14 @@ data class PunctuationDecisionInfo(
     val policyBodyFloor: Float = bodyWidth,
     val inkWidth: Float? = null,
     val inkCenter: Float? = null,
+    /**
+     * `MissingInkBoundsFallback` reason code when shaping ran but ink bounds
+     * could not be attributed to this punctuation character; null when bounds
+     * are present or when no shaping information exists at all (pure policy
+     * path). See ADR 0014 — ink bounds are diagnostic, so this fallback
+     * changes explainability only, never glue placement.
+     */
+    val inkBoundsFallback: String? = null,
 )
 
 data class ClusterGeometryDecisionInfo(

@@ -22,11 +22,30 @@ data class PunctuationAtom(
     val policyBodyFloor: Float,
     val inkWidth: Float?,
     val inkCenter: Float?,
+    /** `MissingInkBoundsFallback` reason; see [PunctuationInkInput.boundsFallbackReason]. */
+    val inkBoundsFallback: String?,
 )
 
 data class PunctuationInkInput(
     val advance: Float,
     val inkBounds: Rect? = null,
+    /**
+     * Named heuristic: `MissingInkBoundsFallback`.
+     *
+     * Non-null exactly when shaping ran but [inkBounds] is absent; explains
+     * why so the dump can distinguish "shaper gave no ink" from "no shaping
+     * at all". Known reason codes:
+     *
+     * - `shaper-no-ink-bounds` — the shaper resolved a glyph but reported
+     *   empty visual bounds (blank glyph, or font without outlines).
+     * - `glyph-cluster-mapping-ambiguous` — glyph count does not match the
+     *   cluster's display characters, so per-character ink cannot be
+     *   attributed; geometry falls back to pure policy ([advance] is unset).
+     *
+     * Per ADR 0014 ink bounds are diagnostic-only, so this fallback never
+     * changes glue placement — only the recorded geometry source.
+     */
+    val boundsFallbackReason: String? = null,
 )
 
 enum class PunctuationAnchor {
@@ -184,7 +203,8 @@ class PunctuationAtomBuilder(
         if (policy.punctuationClass == PunctuationClass.Other) return null
 
         val policyAdvance = policy.defaultAdvanceEm * em
-        val advance = inkInput?.advance?.takeIf { it > 0f } ?: policyAdvance
+        val shapedAdvance = inkInput?.advance?.takeIf { it > 0f }
+        val advance = shapedAdvance ?: policyAdvance
         val bodyWidth = (policy.defaultBodyEm * em).coerceAtMost(advance)
 
         // Diagnostic ink fields — not used for glue calculation.
@@ -232,13 +252,16 @@ class PunctuationAtomBuilder(
             ),
             anchor = anchor,
             geometrySource = when {
-                inkInput?.inkBounds != null -> "ClassDerivedWithInkDiagnostics"
-                inkInput != null -> "ClassDerivedWithShapedAdvance"
+                inkBounds != null -> "ClassDerivedWithInkDiagnostics"
+                shapedAdvance != null -> "ClassDerivedWithShapedAdvance"
                 else -> "PolicyDerived"
             },
             policyBodyFloor = bodyWidth,
             inkWidth = inkWidth,
             inkCenter = inkCenter,
+            // MissingInkBoundsFallback: only meaningful when shaping ran but
+            // produced no usable ink bounds for this character.
+            inkBoundsFallback = if (inkBounds == null) inkInput?.boundsFallbackReason else null,
         )
     }
 

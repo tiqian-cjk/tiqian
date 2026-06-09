@@ -472,9 +472,14 @@ private fun renderEngineMetadata(label: String, result: LayoutResult): String =
         if (result.debug.shapingDecisions.isNotEmpty()) {
             appendLine("<div class=\"metrics\">")
             result.debug.shapingDecisions.forEach { decision ->
+                val noBounds = if (decision.glyphsWithoutInkBounds > 0) {
+                    " noBounds=${decision.glyphsWithoutInkBounds}/${decision.glyphCount}"
+                } else {
+                    ""
+                }
                 appendLine(
                     "<span class=\"metric\">shape ${decision.range.start}-${decision.range.end} " +
-                        "'${decision.displayText.escapeHtml()}' ${decision.advance.oneDecimal()} ${decision.source}</span>",
+                        "'${decision.displayText.escapeHtml()}' ${decision.advance.oneDecimal()} ${decision.source}$noBounds</span>",
                 )
             }
             appendLine("</div>")
@@ -489,11 +494,12 @@ private fun renderEngineMetadata(label: String, result: LayoutResult): String =
                     decision.inkCenter?.let { add("inkC=${it.oneDecimal()}") }
                 }.joinToString(" ")
                 val sourceTag = decision.geometrySource
+                val fallback = decision.inkBoundsFallback?.let { " fallback=$it" } ?: ""
                 appendLine(
                     "<span class=\"metric\">punct ${decision.range.start}-${decision.range.end} " +
                         "'${decision.char.toString().escapeHtml()}' body=${decision.bodyWidth.oneDecimal()} " +
                         "lead=${decision.leadingGlueNatural.oneDecimal()} trail=${decision.trailingGlueNatural.oneDecimal()} " +
-                        "$inkMeasures $sourceTag$ink</span>",
+                        "$inkMeasures $sourceTag$fallback$ink</span>",
                 )
             }
             appendLine("</div>")
