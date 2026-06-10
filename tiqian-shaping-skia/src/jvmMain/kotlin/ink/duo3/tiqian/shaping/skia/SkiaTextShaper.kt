@@ -205,9 +205,9 @@ class SystemSkiaFontResolver(
     private val fontMgr: FontMgr = FontMgr.default,
 ) : SkiaFontResolver {
     private val cjkTypeface: Typeface? =
-        CJK_CANDIDATES.firstNotNullOfOrNull { fontMgr.matchFamilyStyle(it, FontStyle.NORMAL) }
+        SkiaSystemTypefaces.CJK_CANDIDATES.firstNotNullOfOrNull { fontMgr.matchFamilyStyle(it, FontStyle.NORMAL) }
     private val latinTypeface: Typeface? =
-        LATIN_CANDIDATES.firstNotNullOfOrNull { fontMgr.matchFamilyStyle(it, FontStyle.NORMAL) }
+        SkiaSystemTypefaces.LATIN_CANDIDATES.firstNotNullOfOrNull { fontMgr.matchFamilyStyle(it, FontStyle.NORMAL) }
 
     override fun resolve(input: ShapingInput): Font {
         val requestedFamily = input.style.fontFamilies.firstOrNull()
@@ -230,28 +230,6 @@ class SystemSkiaFontResolver(
             -> latinTypeface
         }
 
-    companion object {
-        /** Ordered by preference; first match wins. Mirrors `SystemAwtFontProbe`. */
-        private val CJK_CANDIDATES = listOf(
-            "Source Han Sans CN",
-            "Source Han Sans CN VF",
-            "Noto Sans CJK SC",
-            "PingFang SC",
-            "Hiragino Sans GB",
-            "Sarasa UI SC",
-            "Heiti SC",
-            "STHeiti",
-        )
-
-        private val LATIN_CANDIDATES = listOf(
-            "Inter Variable",
-            "Inter",
-            "SF Pro Text",
-            "SF Pro",
-            "Roboto",
-            "Helvetica Neue",
-        )
-    }
 }
 
 private fun org.jetbrains.skia.Rect.toGlyphLocalRectOrNull(): Rect? {

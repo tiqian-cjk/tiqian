@@ -110,94 +110,14 @@ private object PlaygroundFontProbe {
 /** Result of the raster step — the PNG plus the natural canvas dimensions in CSS pixels. */
 private data class RasterResult(val dataUri: String, val widthPx: Float, val heightPx: Float)
 
-/**
- * Skia twin of [PlaygroundFontProbe] — same candidate lists so the skia-mode
- * raster draws the same physical fonts the engine measured.
- */
-private object SkiaPlaygroundFontProbe {
-    private val fontMgr = org.jetbrains.skia.FontMgr.default
-    val cjk: org.jetbrains.skia.Typeface? = listOf(
-        "Source Han Sans CN",
-        "Source Han Sans CN VF",
-        "Noto Sans CJK SC",
-        "PingFang SC",
-        "Hiragino Sans GB",
-        "Sarasa UI SC",
-        "Heiti SC",
-        "STHeiti",
-    ).firstNotNullOfOrNull { fontMgr.matchFamilyStyle(it, org.jetbrains.skia.FontStyle.NORMAL) }
-    val latin: org.jetbrains.skia.Typeface? = listOf(
-        "Inter",
-        "SF Pro Text",
-        "SF Pro",
-        "Roboto",
-        "Helvetica Neue",
-    ).firstNotNullOfOrNull { fontMgr.matchFamilyStyle(it, org.jetbrains.skia.FontStyle.NORMAL) }
-}
-
-/**
- * Shapes [text] with the same language tag the engine's `SkiaTextShaper`
- * uses (`LocaleTaggedShaping`), so the raster draws the SAME glyphs the
- * engine measured — e.g. the `locl` zh-Hans dash variants. Without this,
- * the engine steps by the 2em CJK dash advance while the canvas draws the
- * shorter Western form, leaving a visible hole after every `——`.
- *
- * The blob is built manually with baseline at y=0 — Skia's own
- * TextBlobBuilderRunHandler is a line-WRAPPING handler that places the
- * first baseline at `-ascent`, which shifted every run down by its own
- * font's ascent (Latin runs visibly floated above CJK runs).
- */
-private fun shapeBlobWithLanguage(
-    shaper: org.jetbrains.skia.shaper.Shaper,
-    text: String,
-    font: org.jetbrains.skia.Font,
-    language: String,
-): org.jetbrains.skia.TextBlob? {
-    val glyphIds = mutableListOf<Short>()
-    val xPositions = mutableListOf<Float>()
-    shaper.shape(
-        text,
-        org.jetbrains.skia.shaper.TrivialFontRunIterator(text, font),
-        org.jetbrains.skia.shaper.TrivialBidiRunIterator(text, 0),
-        org.jetbrains.skia.shaper.TrivialScriptRunIterator(text, "Hani"),
-        org.jetbrains.skia.shaper.TrivialLanguageRunIterator(text, language),
-        org.jetbrains.skia.shaper.ShapingOptions.DEFAULT,
-        Float.MAX_VALUE,
-        object : org.jetbrains.skia.shaper.RunHandler {
-            override fun beginLine() {}
-            override fun runInfo(info: org.jetbrains.skia.shaper.RunInfo?) {}
-            override fun commitRunInfo() {}
-            override fun runOffset(info: org.jetbrains.skia.shaper.RunInfo?): org.jetbrains.skia.Point =
-                org.jetbrains.skia.Point(0f, 0f)
-            override fun commitRun(
-                info: org.jetbrains.skia.shaper.RunInfo?,
-                glyphs: ShortArray?,
-                positions: Array<org.jetbrains.skia.Point?>?,
-                clusters: IntArray?,
-            ) {
-                if (glyphs == null || positions == null) return
-                glyphs.forEachIndexed { index, glyphId ->
-                    glyphIds += glyphId
-                    xPositions += (positions.getOrNull(index)?.x ?: 0f)
-                }
-            }
-            override fun commitLine() {}
-        },
-    )
-    if (glyphIds.isEmpty()) return null
-    return org.jetbrains.skia.TextBlobBuilder()
-        .appendRunPosH(font, glyphIds.toShortArray(), xPositions.toFloatArray(), 0f)
-        .build()
-}
-
 private fun rasterizeLayoutToPngSkia(result: LayoutResult, fixture: LayoutFixture, scale: Int = 2): RasterResult {
     val maxWidth = fixture.constraints.maxWidth.coerceAtLeast(1f)
     val height = result.size.height.coerceAtLeast(16f)
     val fontSize = result.input.textStyle.fontSize
     val language = result.input.textStyle.locale
 
-    val cjkFont = org.jetbrains.skia.Font(SkiaPlaygroundFontProbe.cjk, fontSize)
-    val latinFont = org.jetbrains.skia.Font(SkiaPlaygroundFontProbe.latin, fontSize)
+    val cjkFont = org.jetbrains.skia.Font(ink.duo3.tiqian.shaping.skia.SkiaSystemTypefaces.cjk, fontSize)
+    val latinFont = org.jetbrains.skia.Font(ink.duo3.tiqian.shaping.skia.SkiaSystemTypefaces.latin, fontSize)
 
     // Same canvas padding logic as the AWT raster: engine line boxes use
     // CenteredCjkVisual metrics, real font ascent/descent overflow them.
@@ -244,7 +164,7 @@ private fun rasterizeLayoutToPngSkia(result: LayoutResult, fixture: LayoutFixtur
                 .let { if (trailingStrip > 0) it.dropLast(trailingStrip) else it }
 
             if (paintText.isNotEmpty()) {
-                shapeBlobWithLanguage(shaper, paintText, font, language)?.let { blob ->
+                ink.duo3.tiqian.shaping.skia.shapeTextBlob(shaper, paintText, font, language)?.let { blob ->
                     canvas.drawTextBlob(blob, x + leadingGap, baselineY, paint)
                 }
             }

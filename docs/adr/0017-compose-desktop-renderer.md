@@ -1,0 +1,49 @@
+# ADR 0017: Compose Desktop 渲染前端
+
+- Status: Accepted
+- Date: 2026-06-10
+
+## Context
+
+M1–M5 落地后引擎模型已真（三平台 shaping 互证、决策 golden、吞吐基线），但
+唯一的渲染出口是 playground 的调试 PNG。`tiqian-compose` 一直是空 contract
+外壳。Slice 7 把 playground 验证过的 Skia 渲染路径变成可消费的前端。
+
+## Decision
+
+`tiqian-compose` 接 Compose Multiplatform 1.11.1（Kotlin compose compiler
+2.3.20），先做 **Desktop (jvm)** target：
+
+- **`TiqianParagraph` composable**：自定义 `Layout` 在 measure 阶段用注入的
+  `ParagraphLayoutEngine`（默认 Skia shaper + lookahead breaker）排版，按
+  `LayoutResult.size` 报告尺寸；draw 阶段经 `drawIntoCanvas` 拿到
+  `org.jetbrains.skia.Canvas`，逐 cluster 画 language-tagged TextBlob——
+  glyph 与 engine 度量同源（`LocaleTaggedShaping`，locl 破折号等直接正确）。
+- **前端零排版决策**（CLAUDE.md 既有约束）：composable 只调 engine、只画
+  `LayoutResult`；fallback / glue / 避头尾 / justification 全部在上游。
+  渲染遍历逻辑（autospace strip、行边 gap 抑制）与 playground skia raster
+  同构。
+- **共享件下沉到 `tiqian-shaping-skia`**：language-tagged TextBlob 构建
+  （`shapeTextBlob`）与系统字体探测（`SkiaSystemTypefaces`）从 playground
+  提取为公共 API，playground 与 compose 渲染共用，消除三份重复。
+- **验收 = 离屏渲染**：`ImageComposeScene` 把 `TiqianParagraph` 渲染成 PNG
+  （存 `build/reports/`）并断言有墨迹像素；`runComposeDemo` 提供窗口 demo。
+
+### 暂不做（预留点）
+
+- **Android composable**：渲染要走 `android.graphics.Canvas`+TextRunShaper，
+  与 desktop 的 skia interop 不同源；等 Android 渲染需求明确再开 slice，
+  contract（消费 `LayoutResult`）不变。
+- **Density 映射**：当前引擎单位按 px 直出（desktop density 1 时即物理像素）。
+  fontSize × density 的换算放 composable 入参层处理，后续接真实 DPI 时
+  在 `TextStyle` 构造处乘 density，引擎不感知。
+- **增量重排 / 文本编辑**：每次 measure 全量 layout，220 字 ~2ms
+  （`LayoutBenchmarkProbe`），正文展示场景足够。
+
+## Consequences
+
+- 引擎第一次有了「真前端」：Compose 应用可直接 `TiqianParagraph("…")`。
+- 渲染正确性与 engine 度量绑定在同一 Skia 栈，playground 修过的渲染 bug
+  （locl glyph、baseline）不会在前端复发。
+- `tiqian-compose` 从 commonMain 空壳变为 jvm-first；Android target 留待
+  后续 slice。
