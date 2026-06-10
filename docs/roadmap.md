@@ -13,8 +13,8 @@
 ## 当前位置
 
 ```text
-Last completed: Slice 6b 续 (FontHaltDerivedBody: halt 经 Skiko 测量、替换 policy body，geometrySource=FontHaltDerived*，chws 不启用, ADR 0014 amendment)
-Up next:        Slice 6b 续 (skia 模式渲染/垂直校正；halt placement vs profile glue 侧校验；或 Android TextPaint adapter)
+Last completed: Slice 4 修正 (PushIn zero-shrink merge：链式修复后 fits 的 offender 直接并入，修复 、」行首逃逸), Slice 6b 续 (playground skia 光栅化：locl glyph 与 engine 几何同源、baseline 对齐)
+Up next:        Slice 6b 续 (halt placement vs profile glue 侧校验；或 Android TextPaint adapter；lookahead window 2~3)
 ```
 
 ## Slice / Milestone 对照表
