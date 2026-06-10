@@ -1,0 +1,31 @@
+fixture: kinsoku-push-in
+text: 中文中。
+maxWidth: 60.0 align: Start
+== greedy ==
+size 56.0x16.0
+line[0] 0-4 natural=64.0 adjusted=56.0 visual=56.0 repair=PushIn(ForbiddenAtLineStart shrink=4.0) candidates=PushIn+ justify=-
+cluster 0-1 '中' adv=16.0
+cluster 1-2 '文' adv=16.0
+cluster 2-3 '中' adv=16.0
+cluster 3-4 '。' adv=8.0
+font 0-1 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 3-4 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 3-4 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+edgetrim 3-4 side=trailing trim=4.0 reason=LineEndHalfWidthPunctuation
+== lookahead ==
+size 56.0x16.0
+line[0] 0-4 natural=64.0 adjusted=56.0 visual=56.0 repair=PushIn(ForbiddenAtLineStart shrink=4.0) candidates=PushIn+ justify=-
+cluster 0-1 '中' adv=16.0
+cluster 1-2 '文' adv=16.0
+cluster 2-3 '中' adv=16.0
+cluster 3-4 '。' adv=8.0
+font 0-1 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 3-4 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 3-4 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+edgetrim 3-4 side=trailing trim=4.0 reason=LineEndHalfWidthPunctuation

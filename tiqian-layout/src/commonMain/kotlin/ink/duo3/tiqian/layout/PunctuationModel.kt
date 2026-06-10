@@ -218,7 +218,7 @@ class PunctuationAtomBuilder(
      * will replace the policy body/advance directly, and ink bounds will
      * serve as a validation check.
      *
-     * Named heuristic: `ClassDerivedGlueDirection`.
+     * Named heuristic: `ProfileDerivedGlueDirection`.
      */
     fun build(
         char: Char,
@@ -296,8 +296,8 @@ class PunctuationAtomBuilder(
             geometrySource = when {
                 haltBody != null && inkBounds != null -> "FontHaltDerivedWithInkDiagnostics"
                 haltBody != null -> "FontHaltDerived"
-                inkBounds != null -> "ClassDerivedWithInkDiagnostics"
-                shapedAdvance != null -> "ClassDerivedWithShapedAdvance"
+                inkBounds != null -> "ProfileDerivedWithInkDiagnostics"
+                shapedAdvance != null -> "ProfileDerivedWithShapedAdvance"
                 else -> "PolicyDerived"
             },
             policyBodyFloor = bodyWidth,

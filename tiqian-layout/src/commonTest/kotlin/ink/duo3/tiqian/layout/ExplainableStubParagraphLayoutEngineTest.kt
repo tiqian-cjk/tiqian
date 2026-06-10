@@ -446,7 +446,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // PauseOrStop: all glue on trailing side (class-derived, not ink-derived)
         assertEquals(0f, atom.leadingGlue.natural)
         assertEquals(8f, atom.trailingGlue.natural)
-        assertEquals("ClassDerivedWithInkDiagnostics", atom.geometrySource)
+        assertEquals("ProfileDerivedWithInkDiagnostics", atom.geometrySource)
         // Ink fields are retained as diagnostics
         assertEquals(2f, atom.inkWidth)
         assertEquals(10f, atom.inkCenter)
@@ -500,10 +500,10 @@ class ExplainableStubParagraphLayoutEngineTest {
         // 。 is PauseOrStop: all glue on trailing side
         assertEquals(0f, punctuation.leadingGlueNatural)
         assertEquals(8f, punctuation.trailingGlueNatural)
-        assertEquals("ClassDerivedWithInkDiagnostics", punctuation.geometrySource)
+        assertEquals("ProfileDerivedWithInkDiagnostics", punctuation.geometrySource)
 
         val geometry = result.debug.geometryDecisions.single()
-        assertEquals("ClassDerivedWithInkDiagnostics", geometry.reason)
+        assertEquals("ProfileDerivedWithInkDiagnostics", geometry.reason)
         assertEquals(8f, geometry.bodyWidth)
         assertEquals(0f, geometry.leadingGlueNatural)
         assertEquals(8f, geometry.trailingGlueNatural)
@@ -606,7 +606,7 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         val stopGeometry = result.debug.geometryDecisions.single { it.sourceText == "。" }
         assertEquals("PunctuationGeometryLedger", stopGeometry.source)
-        assertEquals("ClassDerivedWithShapedAdvance", stopGeometry.reason)
+        assertEquals("ProfileDerivedWithShapedAdvance", stopGeometry.reason)
         assertEquals(16f, stopGeometry.baseAdvance)
         assertEquals(8f, stopGeometry.bodyWidth)
         // PauseOrStop: all glue on trailing side, fully consumed by edge trim
@@ -840,7 +840,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
-    fun stubShaperProducesClassDerivedWithShapedAdvance() {
+    fun stubShaperProducesProfileDerivedWithShapedAdvance() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 content = TiqianTextContent("中文，世界。"),
@@ -852,7 +852,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertTrue(punctuationDecisions.isNotEmpty())
         for (p in punctuationDecisions) {
             assertEquals(
-                "ClassDerivedWithShapedAdvance",
+                "ProfileDerivedWithShapedAdvance",
                 p.geometrySource,
                 "Stub shaper provides advance but no bounds for '${p.char}'",
             )
@@ -865,7 +865,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
-    fun shapingWithoutBoundsProducesClassDerivedWithShapedAdvance() {
+    fun shapingWithoutBoundsProducesProfileDerivedWithShapedAdvance() {
         val engine = ExplainableStubParagraphLayoutEngine(
             textShaper = object : TextShaper {
                 override fun shape(input: ShapingInput): ShapingResult =
@@ -906,7 +906,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         )
 
         val punctuation = result.debug.punctuationDecisions.single()
-        assertEquals("ClassDerivedWithShapedAdvance", punctuation.geometrySource)
+        assertEquals("ProfileDerivedWithShapedAdvance", punctuation.geometrySource)
         assertEquals("shaper-no-ink-bounds", punctuation.inkBoundsFallback)
         assertEquals(8f, punctuation.bodyWidth)
         // PauseOrStop: all glue on trailing side (class-based, not ink-based)

@@ -65,7 +65,7 @@ class PunctuationAtomBuilderHaltTest {
 
         assertEquals(8f, atom.bodyWidth)
         assertEquals(null, atom.haltAdvance)
-        assertEquals("ClassDerivedWithShapedAdvance", atom.geometrySource)
+        assertEquals("ProfileDerivedWithShapedAdvance", atom.geometrySource)
     }
 
     @Test

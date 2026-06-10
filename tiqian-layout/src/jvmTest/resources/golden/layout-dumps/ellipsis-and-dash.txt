@@ -1,0 +1,59 @@
+fixture: ellipsis-and-dash
+text: 中文……English——中文。
+maxWidth: 220.0 align: Start
+== greedy ==
+size 208.0x41.6
+line[0] 0-13 natural=208.0 adjusted=208.0 visual=208.0 repair=- candidates=- justify=-
+line[1] 13-16 natural=48.0 adjusted=40.0 visual=40.0 repair=- candidates=- justify=-
+cluster 0-1 '中' adv=16.0
+cluster 1-2 '文' adv=16.0
+cluster 2-4 '⋯⋯' adv=32.0
+cluster 4-11 'English' adv=112.0
+cluster 11-13 '⸺' adv=32.0
+cluster 13-14 '中' adv=16.0
+cluster 14-15 '文' adv=16.0
+cluster 15-16 '。' adv=8.0
+font 0-1 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-4 role=CjkPunctuation key=cjk-primary display='⋯⋯' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:U+2026+U+2026->U+22EF+U+22EF
+font 4-11 role=LatinText key=latin-primary display='English' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-13 role=CjkPunctuation key=cjk-primary display='⸺' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:U+2014+U+2014->U+2E3A
+font 13-14 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 14-15 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 15-16 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 2-3 '⋯' class=Ellipsis adv=16.0 body=16.0 lead=0.0 trail=0.0 anchor=Center source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 3-4 '⋯' class=Ellipsis adv=16.0 body=16.0 lead=0.0 trail=0.0 anchor=Center source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 11-13 '⸺' class=Dash adv=32.0 body=32.0 lead=0.0 trail=0.0 anchor=Center source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 15-16 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 2-4 body=32.0 lead=0.0/0.0 trail=0.0/0.0 justify=0.0 resolved=32.0
+geom 11-13 body=32.0 lead=0.0/0.0 trail=0.0/0.0 justify=0.0 resolved=32.0
+geom 15-16 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+edgetrim 15-16 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+== lookahead ==
+size 208.0x41.6
+line[0] 0-13 natural=208.0 adjusted=208.0 visual=208.0 repair=- candidates=- justify=-
+line[1] 13-16 natural=48.0 adjusted=40.0 visual=40.0 repair=- candidates=- justify=-
+cluster 0-1 '中' adv=16.0
+cluster 1-2 '文' adv=16.0
+cluster 2-4 '⋯⋯' adv=32.0
+cluster 4-11 'English' adv=112.0
+cluster 11-13 '⸺' adv=32.0
+cluster 13-14 '中' adv=16.0
+cluster 14-15 '文' adv=16.0
+cluster 15-16 '。' adv=8.0
+font 0-1 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-4 role=CjkPunctuation key=cjk-primary display='⋯⋯' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:U+2026+U+2026->U+22EF+U+22EF
+font 4-11 role=LatinText key=latin-primary display='English' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-13 role=CjkPunctuation key=cjk-primary display='⸺' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:U+2014+U+2014->U+2E3A
+font 13-14 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 14-15 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 15-16 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 2-3 '⋯' class=Ellipsis adv=16.0 body=16.0 lead=0.0 trail=0.0 anchor=Center source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 3-4 '⋯' class=Ellipsis adv=16.0 body=16.0 lead=0.0 trail=0.0 anchor=Center source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 11-13 '⸺' class=Dash adv=32.0 body=32.0 lead=0.0 trail=0.0 anchor=Center source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 15-16 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 2-4 body=32.0 lead=0.0/0.0 trail=0.0/0.0 justify=0.0 resolved=32.0
+geom 11-13 body=32.0 lead=0.0/0.0 trail=0.0/0.0 justify=0.0 resolved=32.0
+geom 15-16 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+edgetrim 15-16 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation

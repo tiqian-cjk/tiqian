@@ -2,7 +2,7 @@
 
 提椠是一个面向中文正文的 CJK paragraph layout engine。第一阶段目标是支持 CLREQ 横排核心需求，并为 Compose Multiplatform 与 Android View 提供前端适配。
 
-当前仓库处于项目骨架阶段：模块边界、核心数据结构、测试 fixture 和可解释 layout pipeline 已建立；JVM playground 已有 AWT 真实 advance adapter，标点 atom 能用 shaped glyph bounds 校准 body/glue；字体 fallback、平台 shaping、断行优化和绘制适配仍在逐步替换占位实现。
+当前 M1–M5 主线已落地：可解释 layout pipeline（fallback → shaping → 标点 atom/glue → 避头尾修复 → 两端对齐）全链可 dump；AWT / Skia / Android 三平台 shaping adapter 交叉验证标点几何（`halt` body、`locl` 变体、ink 方向）；决策 dump 有 golden 回归基线与吞吐基线。前端绘制适配（Compose / Android View）仍为 contract 外壳，竖排、ruby、悬挂等在后续 slice。
 
 ## 模块
 

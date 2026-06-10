@@ -20,6 +20,7 @@ kotlin {
 
         jvmTest.dependencies {
             implementation(project(":tiqian-shaping-jvm"))
+            implementation(project(":tiqian-test"))
         }
     }
 }

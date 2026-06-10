@@ -1,0 +1,45 @@
+fixture: lookahead-future-push-in
+text: 中文中文中文。
+maxWidth: 60.0 align: Start
+== greedy ==
+size 56.0x32.0
+line[0] 0-3 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
+line[1] 3-7 natural=64.0 adjusted=56.0 visual=56.0 repair=PushIn(ForbiddenAtLineStart shrink=4.0) candidates=PushIn+ justify=-
+cluster 0-1 '中' adv=16.0
+cluster 1-2 '文' adv=16.0
+cluster 2-3 '中' adv=16.0
+cluster 3-4 '文' adv=16.0
+cluster 4-5 '中' adv=16.0
+cluster 5-6 '文' adv=16.0
+cluster 6-7 '。' adv=8.0
+font 0-1 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 6-7 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 6-7 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 6-7 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+edgetrim 6-7 side=trailing trim=4.0 reason=LineEndHalfWidthPunctuation
+== lookahead ==
+size 56.0x32.0
+line[0] 0-3 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
+line[1] 3-7 natural=64.0 adjusted=56.0 visual=56.0 repair=PushIn(ForbiddenAtLineStart shrink=4.0) candidates=PushIn+ justify=-
+cluster 0-1 '中' adv=16.0
+cluster 1-2 '文' adv=16.0
+cluster 2-3 '中' adv=16.0
+cluster 3-4 '文' adv=16.0
+cluster 4-5 '中' adv=16.0
+cluster 5-6 '文' adv=16.0
+cluster 6-7 '。' adv=8.0
+font 0-1 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 6-7 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 6-7 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 6-7 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+edgetrim 6-7 side=trailing trim=4.0 reason=LineEndHalfWidthPunctuation

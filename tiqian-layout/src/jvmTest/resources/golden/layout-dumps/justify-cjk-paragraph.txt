@@ -1,0 +1,59 @@
+fixture: justify-cjk-paragraph
+text: 中文中文中文中文中文中文
+maxWidth: 100.0 align: Justify
+== greedy ==
+size 100.0x32.0
+line[0] 0-6 natural=96.0 adjusted=96.0 visual=100.0 repair=- candidates=- justify=deficit=4.0->0.0 CjkInterChar@0+0.8,CjkInterChar@1+0.8,CjkInterChar@2+0.8,CjkInterChar@3+0.8,CjkInterChar@4+0.8
+line[1] 6-12 natural=96.0 adjusted=96.0 visual=96.0 repair=- candidates=- justify=-
+cluster 0-1 '中' adv=16.8
+cluster 1-2 '文' adv=16.8
+cluster 2-3 '中' adv=16.8
+cluster 3-4 '文' adv=16.8
+cluster 4-5 '中' adv=16.8
+cluster 5-6 '文' adv=16.0
+cluster 6-7 '中' adv=16.0
+cluster 7-8 '文' adv=16.0
+cluster 8-9 '中' adv=16.0
+cluster 9-10 '文' adv=16.0
+cluster 10-11 '中' adv=16.0
+cluster 11-12 '文' adv=16.0
+font 0-1 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 6-7 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 7-8 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 8-9 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 9-10 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 10-11 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-12 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+== lookahead ==
+size 100.0x32.0
+line[0] 0-6 natural=96.0 adjusted=96.0 visual=100.0 repair=- candidates=- justify=deficit=4.0->0.0 CjkInterChar@0+0.8,CjkInterChar@1+0.8,CjkInterChar@2+0.8,CjkInterChar@3+0.8,CjkInterChar@4+0.8
+line[1] 6-12 natural=96.0 adjusted=96.0 visual=96.0 repair=- candidates=- justify=-
+cluster 0-1 '中' adv=16.8
+cluster 1-2 '文' adv=16.8
+cluster 2-3 '中' adv=16.8
+cluster 3-4 '文' adv=16.8
+cluster 4-5 '中' adv=16.8
+cluster 5-6 '文' adv=16.0
+cluster 6-7 '中' adv=16.0
+cluster 7-8 '文' adv=16.0
+cluster 8-9 '中' adv=16.0
+cluster 9-10 '文' adv=16.0
+cluster 10-11 '中' adv=16.0
+cluster 11-12 '文' adv=16.0
+font 0-1 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 6-7 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 7-8 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 8-9 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 9-10 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 10-11 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-12 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve

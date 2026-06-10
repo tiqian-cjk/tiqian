@@ -65,9 +65,9 @@ trim 后视觉位置不变——这跟铅字时代繁体「正中」习惯一致
 - `ProfileDerivedWithShapedAdvance` — profile + shaped advance，无 ink bounds。
 - `PolicyDerived` — profile + 无 shaping 信息，纯 policy（stub 路径）。
 
-`source` 字段还是字符串，旧的 `ClassDerived*` 名字代码里暂时仍叫
-`ClassDerivedWith*`；rename 跟着 `gluePlacement` 接入的 follow-up PR 一起做，
-不影响现有结构化 debug 消费。
+`source` 字段还是字符串。（2026-06-10 更新：代码中的 `ClassDerivedWith*` 已
+rename 为 `ProfileDerivedWith*`，与本节命名一致；另有 `FontHaltDerived*`
+两档，见下方 amendment。）
 
 ### 压缩算法修正
 

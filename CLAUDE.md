@@ -79,4 +79,4 @@ type: subject
 
 ## 状态快照
 
-当前 layout engine 是「可解释占位实现」(`ExplainableStubParagraphLayoutEngine`)，目的是先把 dump/解释路径打通，再逐步替换为真实 shaping。修改它时请同步更新对应 fixture/test，并确保 dump 仍可读。
+layout engine（`ExplainableStubParagraphLayoutEngine`，名字保留历史痕迹）已接真实 shaping：AWT / Skia / Android 三平台 adapter 提供 advance、ink bounds、`halt`/`locl` 度量，标点几何三方互证。修改 layout 决策时必须：同步 fixture/test、跑 `LayoutDumpGoldenTest`（行为变化用 `TIQIAN_UPDATE_GOLDEN=1` 再生成并 review golden diff）、跑 playground 看 dump。
