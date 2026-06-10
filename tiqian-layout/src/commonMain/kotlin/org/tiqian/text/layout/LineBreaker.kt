@@ -129,9 +129,14 @@ class GreedyLineBreaker(
  * CarryPrevious repair (8 vs 10), and noticeably less than LeaveRagged (8 vs
  * 20), so kinsoku conflicts that can be sidestepped by a one-cluster shift are
  * preferred over leaving the conflict in place.
+ *
+ * Default [window] is 2: on the real-text corpus (LookaheadWindowProbe,
+ * AWT advances) window 2 cuts the worst-line deficit further at narrow
+ * measures (240px: 36.2 → 32.0) over window 1, while window 3 shows no
+ * additional benefit and only costs more candidate evaluations.
  */
 class LookaheadLineBreaker(
-    private val window: Int = 1,
+    private val window: Int = 2,
     private val futureLineHorizon: Int = 2,
     private val raggednessWeight: Float = 0.5f,
     private val kinsoku: KinsokuRule = ClreqKinsokuRule(),
