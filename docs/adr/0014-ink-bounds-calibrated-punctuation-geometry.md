@@ -104,7 +104,13 @@ alternate advance 与 placement 暴露为 `Glyph.haltAdvance` / `haltPlacementX`
 
 - **body 来自字体**：`PunctuationAtomBuilder` 在 `haltAdvance < advance` 时用
   它替换 policy `0.5em` body（`FontHaltDerivedBody`）；glue 方向仍由 profile
-  决定，placement 仅作诊断，留给后续「字体 trim 侧 vs profile glue 侧」校验。
+  决定。
+- **`HaltPlacementProfileCrossCheck`**：placement 推导出字体的削边侧
+  （leading / trailing / both），与 profile glue 侧不一致时在
+  `PunctuationAtom.haltValidation` / `PunctuationDecisionInfo.haltValidation`
+  记 warning（如 `halt-trims-trailing-but-profile-glue-both`，Traditional
+  profile 配大陆设计字体时触发）；几何决策不变，dump `punct:*` 行带
+  `haltWarn=`。
 - **feature 不参与渲染几何**：排版用的 cluster advance 仍来自无 feature 的
   shaping pass，空白的削减由 glue 模型显式执行——`halt` 只是度量入口。
 - **`chws` 不启用**：相邻标点挤压是 engine 的具名决策

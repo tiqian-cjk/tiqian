@@ -410,6 +410,7 @@ class ExplainableStubParagraphLayoutEngine(
                         inkCenter = atom.inkCenter,
                         inkBoundsFallback = atom.inkBoundsFallback,
                         haltAdvance = atom.haltAdvance,
+                        haltValidation = atom.haltValidation,
                     )
                 },
                 geometryDecisions = geometryDecisions,
@@ -590,6 +591,7 @@ class ExplainableStubParagraphLayoutEngine(
             inkBounds = glyph.bounds,
             boundsFallbackReason = if (glyph.bounds == null) "shaper-no-ink-bounds" else null,
             haltAdvance = glyph.haltAdvance,
+            haltPlacementX = glyph.haltPlacementX,
         )
     }
 

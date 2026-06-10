@@ -17,6 +17,13 @@ data class PunctuationAtom(
     val bodyWidth: Float,
     /** Font-measured `halt` advance backing [bodyWidth]; null = policy body. */
     val haltAdvance: Float? = null,
+    /**
+     * `HaltPlacementProfileCrossCheck` warning: non-null when the side the
+     * FONT trims under `halt` contradicts the profile's glue side for this
+     * class (e.g. a Traditional-centred profile against a Mainland-designed
+     * font). Diagnostic only — geometry keeps the profile decision.
+     */
+    val haltValidation: String? = null,
     val leadingGlue: Glue,
     val trailingGlue: Glue,
     val anchor: PunctuationAnchor,
@@ -38,6 +45,12 @@ data class PunctuationInkInput(
      * still comes from the profile per ADR 0014.
      */
     val haltAdvance: Float? = null,
+    /**
+     * The x placement shift the font applies under `halt` (-0.5em for
+     * opening brackets, -0.25em for centred marks, 0 for closing/stop).
+     * Input to `HaltPlacementProfileCrossCheck` — diagnostic only.
+     */
+    val haltPlacementX: Float? = null,
     /**
      * Named heuristic: `MissingInkBoundsFallback`.
      *
@@ -241,11 +254,18 @@ class PunctuationAtomBuilder(
             gluePlacement = gluePlacement,
         )
 
-        val anchor = when (gluePlacement.glueSideFor(policy.punctuationClass)) {
+        val glueSide = gluePlacement.glueSideFor(policy.punctuationClass)
+        val anchor = when (glueSide) {
             GlueSide.LeadingOnly -> PunctuationAnchor.Trailing
             GlueSide.TrailingOnly -> PunctuationAnchor.Leading
             GlueSide.BothSides -> PunctuationAnchor.Center
         }
+        val haltValidation = crossCheckHaltPlacement(
+            haltBody = haltBody,
+            haltPlacementX = inkInput?.haltPlacementX,
+            advance = advance,
+            glueSide = glueSide,
+        )
 
         return PunctuationAtom(
             range = range,
@@ -255,6 +275,7 @@ class PunctuationAtomBuilder(
             inkBounds = inkBounds,
             bodyWidth = bodyWidth,
             haltAdvance = haltBody,
+            haltValidation = haltValidation,
             leadingGlue = Glue(
                 kind = GlueKind.PunctuationLeading,
                 min = 0f,
@@ -287,6 +308,43 @@ class PunctuationAtomBuilder(
             inkBoundsFallback = if (inkBounds == null) inkInput?.boundsFallbackReason else null,
         )
     }
+
+    /**
+     * Named heuristic: `HaltPlacementProfileCrossCheck`.
+     *
+     * Under `halt` the font states which side it trims: placement -0.5em =
+     * leading blank removed (opening brackets), 0 = trailing removed
+     * (closing / stops), ≈ -0.25em = both (centred marks). The profile's
+     * glue side must agree — glue is exactly the trimmable blank. A
+     * mismatch (e.g. Traditional centred profile on a Mainland-designed
+     * font) is recorded as a warning; geometry keeps the profile decision
+     * per ADR 0014.
+     */
+    private fun crossCheckHaltPlacement(
+        haltBody: Float?,
+        haltPlacementX: Float?,
+        advance: Float,
+        glueSide: GlueSide,
+    ): String? {
+        if (haltBody == null || haltPlacementX == null) return null
+        val tolerance = 0.5f
+        val leadingTrim = (-haltPlacementX).coerceAtLeast(0f)
+        val trailingTrim = (advance - haltBody - leadingTrim).coerceAtLeast(0f)
+        val fontSide = when {
+            leadingTrim > tolerance && trailingTrim > tolerance -> GlueSide.BothSides
+            leadingTrim > tolerance -> GlueSide.LeadingOnly
+            else -> GlueSide.TrailingOnly
+        }
+        if (fontSide == glueSide) return null
+        return "halt-trims-${fontSide.dumpName()}-but-profile-glue-${glueSide.dumpName()}"
+    }
+
+    private fun GlueSide.dumpName(): String =
+        when (this) {
+            GlueSide.LeadingOnly -> "leading"
+            GlueSide.TrailingOnly -> "trailing"
+            GlueSide.BothSides -> "both"
+        }
 
     /**
      * Named heuristic: `ProfileDerivedGlueDirection`.

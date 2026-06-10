@@ -697,11 +697,12 @@ private fun renderEngineMetadata(label: String, result: LayoutResult): String =
                 }.joinToString(" ")
                 val sourceTag = decision.geometrySource
                 val fallback = decision.inkBoundsFallback?.let { " fallback=$it" } ?: ""
+                val haltWarn = decision.haltValidation?.let { " haltWarn=$it" } ?: ""
                 appendLine(
                     "<span class=\"metric\">punct ${decision.range.start}-${decision.range.end} " +
                         "'${decision.char.toString().escapeHtml()}' body=${decision.bodyWidth.oneDecimal()} " +
                         "lead=${decision.leadingGlueNatural.oneDecimal()} trail=${decision.trailingGlueNatural.oneDecimal()} " +
-                        "$inkMeasures $sourceTag$fallback$ink</span>",
+                        "$inkMeasures $sourceTag$fallback$haltWarn$ink</span>",
                 )
             }
             appendLine("</div>")

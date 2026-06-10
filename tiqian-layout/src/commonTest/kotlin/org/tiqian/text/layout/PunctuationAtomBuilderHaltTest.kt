@@ -69,6 +69,49 @@ class PunctuationAtomBuilderHaltTest {
     }
 
     @Test
+    fun haltPlacementConsistentWithProfileProducesNoWarning() {
+        // MainlandSimplified + Source Han-like halt data: 。 trims trailing
+        // (placement 0), （ trims leading (placement -8) — both match the
+        // profile glue sides, no warning.
+        val stop = builder.build(
+            char = '。',
+            range = TextRange(0, 1),
+            em = em,
+            inkInput = PunctuationInkInput(advance = 16f, haltAdvance = 8f, haltPlacementX = 0f),
+        )!!
+        assertEquals(null, stop.haltValidation)
+
+        val open = builder.build(
+            char = '（',
+            range = TextRange(0, 1),
+            em = em,
+            inkInput = PunctuationInkInput(advance = 16f, haltAdvance = 8f, haltPlacementX = -8f),
+        )!!
+        assertEquals(null, open.haltValidation)
+    }
+
+    @Test
+    fun haltPlacementContradictingProfileIsWarned() {
+        // A Traditional profile centres 。 (glue BothSides), but a Mainland-
+        // designed font trims the trailing side only — the cross-check must
+        // flag it while geometry keeps the profile decision.
+        val traditional = PunctuationAtomBuilder(
+            org.tiqian.text.clreq.PunctuationGluePlacement.Traditional,
+        )
+        val stop = traditional.build(
+            char = '。',
+            range = TextRange(0, 1),
+            em = em,
+            inkInput = PunctuationInkInput(advance = 16f, haltAdvance = 8f, haltPlacementX = 0f),
+        )!!
+
+        assertEquals("halt-trims-trailing-but-profile-glue-both", stop.haltValidation)
+        // Geometry unchanged: glue still split per profile.
+        assertEquals(4f, stop.leadingGlue.natural)
+        assertEquals(4f, stop.trailingGlue.natural)
+    }
+
+    @Test
     fun haltBodyFeedsCompressionAndGlueModelUnchanged() {
         // 」。 with halt bodies: compression semantics stay the same — the
         // inner gap (」 trailing glue) collapses by half-em regardless of

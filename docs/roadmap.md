@@ -13,8 +13,8 @@
 ## 当前位置
 
 ```text
-Last completed: Slice 4 修正 (PushIn zero-shrink merge：链式修复后 fits 的 offender 直接并入，修复 、」行首逃逸), Slice 6b 续 (playground skia 光栅化：locl glyph 与 engine 几何同源、baseline 对齐)
-Up next:        Slice 6b 续 (halt placement vs profile glue 侧校验；或 Android TextPaint adapter；lookahead window 2~3)
+Last completed: Slice 6b 续 (HaltPlacementProfileCrossCheck：字体削边侧 vs profile glue 侧交叉校验，warning 进 atom/decision/dump)
+Up next:        Slice 6b 收尾候选 (Android TextPaint adapter) 或 Slice 4 优化 (lookahead window 2~3)
 ```
 
 ## Slice / Milestone 对照表

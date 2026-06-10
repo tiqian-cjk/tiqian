@@ -176,6 +176,12 @@ data class PunctuationDecisionInfo(
      * [geometrySource] is `FontHaltDerived*`; null = policy body.
      */
     val haltAdvance: Float? = null,
+    /**
+     * `HaltPlacementProfileCrossCheck` warning when the font's halt trim
+     * side contradicts the profile's glue side; null = consistent or no
+     * halt data.
+     */
+    val haltValidation: String? = null,
 )
 
 data class ClusterGeometryDecisionInfo(
