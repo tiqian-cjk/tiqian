@@ -8,7 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 在写任何非平凡改动之前，至少扫一遍：
 
-- [README.md](README.md) — 模块边界、pipeline 形状、commit 格式。
+- [README.md](README.md) — 项目介绍与模块概览。
+- [docs/contributing.md](docs/contributing.md) — 实现约束、流程、commit 格式。
 - [docs/roadmap.md](docs/roadmap.md) — **先看这个**。Slice/Milestone 状态表 + 「当前位置」一行，告诉你下一步该做什么。
 - [docs/adr/](docs/adr/) — 已确定的取舍：pipeline 边界 / 字体度量 / CLREQ 码点替换 / 标点 glue 模型。新决策走 ADR。
 - [docs/cjk-layout-engine-design.md](docs/cjk-layout-engine-design.md) — 核心模型、字体度量、标点 atom/glue、断行修复的设计取舍（讲「为什么」）。
@@ -75,7 +76,7 @@ core ── shaping-api ── font ── linebreak ── clreq ── layout
 type: subject
 ```
 
-`type` 沿用近期 history (`feat`, `fix`, `docs`, `build`, ...)。即使工具默认建议加 Claude/Anthropic co-author，也要去掉。这个仓库 README 和用户都明确说过。
+`type` 沿用近期 history (`feat`, `fix`, `docs`, `build`, ...)。即使工具默认建议加 Claude/Anthropic co-author，也要去掉。这个仓库 [docs/contributing.md](docs/contributing.md) 和用户都明确说过。
 
 ## 状态快照
 

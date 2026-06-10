@@ -252,7 +252,15 @@ object ClreqPunctuationPolicies {
         val punctuationClass = classify(char)
         return PunctuationPolicy(
             punctuationClass = punctuationClass,
-            allowAtLineStart = punctuationClass == PunctuationClass.Opening || punctuationClass == PunctuationClass.Other,
+            // CLREQ forbids 点号 / closing marks / centred separators at line
+            // start, but Dash and Ellipsis are only protected from being
+            // SPLIT（「破折号/省略号不得以适配分行之由断开或拆至两行」）—
+            // starting a line with —— is legitimate (dialogue dashes do it
+            // by construction). See clreq-punctuation-audit.md.
+            allowAtLineStart = punctuationClass == PunctuationClass.Opening ||
+                punctuationClass == PunctuationClass.Other ||
+                punctuationClass == PunctuationClass.Dash ||
+                punctuationClass == PunctuationClass.Ellipsis,
             allowAtLineEnd = punctuationClass != PunctuationClass.Opening,
             defaultBodyEm = char.defaultPunctuationBodyEm(punctuationClass),
             defaultAdvanceEm = char.defaultPunctuationAdvanceEm(punctuationClass),

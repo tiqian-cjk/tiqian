@@ -16,11 +16,11 @@ import ink.duo3.tiqian.core.ParagraphStyle
 import ink.duo3.tiqian.core.TextAlign
 
 private const val PARAGRAPH =
-    "提椠（Tiqian）是一个面向中文正文的 CJK 段落排版引擎。第一阶段的目标不是复刻浏览器级文本系统，" +
-        "而是在 shaping 之后、绘制之前的薄薄一层里——字体 fallback、CJK 度量、标点 atom、避头尾修复、" +
-        "两端对齐——做出一个可观察、可调试、可扩展的物理模型。换句话说，「功能可以窄，模型必须真」。" +
-        "第一阶段并不试图同时覆盖竖排、JLREQ、ruby、纵中横、编辑器、IME……这些不是被遗忘，" +
-        "而是被故意推后到模型稳定之后。"
+    "咖啡（coffee）在十七世纪经威尼斯传入欧洲。最初它被当作药物出售，价格高得吓人，真正" +
+            "让它流行起来的是随后遍地开花的咖啡馆——读报、辩论、下棋、写作——城市生活忽然多出一个公" +
+            "共客厅。意大利人做出了 espresso，维也纳人往杯里加奶油，土耳其人坚持连渣同煮……" +
+            "每座城市都相信自己手里那一杯才是正统。有人说：「先有咖啡馆，后有启蒙运动」。这话说得夸张" +
+            "，但也不算太离谱。"
 
 fun main() = singleWindowApplication(title = "Tiqian Compose Demo") {
     Column(
@@ -41,11 +41,11 @@ fun main() = singleWindowApplication(title = "Tiqian Compose Demo") {
             modifier = Modifier.width(320.dp),
         )
         TiqianParagraph(
-            text = "他强调：模型必须真，不能靠魔法。",
+            text = "他强调：豆子新鲜最要紧，烘焙其次。",
             modifier = Modifier.width(320.dp),
             decorations = listOf(
                 ink.duo3.tiqian.core.DecorationSpan(
-                    range = ink.duo3.tiqian.core.TextRange(4, 15),
+                    range = ink.duo3.tiqian.core.TextRange(4, 16),
                     kind = ink.duo3.tiqian.core.DecorationKind.Emphasis,
                 ),
             ),

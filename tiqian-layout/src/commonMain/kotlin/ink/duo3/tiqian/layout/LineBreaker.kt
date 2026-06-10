@@ -143,10 +143,11 @@ class GreedyLineBreaker(
  * 20), so kinsoku conflicts that can be sidestepped by a one-cluster shift are
  * preferred over leaving the conflict in place.
  *
- * Default [window] is 2: on the real-text corpus (LookaheadWindowProbe,
- * AWT advances) window 2 cuts the worst-line deficit further at narrow
- * measures (240px: 36.2 → 32.0) over window 1, while window 3 shows no
- * additional benefit and only costs more candidate evaluations.
+ * Default [window] is 2 — a cost/benefit middle ground: window 1 already
+ * captures most of the repair-avoidance value, larger windows occasionally
+ * trade worst-line deficit at narrow measures, and window 3+ has not shown
+ * consistent benefit. The numbers are corpus-dependent; re-evaluate with
+ * `LookaheadWindowProbe` when the fixture corpus changes.
  */
 class LookaheadLineBreaker(
     private val window: Int = 2,

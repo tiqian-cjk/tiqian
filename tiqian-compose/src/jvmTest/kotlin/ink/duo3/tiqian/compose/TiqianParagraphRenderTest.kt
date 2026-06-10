@@ -31,9 +31,9 @@ import kotlin.test.assertTrue
 class TiqianParagraphRenderTest {
 
     private val paragraph =
-        "提椠（Tiqian）是一个面向中文正文的 CJK 段落排版引擎。第一阶段的目标不是复刻浏览器级文本系统，" +
-            "而是在 shaping 之后、绘制之前的薄薄一层里——字体 fallback、CJK 度量、标点 atom、避头尾修复、" +
-            "两端对齐——做出一个可观察、可调试、可扩展的物理模型。"
+        "咖啡（coffee）在十七世纪经威尼斯传入欧洲。最初它被当作药物出售，价格高得吓人，" +
+            "真正让它流行起来的是随后遍地开花的咖啡馆——读报、辩论、下棋、写作——" +
+            "城市生活忽然多出一个公共客厅。"
 
     @Test
     fun offscreenRenderProducesInk() {

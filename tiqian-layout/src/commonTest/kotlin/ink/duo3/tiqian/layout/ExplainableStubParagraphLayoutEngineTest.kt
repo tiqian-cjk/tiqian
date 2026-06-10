@@ -981,18 +981,18 @@ class ExplainableStubParagraphLayoutEngineTest {
 
     @Test
     fun emphasisSpanProducesDotAnchorsForHanAndSkipsPunctuation() {
-        // "他强调：模型必须真，不能靠魔法。" with emphasis over 4..15
-        // (模型必须真，不能靠魔法). Stub advances: every cluster 16f, no
+        // "他强调：豆子新鲜最要紧，烘焙其次。" with emphasis over 4..16
+        // (豆子新鲜最要紧，烘焙其次). Stub advances: every cluster 16f, no
         // justification → anchors at glyph centres; ， inside the span is
         // skipped per CLREQ; 。 is outside the span entirely.
         // maxWidth=128 wraps at 8 clusters/line.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                content = TiqianTextContent("他强调：模型必须真，不能靠魔法。"),
+                content = TiqianTextContent("他强调：豆子新鲜最要紧，烘焙其次。"),
                 constraints = LayoutConstraints(maxWidth = 128f),
                 decorations = listOf(
                     ink.duo3.tiqian.core.DecorationSpan(
-                        range = ink.duo3.tiqian.core.TextRange(4, 15),
+                        range = ink.duo3.tiqian.core.TextRange(4, 16),
                         kind = ink.duo3.tiqian.core.DecorationKind.Emphasis,
                     ),
                 ),
@@ -1000,10 +1000,10 @@ class ExplainableStubParagraphLayoutEngineTest {
         )
 
         val decisions = result.debug.decorationDecisions
-        assertEquals(11, decisions.size)
+        assertEquals(12, decisions.size)
 
         val applied = decisions.filter { it.applied }
-        assertEquals(10, applied.size)
+        assertEquals(11, applied.size)
         assertTrue(applied.all { it.reason == "EmphasisDotOnHanText" })
 
         val comma = decisions.single { it.sourceText == "，" }
@@ -1013,10 +1013,10 @@ class ExplainableStubParagraphLayoutEngineTest {
         // 。 (15-16) is outside the span — no decision at all.
         assertTrue(decisions.none { it.sourceText == "。" })
 
-        // Anchor maths for 模 (4-5): line 0 holds clusters 0..7, x offset of
+        // Anchor maths for 豆 (4-5): line 0 holds clusters 0..7, x offset of
         // index 4 = 4×16 = 64, glyph centre 64+8 = 72; anchorY = line 0
         // baseline + 16×0.35 (dot tucked under the character ink).
-        val first = decisions.single { it.sourceText == "模" }
+        val first = decisions.single { it.sourceText == "豆" }
         assertEquals(72f, first.anchorX)
         val line0Baseline = result.lines.first().baseline
         assertEquals(line0Baseline + 5.6f, first.anchorY, 0.01f)
