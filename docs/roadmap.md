@@ -13,8 +13,8 @@
 ## 当前位置
 
 ```text
-Last completed: Slice 6b 续 (tiqian-shaping-skia: SkiaTextShaper + AWT↔Skia CLREQ 标点对照 golden + playground skia 模式, ADR 0015)
-Up next:        Slice 6b 续 (OpenType halt/chws 经 Skiko 接入标点 body/advance；或 Android TextPaint adapter)
+Last completed: Slice 6b 续 (LocaleTaggedShaping: Skia 走语言标签触发 locl 中文破折号变体, ADR 0015 amendment; SubstitutionRollbackOnMissingGlyph: 码点替换的 glyph coverage 回滚, ADR 0003 amendment)
+Up next:        Slice 6b 续 (OpenType halt/chws 经 Skiko 接入标点 body/advance；或 Android TextPaint adapter；skia 模式渲染/垂直校正)
 ```
 
 ## Slice / Milestone 对照表

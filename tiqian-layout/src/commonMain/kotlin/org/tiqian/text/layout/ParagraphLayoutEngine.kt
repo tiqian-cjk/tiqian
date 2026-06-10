@@ -111,10 +111,17 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
+        // SubstitutionRollbackOnMissingGlyph: a CLREQ display substitution
+        // (ADR 0003, e.g. `——` → `⸺`) is only an improvement if the resolved
+        // font actually covers the substituted codepoint — `⸺` U+2E3A is
+        // absent from PingFang SC / Hiragino / Heiti and would render tofu.
+        // When the shaper reports .notdef glyphs for a substituted cluster,
+        // re-shape with the source text and record the rollback.
+        val substitutionRollbackRanges = mutableSetOf<TextRange>()
         val shapingResults = fontDecisions.map { decision ->
             val sourceText = text.substring(decision.range.start, decision.range.end)
             val substitution = punctuationGlyphSubstitutor.substitute(sourceText)
-            textShaper.shape(
+            val shaped = textShaper.shape(
                 ShapingInput(
                     text = text,
                     range = decision.range,
@@ -123,6 +130,20 @@ class ExplainableStubParagraphLayoutEngine(
                     displayText = substitution.displayText,
                 ),
             )
+            if (substitution.displayText == sourceText || shaped.decisions.none { it.missingGlyphs > 0 }) {
+                shaped
+            } else {
+                substitutionRollbackRanges += decision.range
+                textShaper.shape(
+                    ShapingInput(
+                        text = text,
+                        range = decision.range,
+                        style = input.textStyle,
+                        fontDecision = decision,
+                        displayText = sourceText,
+                    ),
+                )
+            }
         }
         val rawNaturalClusters = shapingResults.flatMap { it.clusters }
         val shapedGlyphsByClusterRange = shapingResults
@@ -338,14 +359,19 @@ class ExplainableStubParagraphLayoutEngine(
                 fontDecisions = fontDecisions.map { decision ->
                     val clusterText = text.substring(decision.range.start, decision.range.end)
                     val substitution = punctuationGlyphSubstitutor.substitute(clusterText)
+                    val rolledBack = decision.range in substitutionRollbackRanges
                     FontDecisionInfo(
                         range = decision.range,
                         sourceText = clusterText,
-                        displayText = substitution.displayText,
+                        displayText = if (rolledBack) clusterText else substitution.displayText,
                         role = decision.role.name,
                         fontKey = decision.candidate.key,
                         reason = decision.reason,
-                        substitutionReason = substitution.reason,
+                        substitutionReason = if (rolledBack) {
+                            "${substitution.reason}:SubstitutionRollbackOnMissingGlyph"
+                        } else {
+                            substitution.reason
+                        },
                     )
                 },
                 shapingDecisions = shapingDecisions,

@@ -107,6 +107,19 @@ class AwtSkiaShapingComparisonTest {
 
         val failures = mutableListOf<String>()
         for (r in rows) {
+            if (r.char in LOCL_DIVERGENT_CHARS) {
+                // LocaleTaggedShaping: Skia shapes with lang=zh-Hans and gets
+                // the OpenType `locl` CJK variants — `—` at a full 1em and
+                // `⸺` at a full 2em, vertically centred. AWT has no language
+                // tagging, stays on the Western forms (14.3 / 26.8), and is
+                // expected to diverge here. Assert the Skia side is the
+                // full-width CJK form instead of advance equality.
+                val em = 16f
+                if (r.skiaAdvance % em != 0f) {
+                    failures += "'${r.char}' expected full-width locl form from Skia, got ${r.skiaAdvance}"
+                }
+                continue
+            }
             if (abs(r.awtAdvance - r.skiaAdvance) > ADVANCE_TOLERANCE_PX) {
                 failures += "'${r.char}' advance mismatch: awt=${r.awtAdvance} skia=${r.skiaAdvance}"
             }
@@ -156,5 +169,12 @@ class AwtSkiaShapingComparisonTest {
          * but still tight enough to catch a wrong-font or wrong-feature path.
          */
         private const val ADVANCE_TOLERANCE_PX = 0.5f
+
+        /**
+         * Characters whose Skia measurement intentionally diverges from AWT:
+         * `LocaleTaggedShaping` activates the `locl` zh-Hans variants that
+         * AWT cannot reach. See ADR 0015 amendment.
+         */
+        private val LOCL_DIVERGENT_CHARS = setOf('—', '⸺')
     }
 }

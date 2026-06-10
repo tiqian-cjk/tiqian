@@ -3,8 +3,16 @@ package org.tiqian.text.shaping.skia
 import org.jetbrains.skia.Font
 import org.jetbrains.skia.FontMgr
 import org.jetbrains.skia.FontStyle
-import org.jetbrains.skia.TextLine
+import org.jetbrains.skia.Point
 import org.jetbrains.skia.Typeface
+import org.jetbrains.skia.shaper.RunHandler
+import org.jetbrains.skia.shaper.RunInfo
+import org.jetbrains.skia.shaper.Shaper
+import org.jetbrains.skia.shaper.ShapingOptions
+import org.jetbrains.skia.shaper.TrivialBidiRunIterator
+import org.jetbrains.skia.shaper.TrivialFontRunIterator
+import org.jetbrains.skia.shaper.TrivialLanguageRunIterator
+import org.jetbrains.skia.shaper.TrivialScriptRunIterator
 import org.tiqian.text.core.Cluster
 import org.tiqian.text.core.Glyph
 import org.tiqian.text.core.GlyphRun
@@ -19,10 +27,19 @@ import kotlin.math.max
 
 /**
  * Skia (Skiko) shaping adapter — the second real-measurement adapter next to
- * `AwtTextShaper` (ADR 0013). Same contract: consume the layout-decided
+ * `AwtTextShaper` (ADR 0013/0015). Same contract: consume the layout-decided
  * `displayText` with a single resolved font, emit one cluster + one glyph run
  * with real advances and glyph-local ink bounds. No fallback, no CLREQ
  * substitution, no punctuation decisions — those stay upstream.
+ *
+ * Named heuristic: `LocaleTaggedShaping`. Shaping runs through the full
+ * SkShaper pipeline with [ShapingInput.style]'s locale as the HarfBuzz
+ * language tag, so OpenType `locl` variants activate. Pan-CJK fonts (Source
+ * Han Sans) draw `—` / `⸺` at the Western baseline-aligned height by
+ * default and only swap in the CJK vertically-centred variants under
+ * `zh-Hans` — without the tag the dash visibly sits at Latin height. AWT has
+ * no equivalent capability, which is a documented cross-adapter divergence
+ * (see `AwtSkiaShapingComparisonTest`).
  *
  * Glyph bounds come from [Font.getBounds] and are already glyph-local
  * (origin at the glyph's pen position, negative top above the baseline),
@@ -31,15 +48,31 @@ import kotlin.math.max
 class SkiaTextShaper(
     private val fontResolver: SkiaFontResolver = SystemSkiaFontResolver(),
 ) : TextShaper {
+    private val shaper: Shaper = Shaper.makeShaperDrivenWrapper()
+
     override fun shape(input: ShapingInput): ShapingResult {
         val sourceText = input.text.substring(input.range.start, input.range.end)
         val displayText = input.displayText
         val font = fontResolver.resolve(input)
-        val line = TextLine.make(displayText, font)
-        val glyphIds = line.glyphs
-        val positions = line.positions
+        val language = input.style.locale
+
+        val collector = GlyphCollectingRunHandler()
+        if (displayText.isNotEmpty()) {
+            shaper.shape(
+                displayText,
+                TrivialFontRunIterator(displayText, font),
+                TrivialBidiRunIterator(displayText, 0),
+                TrivialScriptRunIterator(displayText, "Hani"),
+                TrivialLanguageRunIterator(displayText, language),
+                ShapingOptions.DEFAULT,
+                Float.MAX_VALUE,
+                collector,
+            )
+        }
+        val glyphIds = collector.glyphIds.toShortArray()
+        val xPositions = collector.xPositions
         val glyphCount = glyphIds.size
-        val advance = line.width
+        val advance = collector.advance
 
         val cluster = Cluster(
             range = input.range,
@@ -50,8 +83,8 @@ class SkiaTextShaper(
         )
         val inkBounds = font.getBounds(glyphIds)
         val glyphs = (0 until glyphCount).map { glyphIndex ->
-            val startX = positions[2 * glyphIndex]
-            val endX = if (glyphIndex + 1 < glyphCount) positions[2 * (glyphIndex + 1)] else advance
+            val startX = xPositions[glyphIndex]
+            val endX = if (glyphIndex + 1 < glyphCount) xPositions[glyphIndex + 1] else advance
             Glyph(
                 id = glyphIds[glyphIndex].toUShort().toUInt(),
                 clusterRange = input.range,
@@ -73,14 +106,53 @@ class SkiaTextShaper(
             glyphCount = glyphCount,
             advance = advance,
             source = ShapingSource.Skia.name,
-            reason = "SkiaTextShaper:${font.typeface?.familyName ?: "default"}",
+            reason = "SkiaTextShaper:${font.typeface?.familyName ?: "default"}:lang=$language",
             glyphsWithoutInkBounds = glyphs.count { it.bounds == null },
+            missingGlyphs = glyphIds.count { it == NOTDEF_GLYPH },
         )
         return ShapingResult(
             clusters = listOf(cluster),
             glyphRuns = listOf(run),
             decisions = listOf(decision),
         )
+    }
+
+    /**
+     * Collects shaped glyphs across runs. For Tiqian inputs the trivial
+     * font/script/language iterators yield exactly one run, but multi-run
+     * output is still accumulated correctly via the pen offset returned
+     * from [runOffset].
+     */
+    private class GlyphCollectingRunHandler : RunHandler {
+        val glyphIds = mutableListOf<Short>()
+        val xPositions = mutableListOf<Float>()
+        var advance: Float = 0f
+            private set
+        private var penX = 0f
+
+        override fun beginLine() {}
+
+        override fun runInfo(info: RunInfo?) {}
+
+        override fun commitRunInfo() {}
+
+        override fun runOffset(info: RunInfo?): Point = Point(penX, 0f)
+
+        override fun commitRun(info: RunInfo?, glyphs: ShortArray?, positions: Array<Point?>?, clusters: IntArray?) {
+            if (info == null || glyphs == null || positions == null) return
+            glyphs.forEachIndexed { index, glyphId ->
+                glyphIds += glyphId
+                xPositions += (positions.getOrNull(index)?.x ?: penX)
+            }
+            penX += info.advanceX
+            advance = penX
+        }
+
+        override fun commitLine() {}
+    }
+
+    private companion object {
+        const val NOTDEF_GLYPH: Short = 0
     }
 }
 

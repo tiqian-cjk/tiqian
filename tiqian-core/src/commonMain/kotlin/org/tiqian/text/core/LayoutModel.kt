@@ -107,6 +107,14 @@ data class ShapingDecisionInfo(
      * downstream — punctuation geometry falls back to shaped-advance-only.
      */
     val glyphsWithoutInkBounds: Int = 0,
+    /**
+     * How many of [glyphCount] glyphs resolved to the font's .notdef glyph.
+     * Non-zero values on a CLREQ-substituted cluster trigger
+     * `SubstitutionRollbackOnMissingGlyph` — the engine re-shapes with the
+     * source text instead of showing tofu (e.g. `⸺` is absent from
+     * PingFang SC / Hiragino / Heiti).
+     */
+    val missingGlyphs: Int = 0,
 )
 
 data class MetricDecisionInfo(

@@ -11,6 +11,7 @@ import org.tiqian.text.core.LayoutInput
 import org.tiqian.text.core.Rect
 import org.tiqian.text.core.TiqianTextContent
 import org.tiqian.text.font.FontRole
+import org.tiqian.text.shaping.ExplainableStubTextShaper
 import org.tiqian.text.shaping.ShapingInput
 import org.tiqian.text.shaping.ShapingResult
 import org.tiqian.text.shaping.TextShaper
@@ -938,6 +939,57 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals(4f, autoTrim.trimAmount)
         assertEquals(2, autoTrim.clusterRange.start)
         assertEquals(6, autoTrim.clusterRange.end)
+    }
+
+    @Test
+    fun substitutionRollsBackToSourceTextWhenFontLacksTheGlyph() {
+        // SubstitutionRollbackOnMissingGlyph: the CLREQ substitution `——` →
+        // `⸺` only stands if the font covers U+2E3A. This shaper reports a
+        // .notdef for the substituted form (like PingFang SC / Hiragino /
+        // Heiti would), so the engine must re-shape with the source text.
+        val engine = ExplainableStubParagraphLayoutEngine(
+            textShaper = object : TextShaper {
+                val delegate = ExplainableStubTextShaper()
+                override fun shape(input: ShapingInput): ShapingResult {
+                    val result = delegate.shape(input)
+                    return if (input.displayText.contains('⸺')) {
+                        result.copy(decisions = result.decisions.map { it.copy(missingGlyphs = 1) })
+                    } else {
+                        result
+                    }
+                }
+            },
+        )
+
+        val result = engine.layout(
+            LayoutInput(
+                content = TiqianTextContent("中——文"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        // The dash cluster renders the SOURCE text, not the tofu substitution.
+        val dashCluster = result.clusters.single { it.text == "——" }
+        assertEquals("——", dashCluster.displayText)
+
+        val dashDecision = result.debug.fontDecisions.single { it.sourceText == "——" }
+        assertEquals("——", dashDecision.displayText)
+        assertTrue(dashDecision.substitutionReason.endsWith("SubstitutionRollbackOnMissingGlyph"))
+    }
+
+    @Test
+    fun substitutionIsKeptWhenFontCoversTheGlyph() {
+        // Counterpart: the default stub shaper reports no missing glyphs, so
+        // the `——` → `⸺` substitution stays in effect.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("中——文"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val dashCluster = result.clusters.single { it.text == "——" }
+        assertEquals("⸺", dashCluster.displayText)
     }
 
     @Test

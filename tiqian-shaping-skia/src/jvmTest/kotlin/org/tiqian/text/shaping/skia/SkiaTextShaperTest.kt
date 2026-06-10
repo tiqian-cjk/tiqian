@@ -65,6 +65,27 @@ class SkiaTextShaperTest {
     }
 
     @Test
+    fun localeTaggedShapingPicksCjkDashVariant() {
+        // TextStyle defaults to locale=zh-Hans; LocaleTaggedShaping must
+        // activate the font's `locl` CJK dash: a full 1em advance with ink
+        // vertically centred in the CJK band (centre ≈ -6 at 16px), not the
+        // Western baseline-aligned form (centre -4.5, advance 14.3 in
+        // Source Han Sans).
+        val result = shaper.shape(input(text = "—", role = FontRole.CjkPunctuation))
+
+        val glyph = result.glyphRuns.single().glyphs.single()
+        assertEquals(16f, glyph.advance, 0.01f)
+        val bounds = glyph.bounds
+        assertNotNull(bounds)
+        val verticalCenter = (bounds.top + bounds.bottom) / 2f
+        assertTrue(
+            verticalCenter < -5f,
+            "Expected CJK-centred dash ink (centre < -5), got $verticalCenter",
+        )
+        assertTrue(result.decisions.single().reason.endsWith("lang=zh-Hans"))
+    }
+
+    @Test
     fun glyphAdvancesSumToClusterAdvance() {
         val result = shaper.shape(input(text = "中文。", role = FontRole.CjkText))
 

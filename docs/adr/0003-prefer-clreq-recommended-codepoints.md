@@ -46,6 +46,16 @@ source "・" "‧" "•" 等  vs  间隔号 "·"
 - **完全不替换，要求用户输入「正确」码点。** 否决：把负担转嫁给用户，且不解决字体 fallback 问题。
 - **依赖字体的 OpenType 特性自动选 glyph。** 部分接受：`chws / vchw / halt / palt` 仍然是输入之一，但不能假设所有字体都实现可靠。
 
+## Amendment (2026-06-10): SubstitutionRollbackOnMissingGlyph
+
+替换只有在 resolved font 真正覆盖目标码点时才成立。实测 `⸺` U+2E3A 在
+PingFang SC / Hiragino Sans GB / Heiti SC 中都没有 glyph（.notdef 豆腐块），
+只有 Source Han Sans 有。引擎因此增加回滚：shaper 通过
+`ShapingDecisionInfo.missingGlyphs` 报告 .notdef 数量，替换 cluster 出现
+missing glyph 时用 source text 重新 shaping，并在
+`FontDecisionInfo.substitutionReason` 追加 `:SubstitutionRollbackOnMissingGlyph`。
+source range / 复制 / 搜索语义不变（本来就以 source text 为准）。
+
 ## Follow-up
 
 - Mainland / Traditional region profile 下 `/` ↔ `／` 的偏好。

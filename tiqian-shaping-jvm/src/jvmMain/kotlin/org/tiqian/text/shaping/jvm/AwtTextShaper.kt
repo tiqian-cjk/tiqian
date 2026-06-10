@@ -76,6 +76,7 @@ class AwtTextShaper(
             // for fonts without outlines; downstream punctuation geometry
             // records this as a MissingInkBoundsFallback.
             glyphsWithoutInkBounds = glyphs.count { it.bounds == null },
+            missingGlyphs = glyphs.count { it.id == font.missingGlyphCode.toUInt() },
         )
         return ShapingResult(
             clusters = listOf(cluster),
