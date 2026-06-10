@@ -1,0 +1,111 @@
+fixture: emphasis-marks
+text: 他强调：模型必须真，不能靠魔法。
+maxWidth: 128.0 align: Start
+== greedy ==
+size 128.0x51.2
+line[0] 0-8 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=-
+line[1] 8-16 natural=128.0 adjusted=120.0 visual=120.0 repair=- candidates=- justify=-
+cluster 0-1 '他' adv=16.0
+cluster 1-2 '强' adv=16.0
+cluster 2-3 '调' adv=16.0
+cluster 3-4 '：' adv=16.0
+cluster 4-5 '模' adv=16.0
+cluster 5-6 '型' adv=16.0
+cluster 6-7 '必' adv=16.0
+cluster 7-8 '须' adv=16.0
+cluster 8-9 '真' adv=16.0
+cluster 9-10 '，' adv=16.0
+cluster 10-11 '不' adv=16.0
+cluster 11-12 '能' adv=16.0
+cluster 12-13 '靠' adv=16.0
+cluster 13-14 '魔' adv=16.0
+cluster 14-15 '法' adv=16.0
+cluster 15-16 '。' adv=8.0
+font 0-1 role=CjkText key=cjk-primary display='他' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='强' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='调' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkPunctuation key=cjk-primary display='：' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=CjkText key=cjk-primary display='模' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='型' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 6-7 role=CjkText key=cjk-primary display='必' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 7-8 role=CjkText key=cjk-primary display='须' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 8-9 role=CjkText key=cjk-primary display='真' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 9-10 role=CjkPunctuation key=cjk-primary display='，' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 10-11 role=CjkText key=cjk-primary display='不' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-12 role=CjkText key=cjk-primary display='能' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 12-13 role=CjkText key=cjk-primary display='靠' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 13-14 role=CjkText key=cjk-primary display='魔' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 14-15 role=CjkText key=cjk-primary display='法' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 15-16 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 3-4 '：' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 9-10 '，' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 15-16 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 3-4 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 9-10 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 15-16 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+edgetrim 15-16 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+deco 4-5 '模' kind=Emphasis applied=true anchor=72.0,18.4 reason=EmphasisDotOnHanText
+deco 5-6 '型' kind=Emphasis applied=true anchor=88.0,18.4 reason=EmphasisDotOnHanText
+deco 6-7 '必' kind=Emphasis applied=true anchor=104.0,18.4 reason=EmphasisDotOnHanText
+deco 7-8 '须' kind=Emphasis applied=true anchor=120.0,18.4 reason=EmphasisDotOnHanText
+deco 8-9 '真' kind=Emphasis applied=true anchor=8.0,44.0 reason=EmphasisDotOnHanText
+deco 9-10 '，' kind=Emphasis applied=false anchor=24.0,44.0 reason=clreq-no-dot-on-punctuation
+deco 10-11 '不' kind=Emphasis applied=true anchor=40.0,44.0 reason=EmphasisDotOnHanText
+deco 11-12 '能' kind=Emphasis applied=true anchor=56.0,44.0 reason=EmphasisDotOnHanText
+deco 12-13 '靠' kind=Emphasis applied=true anchor=72.0,44.0 reason=EmphasisDotOnHanText
+deco 13-14 '魔' kind=Emphasis applied=true anchor=88.0,44.0 reason=EmphasisDotOnHanText
+deco 14-15 '法' kind=Emphasis applied=true anchor=104.0,44.0 reason=EmphasisDotOnHanText
+== lookahead ==
+size 128.0x51.2
+line[0] 0-8 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=-
+line[1] 8-16 natural=128.0 adjusted=120.0 visual=120.0 repair=- candidates=- justify=-
+cluster 0-1 '他' adv=16.0
+cluster 1-2 '强' adv=16.0
+cluster 2-3 '调' adv=16.0
+cluster 3-4 '：' adv=16.0
+cluster 4-5 '模' adv=16.0
+cluster 5-6 '型' adv=16.0
+cluster 6-7 '必' adv=16.0
+cluster 7-8 '须' adv=16.0
+cluster 8-9 '真' adv=16.0
+cluster 9-10 '，' adv=16.0
+cluster 10-11 '不' adv=16.0
+cluster 11-12 '能' adv=16.0
+cluster 12-13 '靠' adv=16.0
+cluster 13-14 '魔' adv=16.0
+cluster 14-15 '法' adv=16.0
+cluster 15-16 '。' adv=8.0
+font 0-1 role=CjkText key=cjk-primary display='他' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='强' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='调' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkPunctuation key=cjk-primary display='：' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=CjkText key=cjk-primary display='模' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='型' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 6-7 role=CjkText key=cjk-primary display='必' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 7-8 role=CjkText key=cjk-primary display='须' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 8-9 role=CjkText key=cjk-primary display='真' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 9-10 role=CjkPunctuation key=cjk-primary display='，' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 10-11 role=CjkText key=cjk-primary display='不' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-12 role=CjkText key=cjk-primary display='能' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 12-13 role=CjkText key=cjk-primary display='靠' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 13-14 role=CjkText key=cjk-primary display='魔' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 14-15 role=CjkText key=cjk-primary display='法' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 15-16 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 3-4 '：' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 9-10 '，' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 15-16 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 3-4 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 9-10 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 15-16 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+edgetrim 15-16 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+deco 4-5 '模' kind=Emphasis applied=true anchor=72.0,18.4 reason=EmphasisDotOnHanText
+deco 5-6 '型' kind=Emphasis applied=true anchor=88.0,18.4 reason=EmphasisDotOnHanText
+deco 6-7 '必' kind=Emphasis applied=true anchor=104.0,18.4 reason=EmphasisDotOnHanText
+deco 7-8 '须' kind=Emphasis applied=true anchor=120.0,18.4 reason=EmphasisDotOnHanText
+deco 8-9 '真' kind=Emphasis applied=true anchor=8.0,44.0 reason=EmphasisDotOnHanText
+deco 9-10 '，' kind=Emphasis applied=false anchor=24.0,44.0 reason=clreq-no-dot-on-punctuation
+deco 10-11 '不' kind=Emphasis applied=true anchor=40.0,44.0 reason=EmphasisDotOnHanText
+deco 11-12 '能' kind=Emphasis applied=true anchor=56.0,44.0 reason=EmphasisDotOnHanText
+deco 12-13 '靠' kind=Emphasis applied=true anchor=72.0,44.0 reason=EmphasisDotOnHanText
+deco 13-14 '魔' kind=Emphasis applied=true anchor=88.0,44.0 reason=EmphasisDotOnHanText
+deco 14-15 '法' kind=Emphasis applied=true anchor=104.0,44.0 reason=EmphasisDotOnHanText

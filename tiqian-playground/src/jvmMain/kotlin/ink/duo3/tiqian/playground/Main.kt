@@ -51,7 +51,11 @@ fun main() {
         val input = LayoutInput(
             content = TiqianTextContent(fixture.text),
             constraints = fixture.constraints,
-            paragraphStyle = ink.duo3.tiqian.core.ParagraphStyle(textAlign = fixture.textAlign),
+            paragraphStyle = ink.duo3.tiqian.core.ParagraphStyle(
+                textAlign = fixture.textAlign,
+                lineHeight = fixture.lineHeight,
+            ),
+            decorations = fixture.decorations,
         )
         val greedyResult = greedyEngine.layout(input)
         val lookaheadResult = lookaheadEngine.layout(input)
@@ -182,12 +186,32 @@ private fun rasterizeLayoutToPngSkia(result: LayoutResult, fixture: LayoutFixtur
         }
     }
 
+    // Emphasis dots (ADR 0018): align the dot glyph's ink centre to the
+    // engine-decided anchor; topPad shifts engine canvas coords like the
+    // baselines above.
+    val appliedDots = result.debug.decorationDecisions.filter { it.applied }
+    if (appliedDots.isNotEmpty()) {
+        val dotGlyph = cjkFont.getUTF32Glyph(EMPHASIS_DOT.code)
+        val dotInk = cjkFont.getBounds(shortArrayOf(dotGlyph)).firstOrNull()
+        val dotBlob = ink.duo3.tiqian.shaping.skia.shapeTextBlob(shaper, EMPHASIS_DOT.toString(), cjkFont, language)
+        if (dotBlob != null && dotInk != null) {
+            val inkCenterX = (dotInk.left + dotInk.right) / 2f
+            val inkCenterY = (dotInk.top + dotInk.bottom) / 2f
+            for (dot in appliedDots) {
+                canvas.drawTextBlob(dotBlob, dot.anchorX - inkCenterX, topPad + dot.anchorY - inkCenterY, paint)
+            }
+        }
+    }
+
     val bytes = surface.makeImageSnapshot()
         .encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)!!
         .bytes
     val dataUri = "data:image/png;base64,${Base64.getEncoder().encodeToString(bytes)}"
     return RasterResult(dataUri = dataUri, widthPx = canvasWidth, heightPx = canvasHeight)
 }
+
+/** CLREQ 着重号 glyph: U+2022 BULLET (CLREQ allows U+25CF or U+2022). */
+private const val EMPHASIS_DOT = '•'
 
 private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, scale: Int = 2): RasterResult {
     val maxWidth = fixture.constraints.maxWidth.coerceAtLeast(1f)
@@ -288,6 +312,20 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
                     x += cluster.advance
                 }
             }
+        }
+
+        // Emphasis dots — the AWT raster is the legacy debug view; a filled
+        // circle approximates the dot glyph (the skia raster draws the real
+        // U+2022 glyph aligned to the same engine anchor).
+        val dotDiameter = fontSize * 0.22f
+        for (dot in result.debug.decorationDecisions) {
+            if (!dot.applied) continue
+            g.fillOval(
+                (dot.anchorX - dotDiameter / 2f).toInt(),
+                (topPad + dot.anchorY - dotDiameter / 2f).toInt(),
+                dotDiameter.toInt().coerceAtLeast(2),
+                dotDiameter.toInt().coerceAtLeast(2),
+            )
         }
     } finally {
         g.dispose()
@@ -601,6 +639,17 @@ private fun renderEngineMetadata(label: String, result: LayoutResult): String =
                     "<span class=\"metric\">aspace ${decision.clusterRange.start}-${decision.clusterRange.end} " +
                         "side=${decision.side} boundary=${decision.boundaryRole} affected=${decision.charactersAffected} " +
                         "reduction=${decision.totalReduction.oneDecimal()}</span>",
+                )
+            }
+            appendLine("</div>")
+        }
+        if (result.debug.decorationDecisions.isNotEmpty()) {
+            appendLine("<div class=\"metrics\">")
+            result.debug.decorationDecisions.forEach { decision ->
+                appendLine(
+                    "<span class=\"metric\">deco ${decision.clusterRange.start}-${decision.clusterRange.end} " +
+                        "'${decision.sourceText.escapeHtml()}' ${decision.kind} applied=${decision.applied} " +
+                        "anchor=${decision.anchorX.oneDecimal()},${decision.anchorY.oneDecimal()} ${decision.reason}</span>",
                 )
             }
             appendLine("</div>")

@@ -980,6 +980,49 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun emphasisSpanProducesDotAnchorsForHanAndSkipsPunctuation() {
+        // "他强调：模型必须真，不能靠魔法。" with emphasis over 4..15
+        // (模型必须真，不能靠魔法). Stub advances: every cluster 16f, no
+        // justification → anchors at glyph centres; ， inside the span is
+        // skipped per CLREQ; 。 is outside the span entirely.
+        // maxWidth=128 wraps at 8 clusters/line.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("他强调：模型必须真，不能靠魔法。"),
+                constraints = LayoutConstraints(maxWidth = 128f),
+                decorations = listOf(
+                    ink.duo3.tiqian.core.DecorationSpan(
+                        range = ink.duo3.tiqian.core.TextRange(4, 15),
+                        kind = ink.duo3.tiqian.core.DecorationKind.Emphasis,
+                    ),
+                ),
+            ),
+        )
+
+        val decisions = result.debug.decorationDecisions
+        assertEquals(11, decisions.size)
+
+        val applied = decisions.filter { it.applied }
+        assertEquals(10, applied.size)
+        assertTrue(applied.all { it.reason == "EmphasisDotOnHanText" })
+
+        val comma = decisions.single { it.sourceText == "，" }
+        assertEquals(false, comma.applied)
+        assertEquals("clreq-no-dot-on-punctuation", comma.reason)
+
+        // 。 (15-16) is outside the span — no decision at all.
+        assertTrue(decisions.none { it.sourceText == "。" })
+
+        // Anchor maths for 模 (4-5): line 0 holds clusters 0..7, x offset of
+        // index 4 = 4×16 = 64, glyph centre 64+8 = 72; anchorY = line 0
+        // baseline + 16×0.35 (dot tucked under the character ink).
+        val first = decisions.single { it.sourceText == "模" }
+        assertEquals(72f, first.anchorX)
+        val line0Baseline = result.lines.first().baseline
+        assertEquals(line0Baseline + 5.6f, first.anchorY, 0.01f)
+    }
+
+    @Test
     fun substitutionRollsBackToSourceTextWhenFontLacksTheGlyph() {
         // SubstitutionRollbackOnMissingGlyph: the CLREQ substitution `——` →
         // `⸺` only stands if the font covers U+2E3A. This shaper reports a

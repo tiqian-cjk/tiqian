@@ -40,5 +40,15 @@ fun main() = singleWindowApplication(title = "Tiqian Compose Demo") {
             text = "他说：“你好，世界。”中文……English——中文。",
             modifier = Modifier.width(320.dp),
         )
+        TiqianParagraph(
+            text = "他强调：模型必须真，不能靠魔法。",
+            modifier = Modifier.width(320.dp),
+            decorations = listOf(
+                ink.duo3.tiqian.core.DecorationSpan(
+                    range = ink.duo3.tiqian.core.TextRange(4, 15),
+                    kind = ink.duo3.tiqian.core.DecorationKind.Emphasis,
+                ),
+            ),
+        )
     }
 }

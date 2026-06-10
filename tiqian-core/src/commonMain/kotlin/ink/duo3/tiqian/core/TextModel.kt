@@ -16,6 +16,22 @@ data class TextStyle(
     val locale: String = "zh-Hans",
 )
 
+/**
+ * Inline decoration over a SOURCE text range (ADR 0018). Display
+ * substitutions do not affect span semantics. Decorations are pure
+ * render-geometry: they never participate in metrics, line breaking or
+ * justification.
+ */
+data class DecorationSpan(
+    val range: TextRange,
+    val kind: DecorationKind,
+)
+
+enum class DecorationKind {
+    /** CLREQ 着重号 — a solid dot under each emphasised Han character. */
+    Emphasis,
+}
+
 data class ParagraphStyle(
     val textAlign: TextAlign = TextAlign.Start,
     val writingMode: WritingMode = WritingMode.HorizontalTb,
@@ -48,5 +64,6 @@ data class LayoutInput(
     val paragraphStyle: ParagraphStyle = ParagraphStyle(),
     val constraints: LayoutConstraints,
     val profileId: LayoutProfileId = BuiltInLayoutProfiles.ClreqHorizontal,
+    val decorations: List<DecorationSpan> = emptyList(),
 )
 

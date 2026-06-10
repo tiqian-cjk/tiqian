@@ -1,5 +1,6 @@
 package ink.duo3.tiqian.compose
 
+import ink.duo3.tiqian.core.DecorationSpan
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LayoutInput
 import ink.duo3.tiqian.core.LayoutResult
@@ -14,6 +15,7 @@ data class TiqianTextRequest(
     val textStyle: TextStyle = TextStyle(),
     val paragraphStyle: ParagraphStyle = ParagraphStyle(),
     val constraints: LayoutConstraints,
+    val decorations: List<DecorationSpan> = emptyList(),
 )
 
 class TiqianTextMeasurer(
@@ -26,7 +28,7 @@ class TiqianTextMeasurer(
                 textStyle = request.textStyle,
                 paragraphStyle = request.paragraphStyle,
                 constraints = request.constraints,
+                decorations = request.decorations,
             ),
         )
 }
-

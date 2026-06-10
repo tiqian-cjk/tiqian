@@ -1,7 +1,10 @@
 package ink.duo3.tiqian.test
 
+import ink.duo3.tiqian.core.DecorationKind
+import ink.duo3.tiqian.core.DecorationSpan
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.TextAlign
+import ink.duo3.tiqian.core.TextRange
 
 data class LayoutFixture(
     val id: String,
@@ -9,6 +12,8 @@ data class LayoutFixture(
     val constraints: LayoutConstraints,
     val notes: String,
     val textAlign: TextAlign = TextAlign.Start,
+    val lineHeight: Float? = null,
+    val decorations: List<DecorationSpan> = emptyList(),
 )
 
 object EarlyLayoutFixtures {
@@ -99,6 +104,20 @@ object EarlyLayoutFixtures {
             constraints = LayoutConstraints(maxWidth = 320f),
             notes = "Real-text stress test: ~200 chars of authentic Chinese with Latin words, fullwidth/halfwidth brackets, em-dash pair, ellipsis, Chinese quotes, and multiple comma-stop sequences. Triggers multi-line greedy + justification + adjacent punctuation compression simultaneously.",
             textAlign = TextAlign.Justify,
+        ),
+        LayoutFixture(
+            id = "emphasis-marks",
+            // 他0强1调2：3模4型5必6须7真8，9不10能11靠12魔13法14。15
+            text = "他强调：模型必须真，不能靠魔法。",
+            constraints = LayoutConstraints(maxWidth = 128f),
+            notes = "CLREQ emphasis dots (着重号): span covers 模型必须真，不能靠魔法 " +
+                "including the comma — Han text gets a dot anchor, punctuation is " +
+                "skipped per CLREQ. Narrow measure wraps the span across lines; " +
+                "lineHeight 25.6px (1.6×16) leaves room for the dots below the em box.",
+            lineHeight = 25.6f,
+            decorations = listOf(
+                DecorationSpan(range = TextRange(4, 15), kind = DecorationKind.Emphasis),
+            ),
         ),
     )
 }

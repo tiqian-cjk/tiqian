@@ -10,6 +10,8 @@ import ink.duo3.tiqian.clreq.ClreqPunctuationGlyphSubstitutor
 import ink.duo3.tiqian.core.AutoSpaceDecisionInfo
 import ink.duo3.tiqian.core.Cluster
 import ink.duo3.tiqian.core.ClusterGeometryDecisionInfo
+import ink.duo3.tiqian.core.DecorationDecisionInfo
+import ink.duo3.tiqian.core.DecorationSpan
 import ink.duo3.tiqian.core.FontDecisionInfo
 import ink.duo3.tiqian.core.LineEdgeTrimDecisionInfo
 import ink.duo3.tiqian.core.Glyph
@@ -342,6 +344,16 @@ class ExplainableStubParagraphLayoutEngine(
                 ),
             )
         }
+        val decorationDecisions = computeDecorationDecisions(
+            decorations = input.decorations,
+            lineRanges = lineSolution.lines.map { it.clusterRange },
+            lineBoxes = lines,
+            finalClusters = finalClusters,
+            clusterRoles = clusterRoles,
+            justifyDeltaByCluster = justifyDeltaByCluster,
+            fontSize = fontSize,
+        )
+
         val widestLine = lines.maxOfOrNull { it.visualWidth } ?: 0f
         val totalHeight = if (lines.isEmpty()) lineMetrics.height else lines.size * lineMetrics.height
         val resultWidth = widestLine.coerceAtMost(input.constraints.maxWidth)
@@ -466,8 +478,74 @@ class ExplainableStubParagraphLayoutEngine(
                     },
                 autoSpaceDecisions = autoSpaceDecisions,
                 lineEdgeTrimDecisions = edgeTrimDecisions,
+                decorationDecisions = decorationDecisions,
             ),
         )
+    }
+
+    /**
+     * Named heuristic: `EmphasisDotOnHanText` (ADR 0018, CLREQ 着重号).
+     *
+     * Resolves decoration spans into per-cluster dot anchors AFTER all
+     * geometry is final — decorations never feed back into metrics, breaks
+     * or justification. Per CLREQ, only Han text carries a dot: punctuation
+     * inside the span is skipped (`clreq-no-dot-on-punctuation`), and
+     * non-Han clusters are skipped (`no-dot-on-non-han`; western emphasis
+     * is italics, out of scope).
+     *
+     * Anchor = the point the dot INK CENTRE must land on: x is the glyph
+     * centre (final position minus the trailing justification delta), y is
+     * `baseline + EMPHASIS_DOT_CENTER_EM·em`. The drop is baseline-relative,
+     * NOT em-box-relative: CenteredCjkVisual gives the em box an artificial
+     * 0.5em descent while real Han ink ends ≈0.1em below the baseline — an
+     * em-box-relative drop landed the dots inside the NEXT line's ink.
+     * 0.35em tucks the dot snugly under the character (≈2px clearance at
+     * 16px) and clears the next line even at lineHeight 1.0. Renderers
+     * measure their dot glyph's ink and align its centre here, so font
+     * differences stay in the render layer.
+     */
+    private fun computeDecorationDecisions(
+        decorations: List<DecorationSpan>,
+        lineRanges: List<IntRange>,
+        lineBoxes: List<LineBox>,
+        finalClusters: List<Cluster>,
+        clusterRoles: List<FontRole>,
+        justifyDeltaByCluster: Map<Int, Float>,
+        fontSize: Float,
+    ): List<DecorationDecisionInfo> {
+        if (decorations.isEmpty()) return emptyList()
+
+        val decisions = mutableListOf<DecorationDecisionInfo>()
+        for (span in decorations) {
+            lineRanges.forEachIndexed { lineIndex, clusterRange ->
+                var x = 0f
+                for (idx in clusterRange) {
+                    val cluster = finalClusters[idx]
+                    val coveredBySpan = cluster.range.start >= span.range.start &&
+                        cluster.range.end <= span.range.end
+                    if (coveredBySpan) {
+                        val role = clusterRoles[idx]
+                        val applied = role == FontRole.CjkText
+                        val glyphAdvance = cluster.advance - (justifyDeltaByCluster[idx] ?: 0f)
+                        decisions += DecorationDecisionInfo(
+                            clusterRange = cluster.range,
+                            sourceText = cluster.text,
+                            kind = span.kind.name,
+                            applied = applied,
+                            reason = when {
+                                applied -> "EmphasisDotOnHanText"
+                                role == FontRole.CjkPunctuation -> "clreq-no-dot-on-punctuation"
+                                else -> "no-dot-on-non-han"
+                            },
+                            anchorX = x + glyphAdvance / 2f,
+                            anchorY = lineBoxes[lineIndex].baseline + fontSize * EMPHASIS_DOT_CENTER_EM,
+                        )
+                    }
+                    x += cluster.advance
+                }
+            }
+        }
+        return decisions
     }
 
     private fun Map<Int, FontRole>.toRoleOverrideInfos(
@@ -1154,6 +1232,9 @@ private data class LineEdgeTrimResult(
     val geometry: PunctuationGeometryLedger,
     val decisions: List<LineEdgeTrimDecisionInfo>,
 )
+
+/** ADR 0018: dot ink centre sits this far below the BASELINE. */
+private const val EMPHASIS_DOT_CENTER_EM = 0.35f
 
 private fun Map<Int, GlueBudget>.consume(
     consumptionByCluster: Map<Int, Float>,

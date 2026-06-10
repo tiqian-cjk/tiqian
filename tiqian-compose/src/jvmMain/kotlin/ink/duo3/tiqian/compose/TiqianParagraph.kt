@@ -31,6 +31,7 @@ fun TiqianParagraph(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = TextStyle(),
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
+    decorations: List<ink.duo3.tiqian.core.DecorationSpan> = emptyList(),
     measurer: TiqianTextMeasurer = rememberTiqianTextMeasurer(),
 ) {
     val result = remember { mutableStateOf<ink.duo3.tiqian.core.LayoutResult?>(null) }
@@ -51,6 +52,7 @@ fun TiqianParagraph(
                 textStyle = textStyle,
                 paragraphStyle = paragraphStyle,
                 constraints = LayoutConstraints(maxWidth = maxWidth),
+                decorations = decorations,
             ),
         )
         result.value = laidOut

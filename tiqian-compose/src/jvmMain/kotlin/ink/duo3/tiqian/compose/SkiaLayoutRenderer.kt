@@ -72,5 +72,24 @@ internal fun DrawScope.drawTiqianLayout(
                 }
             }
         }
+
+        // Emphasis dots (ADR 0018): the dot glyph's ink centre lands on the
+        // engine-decided anchor.
+        val appliedDots = result.debug.decorationDecisions.filter { it.applied }
+        if (appliedDots.isNotEmpty()) {
+            val dotGlyph = cjkFont.getUTF32Glyph(EMPHASIS_DOT.code)
+            val dotInk = cjkFont.getBounds(shortArrayOf(dotGlyph)).firstOrNull()
+            val dotBlob = shapeTextBlob(shaper, EMPHASIS_DOT.toString(), cjkFont, language)
+            if (dotBlob != null && dotInk != null) {
+                val inkCenterX = (dotInk.left + dotInk.right) / 2f
+                val inkCenterY = (dotInk.top + dotInk.bottom) / 2f
+                for (dot in appliedDots) {
+                    skCanvas.drawTextBlob(dotBlob, dot.anchorX - inkCenterX, dot.anchorY - inkCenterY, paint)
+                }
+            }
+        }
     }
 }
+
+/** CLREQ 着重号 glyph: U+2022 BULLET (CLREQ allows U+25CF or U+2022). */
+private const val EMPHASIS_DOT = '•'

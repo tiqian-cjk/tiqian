@@ -74,6 +74,23 @@ data class LayoutDebugInfo(
     val justificationDecisions: List<JustificationDecisionInfo> = emptyList(),
     val autoSpaceDecisions: List<AutoSpaceDecisionInfo> = emptyList(),
     val lineEdgeTrimDecisions: List<LineEdgeTrimDecisionInfo> = emptyList(),
+    val decorationDecisions: List<DecorationDecisionInfo> = emptyList(),
+)
+
+/**
+ * Per-cluster decoration resolution (ADR 0018). For `Emphasis`, `applied`
+ * clusters get a dot whose INK CENTRE must land on (`anchorX`, `anchorY`)
+ * in layout canvas coordinates; skipped clusters record why (CLREQ:
+ * punctuation never carries a dot; western text uses italics instead).
+ */
+data class DecorationDecisionInfo(
+    val clusterRange: TextRange,
+    val sourceText: String,
+    val kind: String,
+    val applied: Boolean,
+    val reason: String,
+    val anchorX: Float = 0f,
+    val anchorY: Float = 0f,
 )
 
 data class LineEdgeTrimDecisionInfo(

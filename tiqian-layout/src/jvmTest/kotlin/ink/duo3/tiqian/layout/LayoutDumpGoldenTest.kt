@@ -49,7 +49,11 @@ class LayoutDumpGoldenTest {
                         LayoutInput(
                             content = TiqianTextContent(fixture.text),
                             constraints = fixture.constraints,
-                            paragraphStyle = ink.duo3.tiqian.core.ParagraphStyle(textAlign = fixture.textAlign),
+                            paragraphStyle = ink.duo3.tiqian.core.ParagraphStyle(
+                                textAlign = fixture.textAlign,
+                                lineHeight = fixture.lineHeight,
+                            ),
+                            decorations = fixture.decorations,
                         ),
                     )
                     append(result.dump(label))
@@ -150,6 +154,12 @@ class LayoutDumpGoldenTest {
             appendLine(
                 "edgetrim ${t.clusterRange.start}-${t.clusterRange.end} side=${t.side} " +
                     "trim=${t.trimAmount.fmt()} reason=${t.reason}",
+            )
+        }
+        debug.decorationDecisions.forEach { d ->
+            appendLine(
+                "deco ${d.clusterRange.start}-${d.clusterRange.end} '${d.sourceText}' kind=${d.kind} " +
+                    "applied=${d.applied} anchor=${d.anchorX.fmt()},${d.anchorY.fmt()} reason=${d.reason}",
             )
         }
     }
