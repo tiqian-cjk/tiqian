@@ -57,12 +57,14 @@ Layout 在行/cluster 几何定稿后解析 span，产出
 - **kinsoku 交互**：`CarryPrevious` 若会把 span 的一部分带走则拒绝
   （`carry-would-split-mourning-span`，落 LeaveRagged）；PushIn 的 offender
   恒为标点、不会在姓名 span 内，无需 guard。
-- **框几何（`DecorationSegmentInfo`）**：按行一段矩形。水平边贴 cluster
-  盒（右边去掉 justify delta）；**竖直边来自 raw font ink metrics**
-  ——CenteredCjkVisual 的 0.5em/0.5em em box 是人为虚构，真实汉字墨迹上溢
-  到 baseline-0.88em 附近，按 layout em box 画框会切穿字形。外扩
-  `MOURNING_FRAME_PAD_EM = 0.1em`。框高约 1.6em，调用方 lineHeight 需
-  ≥1.8em 才不与邻行框/墨迹相触（fixture 28.8px 演示）。
+- **框几何（`DecorationSegmentInfo`）**：按行一段矩形，**紧贴字面、零边距**。
+  水平边贴 cluster 盒（右边去掉 justify delta）；竖直边取常规 CJK 字面框
+  `baseline - 0.88em .. baseline + 0.12em`。排除过的方案：layout em box
+  （0.5/0.5 人为虚构，会切穿字形）、raw line metrics（含行间空隙，框会
+  虚胖）、逐字 ink union（随字形起伏——`一` 会让框塌掉，名单中框高不一致）。
+  0.88/0.12 编码标准 CJK 设计字身比例；换用字体上报的 ideographic
+  metrics（BASE 表）是 follow-up。框高恰为 1em，默认行高即可容纳，
+  更大行距只是版面更松。
 - CLREQ 依据：「在人名文字外框描上实心的黑色边线」；断行规则 CLREQ 未规定，
   避拆为本项目决策（名单场景姓名不应跨行）。
 

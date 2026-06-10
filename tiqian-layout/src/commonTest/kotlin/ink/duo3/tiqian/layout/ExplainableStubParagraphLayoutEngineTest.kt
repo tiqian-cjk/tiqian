@@ -1059,10 +1059,11 @@ class ExplainableStubParagraphLayoutEngineTest {
         val first = segments.single { it.sourceRange.start == 3 }
         assertEquals(0f, first.left)
         assertEquals(48f, first.right)
-        // Frame uses raw ink metrics, which exceed the 0.5em layout em box.
+        // Frame hugs the CJK character face (字面, no margin):
+        // baseline - 0.88em .. baseline + 0.12em.
         val line = result.lines[1]
-        assertTrue(first.top < line.baseline - 8f)
-        assertTrue(first.bottom > line.baseline)
+        assertEquals(line.baseline - 14.08f, first.top, 0.01f)
+        assertEquals(line.baseline + 1.92f, first.bottom, 0.01f)
     }
 
     @Test

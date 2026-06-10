@@ -47,8 +47,8 @@ geom 14-15 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 2-3 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 8-9 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 14-15 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-decobox 3-6 kind=Mourning line=1 rect=0.0,23.2,48.0,48.8 open=-/- reason=MourningSpanKeptUnbroken
-decobox 9-12 kind=Mourning line=3 rect=0.0,80.8,48.0,106.4 open=-/- reason=MourningSpanKeptUnbroken
+decobox 3-6 kind=Mourning line=1 rect=0.0,29.1,48.0,45.1 open=-/- reason=MourningSpanKeptUnbroken
+decobox 9-12 kind=Mourning line=3 rect=0.0,86.7,48.0,102.7 open=-/- reason=MourningSpanKeptUnbroken
 == lookahead ==
 size 64.0x144.0
 line[0] 0-3 natural=48.0 adjusted=40.0 visual=40.0 repair=- candidates=- justify=-
@@ -95,5 +95,5 @@ geom 14-15 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 2-3 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 8-9 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 14-15 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-decobox 3-6 kind=Mourning line=1 rect=0.0,23.2,48.0,48.8 open=-/- reason=MourningSpanKeptUnbroken
-decobox 9-12 kind=Mourning line=3 rect=0.0,80.8,48.0,106.4 open=-/- reason=MourningSpanKeptUnbroken
+decobox 3-6 kind=Mourning line=1 rect=0.0,29.1,48.0,45.1 open=-/- reason=MourningSpanKeptUnbroken
+decobox 9-12 kind=Mourning line=3 rect=0.0,86.7,48.0,102.7 open=-/- reason=MourningSpanKeptUnbroken

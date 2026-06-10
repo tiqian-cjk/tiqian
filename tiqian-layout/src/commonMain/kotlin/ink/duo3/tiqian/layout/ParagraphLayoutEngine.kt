@@ -366,7 +366,6 @@ class ExplainableStubParagraphLayoutEngine(
             lineBoxes = lines,
             finalClusters = finalClusters,
             justifyDeltaByCluster = justifyDeltaByCluster,
-            metricDecisions = metricDecisions,
             fontSize = fontSize,
         )
 
@@ -568,13 +567,18 @@ class ExplainableStubParagraphLayoutEngine(
 
     /**
      * 示亡号 frame geometry (ADR 0018). One rectangle per line the span
-     * touches. Vertical bounds come from the RAW font ink metrics of the
-     * covered clusters — the CenteredCjkVisual em box is an artificial
-     * 0.5em/0.5em split that real Han ink overflows above, so a frame at
-     * the layout em box would cut through glyphs. `openStart`/`openEnd`
-     * mark continuation edges when the span had to split across lines
-     * (only when wider than the measure — `MourningSpanKeptUnbroken`
-     * otherwise prevents the split at break time).
+     * touches. Vertical bounds are the conventional CJK CHARACTER FACE
+     * (字面): `baseline - 0.88em .. baseline + 0.12em`, hugging the face
+     * with NO margin. Neither layout em box (artificial 0.5/0.5 split that
+     * real ink overflows), nor raw line metrics (include inter-line air),
+     * nor per-glyph ink (varies with glyph shape — `一` would collapse the
+     * frame and break uniformity across a name list) describe the face;
+     * the 0.88/0.12 split encodes the standard CJK design box. Replacing
+     * it with font-reported ideographic metrics (BASE table) is follow-up.
+     * `openStart`/`openEnd` mark continuation edges when the span had to
+     * split across lines (only when wider than the measure —
+     * `MourningSpanKeptUnbroken` otherwise prevents the split at break
+     * time).
      */
     private fun computeDecorationSegments(
         decorations: List<DecorationSpan>,
@@ -582,13 +586,11 @@ class ExplainableStubParagraphLayoutEngine(
         lineBoxes: List<LineBox>,
         finalClusters: List<Cluster>,
         justifyDeltaByCluster: Map<Int, Float>,
-        metricDecisions: List<ClusterMetricDecision>,
         fontSize: Float,
     ): List<DecorationSegmentInfo> {
         val mourningSpans = decorations.filter { it.kind == DecorationKind.Mourning }
         if (mourningSpans.isEmpty()) return emptyList()
 
-        val pad = fontSize * MOURNING_FRAME_PAD_EM
         val segments = mutableListOf<DecorationSegmentInfo>()
         for (span in mourningSpans) {
             val spanSegments = mutableListOf<DecorationSegmentInfo>()
@@ -613,20 +615,15 @@ class ExplainableStubParagraphLayoutEngine(
                     x += cluster.advance
                 }
                 val leftEdge = left ?: return@forEachIndexed
-                val covering = metricDecisions.filter {
-                    it.range.start < segEnd && it.range.end > segStart
-                }
-                val rawAscent = covering.maxOfOrNull { it.rawMetrics.ascent } ?: fontSize
-                val rawDescent = covering.maxOfOrNull { it.rawMetrics.descent } ?: 0f
                 val baseline = lineBoxes[lineIndex].baseline
                 spanSegments += DecorationSegmentInfo(
                     sourceRange = TextRange(segStart, segEnd),
                     kind = span.kind.name,
                     lineIndex = lineIndex,
                     left = leftEdge,
-                    top = baseline - rawAscent - pad,
+                    top = baseline - fontSize * MOURNING_FRAME_FACE_ASCENT_EM,
                     right = right,
-                    bottom = baseline + rawDescent + pad,
+                    bottom = baseline + fontSize * MOURNING_FRAME_FACE_DESCENT_EM,
                     openStart = segStart > span.range.start,
                     openEnd = segEnd < span.range.end,
                     reason = "",
@@ -1330,8 +1327,13 @@ private data class LineEdgeTrimResult(
 /** ADR 0018: dot ink centre sits this far below the BASELINE. */
 private const val EMPHASIS_DOT_CENTER_EM = 0.35f
 
-/** ADR 0018: 示亡号 frame outset beyond the raw ink bounds. */
-private const val MOURNING_FRAME_PAD_EM = 0.1f
+/**
+ * ADR 0018: 示亡号 frame hugs the CJK character face (字面) with no margin.
+ * The face spans baseline-0.88em..baseline+0.12em in conventional CJK
+ * design; font-reported ideographic metrics are a follow-up.
+ */
+private const val MOURNING_FRAME_FACE_ASCENT_EM = 0.88f
+private const val MOURNING_FRAME_FACE_DESCENT_EM = 0.12f
 
 /**
  * Contiguous cluster-index range whose clusters are fully covered by
