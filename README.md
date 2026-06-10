@@ -22,6 +22,9 @@ tiqian-shaping-jvm
 tiqian-shaping-skia
   Skiko (Skia) 测量 adapter，与 AWT 输出做 CLREQ 标点交叉验证 golden。
 
+tiqian-shaping-android
+  Android TextPaint/TextRunShaper adapter（instrumentation 测试需模拟器）。
+
 tiqian-linebreak
   断行机会与 line break analyzer 接口。
 

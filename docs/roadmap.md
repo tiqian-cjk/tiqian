@@ -13,8 +13,8 @@
 ## 当前位置
 
 ```text
-Last completed: Slice 4 优化 (lookahead 默认 window 2，LookaheadWindowProbe 评估数据), Slice 6b 续 (HaltPlacementProfileCrossCheck)
-Up next:        Slice 6 收尾 (Android TextPaint adapter；API 固化与 golden/benchmark)
+Last completed: Slice 6 收尾 (tiqian-shaping-android: AndroidPaintTextShaper + HanContextShaping + 模拟器 instrumentation 对照, ADR 0016；三平台标点几何互证完成)
+Up next:        Slice 6 验收 (API 固化复盘 + golden/benchmark 整理)；之后进入 M5 之外的新 slice 规划
 ```
 
 ## Slice / Milestone 对照表
@@ -28,7 +28,7 @@ Up next:        Slice 6 收尾 (Android TextPaint adapter；API 固化与 golden
 | 3.5 | — | Explainability hardening：结构化 decision 类型替代 stringly dump；SpacingPlan 替代 advance mutation；classifier 接 profile；可重复标点进 clreq 表；role override 进 dump | 现有所有 fixture 不变 | 所有现有测试绿；`LayoutResult` 暴露结构化 `clusterDecisions / spacingPlan` 字段 | done |
 | 4 | M3 | BreakCandidate / RepairOption；`PushIn` `CarryPrevious`；greedy + lookahead；`Hang` 仅保留 profile opt-in 路径 | `kinsoku-carry-previous` `kinsoku-push-in` `lookahead-future-push-in` `lookahead-avoids-repair` | `./gradlew :tiqian-layout:jvmTest` + `./gradlew :tiqian-playground:runPlayground`；dump `line:*` 行，多行非单 placeholder | done (`PushIn` / `CarryPrevious` / `LeaveRagged` 有结构化 chosen repair + candidates；PushIn 支持全行 capacity 聚合与 zero-shrink merge；CarryPrevious 会验证 carried line 不超宽；lookahead 默认 window 2（`LookaheadWindowProbe` 实测 w3 无增益）；Hang 推到后续 opt-in slice) |
 | 5 | M4 | 两端对齐：基于 glue 的 AdjustmentOpportunity；优先级 `PunctuationGlue → CjkLatinSpace → WordSpace → CjkInterChar` | 中文正文段落 + 中西混排 fixture | dump 每行 `adjustedWidth` ≈ `maxWidth`；新 golden | done (`Justifier` + `JustificationDecisionInfo`；`textAlign=Justify` 触发；最后一行 skip；priority chain 完整；`GlueSideAwareJustification`：collapse 不可逆、扩展只在 glue 侧、括号内侧免疫，见 ADR 0004 amendment；WordSpace 待 shaping 分词后启用) |
-| 6 | M5 | API 固化；`tiqian-shaping-android` / `tiqian-shaping-skia` 真 adapter；golden test + benchmark | 平台 fixture + screenshot golden | 各平台模块 build + screenshot 测试 | wip (6a: shaping contract + `ExplainableStubTextShaper` + debug decisions；6b: `tiqian-shaping-jvm` + `AwtTextShaper` + playground 默认 real advance + punctuation atom 消费 shaped glyph bounds + `MissingInkBoundsFallback` + `tiqian-shaping-skia` `SkiaTextShaper` 与 AWT↔Skia 对照 golden + `LocaleTaggedShaping` + `FontHaltDerivedBody`；ADR 0008/0013/0014/0015；`chws` 明确不启用；Android adapter 与 skia 渲染未接) |
+| 6 | M5 | API 固化；`tiqian-shaping-android` / `tiqian-shaping-skia` 真 adapter；golden test + benchmark | 平台 fixture + screenshot golden | 各平台模块 build + screenshot 测试 | wip (6a: shaping contract + `ExplainableStubTextShaper` + debug decisions；6b: `tiqian-shaping-jvm`/`tiqian-shaping-skia`/`tiqian-shaping-android` 三平台 adapter + AWT↔Skia 对照 golden + Android instrumentation 对照 + `LocaleTaggedShaping` + `FontHaltDerivedBody` + `HanContextShaping` + playground skia 光栅化；ADR 0008/0013/0014/0015/0016；`chws` 明确不启用；剩 API 固化复盘与 golden/benchmark 整理) |
 
 Slice 4 的 `done` 范围是当前默认 kinsoku repair：`PushIn` / `CarryPrevious` / `LeaveRagged` 均可解释，`LineDecisionInfo` 暴露 chosen repair 与 candidate repairs。lookahead window 2~3 属于后续优化，不再阻塞当前 Slice 4 的模型收口。
 

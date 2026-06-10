@@ -22,6 +22,7 @@ include(
     ":tiqian-shaping-api",
     ":tiqian-shaping-jvm",
     ":tiqian-shaping-skia",
+    ":tiqian-shaping-android",
     ":tiqian-linebreak",
     ":tiqian-clreq",
     ":tiqian-layout",
