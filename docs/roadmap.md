@@ -14,7 +14,7 @@
 
 ```text
 Last completed: Slice 7 (Compose Desktop 前端真渲染：TiqianParagraph composable，ADR 0017)
-Up next:        新 slice 规划：候选有行尾悬挂 opt-in (ADR 0006)、WordSpace (Latin 分词)、Android composable 渲染、竖排预研
+Up next:        Slice 8 (decoration span 模型 + 着重号)，随后 Slice 9 (示亡号)；更远期：行尾悬挂 opt-in、WordSpace、Android composable 渲染、竖排预研
 ```
 
 ## Slice / Milestone 对照表
@@ -30,6 +30,8 @@ Up next:        新 slice 规划：候选有行尾悬挂 opt-in (ADR 0006)、Wor
 | 5 | M4 | 两端对齐：基于 glue 的 AdjustmentOpportunity；优先级 `PunctuationGlue → CjkLatinSpace → WordSpace → CjkInterChar` | 中文正文段落 + 中西混排 fixture | dump 每行 `adjustedWidth` ≈ `maxWidth`；新 golden | done (`Justifier` + `JustificationDecisionInfo`；`textAlign=Justify` 触发；最后一行 skip；priority chain 完整；`GlueSideAwareJustification`：collapse 不可逆、扩展只在 glue 侧、括号内侧免疫，见 ADR 0004 amendment；WordSpace 待 shaping 分词后启用) |
 | 6 | M5 | API 固化；`tiqian-shaping-android` / `tiqian-shaping-skia` 真 adapter；golden test + benchmark | 平台 fixture + screenshot golden | 各平台模块 build + screenshot 测试 | done (6a: shaping contract + `ExplainableStubTextShaper`；6b: `tiqian-shaping-jvm`/`tiqian-shaping-skia`/`tiqian-shaping-android` 三平台 adapter + AWT↔Skia 对照 golden + Android instrumentation 对照 + `LocaleTaggedShaping` + `FontHaltDerivedBody` + `HanContextShaping` + playground skia 光栅化；验收: `LayoutDumpGoldenTest` 结构化 dump golden（`TIQIAN_UPDATE_GOLDEN=1` 再生成）+ `LayoutBenchmarkProbe` 吞吐基线 + 包名/geometry source 固化（`ink.duo3.tiqian.*`、`ProfileDerived*`）；ADR 0008/0013/0014/0015/0016；`chws` 明确不启用) |
 | 7 | — | Compose Desktop 前端真渲染：`TiqianParagraph` composable 消费 `LayoutResult`，Skia TextBlob 绘制与 engine 度量同源，前端零排版决策 | 现有 fixture 文本 + 离屏渲染 PNG | `./gradlew :tiqian-compose:jvmTest`（ImageComposeScene 离屏渲染）+ `runComposeDemo` | done (`TiqianParagraph` + `rememberTiqianTextMeasurer` 默认 Skia shaper/lookahead；渲染走 `tiqian-shaping-skia` 共享 `shapeTextBlob`/`SkiaSystemTypefaces`；离屏 PNG 验收 + demo 窗口人工确认；根构建统一 jvmToolchain(25)；ADR 0017) |
+| 8 | — | Inline decoration span 模型 + 着重号：`LayoutInput` 接受区间标注，layout 产出逐字 dot 几何决策，渲染层照画 | 含着重号区间的中文段落（跨行、含标点） | dump `decoration:*` 行；playground/compose 渲染目检 + golden | todo |
+| 9 | — | 示亡号：span 区间的黑框几何（按行分段），断行策略明确（整体避拆 or 分段开口） | 含姓名示亡号的 fixture（行中 + 跨行） | dump `decoration:*` 行；渲染目检 + golden | todo |
 
 Slice 4 的 `done` 范围是当前默认 kinsoku repair：`PushIn` / `CarryPrevious` / `LeaveRagged` 均可解释，`LineDecisionInfo` 暴露 chosen repair 与 candidate repairs。lookahead window 2~3 属于后续优化，不再阻塞当前 Slice 4 的模型收口。
 
