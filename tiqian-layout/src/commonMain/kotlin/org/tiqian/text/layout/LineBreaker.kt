@@ -478,7 +478,7 @@ private fun tryPushIn(
     val perCluster = expandedRange.associateWith { (pushInCapacities[it] ?: 0f) }
     val totalCapacity = perCluster.values.sum()
 
-    if (overflow <= 0f || overflow > totalCapacity) {
+    if (overflow > totalCapacity) {
         return PushInResult(
             previous = prev,
             current = curr,
@@ -488,7 +488,7 @@ private fun tryPushIn(
                 offenderClusterIndex = offenderIndex,
                 penalty = pushInPenalty,
                 accepted = false,
-                rejectionReason = if (overflow <= 0f) "no-overflow" else "insufficient-capacity",
+                rejectionReason = "insufficient-capacity",
                 targetClusterIndex = offenderIndex,
                 requiredShrink = overflow.coerceAtLeast(0f),
                 availableCapacity = totalCapacity,
@@ -496,8 +496,13 @@ private fun tryPushIn(
         )
     }
 
-    val shrink = overflow
-    val allocations = distributePushInShrink(perCluster, shrink)
+    // `overflow <= 0` is NOT a rejection: upstream repairs in the chain
+    // (a PushIn / CarryPrevious on earlier lines) can shorten the previous
+    // line after the break was placed, so the offender simply fits now.
+    // That is a zero-shrink merge. Refusing it cascaded into
+    // carry-overflows → LeaveRagged and left `、` / `」` at line start.
+    val shrink = overflow.coerceAtLeast(0f)
+    val allocations = if (shrink > 0f) distributePushInShrink(perCluster, shrink) else emptyList()
     val offender = adjustedClusters[offenderIndex]
     val candidate = RepairCandidate(
         kind = "PushIn",
@@ -507,20 +512,27 @@ private fun tryPushIn(
         accepted = true,
         targetClusterIndex = offenderIndex,
         shrink = shrink,
-        requiredShrink = overflow,
+        requiredShrink = shrink,
         availableCapacity = totalCapacity,
     )
     val repairedPrevious = expanded.copy(
         adjustedWidth = expanded.adjustedWidth - shrink,
         repair = RepairOption.PushIn(
             penalty = pushInPenalty,
-            reason = "ForbiddenAtLineStart:${offender.text}:pushed-in=$shrink/${totalCapacity}",
+            reason = if (shrink > 0f) {
+                "ForbiddenAtLineStart:${offender.text}:pushed-in=$shrink/$totalCapacity"
+            } else {
+                "ForbiddenAtLineStart:${offender.text}:fits-no-shrink"
+            },
             offenderClusterIndex = offenderIndex,
             allocations = allocations,
             totalShrink = shrink,
             totalAvailableCapacity = totalCapacity,
         ),
-        repairCandidates = listOf(candidate),
+        // Preserve any repair history the receiving line already carries
+        // (e.g. its own start was repaired earlier in the chain) — the
+        // PushIn marker for the absorbed offender must not erase it.
+        repairCandidates = prev.repairCandidates + candidate,
     )
     val repairedCurrent = if (offenderIndex == curr.clusterRange.last) {
         null

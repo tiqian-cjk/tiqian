@@ -110,6 +110,165 @@ private object PlaygroundFontProbe {
 /** Result of the raster step — the PNG plus the natural canvas dimensions in CSS pixels. */
 private data class RasterResult(val dataUri: String, val widthPx: Float, val heightPx: Float)
 
+/**
+ * Skia twin of [PlaygroundFontProbe] — same candidate lists so the skia-mode
+ * raster draws the same physical fonts the engine measured.
+ */
+private object SkiaPlaygroundFontProbe {
+    private val fontMgr = org.jetbrains.skia.FontMgr.default
+    val cjk: org.jetbrains.skia.Typeface? = listOf(
+        "Source Han Sans CN",
+        "Source Han Sans CN VF",
+        "Noto Sans CJK SC",
+        "PingFang SC",
+        "Hiragino Sans GB",
+        "Sarasa UI SC",
+        "Heiti SC",
+        "STHeiti",
+    ).firstNotNullOfOrNull { fontMgr.matchFamilyStyle(it, org.jetbrains.skia.FontStyle.NORMAL) }
+    val latin: org.jetbrains.skia.Typeface? = listOf(
+        "Inter",
+        "SF Pro Text",
+        "SF Pro",
+        "Roboto",
+        "Helvetica Neue",
+    ).firstNotNullOfOrNull { fontMgr.matchFamilyStyle(it, org.jetbrains.skia.FontStyle.NORMAL) }
+}
+
+/**
+ * Shapes [text] with the same language tag the engine's `SkiaTextShaper`
+ * uses (`LocaleTaggedShaping`), so the raster draws the SAME glyphs the
+ * engine measured — e.g. the `locl` zh-Hans dash variants. Without this,
+ * the engine steps by the 2em CJK dash advance while the canvas draws the
+ * shorter Western form, leaving a visible hole after every `——`.
+ *
+ * The blob is built manually with baseline at y=0 — Skia's own
+ * TextBlobBuilderRunHandler is a line-WRAPPING handler that places the
+ * first baseline at `-ascent`, which shifted every run down by its own
+ * font's ascent (Latin runs visibly floated above CJK runs).
+ */
+private fun shapeBlobWithLanguage(
+    shaper: org.jetbrains.skia.shaper.Shaper,
+    text: String,
+    font: org.jetbrains.skia.Font,
+    language: String,
+): org.jetbrains.skia.TextBlob? {
+    val glyphIds = mutableListOf<Short>()
+    val xPositions = mutableListOf<Float>()
+    shaper.shape(
+        text,
+        org.jetbrains.skia.shaper.TrivialFontRunIterator(text, font),
+        org.jetbrains.skia.shaper.TrivialBidiRunIterator(text, 0),
+        org.jetbrains.skia.shaper.TrivialScriptRunIterator(text, "Hani"),
+        org.jetbrains.skia.shaper.TrivialLanguageRunIterator(text, language),
+        org.jetbrains.skia.shaper.ShapingOptions.DEFAULT,
+        Float.MAX_VALUE,
+        object : org.jetbrains.skia.shaper.RunHandler {
+            override fun beginLine() {}
+            override fun runInfo(info: org.jetbrains.skia.shaper.RunInfo?) {}
+            override fun commitRunInfo() {}
+            override fun runOffset(info: org.jetbrains.skia.shaper.RunInfo?): org.jetbrains.skia.Point =
+                org.jetbrains.skia.Point(0f, 0f)
+            override fun commitRun(
+                info: org.jetbrains.skia.shaper.RunInfo?,
+                glyphs: ShortArray?,
+                positions: Array<org.jetbrains.skia.Point?>?,
+                clusters: IntArray?,
+            ) {
+                if (glyphs == null || positions == null) return
+                glyphs.forEachIndexed { index, glyphId ->
+                    glyphIds += glyphId
+                    xPositions += (positions.getOrNull(index)?.x ?: 0f)
+                }
+            }
+            override fun commitLine() {}
+        },
+    )
+    if (glyphIds.isEmpty()) return null
+    return org.jetbrains.skia.TextBlobBuilder()
+        .appendRunPosH(font, glyphIds.toShortArray(), xPositions.toFloatArray(), 0f)
+        .build()
+}
+
+private fun rasterizeLayoutToPngSkia(result: LayoutResult, fixture: LayoutFixture, scale: Int = 2): RasterResult {
+    val maxWidth = fixture.constraints.maxWidth.coerceAtLeast(1f)
+    val height = result.size.height.coerceAtLeast(16f)
+    val fontSize = result.input.textStyle.fontSize
+    val language = result.input.textStyle.locale
+
+    val cjkFont = org.jetbrains.skia.Font(SkiaPlaygroundFontProbe.cjk, fontSize)
+    val latinFont = org.jetbrains.skia.Font(SkiaPlaygroundFontProbe.latin, fontSize)
+
+    // Same canvas padding logic as the AWT raster: engine line boxes use
+    // CenteredCjkVisual metrics, real font ascent/descent overflow them.
+    val fontAscent = maxOf(-cjkFont.metrics.ascent, -latinFont.metrics.ascent)
+    val fontDescent = maxOf(cjkFont.metrics.descent, latinFont.metrics.descent)
+    val engineBaseline = result.lines.firstOrNull()?.baseline ?: (fontSize / 2f)
+    val engineDescent = result.lines.lastOrNull()?.let { it.bottom - it.baseline } ?: (fontSize / 2f)
+    val topPad = (fontAscent - engineBaseline).coerceAtLeast(0f)
+    val bottomPad = (fontDescent - engineDescent).coerceAtLeast(0f)
+
+    val canvasWidth = maxWidth
+    val canvasHeight = height + topPad + bottomPad
+    val widthPx = (canvasWidth * scale).toInt().coerceAtLeast(1)
+    val heightPx = (canvasHeight * scale).toInt().coerceAtLeast(1)
+
+    val surface = org.jetbrains.skia.Surface.makeRasterN32Premul(widthPx, heightPx)
+    val canvas = surface.canvas
+    canvas.scale(scale.toFloat(), scale.toFloat())
+    canvas.clear(-1)
+    val paint = org.jetbrains.skia.Paint().apply { color = 0xFF000000.toInt() }
+    val shaper = org.jetbrains.skia.shaper.Shaper.makeShaperDrivenWrapper()
+    val defaultAutoSpaceGap = 0.25f * fontSize
+
+    for (line in result.lines) {
+        val lineClusters = result.clusters.filter {
+            it.range.start >= line.range.start && it.range.end <= line.range.end
+        }
+        var x = 0f
+        val baselineY = line.baseline + topPad
+        for ((clusterIndexInLine, cluster) in lineClusters.withIndex()) {
+            val role = result.debug.fontDecisions.firstOrNull { it.range == cluster.range }?.role
+            val font = if (role == "LatinText") latinFont else cjkFont
+
+            val autoSpaces = result.debug.autoSpaceDecisions
+                .filter { it.clusterRange == cluster.range }
+            val leadingStrip = autoSpaces.firstOrNull { it.side == "leading" }?.charactersAffected ?: 0
+            val trailingStrip = autoSpaces.firstOrNull { it.side == "trailing" }?.charactersAffected ?: 0
+            val isLineStart = clusterIndexInLine == 0
+            val isLineEnd = clusterIndexInLine == lineClusters.lastIndex
+            val leadingGap = if (leadingStrip > 0 && !isLineStart) defaultAutoSpaceGap else 0f
+            val trailingGap = if (trailingStrip > 0 && !isLineEnd) defaultAutoSpaceGap else 0f
+            val paintText = cluster.displayText
+                .drop(leadingStrip)
+                .let { if (trailingStrip > 0) it.dropLast(trailingStrip) else it }
+
+            if (paintText.isNotEmpty()) {
+                shapeBlobWithLanguage(shaper, paintText, font, language)?.let { blob ->
+                    canvas.drawTextBlob(blob, x + leadingGap, baselineY, paint)
+                }
+            }
+
+            if (leadingStrip > 0 || trailingStrip > 0) {
+                val paintWidth = if (paintText.isNotEmpty()) {
+                    org.jetbrains.skia.TextLine.make(paintText, font).width
+                } else {
+                    0f
+                }
+                x += leadingGap + paintWidth + trailingGap
+            } else {
+                x += cluster.advance
+            }
+        }
+    }
+
+    val bytes = surface.makeImageSnapshot()
+        .encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)!!
+        .bytes
+    val dataUri = "data:image/png;base64,${Base64.getEncoder().encodeToString(bytes)}"
+    return RasterResult(dataUri = dataUri, widthPx = canvasWidth, heightPx = canvasHeight)
+}
+
 private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, scale: Int = 2): RasterResult {
     val maxWidth = fixture.constraints.maxWidth.coerceAtLeast(1f)
     val height = result.size.height.coerceAtLeast(16f)
@@ -365,11 +524,11 @@ private fun renderHtmlReport(items: List<PlaygroundReportItem>, shaperMode: Shap
                 "当前 shaper：<code>${shaperMode.id.escapeHtml()}</code>（${shaperMode.description.escapeHtml()}）；" +
                 "切回 deterministic stub 用 <code>TIQIAN_PLAYGROUND_SHAPER=stub</code>。</p>",
         )
-        items.forEach { item -> appendLine(item.renderSection()) }
+        items.forEach { item -> appendLine(item.renderSection(shaperMode)) }
         appendLine("</main></body></html>")
     }
 
-private fun PlaygroundReportItem.renderSection(): String {
+private fun PlaygroundReportItem.renderSection(shaperMode: ShaperMode): String {
     val maxWidth = fixture.constraints.maxWidth
     val spacing = greedy.debug.spacingDecisions
     val fontSize = greedy.input.textStyle.fontSize
@@ -392,8 +551,8 @@ private fun PlaygroundReportItem.renderSection(): String {
         appendLine("</div>")
 
         // Tiqian engine columns — actual rasterized output from the engine.
-        appendLine(renderRasterColumn("Tiqian greedy", greedy, fixture))
-        appendLine(renderRasterColumn("Tiqian lookahead", lookahead, fixture))
+        appendLine(renderRasterColumn("Tiqian greedy", greedy, fixture, shaperMode))
+        appendLine(renderRasterColumn("Tiqian lookahead", lookahead, fixture, shaperMode))
 
         appendLine("</div>") // .compare
 
@@ -413,7 +572,12 @@ private fun PlaygroundReportItem.renderSection(): String {
     }
 }
 
-private fun renderRasterColumn(label: String, result: LayoutResult, fixture: LayoutFixture): String {
+private fun renderRasterColumn(
+    label: String,
+    result: LayoutResult,
+    fixture: LayoutFixture,
+    shaperMode: ShaperMode,
+): String {
     val repairs = result.debug.lineDecisions.count { it.repair != null }
     val justifications = result.debug.justificationDecisions.count { it.allocations.isNotEmpty() }
     val summary = buildList {
@@ -421,7 +585,13 @@ private fun renderRasterColumn(label: String, result: LayoutResult, fixture: Lay
         if (repairs > 0) add("$repairs repairs")
         if (justifications > 0) add("$justifications justify")
     }.joinToString(" · ")
-    val raster = rasterizeLayoutToPng(result, fixture)
+    // The raster must use the same measurement stack as the engine: in skia
+    // mode an AWT drawString would paint Western glyph forms while the engine
+    // stepped by the locl CJK advances (visible as a hole after `——`).
+    val raster = when (shaperMode) {
+        ShaperMode.Skia -> rasterizeLayoutToPngSkia(result, fixture)
+        else -> rasterizeLayoutToPng(result, fixture)
+    }
 
     return buildString {
         appendLine("<div class=\"render-col\">")

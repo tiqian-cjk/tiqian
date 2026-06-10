@@ -133,6 +133,57 @@ class PushInLineWideCapacityTest {
         assertEquals(4f, repair.totalShrink)
     }
 
+    @Test
+    fun pushInMergesOffenderThatFitsAfterChainedRepairs() {
+        // Regression for the `、` / `」` line-start escape: an earlier chained
+        // PushIn shortens a line, after which a later forbidden offender
+        // simply FITS on its previous line. `overflow <= 0` must be treated
+        // as a zero-shrink merge, not rejected as "no-overflow" (which
+        // cascaded into carry-overflows → LeaveRagged).
+        //
+        // maxWidth=64. Greedy: [中中中」][。中中中][、中]
+        //  i=1: 。 forbidden → PushIn (shrink 16 from 」+。) →
+        //       line0=中中中」。(64), line1=中中中(48)
+        //  i=2: 、 forbidden → expanded line1+、 = 64 → overflow 0 →
+        //       zero-shrink merge → line1=中中中、(64), line2=中(16)
+        val clusters = listOf(
+            cluster(0, 1, "中", 16f),
+            cluster(1, 2, "中", 16f),
+            cluster(2, 3, "中", 16f),
+            cluster(3, 4, "」", 16f),
+            cluster(4, 5, "。", 16f),
+            cluster(5, 6, "中", 16f),
+            cluster(6, 7, "中", 16f),
+            cluster(7, 8, "中", 16f),
+            cluster(8, 9, "、", 16f),
+            cluster(9, 10, "中", 16f),
+        )
+        val solution = GreedyLineBreaker().breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 64f,
+            pushInCapacities = mapOf(3 to 8f, 4 to 8f, 8 to 8f),
+        )
+
+        assertEquals(3, solution.lines.size)
+        assertEquals(0..4, solution.lines[0].clusterRange)
+        assertEquals(5..8, solution.lines[1].clusterRange)
+        assertEquals(9..9, solution.lines[2].clusterRange)
+
+        // No line may start with a forbidden mark.
+        for (line in solution.lines) {
+            val first = clusters[line.clusterRange.first].text
+            assertTrue(first == "中", "line starts with forbidden '$first'")
+        }
+
+        // The zero-shrink merge is an accepted PushIn with shrink 0.
+        val merge = solution.lines[1].repair
+        assertTrue(merge is RepairOption.PushIn)
+        assertEquals(0f, merge.totalShrink)
+        assertTrue(merge.reason.endsWith("fits-no-shrink"))
+        assertEquals(64f, solution.lines[1].adjustedWidth)
+    }
+
     private fun cluster(start: Int, end: Int, text: String, advance: Float): Cluster =
         Cluster(
             range = TextRange(start, end),
