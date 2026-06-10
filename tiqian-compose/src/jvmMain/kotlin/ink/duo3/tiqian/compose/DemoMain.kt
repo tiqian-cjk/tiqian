@@ -10,10 +10,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.singleWindowApplication
 import ink.duo3.tiqian.core.ParagraphStyle
 import ink.duo3.tiqian.core.TextAlign
+import ink.duo3.tiqian.core.TextStyle
 
 private const val PARAGRAPH =
     "咖啡（coffee）在十七世纪经威尼斯传入欧洲。最初它被当作药物出售，价格高得吓人，真正" +
@@ -23,6 +25,10 @@ private const val PARAGRAPH =
             "，但也不算太离谱。"
 
 fun main() = singleWindowApplication(title = "Tiqian Compose Demo") {
+    // Engine units are physical pixels; map dp at the TextStyle boundary
+    // (ADR 0017) so the demo reads at 15dp on any density.
+    val fontSizePx = with(LocalDensity.current) { 15.dp.toPx() }
+    val textStyle = TextStyle(fontSize = fontSizePx)
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -34,15 +40,18 @@ fun main() = singleWindowApplication(title = "Tiqian Compose Demo") {
         TiqianParagraph(
             text = PARAGRAPH,
             modifier = Modifier.width(320.dp),
+            textStyle = textStyle,
             paragraphStyle = ParagraphStyle(textAlign = TextAlign.Justify),
         )
         TiqianParagraph(
             text = "他说：“你好，世界。”中文……English——中文。",
             modifier = Modifier.width(320.dp),
+            textStyle = textStyle,
         )
         TiqianParagraph(
             text = "他强调：豆子新鲜最要紧，烘焙其次。",
             modifier = Modifier.width(320.dp),
+            textStyle = textStyle,
             decorations = listOf(
                 ink.duo3.tiqian.core.DecorationSpan(
                     range = ink.duo3.tiqian.core.TextRange(4, 16),
