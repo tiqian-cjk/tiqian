@@ -22,6 +22,6 @@ tasks.register<JavaExec>("runPlayground") {
     group = "application"
     description = "Runs the Tiqian layout playground dump."
     dependsOn("jvmJar")
-    mainClass.set("org.tiqian.playground.MainKt")
+    mainClass.set("ink.duo3.tiqian.playground.MainKt")
     classpath = files(tasks.named("jvmJar")) + configurations.named("jvmRuntimeClasspath").get()
 }

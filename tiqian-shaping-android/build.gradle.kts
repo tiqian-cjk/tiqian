@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace = "org.tiqian.text.shaping.android"
+    namespace = "ink.duo3.tiqian.shaping.android"
     compileSdk = 36
 
     defaultConfig {

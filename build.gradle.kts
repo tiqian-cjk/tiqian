@@ -6,7 +6,7 @@ plugins {
     id("com.android.library") version "9.2.1" apply false
 }
 
-group = "org.tiqian"
+group = "ink.duo3.tiqian"
 version = "0.1.0-SNAPSHOT"
 
 subprojects {

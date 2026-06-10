@@ -24,7 +24,7 @@ Gradle Kotlin Multiplatform 项目，所有模块当前只有 `jvm()` target；J
 ```shell
 ./gradlew build                                 # 编译 + 所有模块测试
 ./gradlew :tiqian-layout:jvmTest                # 单个模块测试
-./gradlew :tiqian-layout:jvmTest --tests 'org.tiqian.text.layout.QuotePairAnalyzerTest'
+./gradlew :tiqian-layout:jvmTest --tests 'ink.duo3.tiqian.layout.QuotePairAnalyzerTest'
 ./gradlew :tiqian-playground:runPlayground      # 跑 playground，生成 layout dump + HTML 调试报告
 ```
 
