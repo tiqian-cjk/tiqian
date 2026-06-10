@@ -15,6 +15,8 @@ data class PunctuationAtom(
     val advance: Float,
     val inkBounds: Rect?,
     val bodyWidth: Float,
+    /** Font-measured `halt` advance backing [bodyWidth]; null = policy body. */
+    val haltAdvance: Float? = null,
     val leadingGlue: Glue,
     val trailingGlue: Glue,
     val anchor: PunctuationAnchor,
@@ -29,6 +31,13 @@ data class PunctuationAtom(
 data class PunctuationInkInput(
     val advance: Float,
     val inkBounds: Rect? = null,
+    /**
+     * Font-measured OpenType `halt` advance — the font designer's own
+     * half-width body for this mark. When present (and smaller than the
+     * full advance) it REPLACES the policy body width; the glue direction
+     * still comes from the profile per ADR 0014.
+     */
+    val haltAdvance: Float? = null,
     /**
      * Named heuristic: `MissingInkBoundsFallback`.
      *
@@ -211,7 +220,12 @@ class PunctuationAtomBuilder(
         val policyAdvance = policy.defaultAdvanceEm * em
         val shapedAdvance = inkInput?.advance?.takeIf { it > 0f }
         val advance = shapedAdvance ?: policyAdvance
-        val bodyWidth = (policy.defaultBodyEm * em).coerceAtMost(advance)
+        // FontHaltDerivedBody: when the font provides an alternate half-width
+        // advance via `halt`, that is the designer-defined solid body — it
+        // replaces the policy 0.5em. Glue direction stays profile-derived
+        // (ADR 0014); only the body/glue SPLIT comes from the font.
+        val haltBody = inkInput?.haltAdvance?.takeIf { it > 0f && it < advance }
+        val bodyWidth = haltBody ?: (policy.defaultBodyEm * em).coerceAtMost(advance)
 
         // Diagnostic ink fields — not used for glue calculation.
         val inkBounds = inkInput?.inkBounds
@@ -240,6 +254,7 @@ class PunctuationAtomBuilder(
             advance = advance,
             inkBounds = inkBounds,
             bodyWidth = bodyWidth,
+            haltAdvance = haltBody,
             leadingGlue = Glue(
                 kind = GlueKind.PunctuationLeading,
                 min = 0f,
@@ -258,6 +273,8 @@ class PunctuationAtomBuilder(
             ),
             anchor = anchor,
             geometrySource = when {
+                haltBody != null && inkBounds != null -> "FontHaltDerivedWithInkDiagnostics"
+                haltBody != null -> "FontHaltDerived"
                 inkBounds != null -> "ClassDerivedWithInkDiagnostics"
                 shapedAdvance != null -> "ClassDerivedWithShapedAdvance"
                 else -> "PolicyDerived"

@@ -521,6 +521,7 @@ private fun renderEngineMetadata(label: String, result: LayoutResult): String =
                 val ink = decision.inkBounds?.let { " ink=${it.compactDump()}" } ?: ""
                 val inkMeasures = buildList {
                     add("floor=${decision.policyBodyFloor.oneDecimal()}")
+                    decision.haltAdvance?.let { add("halt=${it.oneDecimal()}") }
                     decision.inkWidth?.let { add("inkW=${it.oneDecimal()}") }
                     decision.inkCenter?.let { add("inkC=${it.oneDecimal()}") }
                 }.joinToString(" ")

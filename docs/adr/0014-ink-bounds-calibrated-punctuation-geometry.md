@@ -86,6 +86,32 @@ trailing 或 leading（不再硬编码只消费 leading）。
 - `Closing` / `PauseOrStop` → `Leading`（body 锚定在左侧）
 - 其他 → `Center`
 
+### Amendment (2026-06-10): FontHaltDerivedBody 落地
+
+`halt` 已经由 Skiko 路径接入（`FontHaltMeasurement`，ADR 0015）：shaper 对
+CjkPunctuation cluster 额外跑一次 `halt=1` 的 feature-tagged pass，把测得的
+alternate advance 与 placement 暴露为 `Glyph.haltAdvance` / `haltPlacementX`。
+实测 Source Han Sans CN @16px：
+
+| 类别 | halt advance | placement | 含义 |
+|---|---|---|---|
+| `。，、）」：！` | 8.0 | 0 | trailing 侧削半 |
+| `（「《` | 8.0 | -8.0 | leading 侧削半 |
+| `·` | 8.0 | -4.0 | 两侧各削 4（居中） |
+| `— 中` | 16.0（无变体） | — | 不受影响 |
+
+字体经 `halt` 独立证实了本 ADR 的 profile glue 方向表。消费规则：
+
+- **body 来自字体**：`PunctuationAtomBuilder` 在 `haltAdvance < advance` 时用
+  它替换 policy `0.5em` body（`FontHaltDerivedBody`）；glue 方向仍由 profile
+  决定，placement 仅作诊断，留给后续「字体 trim 侧 vs profile glue 侧」校验。
+- **feature 不参与渲染几何**：排版用的 cluster advance 仍来自无 feature 的
+  shaping pass，空白的削减由 glue 模型显式执行——`halt` 只是度量入口。
+- **`chws` 不启用**：相邻标点挤压是 engine 的具名决策
+  （`CollapseAdjacentPunctuationInnerGlue`），交给字体做会双重压缩且不可解释。
+- geometry source 新增 `FontHaltDerived` / `FontHaltDerivedWithInkDiagnostics`，
+  AWT / stub 路径无 halt 能力，自然降级到 `ClassDerived*`（跨引擎分歧已记录）。
+
 ## Consequences
 
 - 标点 body 始终半宽，glue 方向由 CLREQ 规则而非字形物理位置决定。

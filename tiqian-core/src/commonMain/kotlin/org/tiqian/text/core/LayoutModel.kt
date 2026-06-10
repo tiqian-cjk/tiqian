@@ -20,6 +20,21 @@ data class Glyph(
     val clusterRange: TextRange,
     val advance: Float,
     val bounds: Rect? = null,
+    /**
+     * The advance this glyph takes under OpenType `halt` (alternate
+     * half-width metrics), measured by a separate feature-tagged shaping
+     * pass. Null when the shaper cannot measure features (AWT, stub) or the
+     * font provides no alternate (`halt` advance == default advance).
+     * Punctuation geometry consumes it as the font-defined body width.
+     */
+    val haltAdvance: Float? = null,
+    /**
+     * The x placement shift `halt` applies (e.g. -0.5em for opening
+     * brackets whose leading blank is trimmed). Diagnostic: tells which
+     * side the FONT trims, for future validation against the profile's
+     * glue side. Null whenever [haltAdvance] is null.
+     */
+    val haltPlacementX: Float? = null,
 )
 
 data class LineBox(
@@ -156,6 +171,11 @@ data class PunctuationDecisionInfo(
      * changes explainability only, never glue placement.
      */
     val inkBoundsFallback: String? = null,
+    /**
+     * Font-measured `halt` advance backing [bodyWidth] when
+     * [geometrySource] is `FontHaltDerived*`; null = policy body.
+     */
+    val haltAdvance: Float? = null,
 )
 
 data class ClusterGeometryDecisionInfo(

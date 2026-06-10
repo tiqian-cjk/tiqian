@@ -86,6 +86,37 @@ class SkiaTextShaperTest {
     }
 
     @Test
+    fun measuresHaltAdvanceForPunctuationClusters() {
+        // FontHaltMeasurement: 。 in Source Han Sans has a `halt` alternate
+        // at exactly half width; trailing-trimmed marks keep placement 0.
+        val stop = shaper.shape(input(text = "。", role = FontRole.CjkPunctuation))
+            .glyphRuns.single().glyphs.single()
+        assertEquals(8f, stop.haltAdvance!!, 0.01f)
+        assertEquals(0f, stop.haltPlacementX!!, 0.01f)
+
+        // Opening bracket: blank trimmed from the LEADING side — the font
+        // shifts placement by -0.5em.
+        val open = shaper.shape(input(text = "（", role = FontRole.CjkPunctuation))
+            .glyphRuns.single().glyphs.single()
+        assertEquals(8f, open.haltAdvance!!, 0.01f)
+        assertEquals(-8f, open.haltPlacementX!!, 0.01f)
+    }
+
+    @Test
+    fun reportsNoHaltAdvanceWhenFontHasNoAlternate() {
+        // CjkText role clusters skip the halt pass entirely.
+        val han = shaper.shape(input(text = "中", role = FontRole.CjkText))
+            .glyphRuns.single().glyphs.single()
+        assertEquals(null, han.haltAdvance)
+
+        // — has no halt alternate (halt advance == default advance) even
+        // under CjkPunctuation role.
+        val dash = shaper.shape(input(text = "—", role = FontRole.CjkPunctuation))
+            .glyphRuns.single().glyphs.single()
+        assertEquals(null, dash.haltAdvance)
+    }
+
+    @Test
     fun glyphAdvancesSumToClusterAdvance() {
         val result = shaper.shape(input(text = "中文。", role = FontRole.CjkText))
 

@@ -409,6 +409,7 @@ class ExplainableStubParagraphLayoutEngine(
                         inkWidth = atom.inkWidth,
                         inkCenter = atom.inkCenter,
                         inkBoundsFallback = atom.inkBoundsFallback,
+                        haltAdvance = atom.haltAdvance,
                     )
                 },
                 geometryDecisions = geometryDecisions,
@@ -588,6 +589,7 @@ class ExplainableStubParagraphLayoutEngine(
             advance = glyph.advance,
             inkBounds = glyph.bounds,
             boundsFallbackReason = if (glyph.bounds == null) "shaper-no-ink-bounds" else null,
+            haltAdvance = glyph.haltAdvance,
         )
     }
 
@@ -598,6 +600,9 @@ class ExplainableStubParagraphLayoutEngine(
         if (bounds.isEmpty()) return first
         return first.copy(
             advance = sumOf { it.advance.toDouble() }.toFloat(),
+            // halt metrics are per-glyph; a union pseudo-glyph has none.
+            haltAdvance = null,
+            haltPlacementX = null,
             bounds = Rect(
                 left = bounds.minOf { it.left.toDouble() }.toFloat(),
                 top = bounds.minOf { it.top.toDouble() }.toFloat(),

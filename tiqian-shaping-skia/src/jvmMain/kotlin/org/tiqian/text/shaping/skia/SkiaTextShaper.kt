@@ -58,21 +58,34 @@ class SkiaTextShaper(
 
         val collector = GlyphCollectingRunHandler()
         if (displayText.isNotEmpty()) {
-            shaper.shape(
-                displayText,
-                TrivialFontRunIterator(displayText, font),
-                TrivialBidiRunIterator(displayText, 0),
-                TrivialScriptRunIterator(displayText, "Hani"),
-                TrivialLanguageRunIterator(displayText, language),
-                ShapingOptions.DEFAULT,
-                Float.MAX_VALUE,
-                collector,
-            )
+            runShaper(displayText, font, language, ShapingOptions.DEFAULT, collector)
         }
         val glyphIds = collector.glyphIds.toShortArray()
         val xPositions = collector.xPositions
         val glyphCount = glyphIds.size
         val advance = collector.advance
+
+        // FontHaltMeasurement: a second feature-tagged pass measures the
+        // font's `halt` (alternate half-width) metrics for punctuation
+        // clusters. The feature is NOT applied to the rendered geometry —
+        // the engine owns blank-trimming via the glue model; halt only
+        // tells us the font-defined body width (ADR 0014 follow-up).
+        // Single-glyph clusters take the run advance directly (immune to
+        // the placement shift halt applies to opening brackets); multi-
+        // glyph punctuation clusters (`⋯⋯` etc.) are never halt-affected.
+        val haltCollector = if (
+            input.fontDecision.role == FontRole.CjkPunctuation &&
+            glyphCount == 1
+        ) {
+            GlyphCollectingRunHandler().also {
+                runShaper(displayText, font, language, ShapingOptions.DEFAULT.withFeatures("halt=1"), it)
+            }
+        } else {
+            null
+        }
+        val haltAdvance = haltCollector?.advance
+            ?.takeIf { haltCollector.glyphIds.size == 1 && it > 0f && it < advance }
+        val haltPlacementX = if (haltAdvance != null) haltCollector.xPositions.firstOrNull() else null
 
         val cluster = Cluster(
             range = input.range,
@@ -90,6 +103,8 @@ class SkiaTextShaper(
                 clusterRange = input.range,
                 advance = max(0f, endX - startX),
                 bounds = inkBounds.getOrNull(glyphIndex)?.toGlyphLocalRectOrNull(),
+                haltAdvance = haltAdvance,
+                haltPlacementX = haltPlacementX,
             )
         }
         val run = GlyphRun(
@@ -114,6 +129,25 @@ class SkiaTextShaper(
             clusters = listOf(cluster),
             glyphRuns = listOf(run),
             decisions = listOf(decision),
+        )
+    }
+
+    private fun runShaper(
+        text: String,
+        font: Font,
+        language: String,
+        options: ShapingOptions,
+        handler: RunHandler,
+    ) {
+        shaper.shape(
+            text,
+            TrivialFontRunIterator(text, font),
+            TrivialBidiRunIterator(text, 0),
+            TrivialScriptRunIterator(text, "Hani"),
+            TrivialLanguageRunIterator(text, language),
+            options,
+            Float.MAX_VALUE,
+            handler,
         )
     }
 

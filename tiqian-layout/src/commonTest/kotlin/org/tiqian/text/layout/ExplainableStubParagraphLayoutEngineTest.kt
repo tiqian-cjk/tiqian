@@ -942,6 +942,44 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun haltAdvanceFromShaperDrivesPunctuationBodyEndToEnd() {
+        // A shaper that reports halt=7 for 。 — the engine's punctuation
+        // decision must carry the font-derived body and the FontHaltDerived
+        // geometry source, and the ledger must keep resolved >= body.
+        val engine = ExplainableStubParagraphLayoutEngine(
+            textShaper = object : TextShaper {
+                val delegate = ExplainableStubTextShaper()
+                override fun shape(input: ShapingInput): ShapingResult {
+                    val result = delegate.shape(input)
+                    if (input.displayText != "。") return result
+                    return result.copy(
+                        glyphRuns = result.glyphRuns.map { run ->
+                            run.copy(glyphs = run.glyphs.map { it.copy(haltAdvance = 7f, haltPlacementX = 0f) })
+                        },
+                    )
+                }
+            },
+        )
+
+        val result = engine.layout(
+            LayoutInput(
+                content = TiqianTextContent("中文。"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val stop = result.debug.punctuationDecisions.single()
+        assertEquals(7f, stop.haltAdvance)
+        assertEquals(7f, stop.bodyWidth)
+        assertEquals("FontHaltDerived", stop.geometrySource)
+        // Trailing glue grows to advance - haltBody = 9; at line end it is
+        // trimmed away leaving exactly the font body.
+        assertEquals(9f, stop.trailingGlueNatural)
+        val stopCluster = result.clusters.single { it.text == "。" }
+        assertEquals(7f, stopCluster.advance)
+    }
+
+    @Test
     fun substitutionRollsBackToSourceTextWhenFontLacksTheGlyph() {
         // SubstitutionRollbackOnMissingGlyph: the CLREQ substitution `——` →
         // `⸺` only stands if the font covers U+2E3A. This shaper reports a
