@@ -11,6 +11,8 @@ import ink.duo3.tiqian.core.AutoSpaceDecisionInfo
 import ink.duo3.tiqian.core.Cluster
 import ink.duo3.tiqian.core.ClusterGeometryDecisionInfo
 import ink.duo3.tiqian.core.DecorationDecisionInfo
+import ink.duo3.tiqian.core.DecorationKind
+import ink.duo3.tiqian.core.DecorationSegmentInfo
 import ink.duo3.tiqian.core.DecorationSpan
 import ink.duo3.tiqian.core.FontDecisionInfo
 import ink.duo3.tiqian.core.LineEdgeTrimDecisionInfo
@@ -213,6 +215,11 @@ class ExplainableStubParagraphLayoutEngine(
                 adjustedClusters = clusters,
                 maxWidth = input.constraints.maxWidth,
                 pushInCapacities = pushInCapacities,
+                // MourningSpanKeptUnbroken: 示亡号 spans stay on one line
+                // whenever they fit (ADR 0018).
+                unbreakableRanges = input.decorations
+                    .filter { it.kind == DecorationKind.Mourning }
+                    .mapNotNull { span -> naturalClusters.clusterIndexRangeFor(span.range) },
             )
         }
 
@@ -353,6 +360,15 @@ class ExplainableStubParagraphLayoutEngine(
             justifyDeltaByCluster = justifyDeltaByCluster,
             fontSize = fontSize,
         )
+        val decorationSegments = computeDecorationSegments(
+            decorations = input.decorations,
+            lineRanges = lineSolution.lines.map { it.clusterRange },
+            lineBoxes = lines,
+            finalClusters = finalClusters,
+            justifyDeltaByCluster = justifyDeltaByCluster,
+            metricDecisions = metricDecisions,
+            fontSize = fontSize,
+        )
 
         val widestLine = lines.maxOfOrNull { it.visualWidth } ?: 0f
         val totalHeight = if (lines.isEmpty()) lineMetrics.height else lines.size * lineMetrics.height
@@ -479,6 +495,7 @@ class ExplainableStubParagraphLayoutEngine(
                 autoSpaceDecisions = autoSpaceDecisions,
                 lineEdgeTrimDecisions = edgeTrimDecisions,
                 decorationDecisions = decorationDecisions,
+                decorationSegments = decorationSegments,
             ),
         )
     }
@@ -517,6 +534,7 @@ class ExplainableStubParagraphLayoutEngine(
 
         val decisions = mutableListOf<DecorationDecisionInfo>()
         for (span in decorations) {
+            if (span.kind != DecorationKind.Emphasis) continue
             lineRanges.forEachIndexed { lineIndex, clusterRange ->
                 var x = 0f
                 for (idx in clusterRange) {
@@ -546,6 +564,82 @@ class ExplainableStubParagraphLayoutEngine(
             }
         }
         return decisions
+    }
+
+    /**
+     * 示亡号 frame geometry (ADR 0018). One rectangle per line the span
+     * touches. Vertical bounds come from the RAW font ink metrics of the
+     * covered clusters — the CenteredCjkVisual em box is an artificial
+     * 0.5em/0.5em split that real Han ink overflows above, so a frame at
+     * the layout em box would cut through glyphs. `openStart`/`openEnd`
+     * mark continuation edges when the span had to split across lines
+     * (only when wider than the measure — `MourningSpanKeptUnbroken`
+     * otherwise prevents the split at break time).
+     */
+    private fun computeDecorationSegments(
+        decorations: List<DecorationSpan>,
+        lineRanges: List<IntRange>,
+        lineBoxes: List<LineBox>,
+        finalClusters: List<Cluster>,
+        justifyDeltaByCluster: Map<Int, Float>,
+        metricDecisions: List<ClusterMetricDecision>,
+        fontSize: Float,
+    ): List<DecorationSegmentInfo> {
+        val mourningSpans = decorations.filter { it.kind == DecorationKind.Mourning }
+        if (mourningSpans.isEmpty()) return emptyList()
+
+        val pad = fontSize * MOURNING_FRAME_PAD_EM
+        val segments = mutableListOf<DecorationSegmentInfo>()
+        for (span in mourningSpans) {
+            val spanSegments = mutableListOf<DecorationSegmentInfo>()
+            lineRanges.forEachIndexed { lineIndex, clusterRange ->
+                var x = 0f
+                var left: Float? = null
+                var right = 0f
+                var segStart = -1
+                var segEnd = -1
+                for (idx in clusterRange) {
+                    val cluster = finalClusters[idx]
+                    val covered = cluster.range.start >= span.range.start &&
+                        cluster.range.end <= span.range.end
+                    if (covered) {
+                        if (left == null) {
+                            left = x
+                            segStart = cluster.range.start
+                        }
+                        right = x + cluster.advance - (justifyDeltaByCluster[idx] ?: 0f)
+                        segEnd = cluster.range.end
+                    }
+                    x += cluster.advance
+                }
+                val leftEdge = left ?: return@forEachIndexed
+                val covering = metricDecisions.filter {
+                    it.range.start < segEnd && it.range.end > segStart
+                }
+                val rawAscent = covering.maxOfOrNull { it.rawMetrics.ascent } ?: fontSize
+                val rawDescent = covering.maxOfOrNull { it.rawMetrics.descent } ?: 0f
+                val baseline = lineBoxes[lineIndex].baseline
+                spanSegments += DecorationSegmentInfo(
+                    sourceRange = TextRange(segStart, segEnd),
+                    kind = span.kind.name,
+                    lineIndex = lineIndex,
+                    left = leftEdge,
+                    top = baseline - rawAscent - pad,
+                    right = right,
+                    bottom = baseline + rawDescent + pad,
+                    openStart = segStart > span.range.start,
+                    openEnd = segEnd < span.range.end,
+                    reason = "",
+                )
+            }
+            val reason = if (spanSegments.size <= 1) {
+                "MourningSpanKeptUnbroken"
+            } else {
+                "mourning-span-split-across-lines"
+            }
+            segments += spanSegments.map { it.copy(reason = reason) }
+        }
+        return segments
     }
 
     private fun Map<Int, FontRole>.toRoleOverrideInfos(
@@ -1235,6 +1329,25 @@ private data class LineEdgeTrimResult(
 
 /** ADR 0018: dot ink centre sits this far below the BASELINE. */
 private const val EMPHASIS_DOT_CENTER_EM = 0.35f
+
+/** ADR 0018: 示亡号 frame outset beyond the raw ink bounds. */
+private const val MOURNING_FRAME_PAD_EM = 0.1f
+
+/**
+ * Contiguous cluster-index range whose clusters are fully covered by
+ * [sourceRange]; null when no cluster is covered.
+ */
+private fun List<Cluster>.clusterIndexRangeFor(sourceRange: TextRange): IntRange? {
+    var first = -1
+    var last = -1
+    forEachIndexed { idx, cluster ->
+        if (cluster.range.start >= sourceRange.start && cluster.range.end <= sourceRange.end) {
+            if (first == -1) first = idx
+            last = idx
+        }
+    }
+    return if (first == -1) null else first..last
+}
 
 private fun Map<Int, GlueBudget>.consume(
     consumptionByCluster: Map<Int, Float>,

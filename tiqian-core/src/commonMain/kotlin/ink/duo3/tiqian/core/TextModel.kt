@@ -30,6 +30,13 @@ data class DecorationSpan(
 enum class DecorationKind {
     /** CLREQ 着重号 — a solid dot under each emphasised Han character. */
     Emphasis,
+
+    /**
+     * 示亡号 — a solid black frame around a (deceased person's) name.
+     * The span is kept unbroken across line breaks whenever it fits on one
+     * line; when it cannot fit it splits into per-line open-ended segments.
+     */
+    Mourning,
 }
 
 data class ParagraphStyle(

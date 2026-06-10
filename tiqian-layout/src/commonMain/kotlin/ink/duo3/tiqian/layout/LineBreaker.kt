@@ -12,7 +12,30 @@ interface LineBreaker {
         adjustedClusters: List<Cluster>,
         maxWidth: Float,
         pushInCapacities: Map<Int, Float> = emptyMap(),
+        /**
+         * Cluster-index ranges that must stay on one line when they fit
+         * (示亡号 spans, ADR 0018). `MourningSpanKeptUnbroken`: a break that
+         * would land strictly inside a range moves to the range start
+         * instead; a range wider than the measure falls back to splitting.
+         */
+        unbreakableRanges: List<IntRange> = emptyList(),
     ): LineSolution
+}
+
+/**
+ * Moves [breakAt] out of any unbreakable range it falls strictly inside of
+ * (to the range start), provided the line keeps at least one cluster.
+ * Returns [breakAt] unchanged otherwise — including the give-up case where
+ * the range itself is wider than the line (split fallback).
+ */
+internal fun adjustBreakForUnbreakables(
+    breakAt: Int,
+    lineStart: Int,
+    unbreakableRanges: List<IntRange>,
+): Int {
+    val containing = unbreakableRanges.firstOrNull { breakAt > it.first && breakAt <= it.last }
+        ?: return breakAt
+    return if (containing.first > lineStart) containing.first else breakAt
 }
 
 /**
@@ -41,13 +64,14 @@ class GreedyLineBreaker(
         adjustedClusters: List<Cluster>,
         maxWidth: Float,
         pushInCapacities: Map<Int, Float>,
+        unbreakableRanges: List<IntRange>,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
             "naturalClusters and adjustedClusters must align cluster-for-cluster."
         }
 
-        val greedy = greedyFill(naturalClusters, adjustedClusters, maxWidth)
+        val greedy = greedyFill(naturalClusters, adjustedClusters, maxWidth, unbreakableRanges)
         return applyKinsokuRepairs(
             initial = greedy,
             naturalClusters = naturalClusters,
@@ -58,6 +82,7 @@ class GreedyLineBreaker(
             pushInPenalty = pushInPenalty,
             carryPreviousPenalty = carryPreviousPenalty,
             leaveRaggedPenalty = leaveRaggedPenalty,
+            unbreakableRanges = unbreakableRanges,
         )
     }
 
@@ -65,55 +90,43 @@ class GreedyLineBreaker(
         naturalClusters: List<Cluster>,
         adjustedClusters: List<Cluster>,
         maxWidth: Float,
+        unbreakableRanges: List<IntRange>,
     ): List<LineCandidate> {
         val lines = mutableListOf<LineCandidate>()
         var lineStart = 0
         var adjustedAccum = 0f
         var naturalAccum = 0f
 
-        for (i in adjustedClusters.indices) {
+        var i = 0
+        while (i < adjustedClusters.size) {
             val nextAdjusted = adjustedAccum + adjustedClusters[i].advance
             val overflows = nextAdjusted > maxWidth && i > lineStart
             if (overflows) {
-                lines += buildLine(
+                val breakAt = adjustBreakForUnbreakables(i, lineStart, unbreakableRanges)
+                lines += rebuildLine(
+                    clusterRange = lineStart..(breakAt - 1),
+                    naturalClusters = naturalClusters,
                     adjustedClusters = adjustedClusters,
-                    clusterRange = lineStart..(i - 1),
-                    naturalWidth = naturalAccum,
-                    adjustedWidth = adjustedAccum,
                 )
-                lineStart = i
-                adjustedAccum = adjustedClusters[i].advance
-                naturalAccum = naturalClusters[i].advance
+                lineStart = breakAt
+                adjustedAccum = adjustedClusters[breakAt].advance
+                naturalAccum = naturalClusters[breakAt].advance
+                i = breakAt + 1
             } else {
                 adjustedAccum = nextAdjusted
                 naturalAccum += naturalClusters[i].advance
+                i += 1
             }
         }
 
-        lines += buildLine(
-            adjustedClusters = adjustedClusters,
+        lines += rebuildLine(
             clusterRange = lineStart..adjustedClusters.lastIndex,
-            naturalWidth = naturalAccum,
-            adjustedWidth = adjustedAccum,
+            naturalClusters = naturalClusters,
+            adjustedClusters = adjustedClusters,
         )
         return lines
     }
 
-    private fun buildLine(
-        adjustedClusters: List<Cluster>,
-        clusterRange: IntRange,
-        naturalWidth: Float,
-        adjustedWidth: Float,
-    ): LineCandidate {
-        val first = adjustedClusters[clusterRange.first]
-        val last = adjustedClusters[clusterRange.last]
-        return LineCandidate(
-            clusterRange = clusterRange,
-            sourceRange = TextRange(first.range.start, last.range.end),
-            naturalWidth = naturalWidth,
-            adjustedWidth = adjustedWidth,
-        )
-    }
 }
 
 /**
@@ -151,6 +164,7 @@ class LookaheadLineBreaker(
         adjustedClusters: List<Cluster>,
         maxWidth: Float,
         pushInCapacities: Map<Int, Float>,
+        unbreakableRanges: List<IntRange>,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -162,7 +176,11 @@ class LookaheadLineBreaker(
         val committed = mutableListOf<LineCandidate>()
         var lineStart = 0
         while (lineStart < adjustedClusters.size) {
-            val greedyEnd = findGreedyEnd(adjustedClusters, lineStart, maxWidth)
+            val greedyEnd = adjustBreakForUnbreakables(
+                breakAt = findGreedyEnd(adjustedClusters, lineStart, maxWidth),
+                lineStart = lineStart,
+                unbreakableRanges = unbreakableRanges,
+            )
             if (greedyEnd >= adjustedClusters.size) {
                 committed += rebuildLine(
                     lineStart..adjustedClusters.lastIndex,
@@ -175,9 +193,12 @@ class LookaheadLineBreaker(
             // Candidates only shift earlier than greedy. PushIn is evaluated
             // during the repair pass below, where punctuation glue capacity is
             // known and the shrink can be recorded on the chosen line.
+            // Breaks inside an unbreakable span are never candidates.
             val candidates = ((greedyEnd - window)..greedyEnd)
                 .filter { it in (lineStart + 1)..adjustedClusters.size }
+                .filter { e -> unbreakableRanges.none { e > it.first && e <= it.last } }
                 .distinct()
+                .ifEmpty { listOf(greedyEnd) }
 
             var bestEnd = greedyEnd
             var bestScore = Float.POSITIVE_INFINITY
@@ -214,6 +235,7 @@ class LookaheadLineBreaker(
             pushInPenalty = pushInPenalty,
             carryPreviousPenalty = carryPreviousPenalty,
             leaveRaggedPenalty = leaveRaggedPenalty,
+            unbreakableRanges = unbreakableRanges,
         )
     }
 
@@ -308,6 +330,7 @@ internal fun applyKinsokuRepairs(
     pushInPenalty: Int,
     carryPreviousPenalty: Int,
     leaveRaggedPenalty: Int,
+    unbreakableRanges: List<IntRange> = emptyList(),
 ): LineSolution {
     if (initial.size < 2) return LineSolution(initial)
 
@@ -374,6 +397,40 @@ internal fun applyKinsokuRepairs(
         }
 
         val carriedIndex = prev.clusterRange.last
+        // CarryPrevious must not split an unbreakable span: carrying any
+        // cluster other than the span's first would leave part of the span
+        // behind on the previous line.
+        val splitsUnbreakable = unbreakableRanges.any {
+            carriedIndex > it.first && carriedIndex <= it.last
+        }
+        if (splitsUnbreakable) {
+            repairCandidates += RepairCandidate(
+                kind = "CarryPrevious",
+                reasonCode = "ForbiddenAtLineStart",
+                offenderClusterIndex = curr.clusterRange.first,
+                penalty = carryPreviousPenalty,
+                accepted = false,
+                rejectionReason = "carry-would-split-mourning-span",
+                carriedClusterIndex = carriedIndex,
+            )
+            repairCandidates += RepairCandidate(
+                kind = "LeaveRagged",
+                reasonCode = "ForbiddenAtLineStart",
+                offenderClusterIndex = curr.clusterRange.first,
+                penalty = leaveRaggedPenalty,
+                accepted = true,
+            )
+            mutable[i] = curr.copy(
+                repair = RepairOption.LeaveRagged(
+                    penalty = leaveRaggedPenalty,
+                    reason = "ForbiddenAtLineStart:${firstCluster.text}:carry-would-split-mourning-span",
+                    offenderClusterIndex = curr.clusterRange.first,
+                ),
+                repairCandidates = repairCandidates,
+            )
+            i += 1
+            continue
+        }
         val newPrevRange = prev.clusterRange.first..(carriedIndex - 1)
         val newCurrRange = carriedIndex..curr.clusterRange.last
         val carriedCurrent = rebuildLine(newCurrRange, naturalClusters, adjustedClusters)

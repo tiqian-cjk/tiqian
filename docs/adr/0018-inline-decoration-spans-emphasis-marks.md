@@ -48,10 +48,23 @@ Layout 在行/cluster 几何定稿后解析 span，产出
 （baseline + 0.35em，仍在 CenteredCjkVisual 的 0.5em descent 带内），默认
 行高即可容纳；更宽的 lineHeight 只是让版面更松，不是正确性前提。
 
-### 示亡号预定（Slice 9）
+### 示亡号（Slice 9 落地）
 
-黑框按行分段描边；断行策略为**整体避拆**（进现有 repair 体系），span
-超过一行宽时 fallback 为跨行分段。细节随实现补充本 ADR 或新开。
+- **整体避拆（`MourningSpanKeptUnbroken`）**：Mourning span 映射为 breaker 的
+  `unbreakableRanges`——断点落在 span 内部时移到 span 起点（greedy 与
+  lookahead 同规则，lookahead 候选直接排除 span 内断点）。span 比版心还宽
+  时放弃避拆，分段并以 `openStart`/`openEnd` 标记续行边（该边不描）。
+- **kinsoku 交互**：`CarryPrevious` 若会把 span 的一部分带走则拒绝
+  （`carry-would-split-mourning-span`，落 LeaveRagged）；PushIn 的 offender
+  恒为标点、不会在姓名 span 内，无需 guard。
+- **框几何（`DecorationSegmentInfo`）**：按行一段矩形。水平边贴 cluster
+  盒（右边去掉 justify delta）；**竖直边来自 raw font ink metrics**
+  ——CenteredCjkVisual 的 0.5em/0.5em em box 是人为虚构，真实汉字墨迹上溢
+  到 baseline-0.88em 附近，按 layout em box 画框会切穿字形。外扩
+  `MOURNING_FRAME_PAD_EM = 0.1em`。框高约 1.6em，调用方 lineHeight 需
+  ≥1.8em 才不与邻行框/墨迹相触（fixture 28.8px 演示）。
+- CLREQ 依据：「在人名文字外框描上实心的黑色边线」；断行规则 CLREQ 未规定，
+  避拆为本项目决策（名单场景姓名不应跨行）。
 
 ## Consequences
 

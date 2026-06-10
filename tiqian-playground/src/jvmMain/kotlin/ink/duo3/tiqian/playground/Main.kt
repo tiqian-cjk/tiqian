@@ -203,6 +203,24 @@ private fun rasterizeLayoutToPngSkia(result: LayoutResult, fixture: LayoutFixtur
         }
     }
 
+    // 示亡号 frames (ADR 0018): stroke per-line segments; continuation
+    // edges (open start/end) stay undrawn.
+    if (result.debug.decorationSegments.isNotEmpty()) {
+        val framePaint = org.jetbrains.skia.Paint().apply {
+            color = 0xFF000000.toInt()
+            mode = org.jetbrains.skia.PaintMode.STROKE
+            strokeWidth = (fontSize / 16f).coerceAtLeast(1f)
+        }
+        for (seg in result.debug.decorationSegments) {
+            val t = topPad + seg.top
+            val b = topPad + seg.bottom
+            canvas.drawLine(seg.left, t, seg.right, t, framePaint)
+            canvas.drawLine(seg.left, b, seg.right, b, framePaint)
+            if (!seg.openStart) canvas.drawLine(seg.left, t, seg.left, b, framePaint)
+            if (!seg.openEnd) canvas.drawLine(seg.right, t, seg.right, b, framePaint)
+        }
+    }
+
     val bytes = surface.makeImageSnapshot()
         .encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)!!
         .bytes
@@ -326,6 +344,18 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
                 dotDiameter.toInt().coerceAtLeast(2),
                 dotDiameter.toInt().coerceAtLeast(2),
             )
+        }
+
+        // 示亡号 frames; continuation edges stay undrawn.
+        for (seg in result.debug.decorationSegments) {
+            val t = (topPad + seg.top).toInt()
+            val b = (topPad + seg.bottom).toInt()
+            val l = seg.left.toInt()
+            val r = seg.right.toInt()
+            g.drawLine(l, t, r, t)
+            g.drawLine(l, b, r, b)
+            if (!seg.openStart) g.drawLine(l, t, l, b)
+            if (!seg.openEnd) g.drawLine(r, t, r, b)
         }
     } finally {
         g.dispose()
@@ -650,6 +680,17 @@ private fun renderEngineMetadata(label: String, result: LayoutResult): String =
                     "<span class=\"metric\">deco ${decision.clusterRange.start}-${decision.clusterRange.end} " +
                         "'${decision.sourceText.escapeHtml()}' ${decision.kind} applied=${decision.applied} " +
                         "anchor=${decision.anchorX.oneDecimal()},${decision.anchorY.oneDecimal()} ${decision.reason}</span>",
+                )
+            }
+            appendLine("</div>")
+        }
+        if (result.debug.decorationSegments.isNotEmpty()) {
+            appendLine("<div class=\"metrics\">")
+            result.debug.decorationSegments.forEach { seg ->
+                appendLine(
+                    "<span class=\"metric\">decobox ${seg.sourceRange.start}-${seg.sourceRange.end} ${seg.kind} " +
+                        "line=${seg.lineIndex} rect=${seg.left.oneDecimal()},${seg.top.oneDecimal()}," +
+                        "${seg.right.oneDecimal()},${seg.bottom.oneDecimal()} ${seg.reason}</span>",
                 )
             }
             appendLine("</div>")

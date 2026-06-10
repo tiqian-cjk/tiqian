@@ -162,6 +162,13 @@ class LayoutDumpGoldenTest {
                     "applied=${d.applied} anchor=${d.anchorX.fmt()},${d.anchorY.fmt()} reason=${d.reason}",
             )
         }
+        debug.decorationSegments.forEach { seg ->
+            appendLine(
+                "decobox ${seg.sourceRange.start}-${seg.sourceRange.end} kind=${seg.kind} line=${seg.lineIndex} " +
+                    "rect=${seg.left.fmt()},${seg.top.fmt()},${seg.right.fmt()},${seg.bottom.fmt()} " +
+                    "open=${if (seg.openStart) "start" else "-"}/${if (seg.openEnd) "end" else "-"} reason=${seg.reason}",
+            )
+        }
     }
 
     private fun diffMessage(id: String, expected: String, actual: String): String {

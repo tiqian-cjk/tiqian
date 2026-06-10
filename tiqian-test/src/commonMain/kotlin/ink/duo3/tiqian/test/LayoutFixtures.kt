@@ -119,5 +119,20 @@ object EarlyLayoutFixtures {
                 DecorationSpan(range = TextRange(4, 15), kind = DecorationKind.Emphasis),
             ),
         ),
+        LayoutFixture(
+            id = "mourning-frame",
+            // 悼0念1：2王3小4明5同6志7、8张9大10同11同12志13。14
+            text = "悼念：王小明同志、张大同同志。",
+            constraints = LayoutConstraints(maxWidth = 72f),
+            notes = "示亡号 (mourning frames) around 王小明 and 张大同. maxWidth 72 " +
+                "would naturally break inside 王小明 — MourningSpanKeptUnbroken moves " +
+                "the break to the span start instead. Frame rects derive from raw ink " +
+                "metrics; lineHeight 28.8 keeps frames clear of neighbouring lines.",
+            lineHeight = 28.8f,
+            decorations = listOf(
+                DecorationSpan(range = TextRange(3, 6), kind = DecorationKind.Mourning),
+                DecorationSpan(range = TextRange(9, 12), kind = DecorationKind.Mourning),
+            ),
+        ),
     )
 }

@@ -75,6 +75,27 @@ data class LayoutDebugInfo(
     val autoSpaceDecisions: List<AutoSpaceDecisionInfo> = emptyList(),
     val lineEdgeTrimDecisions: List<LineEdgeTrimDecisionInfo> = emptyList(),
     val decorationDecisions: List<DecorationDecisionInfo> = emptyList(),
+    val decorationSegments: List<DecorationSegmentInfo> = emptyList(),
+)
+
+/**
+ * Per-line rectangle segment of a box-style decoration (示亡号, ADR 0018).
+ * Vertical bounds derive from the RAW font ink metrics (the layout em box
+ * is an artificial CenteredCjkVisual fiction that real glyph ink overflows).
+ * `openStart`/`openEnd` mark segments that continue from/onto another line —
+ * renderers leave that frame edge undrawn.
+ */
+data class DecorationSegmentInfo(
+    val sourceRange: TextRange,
+    val kind: String,
+    val lineIndex: Int,
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+    val openStart: Boolean,
+    val openEnd: Boolean,
+    val reason: String,
 )
 
 /**

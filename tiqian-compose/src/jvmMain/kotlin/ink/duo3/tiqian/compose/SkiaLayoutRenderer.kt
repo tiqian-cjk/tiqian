@@ -88,6 +88,21 @@ internal fun DrawScope.drawTiqianLayout(
                 }
             }
         }
+
+        // 示亡号 frames (ADR 0018); continuation edges stay undrawn.
+        if (result.debug.decorationSegments.isNotEmpty()) {
+            val framePaint = Paint().apply {
+                this.color = color
+                mode = org.jetbrains.skia.PaintMode.STROKE
+                strokeWidth = (fontSize / 16f).coerceAtLeast(1f)
+            }
+            for (seg in result.debug.decorationSegments) {
+                skCanvas.drawLine(seg.left, seg.top, seg.right, seg.top, framePaint)
+                skCanvas.drawLine(seg.left, seg.bottom, seg.right, seg.bottom, framePaint)
+                if (!seg.openStart) skCanvas.drawLine(seg.left, seg.top, seg.left, seg.bottom, framePaint)
+                if (!seg.openEnd) skCanvas.drawLine(seg.right, seg.top, seg.right, seg.bottom, framePaint)
+            }
+        }
     }
 }
 

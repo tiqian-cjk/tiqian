@@ -184,6 +184,37 @@ class PushInLineWideCapacityTest {
         assertEquals(64f, solution.lines[1].adjustedWidth)
     }
 
+    @Test
+    fun carryPreviousRefusesToSplitUnbreakableSpan() {
+        // 中中王小明。 maxWidth=80: line0 = 中中王小明 (80), line1 = 。
+        // forbidden. PushIn rejected (overflow 16 > capacity 8); carrying
+        // 明 (index 4) would split the 王小明 span (2..4) → the carry is
+        // refused and the line stays LeaveRagged with an explicit reason.
+        val clusters = listOf(
+            cluster(0, 1, "中", 16f),
+            cluster(1, 2, "中", 16f),
+            cluster(2, 3, "王", 16f),
+            cluster(3, 4, "小", 16f),
+            cluster(4, 5, "明", 16f),
+            cluster(5, 6, "。", 16f),
+        )
+        val solution = GreedyLineBreaker().breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 80f,
+            pushInCapacities = mapOf(5 to 8f),
+            unbreakableRanges = listOf(2..4),
+        )
+
+        assertEquals(2, solution.lines.size)
+        val repair = solution.lines[1].repair
+        assertTrue(repair is RepairOption.LeaveRagged)
+        assertTrue(repair.reason.endsWith("carry-would-split-mourning-span"))
+        val carryCandidate = solution.lines[1].repairCandidates
+            .first { it.kind == "CarryPrevious" }
+        assertEquals("carry-would-split-mourning-span", carryCandidate.rejectionReason)
+    }
+
     private fun cluster(start: Int, end: Int, text: String, advance: Float): Cluster =
         Cluster(
             range = TextRange(start, end),

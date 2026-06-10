@@ -1023,6 +1023,75 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun mourningSpanIsKeptUnbrokenAndFramedPerLine() {
+        // "悼念：王小明同志、张大同同志。" maxWidth=72: greedy would break at
+        // cluster 4 (inside 王小明 3..5) — MourningSpanKeptUnbroken moves the
+        // break to 3. Both names end up whole on single lines with one frame
+        // segment each.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("悼念：王小明同志、张大同同志。"),
+                constraints = LayoutConstraints(maxWidth = 72f),
+                decorations = listOf(
+                    ink.duo3.tiqian.core.DecorationSpan(
+                        range = ink.duo3.tiqian.core.TextRange(3, 6),
+                        kind = ink.duo3.tiqian.core.DecorationKind.Mourning,
+                    ),
+                    ink.duo3.tiqian.core.DecorationSpan(
+                        range = ink.duo3.tiqian.core.TextRange(9, 12),
+                        kind = ink.duo3.tiqian.core.DecorationKind.Mourning,
+                    ),
+                ),
+            ),
+        )
+
+        // Line 0 ends BEFORE the span (悼念： only) — the break moved.
+        assertEquals(3, result.lines[0].range.end)
+
+        val segments = result.debug.decorationSegments
+        assertEquals(2, segments.size)
+        for (seg in segments) {
+            assertEquals("MourningSpanKeptUnbroken", seg.reason)
+            assertEquals(false, seg.openStart)
+            assertEquals(false, seg.openEnd)
+        }
+        // 王小明 starts its line: left edge at 0, right after 3 clusters.
+        val first = segments.single { it.sourceRange.start == 3 }
+        assertEquals(0f, first.left)
+        assertEquals(48f, first.right)
+        // Frame uses raw ink metrics, which exceed the 0.5em layout em box.
+        val line = result.lines[1]
+        assertTrue(first.top < line.baseline - 8f)
+        assertTrue(first.bottom > line.baseline)
+    }
+
+    @Test
+    fun mourningSpanWiderThanMeasureSplitsWithOpenEdges() {
+        // A 5-character name span at maxWidth=64 cannot fit one line: the
+        // split fallback produces open-ended segments.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("王小明大同先生"),
+                constraints = LayoutConstraints(maxWidth = 64f),
+                decorations = listOf(
+                    ink.duo3.tiqian.core.DecorationSpan(
+                        range = ink.duo3.tiqian.core.TextRange(0, 5),
+                        kind = ink.duo3.tiqian.core.DecorationKind.Mourning,
+                    ),
+                ),
+            ),
+        )
+
+        val segments = result.debug.decorationSegments
+        assertEquals(2, segments.size)
+        assertTrue(segments.all { it.reason == "mourning-span-split-across-lines" })
+        assertEquals(false, segments[0].openStart)
+        assertEquals(true, segments[0].openEnd)
+        assertEquals(true, segments[1].openStart)
+        assertEquals(false, segments[1].openEnd)
+    }
+
+    @Test
     fun substitutionRollsBackToSourceTextWhenFontLacksTheGlyph() {
         // SubstitutionRollbackOnMissingGlyph: the CLREQ substitution `——` →
         // `⸺` only stands if the font covers U+2E3A. This shaper reports a
