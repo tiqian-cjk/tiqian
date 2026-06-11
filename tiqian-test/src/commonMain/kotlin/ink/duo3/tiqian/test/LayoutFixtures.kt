@@ -110,6 +110,15 @@ object EarlyLayoutFixtures {
             textAlign = TextAlign.Justify,
         ),
         LayoutFixture(
+            id = "latin-word-wrap",
+            text = "他引用了一句话：The quick brown fox jumps over the lazy dog，然后继续讲。",
+            constraints = LayoutConstraints(maxWidth = 240f),
+            notes = "LatinWordSegmentation: the English sentence wraps at word " +
+                "boundaries instead of overflowing as one unbreakable cluster; " +
+                "spaces collapse at line edges; word spaces stretch under justify.",
+            textAlign = TextAlign.Justify,
+        ),
+        LayoutFixture(
             id = "emphasis-marks",
             // 他0强1调2：3豆4子5新6鲜7最8要9紧10，11烘12焙13其14次15。16
             text = "他强调：豆子新鲜最要紧，烘焙其次。",

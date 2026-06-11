@@ -270,14 +270,15 @@ class ExplainableStubParagraphLayoutEngineTest {
             ),
         )
 
-        val cjkSpaced = result.clusters.single { it.text == " CJK " }
-        // 5 chars * 16 nominal = 80; minus 2 boundary-space replacements of
-        // (16 - 4) = 12 each → 80 - 24 = 56.
-        assertEquals(56f, cjkSpaced.advance)
+        // LatinWordSegmentation: [ ][CJK][ ] — each CJK-adjacent space
+        // cluster IS the gap and normalises from 1em to 0.25em.
+        val spaces = result.clusters.filter { it.text == " " }
+        assertEquals(2, spaces.size)
+        assertTrue(spaces.all { it.advance == 4f })
         assertEquals(2, result.debug.autoSpaceDecisions.size)
         assertTrue(
             result.debug.autoSpaceDecisions.all {
-                it.mode == "Replace" && it.charactersAffected == 1 && it.reductionPerChar == 12f
+                it.mode == "Replace" && it.side == "gap" && it.totalReduction == 12f
             },
         )
     }
@@ -294,9 +295,12 @@ class ExplainableStubParagraphLayoutEngineTest {
             ),
         )
 
-        val latin = result.clusters.single()
-        assertEquals("Hello world", latin.text)
-        assertEquals(176f, latin.advance) // 11 chars * 16 = 176, no reduction
+        // LatinWordSegmentation: [Hello][ ][world]. The space between two
+        // Latin words is a WORD SPACE — untouched by autospace, stretchable
+        // by justification.
+        assertEquals(3, result.clusters.size)
+        val wordSpace = result.clusters.single { it.text == " " }
+        assertEquals(16f, wordSpace.advance)
         assertEquals(0, result.debug.autoSpaceDecisions.size)
     }
 
@@ -317,9 +321,10 @@ class ExplainableStubParagraphLayoutEngineTest {
             ),
         )
 
-        val cjkSpaced = result.clusters.single { it.text == " CJK " }
-        // No shrink: 5 chars * 16 = 80.
-        assertEquals(80f, cjkSpaced.advance)
+        // Disabled: space clusters keep their nominal 1em.
+        val spaces = result.clusters.filter { it.text == " " }
+        assertEquals(2, spaces.size)
+        assertTrue(spaces.all { it.advance == 16f })
         assertEquals(0, result.debug.autoSpaceDecisions.size)
     }
 
@@ -371,10 +376,12 @@ class ExplainableStubParagraphLayoutEngineTest {
             ),
         )
 
-        // With U+0020 now classified as Latin (ADR 0009 autospace model), the
-        // entire `"Hello" world` aggregates into a single Latin cluster.
-        val quoted = result.clusters.single()
-        assertEquals("“Hello” world", quoted.text)
+        // With U+0020 classified as Latin (ADR 0009) the run is one font
+        // decision; LatinWordSegmentation then splits it into word/space
+        // clusters, all still latin-primary.
+        assertEquals(3, result.clusters.size)
+        val quoted = result.clusters.first()
+        assertEquals("“Hello”", quoted.text)
         assertEquals("latin-primary", quoted.fontKey)
         assertTrue(
             result.debug.fontDecisions.any {
@@ -916,12 +923,11 @@ class ExplainableStubParagraphLayoutEngineTest {
 
     @Test
     fun autoSpaceGapAtLineEndIsTrimmedLikeAnyLineEdgeBlank() {
-        // text = "中文 AB 中文中文中文"; the Latin cluster " AB " (source 2-6)
-        // keeps a 0.25em autospace gap per typed-space boundary (stub space =
-        // 1em → reduction 12 per side, advance 64 → 40).
-        // maxWidth=80 → greedy line 0 = [中 文 ' AB '] (72); the cluster's
-        // trailing gap now sits at the line END and must be trimmed:
-        // ' AB ' 40 → 36, line adjusted width 72 → 68.
+        // text = "中文 AB 中文中文中文" segments to 中 文 [ ] [AB] [ ] 中….
+        // Both spaces are CJK-adjacent gaps (advance 4). maxWidth=80 →
+        // greedy line 0 = [中 文 ' ' AB ' '] (16+16+4+32+4=72); the trailing
+        // space cluster sits at the line END and collapses entirely:
+        // line adjusted width 72 → 68.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 content = TiqianTextContent("中文 AB 中文中文中文"),
@@ -929,16 +935,14 @@ class ExplainableStubParagraphLayoutEngineTest {
             ),
         )
 
-        val latinCluster = result.clusters.single { it.text == " AB " }
-        assertEquals(36f, latinCluster.advance)
         assertEquals(68f, result.lines.first().adjustedWidth)
 
-        val autoTrim = result.debug.lineEdgeTrimDecisions
-            .single { it.reason == "TextAutoSpaceLineEdgeTrim" }
-        assertEquals("trailing", autoTrim.side)
-        assertEquals(4f, autoTrim.trimAmount)
-        assertEquals(2, autoTrim.clusterRange.start)
-        assertEquals(6, autoTrim.clusterRange.end)
+        val collapse = result.debug.lineEdgeTrimDecisions
+            .single { it.reason == "LineEdgeWordSpaceCollapse" }
+        assertEquals("trailing", collapse.side)
+        assertEquals(4f, collapse.trimAmount)
+        assertEquals(5, collapse.clusterRange.start)
+        assertEquals(6, collapse.clusterRange.end)
     }
 
     @Test
@@ -1090,6 +1094,64 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals(true, segments[0].openEnd)
         assertEquals(true, segments[1].openStart)
         assertEquals(false, segments[1].openEnd)
+    }
+
+    @Test
+    fun longLatinSentenceWrapsAtWordBoundaries() {
+        // The headline LatinWordSegmentation capability: a Latin sentence
+        // longer than the measure breaks BETWEEN words (previously a Latin
+        // run was one unbreakable cluster and simply overflowed).
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("The quick brown fox"),
+                constraints = LayoutConstraints(maxWidth = 160f),
+            ),
+        )
+
+        assertTrue(result.lines.size > 1, "long Latin must wrap at word boundaries")
+        // No line may begin or end with visible space width.
+        for (line in result.lines) {
+            val lineClusters = result.clusters.filter {
+                it.range.start >= line.range.start && it.range.end <= line.range.end
+            }
+            val first = lineClusters.first()
+            val last = lineClusters.last()
+            if (first.text.all { ch -> ch == ' ' }) assertEquals(0f, first.advance)
+            if (last.text.all { ch -> ch == ' ' }) assertEquals(0f, last.advance)
+        }
+    }
+
+    @Test
+    fun wordSpacesStretchFirstUnderJustification() {
+        // "AB CD EF中文中文中" — two word spaces (Latin|space|Latin) plus a
+        // mid-line EF↔中 sino-western boundary. CLREQ expansion order:
+        // word spaces stretch FIRST (simultaneously, equally), then the
+        // sino-western gap, hanzi spacing untouched.
+        // Stub: AB=32 sp=16 CD=32 sp=16 EF=32+insert(4)=36 中=16 → line0 =
+        // AB·CD·EF中 (148); 文 → 164 > 160 → deficit 12.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("AB CD EF中文中文中"),
+                constraints = LayoutConstraints(maxWidth = 160f),
+                paragraphStyle = ink.duo3.tiqian.core.ParagraphStyle(
+                    textAlign = ink.duo3.tiqian.core.TextAlign.Justify,
+                ),
+            ),
+        )
+
+        assertTrue(result.lines.size >= 2)
+        val decision = result.debug.justificationDecisions.first()
+        assertEquals(12f, decision.deficitBefore)
+        assertEquals(0f, decision.deficitAfter)
+        // Word spaces saturate first (+4 each, equal), the sino-western gap
+        // takes the remaining 4; no CjkInterChar needed.
+        val wordAllocs = decision.allocations.filter { it.kind == "WordSpace" }
+        assertEquals(2, wordAllocs.size)
+        assertTrue(wordAllocs.all { it.delta == 4f })
+        val latinGapAlloc = decision.allocations.single { it.kind == "CjkLatinSpace" }
+        assertEquals(4f, latinGapAlloc.delta)
+        assertTrue(decision.allocations.none { it.kind == "CjkInterChar" })
+        assertEquals(160f, result.lines.first().visualWidth)
     }
 
     @Test

@@ -122,31 +122,38 @@ class ExplainableStubParagraphLayoutEngine(
         // When the shaper reports .notdef glyphs for a substituted cluster,
         // re-shape with the source text and record the rollback.
         val substitutionRollbackRanges = mutableSetOf<TextRange>()
-        val shapingResults = fontDecisions.map { decision ->
-            val sourceText = text.substring(decision.range.start, decision.range.end)
-            val substitution = punctuationGlyphSubstitutor.substitute(sourceText)
-            val shaped = textShaper.shape(
-                ShapingInput(
-                    text = text,
-                    range = decision.range,
-                    style = input.textStyle,
-                    fontDecision = decision,
-                    displayText = substitution.displayText,
-                ),
-            )
-            if (substitution.displayText == sourceText || shaped.decisions.none { it.missingGlyphs > 0 }) {
-                shaped
-            } else {
-                substitutionRollbackRanges += decision.range
-                textShaper.shape(
+        // LatinWordSegmentation (gap audit 缺口 2): Latin runs are shaped per
+        // word/space segment so each word and each space run becomes its own
+        // cluster — line breaks happen at word boundaries, word spaces become
+        // first-class adjustable clusters (CLREQ 西文词距). Cross-segment
+        // kerning at a space boundary is negligible.
+        val shapingResults = fontDecisions.flatMap { decision ->
+            decision.shapingSegments(text).map { segmentRange ->
+                val sourceText = text.substring(segmentRange.start, segmentRange.end)
+                val substitution = punctuationGlyphSubstitutor.substitute(sourceText)
+                val shaped = textShaper.shape(
                     ShapingInput(
                         text = text,
-                        range = decision.range,
+                        range = segmentRange,
                         style = input.textStyle,
                         fontDecision = decision,
-                        displayText = sourceText,
+                        displayText = substitution.displayText,
                     ),
                 )
+                if (substitution.displayText == sourceText || shaped.decisions.none { it.missingGlyphs > 0 }) {
+                    shaped
+                } else {
+                    substitutionRollbackRanges += segmentRange
+                    textShaper.shape(
+                        ShapingInput(
+                            text = text,
+                            range = segmentRange,
+                            style = input.textStyle,
+                            fontDecision = decision,
+                            displayText = sourceText,
+                        ),
+                    )
+                }
             }
         }
         val rawNaturalClusters = shapingResults.flatMap { it.clusters }
@@ -161,7 +168,6 @@ class ExplainableStubParagraphLayoutEngine(
             fontDecisions = fontDecisions,
             policy = clreqProfile.autoSpace,
             fontSize = fontSize,
-            shapedGlyphsByClusterRange = shapedGlyphsByClusterRange,
         )
         val naturalClusters = autoSpaceResult.clusters
         val autoSpaceDecisions = autoSpaceResult.decisions
@@ -262,6 +268,28 @@ class ExplainableStubParagraphLayoutEngine(
             }
             trimEdge(line.clusterRange.last, "trailing")
             trimEdge(line.clusterRange.first, "leading")
+
+            // LineEdgeWordSpaceCollapse: a space-run cluster landing on a
+            // line edge collapses entirely (CSS-like line-edge space
+            // removal; also CLREQ — no sino-western gap at line edges).
+            fun collapseEdgeSpace(clusterIdx: Int, side: String) {
+                val cluster = naturalClusters[clusterIdx]
+                if (!cluster.isSpaceRun()) return
+                val advance = naturalClusters[clusterIdx].advance
+                if (advance <= 0f) return
+                autoSpaceEdgeTrims.merge(clusterIdx, advance) { a, b -> a + b }
+                autoSpaceEdgeDecisions += LineEdgeTrimDecisionInfo(
+                    lineRange = line.sourceRange,
+                    clusterRange = cluster.range,
+                    side = side,
+                    trimAmount = advance,
+                    consumedBefore = 0f,
+                    naturalGlue = advance,
+                    reason = "LineEdgeWordSpaceCollapse",
+                )
+            }
+            collapseEdgeSpace(line.clusterRange.last, "trailing")
+            collapseEdgeSpace(line.clusterRange.first, "leading")
         }
         val trimmedGeometry = edgeTrimResult.geometry.withRawEdgeTrims(autoSpaceEdgeTrims)
         val trimmedClusters = trimmedGeometry.resolveClusters()
@@ -386,7 +414,7 @@ class ExplainableStubParagraphLayoutEngine(
                 fontDecisions = fontDecisions.map { decision ->
                     val clusterText = text.substring(decision.range.start, decision.range.end)
                     val substitution = punctuationGlyphSubstitutor.substitute(clusterText)
-                    val rolledBack = decision.range in substitutionRollbackRanges
+                    val rolledBack = substitutionRollbackRanges.any { it.isInside(decision.range) }
                     FontDecisionInfo(
                         range = decision.range,
                         sourceText = clusterText,
@@ -793,6 +821,33 @@ class ExplainableStubParagraphLayoutEngine(
             range
         }
 
+    /**
+     * Named heuristic: `LatinWordSegmentation`. A LatinText font decision is
+     * shaped per alternating word / space-run segment; every other role
+     * shapes as one segment. Spaces become standalone clusters: break
+     * opportunities, sino-western gaps (when CJK-adjacent) or stretchable
+     * word spaces (when between two Latin words).
+     */
+    private fun FontDecision.shapingSegments(text: String): List<TextRange> {
+        if (role != FontRole.LatinText) return listOf(range)
+        val segments = mutableListOf<TextRange>()
+        var segStart = range.start
+        var inSpace = text[range.start] == ' '
+        for (i in (range.start + 1) until range.end) {
+            val isSpace = text[i] == ' '
+            if (isSpace != inSpace) {
+                segments += TextRange(segStart, i)
+                segStart = i
+                inSpace = isSpace
+            }
+        }
+        segments += TextRange(segStart, range.end)
+        return segments
+    }
+
+    private fun Cluster.isSpaceRun(): Boolean =
+        text.isNotEmpty() && text.all { it == ' ' }
+
     private fun TextRange.isInside(other: TextRange): Boolean =
         start >= other.start && end <= other.end
 
@@ -830,181 +885,95 @@ class ExplainableStubParagraphLayoutEngine(
     }
 
     /**
-     * Applies `AutoSpacePolicy` to natural clusters. The named heuristic is
-     * `TextAutoSpaceReplace` — at CJK ↔ Latin / digit boundaries, typed
-     * U+0020 SPACE characters that sit at the edge of a Latin-classified
-     * cluster have their contribution to the cluster's advance reduced from
-     * the stub shaper's 1em down to `policy.gapEm`.
+     * Applies `AutoSpacePolicy` to (word-segmented) natural clusters.
      *
-     * This mirrors CSS Text Module Level 4 `text-autospace`: the autospace
-     * gap REPLACES the typed space rather than adding to it (avoiding the
-     * "1em space + 0.25em autospace = 1.25em double gap" problem).
+     * Post `LatinWordSegmentation`, U+0020 runs are standalone clusters and
+     * the model is per-cluster (CSS Text 4 + ADR 0009; CLREQ:「原则上，汉字
+     * 与西文字母、数字间使用不多于四分之一个汉字宽的字距或空白」):
      *
-     * Only `AutoSpaceMode.Replace` is implemented in this slice. `Insert`
-     * requires virtual cluster injection (typed space stays at 1em and an
-     * additional 0.25em is inserted) and is deferred to a future slice.
+     * - **space-run cluster with a CjkText neighbour** — the cluster IS the
+     *   sino-western gap: its advance normalises to `gapEm`
+     *   (`TextAutoSpaceReplace`, decision side="gap"; renderers need no
+     *   offsets, the cluster width is the gap).
+     * - **space-run cluster between two Latin words** — a word space
+     *   (CLREQ 西文词距): untouched here; justification stretches it.
+     * - **word cluster directly adjacent to CjkText** (no space cluster in
+     *   between) — `TextAutoSpaceInsert`: the gap is added into the word
+     *   cluster's advance on that side; renderers offset glyphs by the
+     *   recorded side decision. Only under [AutoSpaceMode.Insert];
+     *   [AutoSpaceMode.Replace] keeps the conservative behaviour.
+     *
+     * Punctuation neighbours never produce a gap (their spacing is the
+     * punctuation glue model's job).
      */
     private fun List<Cluster>.applyAutoSpacePolicy(
         fontDecisions: List<FontDecision>,
         policy: AutoSpacePolicy,
         fontSize: Float,
-        shapedGlyphsByClusterRange: Map<TextRange, List<Glyph>>,
     ): AutoSpaceApplicationResult {
         if (isEmpty()) return AutoSpaceApplicationResult(emptyList(), emptyList())
 
+        val roles = map { cluster -> fontDecisions.firstOrNull { cluster.range.isInside(it.range) }?.role }
         val decisions = mutableListOf<AutoSpaceDecisionInfo>()
+        val gap = policy.gapEm * fontSize
+        val mode = policy.cjkLatin
+
         val updated = mapIndexed { idx, cluster ->
-            val role = fontDecisions.firstOrNull { it.range == cluster.range }?.role
-                ?: return@mapIndexed cluster
-            if (role != FontRole.LatinText) return@mapIndexed cluster
+            if (roles[idx] != FontRole.LatinText) return@mapIndexed cluster
+            if (mode == AutoSpaceMode.Disabled) return@mapIndexed cluster
+            val prevRole = if (idx > 0) roles[idx - 1] else null
+            val nextRole = if (idx < lastIndex) roles[idx + 1] else null
 
-            val prevRole = if (idx > 0) fontDecisions.firstOrNull { it.range == this[idx - 1].range }?.role else null
-            val nextRole = if (idx < lastIndex) fontDecisions.firstOrNull { it.range == this[idx + 1].range }?.role else null
-
-            val leadingSpaces = cluster.text.takeWhile { it == ' ' }.length
-            val trailingSpaces = cluster.text.takeLastWhile { it == ' ' }.length
-                .let { count -> if (cluster.text.length == leadingSpaces) 0 else count }
-
-            // Use real shaped space advance when available so we don't
-            // over-shrink Latin clusters at CJK boundaries (AWT shapes
-            // U+0020 narrow, ~0.3em; stub shapes it 1em). Falls back to
-            // 1em per space if we can't find per-glyph data.
-            val glyphs = shapedGlyphsByClusterRange[cluster.range].orEmpty()
-            val leadingTypedAdvance = glyphs.boundarySpaceAdvance(
-                count = leadingSpaces,
-                side = "leading",
-                fallbackPerSpace = fontSize,
-            )
-            val trailingTypedAdvance = glyphs.boundarySpaceAdvance(
-                count = trailingSpaces,
-                side = "trailing",
-                fallbackPerSpace = fontSize,
-            )
-
-            val leadingReduction = leadingSpaces.boundaryReduction(
-                boundaryRole = prevRole,
-                cluster = cluster,
-                side = "leading",
-                policy = policy,
-                fontSize = fontSize,
-                typedAdvance = leadingTypedAdvance,
-                decisions = decisions,
-            )
-            val trailingReduction = trailingSpaces.boundaryReduction(
-                boundaryRole = nextRole,
-                cluster = cluster,
-                side = "trailing",
-                policy = policy,
-                fontSize = fontSize,
-                typedAdvance = trailingTypedAdvance,
-                decisions = decisions,
-            )
-            val totalReduction = leadingReduction + trailingReduction
-            if (totalReduction == 0f) {
-                cluster
+            if (cluster.isSpaceRun()) {
+                val cjkAdjacent = prevRole == FontRole.CjkText || nextRole == FontRole.CjkText
+                if (!cjkAdjacent) return@mapIndexed cluster
+                val reduction = cluster.advance - gap
+                if (reduction == 0f) return@mapIndexed cluster
+                decisions += AutoSpaceDecisionInfo(
+                    clusterRange = cluster.range,
+                    side = "gap",
+                    boundaryRole = FontRole.CjkText.name,
+                    mode = AutoSpaceMode.Replace.name,
+                    charactersAffected = cluster.text.length,
+                    reductionPerChar = reduction / cluster.text.length,
+                    totalReduction = reduction,
+                    reason = "TextAutoSpaceReplace:space-cluster-to-gap",
+                )
+                cluster.copy(advance = gap)
             } else {
-                cluster.copy(advance = (cluster.advance - totalReduction).coerceAtLeast(0f))
+                if (mode != AutoSpaceMode.Insert) return@mapIndexed cluster
+                var added = 0f
+                if (prevRole == FontRole.CjkText) {
+                    added += gap
+                    decisions += AutoSpaceDecisionInfo(
+                        clusterRange = cluster.range,
+                        side = "leading",
+                        boundaryRole = FontRole.CjkText.name,
+                        mode = mode.name,
+                        charactersAffected = 0,
+                        reductionPerChar = 0f,
+                        totalReduction = -gap,
+                        reason = "TextAutoSpaceInsert:ideograph-alpha:quarter-em",
+                    )
+                }
+                if (nextRole == FontRole.CjkText) {
+                    added += gap
+                    decisions += AutoSpaceDecisionInfo(
+                        clusterRange = cluster.range,
+                        side = "trailing",
+                        boundaryRole = FontRole.CjkText.name,
+                        mode = mode.name,
+                        charactersAffected = 0,
+                        reductionPerChar = 0f,
+                        totalReduction = -gap,
+                        reason = "TextAutoSpaceInsert:ideograph-alpha:quarter-em",
+                    )
+                }
+                if (added == 0f) cluster else cluster.copy(advance = cluster.advance + added)
             }
         }
         return AutoSpaceApplicationResult(updated, decisions)
     }
-
-    /**
-     * Sum of the leading or trailing `count` glyphs' advances. Used to read
-     * the real shaped width of typed U+0020 spaces — stub gives 1em per
-     * space; AWT often gives only ~0.3em. If the glyph list is missing or
-     * shorter than `count`, falls back to `count × fallbackPerSpace`.
-     */
-    private fun List<Glyph>.boundarySpaceAdvance(
-        count: Int,
-        side: String,
-        fallbackPerSpace: Float,
-    ): Float {
-        if (count <= 0) return 0f
-        if (size < count) return count * fallbackPerSpace
-        val slice = when (side) {
-            "leading" -> take(count)
-            else -> takeLast(count)
-        }
-        return slice.sumOf { it.advance.toDouble() }.toFloat()
-    }
-
-    /**
-     * Per CSS Text 4 + ADR 0009. A CJK ↔ Latin (or Latin ↔ CJK) boundary
-     * needs ONE autospace gap of `gapEm`:
-     *
-     * - **`TextAutoSpaceReplace`** — the author typed U+0020 at the
-     *   boundary: the typed spaces' shaped advance (see
-     *   [boundarySpaceAdvance]) is normalised down to the gap, regardless
-     *   of how many spaces were typed.
-     * - **`TextAutoSpaceInsert`** — no typed space: the gap is ADDED
-     *   (negative reduction widens the cluster advance). CLREQ:「原则上，
-     *   汉字与西文字母、数字间使用不多于四分之一个汉字宽的字距或空白」——
-     *   the gap is not conditional on authorial spaces. Only fires when the
-     *   profile mode is [AutoSpaceMode.Insert]; [AutoSpaceMode.Replace]
-     *   keeps the conservative typed-space-only behaviour.
-     *
-     * Returns the net advance reduction (negative = insertion).
-     */
-    private fun Int.boundaryReduction(
-        boundaryRole: FontRole?,
-        cluster: Cluster,
-        side: String,
-        policy: AutoSpacePolicy,
-        fontSize: Float,
-        typedAdvance: Float,
-        decisions: MutableList<AutoSpaceDecisionInfo>,
-    ): Float {
-        if (boundaryRole == null) return 0f
-        val mode = policy.modeFor(boundaryRole) ?: return 0f
-        if (mode == AutoSpaceMode.Disabled) return 0f
-        val replacementGap = policy.gapEm * fontSize
-
-        if (this == 0) {
-            // No typed space at the boundary — Insert mode adds the gap.
-            if (mode != AutoSpaceMode.Insert) return 0f
-            decisions += AutoSpaceDecisionInfo(
-                clusterRange = cluster.range,
-                side = side,
-                boundaryRole = boundaryRole.name,
-                mode = mode.name,
-                charactersAffected = 0,
-                reductionPerChar = 0f,
-                totalReduction = -replacementGap,
-                reason = "TextAutoSpaceInsert:ideograph-alpha:quarter-em",
-            )
-            return -replacementGap
-        }
-
-        val total = (typedAdvance - replacementGap).coerceAtLeast(0f)
-        if (total == 0f) return 0f
-        decisions += AutoSpaceDecisionInfo(
-            clusterRange = cluster.range,
-            side = side,
-            boundaryRole = boundaryRole.name,
-            // The decision records the ACTION taken at this boundary, not the
-            // profile-level mode: under Insert policy a typed-space boundary
-            // still performs a Replace.
-            mode = AutoSpaceMode.Replace.name,
-            charactersAffected = this,
-            reductionPerChar = total / this,
-            totalReduction = total,
-            reason = "TextAutoSpaceReplace:ideograph-alpha:n-to-one-gap",
-        )
-        return total
-    }
-
-    /**
-     * Per CSS Text 4 `text-autospace`, autospace only fires at
-     * **ideograph ↔ alpha / numeric** boundaries. Punctuation has its own
-     * spacing model (PunctuationAtom + class-derived glue), so a
-     * Latin ↔ CjkPunctuation boundary must NOT get an extra autospace gap.
-     */
-    private fun AutoSpacePolicy.modeFor(role: FontRole): AutoSpaceMode? =
-        when (role) {
-            FontRole.CjkText -> cjkLatin
-            else -> null
-        }
 
     private fun RepairCandidate.toDecisionInfo(clusters: List<Cluster>): LineRepairCandidateInfo =
         LineRepairCandidateInfo(

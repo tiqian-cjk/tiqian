@@ -20,52 +20,53 @@ class AutoSpaceSingleGapTest {
 
     @Test
     fun oneTypedSpaceBecomesOneAutospaceGap() {
-        // `中文 CJK 段落` — 1 space on each Latin-CJK boundary.
-        // Stub assigns 1em per typed space; gapEm=0.25; fontSize=16.
-        // Each space worth 16 collapsed to a single 4 → reduction 12 per boundary.
-        // " CJK " cluster nominal = 5*16=80; after 2 boundary collapses = 80 - 12 - 12 = 56.
+        // `中文 CJK 段落` — LatinWordSegmentation makes each space its own
+        // cluster. CJK-adjacent space clusters ARE the sino-western gap:
+        // their advance normalises from 1em (stub) to 0.25em.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 content = TiqianTextContent("中文 CJK 段落"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
         )
-        val cluster = result.clusters.single { it.text == " CJK " }
-        assertEquals(56f, cluster.advance)
+        val spaces = result.clusters.filter { it.text == " " }
+        assertEquals(2, spaces.size)
+        assertTrue(spaces.all { it.advance == 4f })
+        val word = result.clusters.single { it.text == "CJK" }
+        assertEquals(48f, word.advance)
     }
 
     @Test
     fun twoTypedSpacesAtBoundaryStillCollapseToOneGap() {
-        // `中文  CJK 段落` — 2 leading spaces, 1 trailing space.
-        // Leading: 2 typed * 16 = 32 → collapsed to ONE 4 gap = reduction 28.
-        // Trailing: 1 typed * 16 = 16 → ONE 4 gap = reduction 12.
-        // Cluster nominal = 6*16=96; after collapses = 96 - 28 - 12 = 56.
-        // Crucially: same 56 px regardless of typed space count on leading side.
+        // `中文  CJK 段落` — the 2-space run is ONE cluster and still
+        // normalises to a single 0.25em gap, same as one typed space.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 content = TiqianTextContent("中文  CJK 段落"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
         )
-        val cluster = result.clusters.single { it.text == "  CJK " }
-        assertEquals(56f, cluster.advance)
+        val doubleSpace = result.clusters.single { it.text == "  " }
+        assertEquals(4f, doubleSpace.advance)
+        val singleSpace = result.clusters.single { it.text == " " }
+        assertEquals(4f, singleSpace.advance)
     }
 
     @Test
     fun threeTypedSpacesStillOneGap() {
-        // 3 leading spaces, 0 trailing — leading boundary still gets ONE
-        // 4 px gap (Replace), and the space-less trailing boundary CJK→段
-        // gains an Insert gap of 4.
-        // Leading: 3 typed × 16 = 48 → one 4 gap, reduction 44.
-        // Cluster nominal = 6*16 = 96; 96 - 44 + 4 (insert) = 56.
+        // 3 leading spaces, 0 trailing — the 3-space run normalises to one
+        // 4 px gap, and the space-less trailing boundary CJK→段 gains an
+        // Insert gap inside the word cluster (48 + 4 = 52).
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 content = TiqianTextContent("中文   CJK段落"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
         )
-        val cluster = result.clusters.single { it.text == "   CJK" }
-        assertEquals(56f, cluster.advance)
+        val tripleSpace = result.clusters.single { it.text == "   " }
+        assertEquals(4f, tripleSpace.advance)
+        val word = result.clusters.single { it.text == "CJK" }
+        assertEquals(52f, word.advance)
     }
 
     @Test
@@ -117,8 +118,8 @@ class AutoSpaceSingleGapTest {
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
         )
-        assertEquals(2, result.debug.autoSpaceDecisions.size) // leading + trailing
+        assertEquals(2, result.debug.autoSpaceDecisions.size) // one per space cluster
         assertTrue(result.debug.autoSpaceDecisions.all { it.boundaryRole == "CjkText" })
-        assertTrue(result.debug.autoSpaceDecisions.all { it.reason.contains("ideograph-alpha") })
+        assertTrue(result.debug.autoSpaceDecisions.all { it.side == "gap" })
     }
 }

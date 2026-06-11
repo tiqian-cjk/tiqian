@@ -8,9 +8,9 @@ import ink.duo3.tiqian.font.FontRole
  * glue resources in CLREQ's expansion order（拉伸处理的优先顺序）:
  *
  *   1. WordSpace         — space inside Latin runs（西文词距，CLREQ 第一档）.
- *                          Stub Latin clusters are treated as single units,
- *                          so this is a no-op until a shaping adapter splits
- *                          them into words.
+ *                          Word spaces are standalone clusters after
+ *                          `LatinWordSegmentation`; all instances in a line
+ *                          stretch simultaneously by equal amounts.
  *   2. CjkLatinSpace     — the sino-western gap（中西间距）: stretches from
  *                          the autospace base (0.25em) by up to another
  *                          0.25em — total 0.5em, CLREQ's upper bound.
@@ -42,6 +42,8 @@ import ink.duo3.tiqian.font.FontRole
 class Justifier(
     private val cjkLatinSpaceEm: Float = 0.25f,
     private val cjkInterCharMaxEm: Float = 0.25f,
+    /** Per-word-space stretch cap (added on top of the natural space). */
+    private val wordSpaceStretchEm: Float = 0.25f,
 ) {
     fun justify(
         adjustedClusters: List<Cluster>,
@@ -74,7 +76,33 @@ class Justifier(
         var remaining = deficitBefore
         val allocations = mutableListOf<JustificationAllocation>()
 
-        // 1. WordSpace — no-op until Latin clusters split into words.
+        // 1. WordSpace — stretch Latin word spaces（CLREQ 拉伸第一档：西文
+        // 词距，一行内多处应同时、同等量处理）. A word space is a space-run
+        // cluster between two Latin word clusters; sino-western gap spaces
+        // (CJK-adjacent) are normalised by autospace and are NOT word
+        // spaces. Line-edge-collapsed spaces (advance 0) are skipped.
+        // Equal caps + proportional allocation = equal amounts.
+        val wordSpaceOpps = buildList {
+            for (idx in lineClusterRange) {
+                if (!adjustedClusters[idx].isWordSpaceBetweenLatin(idx, adjustedClusters, clusterRoles)) continue
+                if (adjustedClusters[idx].advance <= 0f) continue
+                add(
+                    JustificationOpportunity(
+                        targetClusterIndex = idx,
+                        kind = GlueKind.WordSpace,
+                        priority = 0,
+                        capacity = wordSpaceStretchEm * fontSize,
+                    ),
+                )
+            }
+        }
+        remaining = allocate(
+            deficit = remaining,
+            opportunities = wordSpaceOpps,
+            reason = "WordSpace",
+            into = allocations,
+        )
+        if (remaining <= 0f) return finalize(lineClusterRange, deficitBefore, remaining, allocations)
 
         // 2. CjkLatinSpace — open the boundary between CJK and Latin clusters.
         // `IdeographAlphaJustifyBoundary`: same boundary rule as autospace
@@ -246,6 +274,27 @@ class Justifier(
 
     private fun FontRole.isCjkLike(): Boolean =
         this == FontRole.CjkText || this == FontRole.CjkPunctuation
+
+    /**
+     * A word space: a space-run cluster whose nearest non-space context is
+     * Latin on both sides. CJK-adjacent space clusters are sino-western
+     * gaps (autospace's territory), not word spaces.
+     */
+    private fun Cluster.isWordSpaceBetweenLatin(
+        idx: Int,
+        clusters: List<Cluster>,
+        roles: List<FontRole>,
+    ): Boolean {
+        if (text.isEmpty() || !text.all { it == ' ' }) return false
+        if (roles[idx] != FontRole.LatinText) return false
+        val prevLatinWord = idx > 0 &&
+            roles[idx - 1] == FontRole.LatinText &&
+            !clusters[idx - 1].text.all { it == ' ' }
+        val nextLatinWord = idx < clusters.lastIndex &&
+            roles[idx + 1] == FontRole.LatinText &&
+            !clusters[idx + 1].text.all { it == ' ' }
+        return prevLatinWord && nextLatinWord
+    }
 }
 
 /**
