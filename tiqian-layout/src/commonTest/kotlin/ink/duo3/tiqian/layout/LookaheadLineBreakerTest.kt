@@ -80,7 +80,9 @@ class LookaheadLineBreakerTest {
             naturalClusters = clusters,
             adjustedClusters = clusters,
             maxWidth = 60f,
-            pushInCapacities = mapOf(3 to 4f),
+            shrinkOpportunities = listOf(
+                ShrinkOpportunity(3, tier = 6, capacity = 4f, channel = ShrinkChannel.TrailingGlue),
+            ),
         )
 
         assertEquals(1, solution.lines.size)
@@ -106,7 +108,9 @@ class LookaheadLineBreakerTest {
             naturalClusters = clusters,
             adjustedClusters = clusters,
             maxWidth = 60f,
-            pushInCapacities = mapOf(6 to 4f),
+            shrinkOpportunities = listOf(
+                ShrinkOpportunity(6, tier = 6, capacity = 4f, channel = ShrinkChannel.TrailingGlue),
+            ),
         )
 
         assertEquals(2, solution.lines.size)

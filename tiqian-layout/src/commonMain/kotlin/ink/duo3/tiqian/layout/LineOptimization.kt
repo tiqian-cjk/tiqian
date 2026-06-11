@@ -57,6 +57,8 @@ data class PushInAllocation(
     val clusterIndex: Int,
     val shrink: Float,
     val availableCapacity: Float,
+    /** Which resource the shrink consumes (ADR 0020). */
+    val channel: ShrinkChannel = ShrinkChannel.TrailingGlue,
 )
 
 data class LineCandidate(

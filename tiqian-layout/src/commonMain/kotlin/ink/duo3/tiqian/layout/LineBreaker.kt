@@ -11,7 +11,13 @@ interface LineBreaker {
         naturalClusters: List<Cluster>,
         adjustedClusters: List<Cluster>,
         maxWidth: Float,
-        pushInCapacities: Map<Int, Float> = emptyMap(),
+        /**
+         * Tiered in-line shrink resources for PushIn, ordered per CLREQ's
+         * 挤压处理优先顺序 (ADR 0020). Lower tier = consumed first; the
+         * offender's own trailing glue is promoted to tier 1 (行末标点
+         * 调成半宽) at repair time.
+         */
+        shrinkOpportunities: List<ShrinkOpportunity> = emptyList(),
         /**
          * Cluster-index ranges that must stay on one line when they fit
          * (示亡号 spans, ADR 0018). `MourningSpanKeptUnbroken`: a break that
@@ -20,6 +26,41 @@ interface LineBreaker {
          */
         unbreakableRanges: List<IntRange> = emptyList(),
     ): LineSolution
+}
+
+/**
+ * One shrinkable resource on a cluster (ADR 0020, CLREQ 挤压处理优先顺序):
+ *
+ * - tier 1 — 行末标点削半宽（offender 自身 trailing glue，repair 时晋升）
+ * - tier 2 — 西文词距，最小压至 1/4em
+ * - tier 3 — 间隔号/居中类，两侧同时等量，压至 0
+ * - tier 4 — 行内句号/问号/感叹号 trailing glue（风格开关可禁）
+ * - tier 5 — 中西间距（风格开关可禁）
+ * - tier 6 — 其余行内标点 glue。CLREQ 程序未列；项目保留为最后手段，
+ *            否则 PushIn 在标点稀疏的行上能力大幅下降。
+ */
+data class ShrinkOpportunity(
+    val clusterIndex: Int,
+    val tier: Int,
+    val capacity: Float,
+    val channel: ShrinkChannel,
+    /**
+     * Usable only when this cluster becomes the merged line's END (tier-1
+     * promotion). Used when `allowInlineStopCompression` is off: 行内句问叹
+     * keep full width, but 行末削半 (a different CLREQ rule) still applies.
+     */
+    val lineEndOnly: Boolean = false,
+)
+
+enum class ShrinkChannel {
+    /** Consume the punctuation atom's trailing glue. */
+    TrailingGlue,
+
+    /** Consume leading and trailing glue simultaneously, equal amounts. */
+    LeadingAndTrailingGlue,
+
+    /** Reduce the cluster's raw advance (word spaces, gap clusters). */
+    RawAdvance,
 }
 
 /**
@@ -63,7 +104,7 @@ class GreedyLineBreaker(
         naturalClusters: List<Cluster>,
         adjustedClusters: List<Cluster>,
         maxWidth: Float,
-        pushInCapacities: Map<Int, Float>,
+        shrinkOpportunities: List<ShrinkOpportunity>,
         unbreakableRanges: List<IntRange>,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
@@ -78,7 +119,7 @@ class GreedyLineBreaker(
             adjustedClusters = adjustedClusters,
             maxWidth = maxWidth,
             kinsoku = kinsoku,
-            pushInCapacities = pushInCapacities,
+            shrinkOpportunities = shrinkOpportunities,
             pushInPenalty = pushInPenalty,
             carryPreviousPenalty = carryPreviousPenalty,
             leaveRaggedPenalty = leaveRaggedPenalty,
@@ -164,7 +205,7 @@ class LookaheadLineBreaker(
         naturalClusters: List<Cluster>,
         adjustedClusters: List<Cluster>,
         maxWidth: Float,
-        pushInCapacities: Map<Int, Float>,
+        shrinkOpportunities: List<ShrinkOpportunity>,
         unbreakableRanges: List<IntRange>,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
@@ -210,7 +251,7 @@ class LookaheadLineBreaker(
                     natural = naturalClusters,
                     adjusted = adjustedClusters,
                     maxWidth = maxWidth,
-                    pushInCapacities = pushInCapacities,
+                    shrinkOpportunities = shrinkOpportunities,
                 )
                 if (score < bestScore) {
                     bestScore = score
@@ -232,7 +273,7 @@ class LookaheadLineBreaker(
             adjustedClusters = adjustedClusters,
             maxWidth = maxWidth,
             kinsoku = kinsoku,
-            pushInCapacities = pushInCapacities,
+            shrinkOpportunities = shrinkOpportunities,
             pushInPenalty = pushInPenalty,
             carryPreviousPenalty = carryPreviousPenalty,
             leaveRaggedPenalty = leaveRaggedPenalty,
@@ -246,7 +287,7 @@ class LookaheadLineBreaker(
         natural: List<Cluster>,
         adjusted: List<Cluster>,
         maxWidth: Float,
-        pushInCapacities: Map<Int, Float>,
+        shrinkOpportunities: List<ShrinkOpportunity>,
     ): Float {
         val firstLine = rebuildLine(s..(e - 1), natural, adjusted)
         val future = rawGreedyLinesFrom(
@@ -264,7 +305,7 @@ class LookaheadLineBreaker(
             adjustedClusters = adjusted,
             maxWidth = maxWidth,
             kinsoku = kinsoku,
-            pushInCapacities = pushInCapacities,
+            shrinkOpportunities = shrinkOpportunities,
             pushInPenalty = pushInPenalty,
             carryPreviousPenalty = carryPreviousPenalty,
             leaveRaggedPenalty = leaveRaggedPenalty,
@@ -327,7 +368,7 @@ internal fun applyKinsokuRepairs(
     adjustedClusters: List<Cluster>,
     maxWidth: Float,
     kinsoku: KinsokuRule,
-    pushInCapacities: Map<Int, Float> = emptyMap(),
+    shrinkOpportunities: List<ShrinkOpportunity> = emptyList(),
     pushInPenalty: Int,
     carryPreviousPenalty: Int,
     leaveRaggedPenalty: Int,
@@ -353,7 +394,7 @@ internal fun applyKinsokuRepairs(
             naturalClusters = naturalClusters,
             adjustedClusters = adjustedClusters,
             maxWidth = maxWidth,
-            pushInCapacities = pushInCapacities,
+            shrinkOpportunities = shrinkOpportunities,
             pushInPenalty = pushInPenalty,
         )
         repairCandidates += pushIn.candidate
@@ -527,7 +568,7 @@ private fun tryPushIn(
     naturalClusters: List<Cluster>,
     adjustedClusters: List<Cluster>,
     maxWidth: Float,
-    pushInCapacities: Map<Int, Float>,
+    shrinkOpportunities: List<ShrinkOpportunity>,
     pushInPenalty: Int,
 ): PushInResult {
     val offenderIndex = curr.clusterRange.first
@@ -535,11 +576,20 @@ private fun tryPushIn(
     val expanded = rebuildLine(expandedRange, naturalClusters, adjustedClusters)
     val overflow = expanded.adjustedWidth - maxWidth
 
-    // Aggregate compressible glue across the merged line. Every cluster on
-    // the new line contributes whatever its punctuation atoms still have
-    // available (after spacing-compression but before edge-trim).
-    val perCluster = expandedRange.associateWith { (pushInCapacities[it] ?: 0f) }
-    val totalCapacity = perCluster.values.sum()
+    // Tiered shrink resources across the merged line (CLREQ 挤压处理优先
+    // 顺序, ADR 0020). The offender will sit at the merged line's END, so
+    // its trailing glue IS the 行末标点削半宽 step — promote it to tier 1.
+    val inLine = shrinkOpportunities
+        .filter { it.clusterIndex in expandedRange && it.capacity > 0f }
+        .filter { !it.lineEndOnly || it.clusterIndex == offenderIndex }
+        .map { opp ->
+            if (opp.clusterIndex == offenderIndex && opp.channel == ShrinkChannel.TrailingGlue) {
+                opp.copy(tier = 1)
+            } else {
+                opp
+            }
+        }
+    val totalCapacity = inLine.sumOf { it.capacity.toDouble() }.toFloat()
 
     if (overflow > totalCapacity) {
         return PushInResult(
@@ -565,7 +615,7 @@ private fun tryPushIn(
     // That is a zero-shrink merge. Refusing it cascaded into
     // carry-overflows → LeaveRagged and left `、` / `」` at line start.
     val shrink = overflow.coerceAtLeast(0f)
-    val allocations = if (shrink > 0f) distributePushInShrink(perCluster, shrink) else emptyList()
+    val allocations = if (shrink > 0f) distributePushInShrink(inLine, shrink) else emptyList()
     val offender = adjustedClusters[offenderIndex]
     val candidate = RepairCandidate(
         kind = "PushIn",
@@ -606,40 +656,46 @@ private fun tryPushIn(
 }
 
 /**
- * Distribute [totalShrink] across the active (capacity > 0) entries of
- * [perCluster] proportionally to each cluster's available capacity. Each
- * allocation is capped by its own capacity; any rounding remainder lands
- * on the last active entry so the sum equals [totalShrink] exactly.
- *
- * Returned in cluster order. Clusters with zero capacity are omitted.
+ * Distribute [totalShrink] across [opportunities] in STRICT TIER ORDER
+ * (CLREQ 挤压处理优先顺序): tier k is exhausted before tier k+1 is touched.
+ * Within a tier, shrink is shared proportionally to capacity (equal caps →
+ * equal amounts, the CLREQ「同时、同等量」rule); rounding remainder lands on
+ * the tier's last entry. Allocations carry the consumption channel so the
+ * engine knows whether to consume glue (one- or two-sided) or raw advance.
  */
 private fun distributePushInShrink(
-    perCluster: Map<Int, Float>,
+    opportunities: List<ShrinkOpportunity>,
     totalShrink: Float,
 ): List<PushInAllocation> {
-    val active = perCluster.entries
-        .filter { it.value > 0f }
-        .sortedBy { it.key }
-    if (active.isEmpty() || totalShrink <= 0f) return emptyList()
+    if (opportunities.isEmpty() || totalShrink <= 0f) return emptyList()
 
-    val totalActive = active.sumOf { it.value.toDouble() }.toFloat()
     val allocations = mutableListOf<PushInAllocation>()
     var remaining = totalShrink
-    active.forEachIndexed { i, entry ->
-        val isLast = (i == active.lastIndex)
-        val share = if (isLast) {
-            remaining.coerceAtMost(entry.value)
-        } else {
-            (totalShrink * entry.value / totalActive).coerceAtMost(entry.value)
+    for ((_, tierOpps) in opportunities.groupBy { it.tier }.toSortedMap()) {
+        if (remaining <= 0f) break
+        val tierCapacity = tierOpps.sumOf { it.capacity.toDouble() }.toFloat()
+        if (tierCapacity <= 0f) continue
+        val tierShrink = remaining.coerceAtMost(tierCapacity)
+        var tierRemaining = tierShrink
+        val ordered = tierOpps.sortedBy { it.clusterIndex }
+        ordered.forEachIndexed { i, opp ->
+            val isLast = (i == ordered.lastIndex)
+            val share = if (isLast) {
+                tierRemaining.coerceAtMost(opp.capacity)
+            } else {
+                (tierShrink * opp.capacity / tierCapacity).coerceAtMost(opp.capacity)
+            }
+            if (share > 0f) {
+                allocations += PushInAllocation(
+                    clusterIndex = opp.clusterIndex,
+                    shrink = share,
+                    availableCapacity = opp.capacity,
+                    channel = opp.channel,
+                )
+                tierRemaining -= share
+            }
         }
-        if (share > 0f) {
-            allocations += PushInAllocation(
-                clusterIndex = entry.key,
-                shrink = share,
-                availableCapacity = entry.value,
-            )
-            remaining -= share
-        }
+        remaining -= (tierShrink - tierRemaining.coerceAtLeast(0f))
     }
     return allocations
 }

@@ -39,16 +39,15 @@ class PushInLineWideCapacityTest {
         repeat(4) { i -> clusters += cluster(6 + i, 7 + i, "文", 16f) }
         clusters += cluster(10, 11, "。", 16f)
 
-        val capacities = mapOf(
-            5 to 8f,   // `、` trailing glue
-            10 to 8f,  // `。` trailing glue
-        )
-
         val solution = GreedyLineBreaker().breakLines(
             naturalClusters = clusters,
             adjustedClusters = clusters,
             maxWidth = 160f,
-            pushInCapacities = capacities,
+            shrinkOpportunities = listOf(
+                // `、` and `。` trailing glue, same tier.
+                ShrinkOpportunity(5, tier = 6, capacity = 8f, channel = ShrinkChannel.TrailingGlue),
+                ShrinkOpportunity(10, tier = 6, capacity = 8f, channel = ShrinkChannel.TrailingGlue),
+            ),
         )
 
         // PushIn must absorb the `。` into line 0.
@@ -63,9 +62,10 @@ class PushInLineWideCapacityTest {
         assertEquals(10, repair.offenderClusterIndex)
         assertEquals(16f, repair.totalShrink)
         assertEquals(16f, repair.totalAvailableCapacity)
-        // Both clusters with capacity contributed in cluster order.
-        assertEquals(listOf(5, 10), repair.allocations.map { it.clusterIndex })
-        // Proportional split: equal capacity → equal share.
+        // Tiered order (ADR 0020): the offender `。` will end the merged
+        // line, so its trailing glue is promoted to tier 1 (行末标点削半宽)
+        // and consumed FIRST; `、`'s tier-6 glue follows.
+        assertEquals(listOf(10, 5), repair.allocations.map { it.clusterIndex })
         assertEquals(8f, repair.allocations[0].shrink)
         assertEquals(8f, repair.allocations[1].shrink)
     }
@@ -87,7 +87,9 @@ class PushInLineWideCapacityTest {
             naturalClusters = clusters,
             adjustedClusters = clusters,
             maxWidth = 160f,
-            pushInCapacities = mapOf(5 to 4f),
+            shrinkOpportunities = listOf(
+                ShrinkOpportunity(5, tier = 6, capacity = 4f, channel = ShrinkChannel.TrailingGlue),
+            ),
         )
 
         // PushIn rejected. CarryPrevious takes `文` (index 9) along with `。`.
@@ -122,7 +124,9 @@ class PushInLineWideCapacityTest {
             naturalClusters = clusters,
             adjustedClusters = clusters,
             maxWidth = 60f,
-            pushInCapacities = mapOf(3 to 4f),
+            shrinkOpportunities = listOf(
+                ShrinkOpportunity(3, tier = 6, capacity = 4f, channel = ShrinkChannel.TrailingGlue),
+            ),
         )
 
         assertEquals(1, solution.lines.size)
@@ -162,7 +166,11 @@ class PushInLineWideCapacityTest {
             naturalClusters = clusters,
             adjustedClusters = clusters,
             maxWidth = 64f,
-            pushInCapacities = mapOf(3 to 8f, 4 to 8f, 8 to 8f),
+            shrinkOpportunities = listOf(
+                ShrinkOpportunity(3, tier = 6, capacity = 8f, channel = ShrinkChannel.TrailingGlue),
+                ShrinkOpportunity(4, tier = 6, capacity = 8f, channel = ShrinkChannel.TrailingGlue),
+                ShrinkOpportunity(8, tier = 6, capacity = 8f, channel = ShrinkChannel.TrailingGlue),
+            ),
         )
 
         assertEquals(3, solution.lines.size)
@@ -202,7 +210,9 @@ class PushInLineWideCapacityTest {
             naturalClusters = clusters,
             adjustedClusters = clusters,
             maxWidth = 80f,
-            pushInCapacities = mapOf(5 to 8f),
+            shrinkOpportunities = listOf(
+                ShrinkOpportunity(5, tier = 6, capacity = 8f, channel = ShrinkChannel.TrailingGlue),
+            ),
             unbreakableRanges = listOf(2..4),
         )
 

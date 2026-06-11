@@ -18,6 +18,7 @@ data class ClreqProfile(
     val hangingPunctuation: HangingPunctuationPolicy = HangingPunctuationPolicy.Disabled,
     val autoSpace: AutoSpacePolicy = AutoSpacePolicy.Default,
     val gluePlacement: PunctuationGluePlacement = PunctuationGluePlacement.forRegion(region),
+    val adjustment: AdjustmentStylePolicy = AdjustmentStylePolicy(),
 ) {
     companion object {
         // CoalesceRepeatablePunctuation: codepoints that, when written as consecutive
@@ -182,6 +183,36 @@ data class AutoSpacePolicy(
             cjkDigit = AutoSpaceMode.Disabled,
         )
     }
+}
+
+/**
+ * 行内调整（挤压/拉伸）的风格开关。CLREQ 的调整程序是默认侧；每个开关都
+ * 对应原文点名的「部分排版风格」变体。
+ */
+data class AdjustmentStylePolicy(
+    /**
+     * 严格风格（默认）：行尾标点无条件削成半宽（`LineEndHalfWidthPunctuation`）。
+     * 宽松风格：行尾标点保留全宽，其空白只在需要挤压时按需消耗——字身网格
+     * 在行尾保持完整，墨迹缘允许参差。
+     */
+    val lineEndPunctuation: LineEndPunctuationStyle = LineEndPunctuationStyle.ForceHalfWidth,
+    /**
+     * CLREQ 挤压第④档：「位于行内的句号、问号、感叹号……最小挤为半个汉字
+     * 字宽」。「有些排版风格禁止此项调整，而保持句号、问号、惊叹号固定一个
+     * 字宽」→ false 时这些标点不进挤压容量。
+     */
+    val allowInlineStopCompression: Boolean = true,
+    /**
+     * 「在一些排版风格中，中西间距固定默认宽度……被排除在行内调整对象之外，
+     * 不允许被挤压（/拉伸）」→ false 时 sino-western gap 既不进挤压容量，
+     * 也不参与 justify 的 CjkLatinSpace 拉伸档。
+     */
+    val allowSinoWesternGapAdjustment: Boolean = true,
+)
+
+enum class LineEndPunctuationStyle {
+    ForceHalfWidth,
+    AllowFullWidth,
 }
 
 /**

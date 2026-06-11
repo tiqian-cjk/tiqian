@@ -13,8 +13,8 @@
 ## 当前位置
 
 ```text
-Last completed: Slice 12 (Latin 分词 + WordSpace，gap audit 缺口 2，ADR 0019)
-Up next:        Slice 13 (gap audit 缺口 4：挤压分层 + 调整风格开关：行尾标点严格/宽松、句问叹可压、中西间距可调)；更远期：行尾悬挂 opt-in、WordSpace、Android composable 渲染、竖排预研
+Last completed: Slice 13 (挤压分层 + 调整风格开关，gap audit 缺口 4，ADR 0020)
+Up next:        Slice 14 (gap audit 缺口 5：段首缩进 + 首行开括号半宽缩减)；更远期：行尾悬挂 opt-in、行间线（专名号/书名号甲式）、Android composable 渲染、竖排预研
 ```
 
 ## Slice / Milestone 对照表
@@ -35,6 +35,7 @@ Up next:        Slice 13 (gap audit 缺口 4：挤压分层 + 调整风格开关
 | 10 | — | 中西混排间距补全：无空格边界插入 1/4em（CLREQ 原文），Insert 为默认 mode | `justify-mixed-paragraph` `ascii-brackets-in-cjk` fixture | dump `autospace` 行 reduction 为负；golden + 渲染目检 | done (`TextAutoSpaceInsert`；decision mode 记实际动作；行边 trim 复用；ADR 0009 amendment) |
 | 11 | — | justify 拉伸对齐 CLREQ：去标点优先档，标点 glue 侧并入均匀 CjkInterChar | `real-paragraph-1` golden 中 justify 全为均匀份额 | golden diff review | done (拉伸链 WordSpace→CjkLatinSpace→CjkInterChar；collapse 不可逆与实心侧禁令保留；ADR 0004 amendment、design doc 取舍废止) |
 | 12 | — | Latin 分词：词/空格独立 cluster，长西文按词换行，词空格参与 justify，行边空格塌缩 | `latin-word-wrap` fixture | golden + 渲染目检；`longLatinSentenceWrapsAtWordBoundaries` 等单测 | done (`LatinWordSegmentation` shaping 输入层分段；空格三种身份：中西 gap/词空格/行边塌缩；WordSpace 档启用；ADR 0019) |
+| 13 | — | 挤压分层对齐 CLREQ：六档 `ShrinkOpportunity`（行末削半→词距→间隔号双侧→行内句问叹→中西间距→其余 glue），`AdjustmentStylePolicy` 三开关 | `latin-word-wrap` golden（词距先于行内 `，` 被压）+ 三开关单测 | golden diff review；`PushInLineWideCapacityTest` tier 顺序断言 | done (严格 tier 耗尽 + 同档比例分摊；offender trailing glue 晋升 tier 1；`lineEndOnly` 隔离行末削半与行内压缩；行末强制半宽默认、宽松风格 opt-in；ADR 0020) |
 
 Slice 4 的 `done` 范围是当前默认 kinsoku repair：`PushIn` / `CarryPrevious` / `LeaveRagged` 均可解释，`LineDecisionInfo` 暴露 chosen repair 与 candidate repairs。lookahead window 2~3 属于后续优化，不再阻塞当前 Slice 4 的模型收口。
 

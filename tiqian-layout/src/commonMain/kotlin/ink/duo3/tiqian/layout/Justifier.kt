@@ -54,6 +54,11 @@ class Justifier(
         fontSize: Float,
         skip: Boolean,
         clusterEdgeAnchors: Map<Int, ClusterEdgeAnchors> = emptyMap(),
+        /**
+         * 「在一些排版风格中，中西间距固定默认宽度……不允许被拉伸」—
+         * false disables the CjkLatinSpace tier (AdjustmentStylePolicy).
+         */
+        allowSinoWesternGapStretch: Boolean = true,
     ): JustificationPlan {
         require(clusterRoles.size == adjustedClusters.size) {
             "clusterRoles must align with adjustedClusters."
@@ -112,7 +117,7 @@ class Justifier(
         // typed a U+0020 at the boundary, the gap is a WordSpace opportunity
         // (deferred until Latin word splitting) — stacking CjkLatinSpace on
         // top doubled the visible gap.
-        val cjkLatinOpps = buildBoundaryOpportunities(
+        val cjkLatinOpps = if (!allowSinoWesternGapStretch) emptyList() else buildBoundaryOpportunities(
             adjustedClusters = adjustedClusters,
             lineClusterRange = lineClusterRange,
             kind = GlueKind.CjkLatinSpace,

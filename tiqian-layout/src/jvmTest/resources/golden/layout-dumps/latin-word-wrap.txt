@@ -6,7 +6,7 @@ size 240.0x83.2
 line[0] 0-12 natural=192.0 adjusted=176.0 visual=204.0 repair=- candidates=- justify=deficit=64.0->36.0 CjkInterChar@0+4.0,CjkInterChar@1+4.0,CjkInterChar@2+4.0,CjkInterChar@3+4.0,CjkInterChar@4+4.0,CjkInterChar@5+4.0,CjkInterChar@7+4.0
 line[1] 12-27 natural=240.0 adjusted=240.0 visual=240.0 repair=- candidates=- justify=-
 line[2] 27-42 natural=240.0 adjusted=224.0 visual=232.0 repair=- candidates=- justify=deficit=16.0->8.0 WordSpace@33+4.0,WordSpace@38+4.0
-line[3] 42-58 natural=256.0 adjusted=224.0 visual=224.0 repair=PushIn(ForbiddenAtLineStart shrink=16.0) candidates=PushIn+ justify=-
+line[3] 42-58 natural=256.0 adjusted=228.0 visual=228.0 repair=PushIn(ForbiddenAtLineStart shrink=16.0) candidates=PushIn+ justify=-
 cluster 0-1 '他' adv=20.0
 cluster 1-2 '引' adv=20.0
 cluster 2-3 '用' adv=20.0
@@ -30,9 +30,9 @@ cluster 38-39 ' ' adv=20.0
 cluster 39-42 'the' adv=48.0
 cluster 42-43 ' ' adv=0.0
 cluster 43-47 'lazy' adv=64.0
-cluster 47-48 ' ' adv=16.0
+cluster 47-48 ' ' adv=12.0
 cluster 48-51 'dog' adv=48.0
-cluster 51-52 '，' adv=8.0
+cluster 51-52 '，' adv=16.0
 cluster 52-53 '然' adv=16.0
 cluster 53-54 '后' adv=16.0
 cluster 54-55 '继' adv=16.0
@@ -59,7 +59,7 @@ punct 7-8 '：' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Le
 punct 51-52 '，' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
 punct 57-58 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
 geom 7-8 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=4.0 resolved=20.0
-geom 51-52 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+geom 51-52 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
 geom 57-58 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 11-12 side=trailing trim=16.0 reason=LineEdgeWordSpaceCollapse
 edgetrim 27-28 side=leading trim=16.0 reason=LineEdgeWordSpaceCollapse
@@ -69,7 +69,7 @@ size 240.0x83.2
 line[0] 0-12 natural=192.0 adjusted=176.0 visual=204.0 repair=- candidates=- justify=deficit=64.0->36.0 CjkInterChar@0+4.0,CjkInterChar@1+4.0,CjkInterChar@2+4.0,CjkInterChar@3+4.0,CjkInterChar@4+4.0,CjkInterChar@5+4.0,CjkInterChar@7+4.0
 line[1] 12-27 natural=240.0 adjusted=240.0 visual=240.0 repair=- candidates=- justify=-
 line[2] 27-42 natural=240.0 adjusted=224.0 visual=232.0 repair=- candidates=- justify=deficit=16.0->8.0 WordSpace@33+4.0,WordSpace@38+4.0
-line[3] 42-58 natural=256.0 adjusted=224.0 visual=224.0 repair=PushIn(ForbiddenAtLineStart shrink=16.0) candidates=PushIn+ justify=-
+line[3] 42-58 natural=256.0 adjusted=228.0 visual=228.0 repair=PushIn(ForbiddenAtLineStart shrink=16.0) candidates=PushIn+ justify=-
 cluster 0-1 '他' adv=20.0
 cluster 1-2 '引' adv=20.0
 cluster 2-3 '用' adv=20.0
@@ -93,9 +93,9 @@ cluster 38-39 ' ' adv=20.0
 cluster 39-42 'the' adv=48.0
 cluster 42-43 ' ' adv=0.0
 cluster 43-47 'lazy' adv=64.0
-cluster 47-48 ' ' adv=16.0
+cluster 47-48 ' ' adv=12.0
 cluster 48-51 'dog' adv=48.0
-cluster 51-52 '，' adv=8.0
+cluster 51-52 '，' adv=16.0
 cluster 52-53 '然' adv=16.0
 cluster 53-54 '后' adv=16.0
 cluster 54-55 '继' adv=16.0
@@ -122,7 +122,7 @@ punct 7-8 '：' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Le
 punct 51-52 '，' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
 punct 57-58 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
 geom 7-8 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=4.0 resolved=20.0
-geom 51-52 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+geom 51-52 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
 geom 57-58 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 11-12 side=trailing trim=16.0 reason=LineEdgeWordSpaceCollapse
 edgetrim 27-28 side=leading trim=16.0 reason=LineEdgeWordSpaceCollapse

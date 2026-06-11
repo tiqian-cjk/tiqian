@@ -5,6 +5,8 @@ import ink.duo3.tiqian.clreq.AutoSpacePolicy
 import ink.duo3.tiqian.clreq.BuiltInClreqProfileResolver
 import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.clreq.ClreqProfileResolver
+import ink.duo3.tiqian.clreq.LineEndPunctuationStyle
+import ink.duo3.tiqian.clreq.PunctuationClass
 import ink.duo3.tiqian.clreq.PunctuationGluePlacement
 import ink.duo3.tiqian.clreq.ClreqPunctuationGlyphSubstitutor
 import ink.duo3.tiqian.core.AutoSpaceDecisionInfo
@@ -187,7 +189,70 @@ class ExplainableStubParagraphLayoutEngine(
             spacingPlan = spacingPlan,
         )
         val clusters = baseGeometry.resolveClusters()
-        val pushInCapacities = baseGeometry.pushInCapacities()
+        // CLREQ 挤压处理优先顺序 (ADR 0020): tiered shrink resources for
+        // PushIn. Punctuation classes map to tiers; style knobs gate the
+        // inline-stop and sino-western tiers.
+        val adjustmentStyle = clreqProfile.adjustment
+        val glueCaps = baseGeometry.glueCapacities()
+        val gapClusterRanges = autoSpaceDecisions
+            .filter { it.side == "gap" }
+            .map { it.clusterRange }
+            .toSet()
+        val atomClassByRange = punctuationAtoms.associate { it.range to it.punctuationClass }
+        val shrinkOpportunities = buildList {
+            naturalClusters.forEachIndexed { idx, cluster ->
+                val caps = glueCaps[idx]
+                if (caps != null) {
+                    val cls = atomClassByRange[cluster.range]
+                    when (cls) {
+                        PunctuationClass.Interpunct,
+                        PunctuationClass.MiddleDot,
+                        -> {
+                            val both = caps.leading + caps.trailing
+                            if (both > 0f) {
+                                add(ShrinkOpportunity(idx, tier = 3, capacity = both, channel = ShrinkChannel.LeadingAndTrailingGlue))
+                            }
+                        }
+
+                        PunctuationClass.PauseOrStop -> {
+                            val isStop = cluster.displayText.firstOrNull() in INLINE_STOPS
+                            val tier = if (isStop) 4 else 6
+                            // Knob off: 行内句问叹 keep full width — their glue
+                            // is only reachable via the tier-1 line-end
+                            // promotion (行末削半 is a separate rule).
+                            val lineEndOnly = isStop && !adjustmentStyle.allowInlineStopCompression
+                            if (caps.trailing > 0f) {
+                                add(
+                                    ShrinkOpportunity(
+                                        idx,
+                                        tier = tier,
+                                        capacity = caps.trailing,
+                                        channel = ShrinkChannel.TrailingGlue,
+                                        lineEndOnly = lineEndOnly,
+                                    ),
+                                )
+                            }
+                        }
+
+                        else -> if (caps.trailing > 0f) {
+                            add(ShrinkOpportunity(idx, tier = 6, capacity = caps.trailing, channel = ShrinkChannel.TrailingGlue))
+                        }
+                    }
+                } else if (cluster.isSpaceRun()) {
+                    if (cluster.range in gapClusterRanges) {
+                        if (adjustmentStyle.allowSinoWesternGapAdjustment && cluster.advance > 0f) {
+                            add(ShrinkOpportunity(idx, tier = 5, capacity = cluster.advance, channel = ShrinkChannel.RawAdvance))
+                        }
+                    } else {
+                        // Word space: min 1/4em (CLREQ 挤压第②档).
+                        val capacity = cluster.advance - WORD_SPACE_MIN_EM * fontSize
+                        if (capacity > 0f) {
+                            add(ShrinkOpportunity(idx, tier = 2, capacity = capacity, channel = ShrinkChannel.RawAdvance))
+                        }
+                    }
+                }
+            }
+        }
 
         val metricDecisions = fontDecisions.map { decision ->
             val request = FontMetricsRequest(
@@ -220,7 +285,7 @@ class ExplainableStubParagraphLayoutEngine(
                 naturalClusters = naturalClusters,
                 adjustedClusters = clusters,
                 maxWidth = input.constraints.maxWidth,
-                pushInCapacities = pushInCapacities,
+                shrinkOpportunities = shrinkOpportunities,
                 // MourningSpanKeptUnbroken: 示亡号 spans stay on one line
                 // whenever they fit (ADR 0018).
                 unbreakableRanges = input.decorations
@@ -232,15 +297,33 @@ class ExplainableStubParagraphLayoutEngine(
         val clusterRoles = naturalClusters.map { cluster ->
             fontDecisions.first { cluster.range.isInside(it.range) }.role
         }
-        val pushInShrinkByCluster = lineSolution.lines
+        val pushInAllocations = lineSolution.lines
             .mapNotNull { it.repair as? RepairOption.PushIn }
             .flatMap { it.allocations }
-            .groupBy { it.clusterIndex }
-            .mapValues { (_, allocs) -> allocs.sumOf { it.shrink.toDouble() }.toFloat() }
-        val pushInGeometry = baseGeometry.consumeTrailingByCluster(pushInShrinkByCluster)
+        val pushInTrailing = HashMap<Int, Float>()
+        val pushInLeading = HashMap<Int, Float>()
+        val pushInRawTrims = HashMap<Int, Float>()
+        for (alloc in pushInAllocations) {
+            when (alloc.channel) {
+                ShrinkChannel.TrailingGlue ->
+                    pushInTrailing.merge(alloc.clusterIndex, alloc.shrink) { a, b -> a + b }
+                ShrinkChannel.LeadingAndTrailingGlue -> {
+                    // CLREQ: 间隔号挤压必须同时从字面两侧、同等量处理.
+                    pushInLeading.merge(alloc.clusterIndex, alloc.shrink / 2f) { a, b -> a + b }
+                    pushInTrailing.merge(alloc.clusterIndex, alloc.shrink / 2f) { a, b -> a + b }
+                }
+                ShrinkChannel.RawAdvance ->
+                    pushInRawTrims.merge(alloc.clusterIndex, alloc.shrink) { a, b -> a + b }
+            }
+        }
+        val pushInGeometry = baseGeometry
+            .consumeTrailingByCluster(pushInTrailing)
+            .consumeLeadingByCluster(pushInLeading)
         val pushInClusters = pushInGeometry.resolveClusters()
         val edgeTrimResult = pushInGeometry.consumeLineEdgeGlue(
             lines = lineSolution.lines,
+            forceLineEndHalfWidth = adjustmentStyle.lineEndPunctuation ==
+                LineEndPunctuationStyle.ForceHalfWidth,
         )
         // TextAutoSpaceLineEdgeTrim: the autospace replacement gap lives in
         // the Latin cluster's advance, not in punctuation glue, so the edge
@@ -291,7 +374,9 @@ class ExplainableStubParagraphLayoutEngine(
             collapseEdgeSpace(line.clusterRange.last, "trailing")
             collapseEdgeSpace(line.clusterRange.first, "leading")
         }
-        val trimmedGeometry = edgeTrimResult.geometry.withRawEdgeTrims(autoSpaceEdgeTrims)
+        val rawTrims = HashMap<Int, Float>(autoSpaceEdgeTrims)
+        pushInRawTrims.forEach { (idx, amount) -> rawTrims.merge(idx, amount) { a, b -> a + b } }
+        val trimmedGeometry = edgeTrimResult.geometry.withRawEdgeTrims(rawTrims)
         val trimmedClusters = trimmedGeometry.resolveClusters()
         val edgeTrimDecisions = edgeTrimResult.decisions + autoSpaceEdgeDecisions
 
@@ -324,6 +409,7 @@ class ExplainableStubParagraphLayoutEngine(
                     fontSize = fontSize,
                     skip = false,
                     clusterEdgeAnchors = clusterEdgeAnchors,
+                    allowSinoWesternGapStretch = adjustmentStyle.allowSinoWesternGapAdjustment,
                 )
             }
         }
@@ -1161,12 +1247,6 @@ private data class PunctuationGeometryLedger(
             if (resolved == cluster.advance) cluster else cluster.copy(advance = resolved)
         }
 
-    fun pushInCapacities(): Map<Int, Float> =
-        budgets.mapNotNull { (index, budget) ->
-            val capacity = budget.trailingRemaining
-            if (capacity > 0f) index to capacity else null
-        }.toMap()
-
     fun consumeTrailingByCluster(consumptionByCluster: Map<Int, Float>): PunctuationGeometryLedger =
         copy(
             budgets = budgets.consume(consumptionByCluster) { budget, amount ->
@@ -1177,13 +1257,34 @@ private data class PunctuationGeometryLedger(
             },
         )
 
+    fun consumeLeadingByCluster(consumptionByCluster: Map<Int, Float>): PunctuationGeometryLedger =
+        copy(
+            budgets = budgets.consume(consumptionByCluster) { budget, amount ->
+                budget.copy(
+                    leadingConsumed = (budget.leadingConsumed + amount)
+                        .coerceAtMost(budget.leadingNatural),
+                )
+            },
+        )
+
+    /** Remaining leading/trailing glue per punctuation cluster index. */
+    fun glueCapacities(): Map<Int, GlueCapacity> =
+        budgets.mapNotNull { (index, budget) ->
+            val leading = budget.leadingRemaining
+            val trailing = budget.trailingRemaining
+            if (leading > 0f || trailing > 0f) index to GlueCapacity(leading, trailing) else null
+        }.toMap()
+
     fun addJustificationDeltas(deltaByCluster: Map<Int, Float>): PunctuationGeometryLedger =
         copy(justificationDeltaByCluster = deltaByCluster)
 
     fun withRawEdgeTrims(trimByCluster: Map<Int, Float>): PunctuationGeometryLedger =
         if (trimByCluster.isEmpty()) this else copy(rawEdgeTrimByCluster = trimByCluster)
 
-    fun consumeLineEdgeGlue(lines: List<LineCandidate>): LineEdgeTrimResult {
+    fun consumeLineEdgeGlue(
+        lines: List<LineCandidate>,
+        forceLineEndHalfWidth: Boolean = true,
+    ): LineEdgeTrimResult {
         if (lines.isEmpty() || budgets.isEmpty()) {
             return LineEdgeTrimResult(this, emptyList())
         }
@@ -1193,7 +1294,11 @@ private data class PunctuationGeometryLedger(
         val trailingConsumptionByCluster = HashMap<Int, Float>()
         lines.forEach { line ->
             val lastIdx = line.clusterRange.last
-            budgets[lastIdx]?.let { budget ->
+            // 宽松风格 (AllowFullWidth): the unconditional line-end half-width
+            // trim is skipped; the blank was only available as on-demand
+            // shrink capacity during PushIn.
+            val trailingBudget = if (forceLineEndHalfWidth) budgets[lastIdx] else null
+            trailingBudget?.let { budget ->
                 val remaining = budget.trailingRemaining
                 if (remaining > 0f) {
                     trailingConsumptionByCluster.merge(lastIdx, remaining) { a, b -> a + b }
@@ -1323,6 +1428,15 @@ private data class LineEdgeTrimResult(
 
 /** ADR 0018: dot ink centre sits this far below the BASELINE. */
 private const val EMPHASIS_DOT_CENTER_EM = 0.35f
+
+/** CLREQ 挤压第②档：西文词距最小压至四分之一汉字宽. */
+private const val WORD_SPACE_MIN_EM = 0.25f
+
+/** CLREQ 挤压第④档对象：「位于行内的句号、问号、感叹号」. */
+private val INLINE_STOPS = setOf('。', '！', '？', '．')
+
+/** Remaining glue per side, input to the tiered shrink model (ADR 0020). */
+internal data class GlueCapacity(val leading: Float, val trailing: Float)
 
 /**
  * ADR 0018: 示亡号 frame hugs the CJK character face (字面) with no margin.

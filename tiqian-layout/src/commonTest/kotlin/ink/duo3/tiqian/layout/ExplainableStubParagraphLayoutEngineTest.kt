@@ -1155,6 +1155,147 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun looseLineEndStyleKeepsFullWidthPunctuation() {
+        // AdjustmentStylePolicy.lineEndPunctuation = AllowFullWidth (宽松风格):
+        // the unconditional line-end half-width trim is skipped; the 字身
+        // grid stays intact at line end.
+        val loose = ExplainableStubParagraphLayoutEngine(
+            clreqProfileResolver = ClreqProfileResolver {
+                ClreqProfile.MainlandHorizontal.copy(
+                    adjustment = ink.duo3.tiqian.clreq.AdjustmentStylePolicy(
+                        lineEndPunctuation = ink.duo3.tiqian.clreq.LineEndPunctuationStyle.AllowFullWidth,
+                    ),
+                )
+            },
+        )
+        val result = loose.layout(
+            LayoutInput(
+                content = TiqianTextContent("中文中文。"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+        val stop = result.clusters.single { it.text == "。" }
+        assertEquals(16f, stop.advance)
+        assertTrue(result.debug.lineEdgeTrimDecisions.none { it.reason == "LineEndHalfWidthPunctuation" })
+
+        // Default strict style trims to half width.
+        val strict = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("中文中文。"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+        assertEquals(8f, strict.clusters.single { it.text == "。" }.advance)
+    }
+
+    @Test
+    fun inlineStopCompressionKnobLimitsPushInCapacity() {
+        // "中中中。中中。" maxWidth=96: line0 = 6 clusters (96), offender 。
+        // (idx 6) overflows by 16. Capacities: offender 。 tier-1 (8) +
+        // mid-line 。 idx3 tier-4 (8) = 16 → PushIn succeeds by default.
+        val text = "中中中。中中。"
+        val default = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent(text),
+                constraints = LayoutConstraints(maxWidth = 96f),
+            ),
+        )
+        assertEquals(1, default.lines.size)
+        assertTrue(default.debug.lineDecisions.single().repairDecision?.kind == "PushIn")
+
+        // Knob off: mid-line 。 keeps full width (its glue is lineEndOnly);
+        // capacity drops to the offender's own 8 < 16 → PushIn rejected,
+        // CarryPrevious instead.
+        val noInline = ExplainableStubParagraphLayoutEngine(
+            clreqProfileResolver = ClreqProfileResolver {
+                ClreqProfile.MainlandHorizontal.copy(
+                    adjustment = ink.duo3.tiqian.clreq.AdjustmentStylePolicy(
+                        allowInlineStopCompression = false,
+                    ),
+                )
+            },
+        ).layout(
+            LayoutInput(
+                content = TiqianTextContent(text),
+                constraints = LayoutConstraints(maxWidth = 96f),
+            ),
+        )
+        assertTrue(noInline.lines.size > 1)
+        val pushInCandidate = noInline.debug.lineDecisions
+            .flatMap { it.repairCandidates }
+            .first { it.kind == "PushIn" }
+        assertEquals("insufficient-capacity", pushInCandidate.rejectionReason)
+        assertEquals(8f, pushInCandidate.availableCapacity)
+    }
+
+    @Test
+    fun sinoWesternGapKnobDisablesStretchAndShrink() {
+        // allowSinoWesternGapAdjustment=false: the gap stays fixed — no
+        // CjkLatinSpace stretch under justify.
+        val fixedGap = ExplainableStubParagraphLayoutEngine(
+            clreqProfileResolver = ClreqProfileResolver {
+                ClreqProfile.MainlandHorizontal.copy(
+                    adjustment = ink.duo3.tiqian.clreq.AdjustmentStylePolicy(
+                        allowSinoWesternGapAdjustment = false,
+                    ),
+                )
+            },
+        ).layout(
+            LayoutInput(
+                content = TiqianTextContent("中文Hello文中文中文中文中"),
+                constraints = LayoutConstraints(maxWidth = 160f),
+                paragraphStyle = ink.duo3.tiqian.core.ParagraphStyle(
+                    textAlign = ink.duo3.tiqian.core.TextAlign.Justify,
+                ),
+            ),
+        )
+        assertTrue(fixedGap.debug.justificationDecisions.isNotEmpty())
+        assertTrue(
+            fixedGap.debug.justificationDecisions
+                .flatMap { it.allocations }
+                .none { it.kind == "CjkLatinSpace" },
+        )
+    }
+
+    @Test
+    fun pushInConsumesWordSpaceBeforeMidLinePunctGlue() {
+        // Breaker-level tier ordering with mixed channels: line
+        // [A][ ][B][、][中] + offender 。. Tiers in the merged line:
+        // offender 。 trailing (promoted tier 1, 8) → word space (tier 2,
+        // capacity 12) → 、 trailing (tier 6, 8). Overflow 16 must consume
+        // tier 1 fully then 8 of tier 2 — 、 stays untouched.
+        val clusters = listOf(
+            Cluster(range = ink.duo3.tiqian.core.TextRange(0, 1), text = "A", fontKey = "t", advance = 32f),
+            Cluster(range = ink.duo3.tiqian.core.TextRange(1, 2), text = " ", fontKey = "t", advance = 16f),
+            Cluster(range = ink.duo3.tiqian.core.TextRange(2, 3), text = "B", fontKey = "t", advance = 32f),
+            Cluster(range = ink.duo3.tiqian.core.TextRange(3, 4), text = "、", fontKey = "t", advance = 16f),
+            Cluster(range = ink.duo3.tiqian.core.TextRange(4, 5), text = "中", fontKey = "t", advance = 16f),
+            Cluster(range = ink.duo3.tiqian.core.TextRange(5, 6), text = "。", fontKey = "t", advance = 16f),
+        )
+        val solution = GreedyLineBreaker().breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 112f,
+            shrinkOpportunities = listOf(
+                ShrinkOpportunity(1, tier = 2, capacity = 12f, channel = ShrinkChannel.RawAdvance),
+                ShrinkOpportunity(3, tier = 6, capacity = 8f, channel = ShrinkChannel.TrailingGlue),
+                ShrinkOpportunity(5, tier = 4, capacity = 8f, channel = ShrinkChannel.TrailingGlue),
+            ),
+        )
+
+        assertEquals(1, solution.lines.size)
+        val repair = solution.lines.single().repair
+        assertTrue(repair is RepairOption.PushIn)
+        assertEquals(16f, repair.totalShrink)
+        // Tier 1 (offender 。) → tier 2 (word space); tier-6 、 untouched.
+        assertEquals(listOf(5, 1), repair.allocations.map { it.clusterIndex })
+        assertEquals(8f, repair.allocations[0].shrink)
+        assertEquals(8f, repair.allocations[1].shrink)
+        assertEquals(ShrinkChannel.RawAdvance, repair.allocations[1].channel)
+        assertTrue(repair.allocations.none { it.clusterIndex == 3 })
+    }
+
+    @Test
     fun substitutionRollsBackToSourceTextWhenFontLacksTheGlyph() {
         // SubstitutionRollbackOnMissingGlyph: the CLREQ substitution `——` →
         // `⸺` only stands if the font covers U+2E3A. This shaper reports a

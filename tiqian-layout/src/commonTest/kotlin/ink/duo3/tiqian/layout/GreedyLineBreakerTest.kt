@@ -100,7 +100,9 @@ class GreedyLineBreakerTest {
             naturalClusters = clusters,
             adjustedClusters = clusters,
             maxWidth = 60f,
-            pushInCapacities = mapOf(3 to 4f),
+            shrinkOpportunities = listOf(
+                ShrinkOpportunity(3, tier = 6, capacity = 4f, channel = ShrinkChannel.TrailingGlue),
+            ),
         )
 
         assertEquals(1, solution.lines.size)
@@ -135,7 +137,9 @@ class GreedyLineBreakerTest {
             naturalClusters = clusters,
             adjustedClusters = clusters,
             maxWidth = 59f,
-            pushInCapacities = mapOf(3 to 4f),
+            shrinkOpportunities = listOf(
+                ShrinkOpportunity(3, tier = 6, capacity = 4f, channel = ShrinkChannel.TrailingGlue),
+            ),
         )
 
         assertEquals(2, solution.lines.size)
