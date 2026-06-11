@@ -930,12 +930,21 @@ class ExplainableStubParagraphLayoutEngine(
     }
 
     /**
-     * `TextAutoSpaceReplace` per CSS Text 4 + ADR 0009: a CJK ↔ Latin (or
-     * Latin ↔ CJK) boundary needs ONE autospace gap, regardless of how many
-     * typed U+0020 the author placed at the boundary. The typed advance is
-     * measured from the real shaped glyphs (see [boundarySpaceAdvance]), so
-     * when the shaper already gives narrow spaces (~0.3em in AWT) the
-     * reduction is small or zero rather than over-shrinking by `count × em`.
+     * Per CSS Text 4 + ADR 0009. A CJK ↔ Latin (or Latin ↔ CJK) boundary
+     * needs ONE autospace gap of `gapEm`:
+     *
+     * - **`TextAutoSpaceReplace`** — the author typed U+0020 at the
+     *   boundary: the typed spaces' shaped advance (see
+     *   [boundarySpaceAdvance]) is normalised down to the gap, regardless
+     *   of how many spaces were typed.
+     * - **`TextAutoSpaceInsert`** — no typed space: the gap is ADDED
+     *   (negative reduction widens the cluster advance). CLREQ:「原则上，
+     *   汉字与西文字母、数字间使用不多于四分之一个汉字宽的字距或空白」——
+     *   the gap is not conditional on authorial spaces. Only fires when the
+     *   profile mode is [AutoSpaceMode.Insert]; [AutoSpaceMode.Replace]
+     *   keeps the conservative typed-space-only behaviour.
+     *
+     * Returns the net advance reduction (negative = insertion).
      */
     private fun Int.boundaryReduction(
         boundaryRole: FontRole?,
@@ -946,18 +955,37 @@ class ExplainableStubParagraphLayoutEngine(
         typedAdvance: Float,
         decisions: MutableList<AutoSpaceDecisionInfo>,
     ): Float {
-        if (this == 0 || boundaryRole == null) return 0f
+        if (boundaryRole == null) return 0f
         val mode = policy.modeFor(boundaryRole) ?: return 0f
-        if (mode != AutoSpaceMode.Replace) return 0f
-
+        if (mode == AutoSpaceMode.Disabled) return 0f
         val replacementGap = policy.gapEm * fontSize
+
+        if (this == 0) {
+            // No typed space at the boundary — Insert mode adds the gap.
+            if (mode != AutoSpaceMode.Insert) return 0f
+            decisions += AutoSpaceDecisionInfo(
+                clusterRange = cluster.range,
+                side = side,
+                boundaryRole = boundaryRole.name,
+                mode = mode.name,
+                charactersAffected = 0,
+                reductionPerChar = 0f,
+                totalReduction = -replacementGap,
+                reason = "TextAutoSpaceInsert:ideograph-alpha:quarter-em",
+            )
+            return -replacementGap
+        }
+
         val total = (typedAdvance - replacementGap).coerceAtLeast(0f)
         if (total == 0f) return 0f
         decisions += AutoSpaceDecisionInfo(
             clusterRange = cluster.range,
             side = side,
             boundaryRole = boundaryRole.name,
-            mode = mode.name,
+            // The decision records the ACTION taken at this boundary, not the
+            // profile-level mode: under Insert policy a typed-space boundary
+            // still performs a Replace.
+            mode = AutoSpaceMode.Replace.name,
             charactersAffected = this,
             reductionPerChar = total / this,
             totalReduction = total,

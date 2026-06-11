@@ -53,10 +53,11 @@ class AutoSpaceSingleGapTest {
 
     @Test
     fun threeTypedSpacesStillOneGap() {
-        // 3 leading spaces, 0 trailing — boundary still gets ONE 4 px gap.
-        // Cluster `   CJK段落` doesn't exist as "段落" follows directly.
-        // Use `中文   CJK段落`: leading 3 typed × 16 = 48, replaced by 1 × 4. Reduction 44.
-        // Cluster nominal = 6*16 = 96 (3 spaces + "CJK"); after collapse = 96 - 44 = 52.
+        // 3 leading spaces, 0 trailing — leading boundary still gets ONE
+        // 4 px gap (Replace), and the space-less trailing boundary CJK→段
+        // gains an Insert gap of 4.
+        // Leading: 3 typed × 16 = 48 → one 4 gap, reduction 44.
+        // Cluster nominal = 6*16 = 96; 96 - 44 + 4 (insert) = 56.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 content = TiqianTextContent("中文   CJK段落"),
@@ -64,19 +65,28 @@ class AutoSpaceSingleGapTest {
             ),
         )
         val cluster = result.clusters.single { it.text == "   CJK" }
-        assertEquals(52f, cluster.advance)
+        assertEquals(56f, cluster.advance)
     }
 
     @Test
-    fun zeroSpacesProducesNoAutospaceDecision() {
-        // No typed spaces → no autospace decision. Different from above.
+    fun zeroSpacesGetInsertedQuarterEmGaps() {
+        // TextAutoSpaceInsert (CLREQ:「汉字与西文字母、数字间使用不多于四分
+        // 之一个汉字宽的字距或空白」): boundaries WITHOUT typed spaces gain
+        // a 0.25em gap on each side. "CJK" nominal 48 → 48 + 4 + 4 = 56.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 content = TiqianTextContent("中文CJK段落"),
                 constraints = LayoutConstraints(maxWidth = 320f),
             ),
         )
-        assertEquals(0, result.debug.autoSpaceDecisions.size)
+        val cluster = result.clusters.single { it.text == "CJK" }
+        assertEquals(56f, cluster.advance)
+
+        val decisions = result.debug.autoSpaceDecisions
+        assertEquals(2, decisions.size)
+        assertTrue(decisions.all { it.mode == "Insert" && it.charactersAffected == 0 })
+        assertTrue(decisions.all { it.totalReduction == -4f })
+        assertTrue(decisions.all { it.reason.startsWith("TextAutoSpaceInsert") })
     }
 
     @Test

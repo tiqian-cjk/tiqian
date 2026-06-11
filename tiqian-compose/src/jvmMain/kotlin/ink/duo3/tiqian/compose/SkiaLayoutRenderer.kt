@@ -44,12 +44,15 @@ internal fun DrawScope.drawTiqianLayout(
 
                 val autoSpaces = result.debug.autoSpaceDecisions
                     .filter { it.clusterRange == cluster.range }
-                val leadingStrip = autoSpaces.firstOrNull { it.side == "leading" }?.charactersAffected ?: 0
-                val trailingStrip = autoSpaces.firstOrNull { it.side == "trailing" }?.charactersAffected ?: 0
+                val leadingDecision = autoSpaces.firstOrNull { it.side == "leading" }
+                val leadingStrip = leadingDecision?.charactersAffected ?: 0
+                val trailingDecision = autoSpaces.firstOrNull { it.side == "trailing" }
+                val trailingStrip = trailingDecision?.charactersAffected ?: 0
                 val isLineStart = clusterIndexInLine == 0
                 val isLineEnd = clusterIndexInLine == lineClusters.lastIndex
-                val leadingGap = if (leadingStrip > 0 && !isLineStart) autoSpaceGap else 0f
-                val trailingGap = if (trailingStrip > 0 && !isLineEnd) autoSpaceGap else 0f
+                // Insert decisions carry charactersAffected=0 but still gap.
+                val leadingGap = if (leadingDecision != null && !isLineStart) autoSpaceGap else 0f
+                val trailingGap = if (trailingDecision != null && !isLineEnd) autoSpaceGap else 0f
                 val paintText = cluster.displayText
                     .drop(leadingStrip)
                     .let { if (trailingStrip > 0) it.dropLast(trailingStrip) else it }

@@ -13,8 +13,8 @@
 ## 当前位置
 
 ```text
-Last completed: Slice 9 (示亡号：黑框分段几何 + 整体避拆，ADR 0018)
-Up next:        新 slice 规划：候选有行尾悬挂 opt-in (ADR 0006)、WordSpace (Latin 分词)、Android composable 渲染、竖排预研；更远期：行尾悬挂 opt-in、WordSpace、Android composable 渲染、竖排预研
+Last completed: Slice 10 (autospace Insert：无空格中西边界 1/4em，gap audit 缺口 1)
+Up next:        gap audit 缺口 3 (justify 拉伸去标点优先档)，随后缺口 2+4 (Latin 分词 + 挤压分层 + 调整风格开关)；更远期：行尾悬挂 opt-in、WordSpace、Android composable 渲染、竖排预研
 ```
 
 ## Slice / Milestone 对照表
@@ -32,6 +32,7 @@ Up next:        新 slice 规划：候选有行尾悬挂 opt-in (ADR 0006)、Wor
 | 7 | — | Compose Desktop 前端真渲染：`TiqianParagraph` composable 消费 `LayoutResult`，Skia TextBlob 绘制与 engine 度量同源，前端零排版决策 | 现有 fixture 文本 + 离屏渲染 PNG | `./gradlew :tiqian-compose:jvmTest`（ImageComposeScene 离屏渲染）+ `runComposeDemo` | done (`TiqianParagraph` + `rememberTiqianTextMeasurer` 默认 Skia shaper/lookahead；渲染走 `tiqian-shaping-skia` 共享 `shapeTextBlob`/`SkiaSystemTypefaces`；离屏 PNG 验收 + demo 窗口人工确认；根构建统一 jvmToolchain(25)；ADR 0017) |
 | 8 | — | Inline decoration span 模型 + 着重号：`LayoutInput` 接受区间标注，layout 产出逐字 dot 几何决策，渲染层照画 | `emphasis-marks` fixture（跨行、含标点） | dump `deco:*` 行；playground/compose 渲染目检 + golden | done (`DecorationSpan`/`DecorationKind.Emphasis` 输入；`EmphasisDotOnHanText` 逐字决策，标点跳过有 CLREQ 原文 reason；anchor=baseline+0.35em 紧贴字底；U+2022 glyph 渲染 ink-center 对位（skia/compose），AWT raster 圆形近似；golden + 单测；ADR 0018) |
 | 9 | — | 示亡号：span 区间的黑框几何（按行分段），断行策略明确（整体避拆 or 分段开口） | `mourning-frame` fixture | dump `decobox:*` 行；渲染目检 + golden | done (`DecorationKind.Mourning`；`MourningSpanKeptUnbroken` 进 breaker `unbreakableRanges`，超宽 fallback 分段 openStart/End；CarryPrevious 防拆 guard；框竖直边用 raw ink metrics（layout em box 会切字形）；golden + 单测；ADR 0018) |
+| 10 | — | 中西混排间距补全：无空格边界插入 1/4em（CLREQ 原文），Insert 为默认 mode | `justify-mixed-paragraph` `ascii-brackets-in-cjk` fixture | dump `autospace` 行 reduction 为负；golden + 渲染目检 | done (`TextAutoSpaceInsert`；decision mode 记实际动作；行边 trim 复用；ADR 0009 amendment) |
 
 Slice 4 的 `done` 范围是当前默认 kinsoku repair：`PushIn` / `CarryPrevious` / `LeaveRagged` 均可解释，`LineDecisionInfo` 暴露 chosen repair 与 candidate repairs。lookahead window 2~3 属于后续优化，不再阻塞当前 Slice 4 的模型收口。
 

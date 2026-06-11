@@ -49,6 +49,22 @@ ClreqProfile(..., autoSpace = AutoSpacePolicy.Default)
 5. **`policy.cjkLatin = Insert`** 留接口未实现：需要虚拟 cluster 注入（typed space 留 1em，再插入 0.25em autospace），跟当前「cluster 必须连续覆盖 source range」的契约冲突，留 Slice 6+ 配合 shaping adapter 一起处理。
 6. **Justifier 的 `CjkLatinSpace` priority**（[ADR 0005 / ADR 0004 priority chain](0004-punctuation-additive-glue-model.md)）保留不变。Replace 模式下 typed space 已经吸收到 gapEm 上限，justifier 只在该 cluster 还有 stretch capacity 时再加（未来 follow-up：让 justifier 知道哪些 Latin cluster 是 autospace-shrunk，以避免双账）。
 
+### Amendment (2026-06-11): Insert 落地并成为默认
+
+CLREQ 原文「原则上，汉字与西文字母、数字间使用不多于四分之一个汉字宽的字距
+或空白」不以作者键入空格为前提。`AutoSpaceMode.Insert` 实现为 Replace 的
+超集并成为 profile 默认：
+
+- 有 typed space 的边界照旧 `TextAutoSpaceReplace`（n-to-one 归一）；
+- 无 typed space 的 ideograph↔alpha 边界增加 `gapEm` 间距
+  （`TextAutoSpaceInsert`，decision 记负向 reduction，cluster advance 加宽，
+  渲染层按 side decision 画 gap）；
+- 行边仍无间距（`TextAutoSpaceLineEdgeTrim` 同样适用于 Insert 边界）；
+- decision 的 `mode` 字段记录边界上的实际动作（Replace/Insert），而非
+  profile 枚举值。
+- justify 的 `CjkLatinSpace` 档自此有了真实基础间距可拉伸：1/4em 起、
+  上限 +1/4em（合计 1/2em，恰为 CLREQ 上限）。
+
 ## Consequences
 
 - **Line-height 立刻收紧**：空格不再以 Unknown role 进入 `metricDecisions.lineMetrics`，paragraph maxAscent 从 14.4 (Symbol fallback) 回到 12.8 (Latin)。real-paragraph-1 测试段落 12 行总高 268.8 → 249.6。

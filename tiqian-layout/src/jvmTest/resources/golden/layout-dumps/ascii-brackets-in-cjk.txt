@@ -2,16 +2,16 @@ fixture: ascii-brackets-in-cjk
 text: 中文段落(English)和[mixed]说明。
 maxWidth: 240.0 align: Start
 == greedy ==
-size 224.0x41.6
-line[0] 0-14 natural=224.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=-
-line[1] 14-24 natural=160.0 adjusted=152.0 visual=152.0 repair=- candidates=- justify=-
+size 232.0x41.6
+line[0] 0-14 natural=232.0 adjusted=232.0 visual=232.0 repair=- candidates=- justify=-
+line[1] 14-24 natural=168.0 adjusted=156.0 visual=156.0 repair=- candidates=- justify=-
 cluster 0-1 '中' adv=16.0
 cluster 1-2 '文' adv=16.0
 cluster 2-3 '段' adv=16.0
 cluster 3-4 '落' adv=16.0
-cluster 4-13 '(English)' adv=144.0
+cluster 4-13 '(English)' adv=152.0
 cluster 13-14 '和' adv=16.0
-cluster 14-21 '[mixed]' adv=112.0
+cluster 14-21 '[mixed]' adv=116.0
 cluster 21-22 '说' adv=16.0
 cluster 22-23 '明' adv=16.0
 cluster 23-24 '。' adv=8.0
@@ -27,18 +27,23 @@ font 22-23 role=CjkText key=cjk-primary display='明' sub=CjkPunctuationGlyphPol
 font 23-24 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 punct 23-24 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
 geom 23-24 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+autospace 4-13 side=leading boundary=CjkText reduction=-4.0
+autospace 4-13 side=trailing boundary=CjkText reduction=-4.0
+autospace 14-21 side=leading boundary=CjkText reduction=-4.0
+autospace 14-21 side=trailing boundary=CjkText reduction=-4.0
 edgetrim 23-24 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+edgetrim 14-21 side=leading trim=4.0 reason=TextAutoSpaceLineEdgeTrim
 == lookahead ==
-size 224.0x41.6
-line[0] 0-14 natural=224.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=-
-line[1] 14-24 natural=160.0 adjusted=152.0 visual=152.0 repair=- candidates=- justify=-
+size 232.0x41.6
+line[0] 0-14 natural=232.0 adjusted=232.0 visual=232.0 repair=- candidates=- justify=-
+line[1] 14-24 natural=168.0 adjusted=156.0 visual=156.0 repair=- candidates=- justify=-
 cluster 0-1 '中' adv=16.0
 cluster 1-2 '文' adv=16.0
 cluster 2-3 '段' adv=16.0
 cluster 3-4 '落' adv=16.0
-cluster 4-13 '(English)' adv=144.0
+cluster 4-13 '(English)' adv=152.0
 cluster 13-14 '和' adv=16.0
-cluster 14-21 '[mixed]' adv=112.0
+cluster 14-21 '[mixed]' adv=116.0
 cluster 21-22 '说' adv=16.0
 cluster 22-23 '明' adv=16.0
 cluster 23-24 '。' adv=8.0
@@ -54,4 +59,9 @@ font 22-23 role=CjkText key=cjk-primary display='明' sub=CjkPunctuationGlyphPol
 font 23-24 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 punct 23-24 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
 geom 23-24 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+autospace 4-13 side=leading boundary=CjkText reduction=-4.0
+autospace 4-13 side=trailing boundary=CjkText reduction=-4.0
+autospace 14-21 side=leading boundary=CjkText reduction=-4.0
+autospace 14-21 side=trailing boundary=CjkText reduction=-4.0
 edgetrim 23-24 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+edgetrim 14-21 side=leading trim=4.0 reason=TextAutoSpaceLineEdgeTrim

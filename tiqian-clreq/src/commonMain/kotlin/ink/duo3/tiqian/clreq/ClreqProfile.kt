@@ -171,8 +171,8 @@ fun PunctuationGluePlacement.glueSideFor(punctuationClass: PunctuationClass): Gl
  * space replacement and justification stretch capacity.
  */
 data class AutoSpacePolicy(
-    val cjkLatin: AutoSpaceMode = AutoSpaceMode.Replace,
-    val cjkDigit: AutoSpaceMode = AutoSpaceMode.Replace,
+    val cjkLatin: AutoSpaceMode = AutoSpaceMode.Insert,
+    val cjkDigit: AutoSpaceMode = AutoSpaceMode.Insert,
     val gapEm: Float = 0.25f,
 ) {
     companion object {
@@ -184,9 +184,26 @@ data class AutoSpacePolicy(
     }
 }
 
+/**
+ * CLREQ:「原则上，汉字与西文字母、数字间使用不多于四分之一个汉字宽的字距
+ * 或空白。」The gap exists whether or not the author typed U+0020.
+ */
 enum class AutoSpaceMode {
     Disabled,
+
+    /**
+     * Only normalise TYPED spaces at the boundary down to [AutoSpacePolicy.gapEm]
+     * (`TextAutoSpaceReplace`); boundaries without a typed space get nothing.
+     * Conservative pre-Insert behaviour, kept for styles that treat missing
+     * spaces as authorial intent.
+     */
     Replace,
+
+    /**
+     * Full CLREQ behaviour, superset of [Replace]: boundaries WITHOUT a typed
+     * space additionally gain a [AutoSpacePolicy.gapEm] gap
+     * (`TextAutoSpaceInsert`). Default.
+     */
     Insert,
 }
 
