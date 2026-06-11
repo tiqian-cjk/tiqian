@@ -55,6 +55,18 @@ PunctuationGlue -> CjkLatinSpace -> WordSpace -> CjkInterChar
 - `CjkLatinSpace` 档只在 ideograph ↔ alpha 边界开口（与 ADR 0009 autospace
   同一边界判定），且边界已有作者键入的 U+0020 时让位给未来的 `WordSpace` 档。
 
+### Amendment (2026-06-11): 拉伸档对齐 CLREQ，标点空隙退出优先序
+
+CLREQ 拉伸顺序（西文词距 → 中西间距 → 平均拉大字距）**不含**标点空隙档——
+标点调整空间只参与挤压。上一条 amendment 引入的 tier-1
+`PunctuationGlueFirstJustification`（标点 glue 侧优先扩 0.125em）随之删除：
+
+- 拉伸链变为 `WordSpace → CjkLatinSpace → CjkInterChar`；
+- 标点 glue 侧边界并入 `CjkInterChar`，与汉字边界**同 cap、同份额**
+  （均匀加，无优先无额外）；
+- `GlueSideAwareJustification` 的实心侧禁令与 collapse 不可逆原则不变；
+- 已折叠/已削减的标点空白永不在拉伸中复原（用户原则 + CLREQ 一致）。
+
 ## Consequences
 
 - 行尾标点「自然半宽」不是硬编码 `-= 0.5em`，而是 `lineEndPolicy + trailingGlue.min`。

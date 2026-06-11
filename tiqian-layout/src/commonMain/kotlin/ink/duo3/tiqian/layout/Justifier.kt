@@ -5,25 +5,25 @@ import ink.duo3.tiqian.font.FontRole
 
 /**
  * Justifier — distributes a line's deficit (maxWidth - adjustedWidth) across
- * glue resources in priority order:
+ * glue resources in CLREQ's expansion order（拉伸处理的优先顺序）:
  *
- *   1. PunctuationGlue   — opens a bounded extra slice on the glue side of
- *                          punctuation atoms (after `。，、`, before `（「`).
- *                          Boundaries collapsed by PunctuationSpacingCompressor
- *                          are EXCLUDED: the CLREQ adjacent-punctuation collapse
- *                          is a hard rule, never elastic — justification must
- *                          not re-open `」。` / `，「`.
- *   2. CjkLatinSpace     — small extra space at CJK ↔ Latin boundaries.
- *   3. WordSpace         — space inside Latin runs. Stub Latin clusters are
- *                          treated as single units, so this is a no-op until
- *                          a real shaping adapter splits them into words.
- *   4. CjkInterChar      — last resort: evenly add a small slice between
- *                          adjacent ideograph (CjkText ↔ CjkText) clusters.
- *                          Punctuation boundaries belong to tier 1, keeping
- *                          the expansion colour uniform.
+ *   1. WordSpace         — space inside Latin runs（西文词距，CLREQ 第一档）.
+ *                          Stub Latin clusters are treated as single units,
+ *                          so this is a no-op until a shaping adapter splits
+ *                          them into words.
+ *   2. CjkLatinSpace     — the sino-western gap（中西间距）: stretches from
+ *                          the autospace base (0.25em) by up to another
+ *                          0.25em — total 0.5em, CLREQ's upper bound.
+ *   3. CjkInterChar      — last resort: EVEN inter-character expansion
+ *                          （平均拉大字距）. Punctuation-adjacent boundaries
+ *                          participate at the SAME cap on their glue side —
+ *                          no priority, no extra; trimmed/collapsed blanks
+ *                          are never restored.
  *
- * The default heuristic name for this policy chain is
- * `PunctuationGlueFirstJustification` (see ADR notes).
+ * CLREQ's expansion list has no punctuation-space tier: punctuation
+ * adjustment space participates in COMPRESSION only. The earlier tier-1
+ * (`PunctuationGlueFirstJustification`) is removed accordingly — see
+ * ADR 0004 amendments.
  *
  * Each [JustificationAllocation] targets a specific cluster: the delta is
  * understood as trailing space added to that cluster's advance.
@@ -32,25 +32,16 @@ import ink.duo3.tiqian.font.FontRole
  * expansion may only open on a punctuation atom's glue side, never the
  * body-anchored (solid) side. Concretely, for MainlandSimplified:
  *
- * - after an Opening mark (`（「`) — the bracket's inner side — is solid:
- *   no CjkInterChar / CjkLatinSpace expansion there;
- * - before a Closing / PauseOrStop mark (`）。，`) is solid: no expansion;
+ * - after an Opening mark (`（「`) — the bracket's inner side — is solid;
+ * - before a Closing / PauseOrStop mark (`）。，`) is solid;
  * - the opposite sides (before Opening, after Closing) carry the atom's
- *   glue and may expand.
- *
- * Without this rule, justification visibly pushed `（Tiqian）` apart from
- * the inside — see clreq-punctuation-audit.md.
+ *   glue and may expand;
+ * - boundaries collapsed by PunctuationSpacingCompressor (`」。` `，「`) are
+ *   EXCLUDED: the CLREQ adjacent-punctuation collapse is a hard rule.
  */
 class Justifier(
     private val cjkLatinSpaceEm: Float = 0.25f,
     private val cjkInterCharMaxEm: Float = 0.25f,
-    /**
-     * Cap for tier-1 punctuation glue expansion. Deliberately HALF the
-     * inter-char cap: the punctuation blank is already 0.5em, so a 0.25em
-     * stretch reads as a hole (`提椠 （` looked like a typed space).
-     * 0.125em keeps tier 1 first-in-line but visually subtle.
-     */
-    private val punctuationGlueExpandEm: Float = 0.125f,
 ) {
     fun justify(
         adjustedClusters: List<Cluster>,
@@ -83,22 +74,7 @@ class Justifier(
         var remaining = deficitBefore
         val allocations = mutableListOf<JustificationAllocation>()
 
-        // 1. PunctuationGlue — bounded expansion on punctuation glue sides.
-        val punctOpps = buildPunctuationGlueOpportunities(
-            adjustedClusters = adjustedClusters,
-            clusterRoles = clusterRoles,
-            lineClusterRange = lineClusterRange,
-            spacingPlan = spacingPlan,
-            clusterEdgeAnchors = clusterEdgeAnchors,
-            capacity = punctuationGlueExpandEm * fontSize,
-        )
-        remaining = allocate(
-            deficit = remaining,
-            opportunities = punctOpps,
-            reason = "PunctuationGlueFirstJustification",
-            into = allocations,
-        )
-        if (remaining <= 0f) return finalize(lineClusterRange, deficitBefore, remaining, allocations)
+        // 1. WordSpace — no-op until Latin clusters split into words.
 
         // 2. CjkLatinSpace — open the boundary between CJK and Latin clusters.
         // `IdeographAlphaJustifyBoundary`: same boundary rule as autospace
@@ -127,11 +103,15 @@ class Justifier(
         )
         if (remaining <= 0f) return finalize(lineClusterRange, deficitBefore, remaining, allocations)
 
-        // 3. WordSpace — no-op until Latin clusters split into words.
-
-        // 4. CjkInterChar — last resort, ideograph ↔ ideograph only.
-        // Punctuation-adjacent boundaries are tier-1 territory: mixing them
-        // here gave punctuation gaps double weight and uneven colour.
+        // 3. CjkInterChar — last resort: EVEN expansion across boundaries
+        // （CLREQ「平均拉大字距」）. Punctuation-adjacent boundaries join at
+        // the SAME cap on their glue side (GlueSideAwareJustification) —
+        // trimmed/collapsed punctuation blanks are gone for good and get no
+        // special treatment, only the uniform share every position gets.
+        // Ideograph↔alpha boundaries are excluded (CjkLatinSpace territory).
+        val collapsedBoundaries = spacingPlan.adjustments
+            .map { it.range.start to it.range.end }
+            .toSet()
         val cjkInterOpps = buildBoundaryOpportunities(
             adjustedClusters = adjustedClusters,
             lineClusterRange = lineClusterRange,
@@ -139,7 +119,13 @@ class Justifier(
             priority = 3,
             capacity = cjkInterCharMaxEm * fontSize,
         ) { leftIdx, rightIdx ->
-            clusterRoles[leftIdx] == FontRole.CjkText && clusterRoles[rightIdx] == FontRole.CjkText
+            val left = clusterRoles[leftIdx]
+            val right = clusterRoles[rightIdx]
+            val boundary = adjustedClusters[leftIdx].range.start to adjustedClusters[rightIdx].range.end
+            (left.isCjkLike() || right.isCjkLike()) &&
+                !left.isIdeographAlphaBoundaryWith(right) &&
+                boundary !in collapsedBoundaries &&
+                boundaryOnGlueSide(leftIdx, rightIdx, clusterRoles, clusterEdgeAnchors)
         }
         remaining = allocate(
             deficit = remaining,
@@ -149,48 +135,6 @@ class Justifier(
         )
 
         return finalize(lineClusterRange, deficitBefore, remaining, allocations)
-    }
-
-    /**
-     * Tier-1 punctuation glue expansion. A boundary qualifies when at least
-     * one side is a punctuation cluster AND `GlueSideAwareJustification`
-     * holds (only the atom's glue side may stretch — see [boundaryOnGlueSide]).
-     *
-     * Boundaries collapsed by the spacing plan (`」。` `，「` …) are excluded:
-     * CLREQ's adjacent-punctuation collapse is mandatory, so justification
-     * must never buy width back from it.
-     *
-     * The reported kind names the side that supplied the glue: trailing glue
-     * of the left atom (`。→第`) or leading glue of the right atom (`中→（`).
-     */
-    private fun buildPunctuationGlueOpportunities(
-        adjustedClusters: List<Cluster>,
-        clusterRoles: List<FontRole>,
-        lineClusterRange: IntRange,
-        spacingPlan: PunctuationSpacingCompressionResult,
-        clusterEdgeAnchors: Map<Int, ClusterEdgeAnchors>,
-        capacity: Float,
-    ): List<JustificationOpportunity> {
-        if (capacity <= 0f) return emptyList()
-        val collapsedBoundaries = spacingPlan.adjustments
-            .map { it.range.start to it.range.end }
-            .toSet()
-        val opps = mutableListOf<JustificationOpportunity>()
-        for (idx in lineClusterRange.first until lineClusterRange.last) {
-            val leftPunct = clusterRoles[idx] == FontRole.CjkPunctuation
-            val rightPunct = clusterRoles[idx + 1] == FontRole.CjkPunctuation
-            if (!leftPunct && !rightPunct) continue
-            if (!boundaryOnGlueSide(idx, idx + 1, clusterRoles, clusterEdgeAnchors)) continue
-            val boundary = adjustedClusters[idx].range.start to adjustedClusters[idx + 1].range.end
-            if (boundary in collapsedBoundaries) continue
-            opps += JustificationOpportunity(
-                targetClusterIndex = idx,
-                kind = if (leftPunct) GlueKind.PunctuationTrailing else GlueKind.PunctuationLeading,
-                priority = 0,
-                capacity = capacity,
-            )
-        }
-        return opps
     }
 
     private inline fun buildBoundaryOpportunities(
@@ -299,6 +243,9 @@ class Justifier(
     private fun FontRole.isIdeographAlphaBoundaryWith(other: FontRole): Boolean =
         (this == FontRole.CjkText && other == FontRole.LatinText) ||
             (this == FontRole.LatinText && other == FontRole.CjkText)
+
+    private fun FontRole.isCjkLike(): Boolean =
+        this == FontRole.CjkText || this == FontRole.CjkPunctuation
 }
 
 /**

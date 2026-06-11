@@ -329,16 +329,19 @@ AdjustmentOpportunity
   penalty
 ```
 
-默认调整优先级：
+拉伸（justify）优先级遵循 CLREQ 的拉伸顺序：
 
 ```text
-PunctuationGlue
-  -> CjkLatinSpace
-  -> WordSpace
-  -> CjkInterChar
+WordSpace（西文词距）
+  -> CjkLatinSpace（中西间距，1/4em 起、上限 1/2em）
+  -> CjkInterChar（平均拉大字距）
 ```
 
-中文正文中，粗暴拉开所有汉字会很快显得廉价。提椠应优先利用标点 glue、中西文间距和西文词距，最后才轻微调整汉字间距。
+标点空隙不单列拉伸档（CLREQ 的标点调整空间只参与挤压）：已削减/折叠的标点
+空白不可逆，标点 glue 侧只以与其他位置完全相同的均匀份额参与 CjkInterChar，
+实心侧（括号内侧、点号前）永不扩展。早期「优先利用标点 glue」的取舍已被
+ADR 0004 amendment 废止。挤压（PushIn 等）另有独立的优先顺序，见
+clreq-gap-audit.md 缺口 4。
 
 ## 模块结构
 

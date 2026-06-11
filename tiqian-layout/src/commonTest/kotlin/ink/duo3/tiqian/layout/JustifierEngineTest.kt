@@ -116,26 +116,21 @@ class JustifierEngineTest {
         assertTrue(result.lines.size >= 2)
         val firstDecision = result.debug.justificationDecisions.first()
         // The collapse is MANDATORY — justification must not re-open `」。`.
-        // The deficit is filled by tier-1 punctuation glue expansion on 。's
-        // trailing side (。→文, capped at 0.125em = 2) and CjkInterChar
-        // (文→中, +4); the remaining 2 stays unfilled rather than re-opening
-        // the collapse.
+        // CLREQ expansion order has no punctuation tier: the deficit fills
+        // by EVEN CjkInterChar expansion across eligible boundaries —
+        // 。→文 (。's glue side) and 文→中 get the same share (+4 each);
+        // 中→」 (」 leading is solid) and the collapsed 」→。 are excluded.
         assertEquals(8f, firstDecision.deficitBefore)
-        assertEquals(2f, firstDecision.deficitAfter)
+        assertEquals(0f, firstDecision.deficitAfter)
         assertEquals(2, firstDecision.allocations.size)
-        val punctAlloc = firstDecision.allocations.single { it.kind == "PunctuationTrailing" }
-        assertEquals(0, punctAlloc.priority)
-        assertEquals(2f, punctAlloc.delta)
-        assertEquals("PunctuationGlueFirstJustification", punctAlloc.reason)
-        // The expanded gap is 。→文 (cluster 。 at source 2-3), NOT the
-        // collapsed 」。 inner boundary.
-        assertEquals(2, punctAlloc.clusterRange.start)
-        val interAlloc = firstDecision.allocations.single { it.kind == "CjkInterChar" }
-        assertEquals(4f, interAlloc.delta)
+        assertTrue(firstDecision.allocations.all { it.kind == "CjkInterChar" })
+        assertTrue(firstDecision.allocations.all { it.delta == 4f })
+        assertEquals(
+            listOf(2, 3),
+            firstDecision.allocations.map { it.clusterRange.start }.sorted(),
+        )
 
-        // Line 0 reaches 78 of 80: capacity exhausted without touching the
-        // collapsed pair.
-        assertEquals(78f, result.lines[0].visualWidth)
+        assertEquals(80f, result.lines[0].visualWidth)
         // Cluster 」 (range 1-2) stays at its collapsed advance: the spacing
         // compression is not elastic.
         val closingCluster = result.clusters.single { it.text == "」" }
@@ -180,12 +175,12 @@ class JustifierEngineTest {
     fun glueSideAwareJustificationNeverExpandsInsideBrackets() {
         // text = "中（中文）文中文中文中"  (11 CJK-width clusters @16f)
         // maxWidth=100 → greedy line 0 = clusters 0..5 (96), deficit 4.
-        // Tier-1 punctuation glue boundaries inside line 0:
+        // EVEN CjkInterChar expansion; eligible boundaries inside line 0:
         //   中→（  eligible   (（ leading edge carries its glue)
         //   （→中  FORBIDDEN  (（ anchor=Trailing: inner side is solid body)
+        //   中→文  eligible
         //   文→）  FORBIDDEN  (） anchor=Leading: inner side is solid body)
         //   ）→文  eligible   (） trailing edge carries its glue)
-        // Tier-1 capacity (2 × 4) covers the deficit before CjkInterChar.
         val result = engine.layout(
             LayoutInput(
                 content = TiqianTextContent("中（中文）文中文中文中"),
@@ -197,13 +192,12 @@ class JustifierEngineTest {
         val decision = result.debug.justificationDecisions.single()
         assertEquals(0f, decision.deficitAfter)
         // Allocation target = left cluster of the boundary; the bracket
-        // inner sides (（ at 1-2 trailing, 文 at 3-4 trailing) must be absent.
+        // inner sides (（ at 1-2 trailing, 文 at 3-4 trailing) must be absent;
+        // every eligible boundary gets the SAME share (4/3 each).
         val targets = decision.allocations.map { it.clusterRange.start }
-        assertEquals(listOf(0, 4), targets.sorted())
-        assertEquals(
-            listOf("PunctuationLeading", "PunctuationTrailing"),
-            decision.allocations.sortedBy { it.clusterRange.start }.map { it.kind },
-        )
+        assertEquals(listOf(0, 2, 4), targets.sorted())
+        assertTrue(decision.allocations.all { it.kind == "CjkInterChar" })
+        decision.allocations.forEach { assertEquals(4f / 3f, it.delta, 0.01f) }
     }
 
     @Test
