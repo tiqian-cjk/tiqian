@@ -2,9 +2,11 @@
 
 2026-06-11 对照 [CLREQ](https://w3c.github.io/clreq/) 原文逐节核对的结果。
 范围：简体中文横排（项目第一阶段目标）。每条引用 CLREQ 简体原文。
-第六节（行与段落版式）全文摘录见
+第五节（标点符号与其他行内特性）与第六节（行与段落版式）全文摘录见
+[research/clreq-section-5-punctuation-and-inline-features.md](research/clreq-section-5-punctuation-and-inline-features.md)
+与
 [research/clreq-section-6-line-and-paragraph.md](research/clreq-section-6-line-and-paragraph.md)——
-引用挤压/拉伸/禁则原文时以摘录为准。
+引用示亡号/着重号/省略号/挤压/拉伸/禁则原文时以摘录为准。
 
 ## 已覆盖且被原文印证的
 
