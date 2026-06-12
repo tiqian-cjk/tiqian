@@ -208,15 +208,35 @@ class ExplainableStubParagraphLayoutEngine(
                         PunctuationClass.Interpunct,
                         PunctuationClass.MiddleDot,
                         -> {
+                            // CLREQ ③ 间隔号：双侧同时、同等量，最小挤到 0。
                             val both = caps.leading + caps.trailing
                             if (both > 0f) {
                                 add(ShrinkOpportunity(idx, tier = 3, capacity = both, channel = ShrinkChannel.LeadingAndTrailingGlue))
                             }
                         }
 
+                        // CLREQ ④ 夹注符号：开始夹注的前侧、结束夹注的
+                        // 后侧，最小挤到半个汉字字宽（= glue 全部可压）。
+                        // Quote 经 pair 分析后开/闭各持一侧 glue，两个分支
+                        // 自然各取其有的一侧。
+                        PunctuationClass.Opening,
+                        PunctuationClass.Closing,
+                        PunctuationClass.Quote,
+                        -> {
+                            if (caps.leading > 0f) {
+                                add(ShrinkOpportunity(idx, tier = 4, capacity = caps.leading, channel = ShrinkChannel.LeadingGlue))
+                            }
+                            if (caps.trailing > 0f) {
+                                add(ShrinkOpportunity(idx, tier = 4, capacity = caps.trailing, channel = ShrinkChannel.TrailingGlue))
+                            }
+                        }
+
                         PunctuationClass.PauseOrStop -> {
+                            // CLREQ ⑤ 行内逗、顿、分号（冒号原文未尽列，
+                            // 按同档处理）；⑦ 行内句问叹排最后，且部分
+                            // 风格禁止（knob）。
                             val isStop = cluster.displayText.firstOrNull() in INLINE_STOPS
-                            val tier = if (isStop) 4 else 6
+                            val tier = if (isStop) 7 else 5
                             // Knob off: 行内句问叹 keep full width — their glue
                             // is only reachable via the tier-1 line-end
                             // promotion (行末削半 is a separate rule).
@@ -234,17 +254,21 @@ class ExplainableStubParagraphLayoutEngine(
                             }
                         }
 
+                        // CLREQ 未列其余带 glue 的标点：按 ⑤ 档兜底。
                         else -> if (caps.trailing > 0f) {
-                            add(ShrinkOpportunity(idx, tier = 6, capacity = caps.trailing, channel = ShrinkChannel.TrailingGlue))
+                            add(ShrinkOpportunity(idx, tier = 5, capacity = caps.trailing, channel = ShrinkChannel.TrailingGlue))
                         }
                     }
                 } else if (cluster.isSpaceRun()) {
                     if (cluster.range in gapClusterRanges) {
-                        if (adjustmentStyle.allowSinoWesternGapAdjustment && cluster.advance > 0f) {
-                            add(ShrinkOpportunity(idx, tier = 5, capacity = cluster.advance, channel = ShrinkChannel.RawAdvance))
+                        // CLREQ ⑥ 中西间距：最小挤为八分之一汉字宽（不是 0）；
+                        // 部分风格禁止（knob）。
+                        val capacity = cluster.advance - SINO_WESTERN_GAP_MIN_EM * fontSize
+                        if (adjustmentStyle.allowSinoWesternGapAdjustment && capacity > 0f) {
+                            add(ShrinkOpportunity(idx, tier = 6, capacity = capacity, channel = ShrinkChannel.RawAdvance))
                         }
                     } else {
-                        // Word space: min 1/4em (CLREQ 挤压第②档).
+                        // CLREQ ② 西文词距：最小挤到 1/4em。
                         val capacity = cluster.advance - WORD_SPACE_MIN_EM * fontSize
                         if (capacity > 0f) {
                             add(ShrinkOpportunity(idx, tier = 2, capacity = capacity, channel = ShrinkChannel.RawAdvance))
@@ -311,6 +335,10 @@ class ExplainableStubParagraphLayoutEngine(
             when (alloc.channel) {
                 ShrinkChannel.TrailingGlue ->
                     pushInTrailing.merge(alloc.clusterIndex, alloc.shrink) { a, b -> a + b }
+                ShrinkChannel.LeadingGlue ->
+                    // 开夹注符号前侧（CLREQ 挤压④）；渲染层按 consumed
+                    // leading 左移字形原点（ADR 0017 amendment）。
+                    pushInLeading.merge(alloc.clusterIndex, alloc.shrink) { a, b -> a + b }
                 ShrinkChannel.LeadingAndTrailingGlue -> {
                     // CLREQ: 间隔号挤压必须同时从字面两侧、同等量处理.
                     pushInLeading.merge(alloc.clusterIndex, alloc.shrink / 2f) { a, b -> a + b }
@@ -384,6 +412,14 @@ class ExplainableStubParagraphLayoutEngine(
         val trimmedClusters = trimmedGeometry.resolveClusters()
         val edgeTrimDecisions = edgeTrimResult.decisions + autoSpaceEdgeDecisions
 
+        // AvoidStretchAroundConnectors（CLREQ 拉伸限制②）：连接号、分隔号
+        // 与其前后字符之间避免拉伸。
+        val avoidStretchClusters: Set<Int> = naturalClusters.indices.filterTo(mutableSetOf()) { idx ->
+            when (atomClassByRange[naturalClusters[idx].range]) {
+                PunctuationClass.Connector, PunctuationClass.Solidus -> true
+                else -> false
+            }
+        }
         // CLREQ:「中文排版特别是书籍正文排版极少使用左齐右不齐，原则上
         // 应该进行两端对齐」— justification is the baseline, not an option:
         // every non-last line goes through the justify chain. The last line
@@ -405,6 +441,7 @@ class ExplainableStubParagraphLayoutEngine(
                     fontSize = fontSize,
                     skip = false,
                     allowSinoWesternGapStretch = adjustmentStyle.allowSinoWesternGapAdjustment,
+                    avoidStretchClusters = avoidStretchClusters,
                 )
             }
         }
@@ -1444,6 +1481,9 @@ private const val EMPHASIS_DOT_CENTER_EM = 0.35f
 
 /** CLREQ 挤压第②档：西文词距最小压至四分之一汉字宽. */
 private const val WORD_SPACE_MIN_EM = 0.25f
+
+/** CLREQ 挤压⑥：行内中西间距「最小挤为八分之一汉字宽」. */
+private const val SINO_WESTERN_GAP_MIN_EM = 0.125f
 
 /** CLREQ 挤压第④档对象：「位于行内的句号、问号、感叹号」. */
 private val INLINE_STOPS = setOf('。', '！', '？', '．')

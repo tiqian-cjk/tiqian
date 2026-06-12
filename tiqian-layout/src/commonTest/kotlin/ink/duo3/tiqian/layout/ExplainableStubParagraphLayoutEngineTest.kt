@@ -1354,6 +1354,50 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun pushInDrainsBracketOuterGlueBeforeInlineComma() {
+        // CLREQ 挤压七档（ADR 0020 amendment）：tier 4 夹注符号外侧
+        // （（ 前侧、） 后侧）先于 tier 5 行内逗号被消耗。
+        // 中（文）中，中文中。 @144：line0 = 前 9 cluster (144)，。 PushIn
+        // overflow 16 = tier1 。(8) + tier4 （/）各 4 —— ， 保持全宽。
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                content = TiqianTextContent("中（文）中，中文中。"),
+                constraints = LayoutConstraints(maxWidth = 144f),
+            ),
+        )
+
+        assertEquals(1, result.lines.size)
+        fun geom(text: String) = result.debug.geometryDecisions.single { it.sourceText == text }
+        assertEquals(8f, geom("。").trailingGlueConsumed)
+        assertEquals(4f, geom("（").leadingGlueConsumed)
+        assertEquals(4f, geom("）").trailingGlueConsumed)
+        assertEquals(0f, geom("，").trailingGlueConsumed)
+    }
+
+    @Test
+    fun sinoWesternGapShrinkFloorsAtEighthEm() {
+        // CLREQ 挤压⑥：中西间距最小挤为 1/8 汉字宽，不是 0。两个 gap
+        // (advance 4) 各只有 2px 容量：。 推入需要 16，可用 8+2+2=12 →
+        // PushIn 拒绝，CarryPrevious 兜底。（floor 为 0 的旧行为会接受。）
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                content = TiqianTextContent("中文 AB 中。"),
+                constraints = LayoutConstraints(maxWidth = 88f),
+            ),
+        )
+
+        assertEquals(2, result.lines.size)
+        val decision = result.debug.lineDecisions[1]
+        assertEquals("CarryPrevious", decision.repairDecision?.kind)
+        val pushIn = decision.repairCandidates.first { it.kind == "PushIn" }
+        assertEquals(false, pushIn.accepted)
+        assertEquals("insufficient-capacity", pushIn.rejectionReason)
+        assertEquals(12f, pushIn.availableCapacity)
+    }
+
+    @Test
     fun firstLineIndentShrinksFirstLineMeasureOnly() {
         // ParagraphFirstLineIndent: 12 hanzi at maxWidth 160, indent 2em
         // (32). Line 0 measure = 128 → 8 chars; line 1 uses the full 160.

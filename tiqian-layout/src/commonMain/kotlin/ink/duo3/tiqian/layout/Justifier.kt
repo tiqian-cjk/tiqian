@@ -55,6 +55,13 @@ class Justifier(
          * false disables the CjkLatinSpace tier (AdjustmentStylePolicy).
          */
         allowSinoWesternGapStretch: Boolean = true,
+        /**
+         * `AvoidStretchAroundConnectors` — CLREQ 平均拉大字距的限制②：
+         * 「避免对连接号、分隔号与其前后的字符进行拉伸处理」。Cluster
+         * indices of Connector / Solidus marks; boundaries touching them
+         * are excluded from the CjkInterChar tier.
+         */
+        avoidStretchClusters: Set<Int> = emptySet(),
     ): JustificationPlan {
         require(clusterRoles.size == adjustedClusters.size) {
             "clusterRoles must align with adjustedClusters."
@@ -147,7 +154,10 @@ class Justifier(
             priority = 3,
             capacity = remaining,
         ) { leftIdx, rightIdx ->
-            clusterRoles[leftIdx].isCjkLike() && clusterRoles[rightIdx].isCjkLike()
+            clusterRoles[leftIdx].isCjkLike() && clusterRoles[rightIdx].isCjkLike() &&
+                // AvoidStretchAroundConnectors: boundaries touching 连接号/
+                // 分隔号 stay closed（CLREQ 拉伸限制②）.
+                leftIdx !in avoidStretchClusters && rightIdx !in avoidStretchClusters
         }
         remaining = allocate(
             deficit = remaining,

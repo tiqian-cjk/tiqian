@@ -39,15 +39,16 @@ internal fun lineLimit(maxWidth: Float, firstLineIndent: Float, lineStartCluster
     if (lineStartCluster == 0) maxWidth - firstLineIndent else maxWidth
 
 /**
- * One shrinkable resource on a cluster (ADR 0020, CLREQ 挤压处理优先顺序):
+ * One shrinkable resource on a cluster (ADR 0020 + 2026-06-13 amendment,
+ * CLREQ 挤压处理优先顺序七档):
  *
  * - tier 1 — 行末标点削半宽（offender 自身 trailing glue，repair 时晋升）
  * - tier 2 — 西文词距，最小压至 1/4em
  * - tier 3 — 间隔号/居中类，两侧同时等量，压至 0
- * - tier 4 — 行内句号/问号/感叹号 trailing glue（风格开关可禁）
- * - tier 5 — 中西间距（风格开关可禁）
- * - tier 6 — 其余行内标点 glue。CLREQ 程序未列；项目保留为最后手段，
- *            否则 PushIn 在标点稀疏的行上能力大幅下降。
+ * - tier 4 — 夹注符号外侧：开括号/开引号前侧、闭括号/闭引号后侧
+ * - tier 5 — 行内逗、顿、分号 trailing glue（冒号等未尽列者同档兜底）
+ * - tier 6 — 中西间距，最小压至 1/8em（风格开关可禁）
+ * - tier 7 — 行内句号/问号/感叹号 trailing glue（风格开关可禁）
  */
 data class ShrinkOpportunity(
     val clusterIndex: Int,
@@ -65,6 +66,13 @@ data class ShrinkOpportunity(
 enum class ShrinkChannel {
     /** Consume the punctuation atom's trailing glue. */
     TrailingGlue,
+
+    /**
+     * Consume the punctuation atom's LEADING glue (开夹注符号前侧，CLREQ
+     * 挤压④). Renderers shift the glyph origin left by the consumed amount
+     * (ADR 0017 amendment).
+     */
+    LeadingGlue,
 
     /** Consume leading and trailing glue simultaneously, equal amounts. */
     LeadingAndTrailingGlue,

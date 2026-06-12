@@ -18,6 +18,27 @@ class JustifierEngineTest {
     private val engine = ExplainableStubParagraphLayoutEngine()
 
     @Test
+    fun connectorBoundariesAvoidStretchUnderJustification() {
+        // AvoidStretchAroundConnectors（CLREQ 拉伸限制②）：连接号（～）
+        // 前后的边界不参与均匀拉大字距。中～文中Example @80：line0 =
+        // 中～文中 (64)，deficit 16 全部落在唯一合法边界 文|中 上。
+        val result = engine.layout(
+            LayoutInput(
+                content = TiqianTextContent("中～文中Example"),
+                constraints = LayoutConstraints(maxWidth = 80f),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+            ),
+        )
+
+        assertTrue(result.lines.size >= 2)
+        val decision = result.debug.justificationDecisions.first()
+        assertEquals(0f, decision.deficitAfter)
+        val interChar = decision.allocations.filter { it.kind == "CjkInterChar" }
+        assertEquals(listOf(2), interChar.map { it.clusterRange.start })
+        assertEquals(16f, interChar.single().delta)
+    }
+
+    @Test
     fun lastLineAlignmentPositionsTheLastLineViaIndent() {
         // 9 hanzi at maxWidth=100: line 0 (6 clusters) justifies to 100;
         // line 1 (3 clusters, 48) is the last line — its position comes from
