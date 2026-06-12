@@ -1054,11 +1054,11 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         // Anchor maths for 豆 (4-5): line 0 holds clusters 0..7, x offset of
         // index 4 = 4×16 = 64, glyph centre 64+8 = 72; anchorY = line 0
-        // baseline + 16×0.35 (dot tucked under the character ink).
+        // baseline + 16×0.45 (clear daylight under the character face).
         val first = decisions.single { it.sourceText == "豆" }
         assertEquals(72f, first.anchorX)
         val line0Baseline = result.lines.first().baseline
-        assertEquals(line0Baseline + 5.6f, first.anchorY, 0.01f)
+        assertEquals(line0Baseline + 7.2f, first.anchorY, 0.01f)
     }
 
     @Test
@@ -1351,6 +1351,58 @@ class ExplainableStubParagraphLayoutEngineTest {
         val deltas = decision.allocations.filter { it.kind == "CjkInterChar" }.map { it.delta }
         assertEquals(3, deltas.size)
         assertTrue(deltas.all { kotlin.math.abs(it - 32f) < 0.01f }, "deltas=$deltas")
+    }
+
+    @Test
+    fun interlinearMarksRaiseAutoLineHeightToSpacingFloor() {
+        // InterlinearMarkLineSpacingFloor (CLREQ 5.6.1.1): with 着重号
+        // present and no explicit lineHeight, line spacing rises to 1/2
+        // 字号 (单面装) → height 1.5em = 24; 双面装 5/8 → 26. An explicit
+        // lineHeight below the floor is clamped, not honoured.
+        fun layoutWith(lineHeight: Float?, sides: ink.duo3.tiqian.core.PrintingSides) =
+            ExplainableStubParagraphLayoutEngine().layout(
+                LayoutInput(
+                    paragraphStyle = ParagraphStyle(
+                        firstLineIndentEm = 0f,
+                        lineHeight = lineHeight,
+                        printingSides = sides,
+                    ),
+                    content = TiqianTextContent("豆子新鲜"),
+                    constraints = LayoutConstraints(maxWidth = 240f),
+                    decorations = listOf(
+                        ink.duo3.tiqian.core.DecorationSpan(
+                            range = ink.duo3.tiqian.core.TextRange(0, 4),
+                            kind = ink.duo3.tiqian.core.DecorationKind.Emphasis,
+                        ),
+                    ),
+                ),
+            )
+
+        val single = layoutWith(null, ink.duo3.tiqian.core.PrintingSides.SingleSided)
+        assertEquals(24f, single.lines.single().bottom)
+        assertEquals(true, single.debug.lineSpacingDecision?.floorApplied)
+
+        val duplex = layoutWith(null, ink.duo3.tiqian.core.PrintingSides.DoubleSided)
+        assertEquals(26f, duplex.lines.single().bottom)
+
+        val clamped = layoutWith(20f, ink.duo3.tiqian.core.PrintingSides.SingleSided)
+        assertEquals(24f, clamped.lines.single().bottom)
+        assertEquals(true, clamped.debug.lineSpacingDecision?.floorApplied)
+
+        val generous = layoutWith(28f, ink.duo3.tiqian.core.PrintingSides.SingleSided)
+        assertEquals(28f, generous.lines.single().bottom)
+        assertEquals(false, generous.debug.lineSpacingDecision?.floorApplied)
+
+        // No marks → no floor, no decision: default stays at 1.0em.
+        val plain = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                content = TiqianTextContent("豆子新鲜"),
+                constraints = LayoutConstraints(maxWidth = 240f),
+            ),
+        )
+        assertEquals(16f, plain.lines.single().bottom)
+        assertEquals(null, plain.debug.lineSpacingDecision)
     }
 
     @Test

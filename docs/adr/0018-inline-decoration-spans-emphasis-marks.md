@@ -68,6 +68,22 @@ Layout 在行/cluster 几何定稿后解析 span，产出
 - CLREQ 依据：「在人名文字外框描上实心的黑色边线」；断行规则 CLREQ 未规定，
   避拆为本项目决策（名单场景姓名不应跨行）。
 
+### Amendment (2026-06-13): 行距下限与锚点下移（CLREQ 5.6.1.1）
+
+第五节原文入库后复核发现两处缺口：
+
+- **`InterlinearMarkLineSpacingFloor`**：CLREQ 5.6.1.1 要求带行间标点时
+  行距（行高 − 字面高）单面装不小于 1/2 字号、双面装不小于 5/8 字号。
+  此前引擎没有任何约束——默认行高恰为 1.0em（字面相贴、行距 0），
+  fixture 靠手动 lineHeight 兜底，demo 第三段实际处于违例状态。现在：
+  段落带行间标记类 decoration 时 auto 行高抬到 floor；显式 lineHeight
+  低于 floor 时 clamp（原文是「不应小于」）。单/双面装是**印刷正反面**
+  属性，落为 `ParagraphStyle.printingSides`（屏幕渲染无背面，默认单面）。
+  决策记入 `LayoutDebugInfo.lineSpacingDecision`，dump 增 `linespacing` 行。
+- **着重号锚点 0.35em → 0.45em**：原值点的墨水上缘距字面底仅 0.12em，
+  视觉上贴字。下移后点与字面有明确空隙，且在 floor 保证的行距带内
+  （点底 +0.56em < 下一行字面顶 +0.62em @1.5em 行高）。
+
 ## Consequences
 
 - `LayoutResult` 新增 `decorationDecisions`；dump 增 `deco:*` 行；

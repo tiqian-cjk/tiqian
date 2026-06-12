@@ -38,6 +38,8 @@ import ink.duo3.tiqian.core.RoleOverrideInfo
 import ink.duo3.tiqian.core.Size
 import ink.duo3.tiqian.core.SpacingDecisionInfo
 import ink.duo3.tiqian.core.LastLineAlignment
+import ink.duo3.tiqian.core.LineSpacingDecisionInfo
+import ink.duo3.tiqian.core.PrintingSides
 import ink.duo3.tiqian.core.TextRange
 import ink.duo3.tiqian.font.CjkFontRoleClassifier
 import ink.duo3.tiqian.font.FallbackResolver
@@ -301,7 +303,35 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        val lineMetrics = metricDecisions.lineMetrics(input.paragraphStyle.lineHeight)
+        // InterlinearMarkLineSpacingFloor (CLREQ 5.6.1.1): with 行间标点
+        // (着重号、示亡号 etc.) present, line spacing (height − 字面高)
+        // must not drop below 1/2 字号 (单面装) / 5/8 字号 (双面装).
+        val interlinearSpacingFloor = if (input.decorations.isEmpty()) {
+            0f
+        } else {
+            when (input.paragraphStyle.printingSides) {
+                PrintingSides.SingleSided -> 0.5f * fontSize
+                PrintingSides.DoubleSided -> 0.625f * fontSize
+            }
+        }
+        val lineMetrics = metricDecisions.lineMetrics(
+            explicitLineHeight = input.paragraphStyle.lineHeight,
+            spacingFloor = interlinearSpacingFloor,
+        )
+        val lineSpacingDecision = if (input.decorations.isEmpty()) {
+            null
+        } else {
+            val natural = lineMetrics.height - lineMetrics.extraLeading
+            LineSpacingDecisionInfo(
+                naturalHeight = natural,
+                requestedLineHeight = input.paragraphStyle.lineHeight,
+                resolvedHeight = lineMetrics.height,
+                spacingFloor = interlinearSpacingFloor,
+                printingSides = input.paragraphStyle.printingSides.name,
+                floorApplied = lineMetrics.height > ((input.paragraphStyle.lineHeight ?: 0f).coerceAtLeast(natural)),
+                reason = "InterlinearMarkLineSpacingFloor",
+            )
+        }
         // ParagraphFirstLineIndent (CLREQ 段首缩排): the first line's usable
         // measure shrinks by the indent; rendering shifts its start edge.
         val firstLineIndent = input.paragraphStyle.firstLineIndentEm.coerceAtLeast(0f) * fontSize
@@ -659,6 +689,7 @@ class ExplainableStubParagraphLayoutEngine(
                 lineEdgeTrimDecisions = edgeTrimDecisions,
                 decorationDecisions = decorationDecisions,
                 decorationSegments = decorationSegments,
+                lineSpacingDecision = lineSpacingDecision,
             ),
         )
     }
@@ -679,7 +710,8 @@ class ExplainableStubParagraphLayoutEngine(
      * NOT em-box-relative: CenteredCjkVisual gives the em box an artificial
      * 0.5em descent while real Han ink ends ≈0.1em below the baseline — an
      * em-box-relative drop landed the dots inside the NEXT line's ink.
-     * 0.35em tucks the dot snugly under the character (≈2px clearance at
+     * 0.45em keeps clear daylight under the character face (字面底
+     * baseline+0.12em; ≈2px clearance at
      * 16px) and clears the next line even at lineHeight 1.0. Renderers
      * measure their dot glyph's ink and align its centre here, so font
      * differences stay in the render layer.
@@ -1168,7 +1200,10 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-    private fun List<ClusterMetricDecision>.lineMetrics(explicitLineHeight: Float?): ResolvedLineMetrics {
+    private fun List<ClusterMetricDecision>.lineMetrics(
+        explicitLineHeight: Float?,
+        spacingFloor: Float = 0f,
+    ): ResolvedLineMetrics {
         if (isEmpty()) {
             val height = explicitLineHeight ?: 0f
             return ResolvedLineMetrics(
@@ -1180,12 +1215,17 @@ class ExplainableStubParagraphLayoutEngine(
         val ascent = maxOf { it.layoutMetrics.ascent }
         val descent = maxOf { it.layoutMetrics.descent }
         val naturalHeight = ascent + descent
-        val height = explicitLineHeight?.coerceAtLeast(naturalHeight) ?: naturalHeight
+        // InterlinearMarkLineSpacingFloor: the floor binds line SPACING
+        // (height − naturalHeight) — CLREQ「不应小于」, so an explicit
+        // lineHeight below it is clamped, not silently honoured.
+        val minHeight = naturalHeight + spacingFloor
+        val height = (explicitLineHeight ?: minHeight).coerceAtLeast(minHeight)
         val extraLeading = (height - naturalHeight).coerceAtLeast(0f)
 
         return ResolvedLineMetrics(
             baseline = extraLeading / 2f + ascent,
             height = height,
+            extraLeading = extraLeading,
         )
     }
 
@@ -1223,6 +1263,7 @@ private data class ClusterMetricDecision(
 private data class ResolvedLineMetrics(
     val baseline: Float,
     val height: Float,
+    val extraLeading: Float = 0f,
 )
 
 private data class AutoSpaceApplicationResult(
@@ -1477,7 +1518,7 @@ private data class LineEdgeTrimResult(
 )
 
 /** ADR 0018: dot ink centre sits this far below the BASELINE. */
-private const val EMPHASIS_DOT_CENTER_EM = 0.35f
+private const val EMPHASIS_DOT_CENTER_EM = 0.45f
 
 /** CLREQ 挤压第②档：西文词距最小压至四分之一汉字宽. */
 private const val WORD_SPACE_MIN_EM = 0.25f

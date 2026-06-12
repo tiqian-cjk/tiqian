@@ -24,7 +24,10 @@
 - **标点旁不加中西间距**：tracking 不出现在中文点号与西文之间、开闭引号括号内侧
   ——autospace 仅 ideograph↔alpha + `GlueSideAwareJustification`。
 - **着重号**：码点（●/•）、横排字底端、点号引号括号不加点、与字符居中对齐
-  （疏排仍居中）——Slice 8。
+  （疏排仍居中）——Slice 8；锚点 0.45em（2026-06-13 下移）。
+- **行间标点的行距下限**（5.6.1.1）：单面装 ≥1/2 字号、双面装 ≥5/8——
+  `InterlinearMarkLineSpacingFloor` + `ParagraphStyle.printingSides`
+  （2026-06-13，ADR 0018 amendment；此前默认行高 1.0em 行距为 0，违例）。
 - **行尾点号悬挂为非默认**：「绝大多数的中文出版物没有悬挂行尾点号的惯例」——
   ADR 0006 opt-in 立场正确（未实现，见缺口 6）。
 

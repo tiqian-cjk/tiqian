@@ -53,6 +53,13 @@ data class ParagraphStyle(
     val writingMode: WritingMode = WritingMode.HorizontalTb,
     val lineHeight: Float? = null,
     /**
+     * 单面装/双面装（印刷是否正反两面）。CLREQ 5.6.1.1：为保证行间标点的
+     * 摆放，单面装的行距不应小于当前字号的一半，双面装不应小于 5/8。
+     * 该值决定 `InterlinearMarkLineSpacingFloor` 的下限；屏幕渲染无背面，
+     * 默认按单面装。
+     */
+    val printingSides: PrintingSides = PrintingSides.SingleSided,
+    /**
      * 段首缩进, in ems of the paragraph font size. CLREQ: 「段首缩排以两个
      * 汉字的空间为标准」— hence the default 2. Multi-column magazine styles
      * commonly use 1; 0 disables the indent. The indent insets the FIRST
@@ -69,6 +76,12 @@ enum class LastLineAlignment {
     Start,
     Center,
     End,
+}
+
+/** 印刷装订面数（CLREQ 5.6.1.1 行间标点的行距下限随之不同）. */
+enum class PrintingSides {
+    SingleSided,
+    DoubleSided,
 }
 
 enum class WritingMode {

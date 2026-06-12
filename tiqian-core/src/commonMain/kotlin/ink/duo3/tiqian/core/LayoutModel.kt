@@ -82,6 +82,24 @@ data class LayoutDebugInfo(
     val lineEdgeTrimDecisions: List<LineEdgeTrimDecisionInfo> = emptyList(),
     val decorationDecisions: List<DecorationDecisionInfo> = emptyList(),
     val decorationSegments: List<DecorationSegmentInfo> = emptyList(),
+    val lineSpacingDecision: LineSpacingDecisionInfo? = null,
+)
+
+/**
+ * `InterlinearMarkLineSpacingFloor` (CLREQ 5.6.1.1): with interlinear marks
+ * (着重号、示亡号 etc.) present, line spacing must not drop below 1/2 of the
+ * font size for single-sided printing, 5/8 for double-sided. Recorded
+ * whenever the paragraph carries such marks; `floorApplied` tells whether
+ * the floor actually raised (auto) or clamped (explicit) the line height.
+ */
+data class LineSpacingDecisionInfo(
+    val naturalHeight: Float,
+    val requestedLineHeight: Float?,
+    val resolvedHeight: Float,
+    val spacingFloor: Float,
+    val printingSides: String,
+    val floorApplied: Boolean,
+    val reason: String,
 )
 
 /**

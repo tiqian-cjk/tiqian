@@ -161,6 +161,13 @@ class LayoutDumpGoldenTest {
                     "applied=${d.applied} anchor=${d.anchorX.fmt()},${d.anchorY.fmt()} reason=${d.reason}",
             )
         }
+        debug.lineSpacingDecision?.let { d ->
+            appendLine(
+                "linespacing natural=${d.naturalHeight.fmt()} requested=${d.requestedLineHeight?.fmt() ?: "-"} " +
+                    "resolved=${d.resolvedHeight.fmt()} floor=${d.spacingFloor.fmt()} " +
+                    "sides=${d.printingSides} applied=${d.floorApplied} reason=${d.reason}",
+            )
+        }
         debug.decorationSegments.forEach { seg ->
             appendLine(
                 "decobox ${seg.sourceRange.start}-${seg.sourceRange.end} kind=${seg.kind} line=${seg.lineIndex} " +

@@ -47,6 +47,7 @@ geom 14-15 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 2-3 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 8-9 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 14-15 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+linespacing natural=16.0 requested=28.8 resolved=28.8 floor=8.0 sides=SingleSided applied=false reason=InterlinearMarkLineSpacingFloor
 decobox 3-6 kind=Mourning line=1 rect=0.0,29.1,53.3,45.1 open=-/- reason=MourningSpanKeptUnbroken
 decobox 9-12 kind=Mourning line=3 rect=0.0,86.7,53.3,102.7 open=-/- reason=MourningSpanKeptUnbroken
 == lookahead ==
@@ -95,5 +96,6 @@ geom 14-15 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 2-3 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 8-9 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 14-15 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+linespacing natural=16.0 requested=28.8 resolved=28.8 floor=8.0 sides=SingleSided applied=false reason=InterlinearMarkLineSpacingFloor
 decobox 3-6 kind=Mourning line=1 rect=0.0,29.1,53.3,45.1 open=-/- reason=MourningSpanKeptUnbroken
 decobox 9-12 kind=Mourning line=3 rect=0.0,86.7,53.3,102.7 open=-/- reason=MourningSpanKeptUnbroken
