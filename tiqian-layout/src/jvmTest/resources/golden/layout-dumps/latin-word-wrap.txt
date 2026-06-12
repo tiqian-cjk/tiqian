@@ -1,6 +1,6 @@
 fixture: latin-word-wrap
 text: 他引用了一句话：The quick brown fox jumps over the lazy dog，然后继续讲。
-maxWidth: 240.0 align: Justify
+maxWidth: 240.0
 == greedy ==
 size 240.0x83.2
 line[0] 0-12 natural=192.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+9.1,CjkInterChar@1+9.1,CjkInterChar@2+9.1,CjkInterChar@3+9.1,CjkInterChar@4+9.1,CjkInterChar@5+9.1,CjkInterChar@6+9.1

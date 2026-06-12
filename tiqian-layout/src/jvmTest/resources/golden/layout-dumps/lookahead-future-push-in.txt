@@ -1,12 +1,12 @@
 fixture: lookahead-future-push-in
 text: 中文中文中文。
-maxWidth: 60.0 align: Start
+maxWidth: 60.0
 == greedy ==
-size 56.0x32.0
-line[0] 0-3 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
+size 60.0x32.0
+line[0] 0-3 natural=48.0 adjusted=48.0 visual=60.0 repair=- candidates=- justify=deficit=12.0->0.0 CjkInterChar@0+6.0,CjkInterChar@1+6.0
 line[1] 3-7 natural=64.0 adjusted=56.0 visual=56.0 repair=PushIn(ForbiddenAtLineStart shrink=4.0) candidates=PushIn+ justify=-
-cluster 0-1 '中' adv=16.0
-cluster 1-2 '文' adv=16.0
+cluster 0-1 '中' adv=22.0
+cluster 1-2 '文' adv=22.0
 cluster 2-3 '中' adv=16.0
 cluster 3-4 '文' adv=16.0
 cluster 4-5 '中' adv=16.0
@@ -23,11 +23,11 @@ punct 6-7 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Le
 geom 6-7 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 6-7 side=trailing trim=4.0 reason=LineEndHalfWidthPunctuation
 == lookahead ==
-size 56.0x32.0
-line[0] 0-3 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
+size 60.0x32.0
+line[0] 0-3 natural=48.0 adjusted=48.0 visual=60.0 repair=- candidates=- justify=deficit=12.0->0.0 CjkInterChar@0+6.0,CjkInterChar@1+6.0
 line[1] 3-7 natural=64.0 adjusted=56.0 visual=56.0 repair=PushIn(ForbiddenAtLineStart shrink=4.0) candidates=PushIn+ justify=-
-cluster 0-1 '中' adv=16.0
-cluster 1-2 '文' adv=16.0
+cluster 0-1 '中' adv=22.0
+cluster 1-2 '文' adv=22.0
 cluster 2-3 '中' adv=16.0
 cluster 3-4 '文' adv=16.0
 cluster 4-5 '中' adv=16.0

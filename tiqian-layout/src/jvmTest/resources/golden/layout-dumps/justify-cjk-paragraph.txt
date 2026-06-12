@@ -1,6 +1,6 @@
 fixture: justify-cjk-paragraph
 text: 中文中文中文中文中文中文
-maxWidth: 100.0 align: Justify
+maxWidth: 100.0
 == greedy ==
 size 100.0x32.0
 line[0] 0-6 natural=96.0 adjusted=96.0 visual=100.0 repair=- candidates=- justify=deficit=4.0->0.0 CjkInterChar@0+0.8,CjkInterChar@1+0.8,CjkInterChar@2+0.8,CjkInterChar@3+0.8,CjkInterChar@4+0.8

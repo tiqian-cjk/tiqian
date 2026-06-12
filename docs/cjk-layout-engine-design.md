@@ -438,7 +438,8 @@ TiqianText(
     style = style,
     profile = ClreqProfile.MainlandHorizontal,
     lineBreak = ClreqLineBreak.Strict,
-    textAlign = TextAlign.Justify,
+    // 双齐是基线（ADR 0023）：没有 textAlign，只有末行对齐可选。
+    lastLineAlignment = LastLineAlignment.Start,
 )
 ```
 

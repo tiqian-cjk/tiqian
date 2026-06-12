@@ -38,9 +38,7 @@ class LayoutDumpGoldenTest {
             val dump = buildString {
                 appendLine("fixture: ${fixture.id}")
                 appendLine("text: ${fixture.text}")
-                appendLine(
-                    "maxWidth: ${fixture.constraints.maxWidth.fmt()} align: ${fixture.textAlign}",
-                )
+                appendLine("maxWidth: ${fixture.constraints.maxWidth.fmt()}")
                 for ((label, breaker) in listOf(
                     "greedy" to GreedyLineBreaker(),
                     "lookahead" to LookaheadLineBreaker(),
@@ -50,7 +48,6 @@ class LayoutDumpGoldenTest {
                             content = TiqianTextContent(fixture.text),
                             constraints = fixture.constraints,
                             paragraphStyle = ink.duo3.tiqian.core.ParagraphStyle(
-                                textAlign = fixture.textAlign,
                                 lineHeight = fixture.lineHeight,
                                 firstLineIndentEm = fixture.firstLineIndentEm,
                             ),

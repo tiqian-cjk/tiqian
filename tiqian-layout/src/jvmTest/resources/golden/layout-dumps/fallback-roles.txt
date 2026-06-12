@@ -1,6 +1,6 @@
 fixture: fallback-roles
 text: 提椠……Hello——世界。
-maxWidth: 240.0 align: Start
+maxWidth: 240.0
 == greedy ==
 size 216.0x20.8
 line[0] 0-14 natural=224.0 adjusted=216.0 visual=216.0 repair=- candidates=- justify=-

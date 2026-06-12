@@ -1,6 +1,6 @@
 fixture: first-line-indent
 text: 咖啡的风味因产地而各异，烘焙的深浅同样会改变口感与香气。
-maxWidth: 200.0 align: Justify
+maxWidth: 200.0
 == greedy ==
 size 200.0x48.0
 line[0] 0-10 indent=32.0 natural=160.0 adjusted=160.0 visual=168.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkInterChar@0+0.9,CjkInterChar@1+0.9,CjkInterChar@2+0.9,CjkInterChar@3+0.9,CjkInterChar@4+0.9,CjkInterChar@5+0.9,CjkInterChar@6+0.9,CjkInterChar@7+0.9,CjkInterChar@8+0.9

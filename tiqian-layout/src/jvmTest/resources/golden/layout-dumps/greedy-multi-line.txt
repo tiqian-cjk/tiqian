@@ -1,6 +1,6 @@
 fixture: greedy-multi-line
 text: 咖啡馆比咖啡更早地改变了城里人的作息与谈吐。
-maxWidth: 144.0 align: Start
+maxWidth: 144.0
 == greedy ==
 size 144.0x48.0
 line[0] 0-9 natural=144.0 adjusted=144.0 visual=144.0 repair=- candidates=- justify=-

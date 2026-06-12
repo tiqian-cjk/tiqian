@@ -13,8 +13,6 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.use
-import ink.duo3.tiqian.core.ParagraphStyle
-import ink.duo3.tiqian.core.TextAlign
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 import kotlin.test.Test
@@ -42,7 +40,6 @@ class TiqianParagraphRenderTest {
                 TiqianParagraph(
                     text = paragraph,
                     modifier = Modifier.width(320.dp),
-                    paragraphStyle = ParagraphStyle(textAlign = TextAlign.Justify),
                 )
             }
         }.use { scene ->

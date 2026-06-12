@@ -1,6 +1,6 @@
 fixture: justify-mixed-paragraph
 text: 中文Hello中文，世界。
-maxWidth: 144.0 align: Justify
+maxWidth: 144.0
 == greedy ==
 size 144.0x41.6
 line[0] 0-8 natural=136.0 adjusted=136.0 visual=144.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkLatinSpace@1+4.0,CjkLatinSpace@2+4.0

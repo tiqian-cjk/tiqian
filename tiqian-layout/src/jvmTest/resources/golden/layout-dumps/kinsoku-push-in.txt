@@ -1,6 +1,6 @@
 fixture: kinsoku-push-in
 text: 中文中。
-maxWidth: 60.0 align: Start
+maxWidth: 60.0
 == greedy ==
 size 56.0x16.0
 line[0] 0-4 natural=64.0 adjusted=56.0 visual=56.0 repair=PushIn(ForbiddenAtLineStart shrink=4.0) candidates=PushIn+ justify=-

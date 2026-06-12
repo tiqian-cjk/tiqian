@@ -1,6 +1,6 @@
 fixture: basic-pause-stop
 text: 中文，中文。
-maxWidth: 160.0 align: Start
+maxWidth: 160.0
 == greedy ==
 size 88.0x16.0
 line[0] 0-6 natural=96.0 adjusted=88.0 visual=88.0 repair=- candidates=- justify=-

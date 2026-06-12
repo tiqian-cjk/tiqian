@@ -1,6 +1,6 @@
 fixture: indent-opening-quote
 text: “好咖啡要趁热喝。”他说完便把杯子推了过来，让大家依次尝一口。
-maxWidth: 192.0 align: Justify
+maxWidth: 192.0
 == greedy ==
 size 192.0x48.0
 line[0] 0-10 indent=32.0 natural=160.0 adjusted=136.0 visual=160.0 repair=- candidates=- justify=deficit=24.0->0.0 CjkInterChar@0+2.7,CjkInterChar@1+2.7,CjkInterChar@2+2.7,CjkInterChar@3+2.7,CjkInterChar@4+2.7,CjkInterChar@5+2.7,CjkInterChar@6+2.7,CjkInterChar@7+2.7,CjkInterChar@8+2.7

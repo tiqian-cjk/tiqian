@@ -1,6 +1,6 @@
 fixture: real-paragraph-1
 text: 咖啡（coffee）在十七世纪经威尼斯传入欧洲。最初它被当作药物出售，价格高得吓人，真正让它流行起来的是随后遍地开花的咖啡馆——读报、辩论、下棋、写作——城市生活忽然多出一个公共客厅。意大利人做出了 espresso，维也纳人往杯里加奶油，土耳其人坚持连渣同煮……每座城市都相信自己手里那一杯才是正统。有人说：「先有咖啡馆，后有启蒙运动」。这话说得夸张，但也不算太离谱。
-maxWidth: 320.0 align: Justify
+maxWidth: 320.0
 == greedy ==
 size 320.0x208.0
 line[0] 0-18 indent=32.0 natural=288.0 adjusted=288.0 visual=288.0 repair=- candidates=- justify=-

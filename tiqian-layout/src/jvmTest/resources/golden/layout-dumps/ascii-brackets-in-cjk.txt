@@ -1,15 +1,15 @@
 fixture: ascii-brackets-in-cjk
 text: 中文段落(English)和[mixed]说明。
-maxWidth: 240.0 align: Start
+maxWidth: 240.0
 == greedy ==
-size 232.0x41.6
-line[0] 0-14 natural=232.0 adjusted=232.0 visual=232.0 repair=- candidates=- justify=-
+size 240.0x41.6
+line[0] 0-14 natural=232.0 adjusted=232.0 visual=240.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkLatinSpace@3+4.0,CjkLatinSpace@4+4.0
 line[1] 14-24 natural=168.0 adjusted=156.0 visual=156.0 repair=- candidates=- justify=-
 cluster 0-1 '中' adv=16.0
 cluster 1-2 '文' adv=16.0
 cluster 2-3 '段' adv=16.0
-cluster 3-4 '落' adv=16.0
-cluster 4-13 '(English)' adv=152.0
+cluster 3-4 '落' adv=20.0
+cluster 4-13 '(English)' adv=156.0
 cluster 13-14 '和' adv=16.0
 cluster 14-21 '[mixed]' adv=116.0
 cluster 21-22 '说' adv=16.0
@@ -34,14 +34,14 @@ autospace 14-21 side=trailing boundary=CjkText reduction=-4.0
 edgetrim 23-24 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 14-21 side=leading trim=4.0 reason=TextAutoSpaceLineEdgeTrim
 == lookahead ==
-size 232.0x41.6
-line[0] 0-14 natural=232.0 adjusted=232.0 visual=232.0 repair=- candidates=- justify=-
+size 240.0x41.6
+line[0] 0-14 natural=232.0 adjusted=232.0 visual=240.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkLatinSpace@3+4.0,CjkLatinSpace@4+4.0
 line[1] 14-24 natural=168.0 adjusted=156.0 visual=156.0 repair=- candidates=- justify=-
 cluster 0-1 '中' adv=16.0
 cluster 1-2 '文' adv=16.0
 cluster 2-3 '段' adv=16.0
-cluster 3-4 '落' adv=16.0
-cluster 4-13 '(English)' adv=152.0
+cluster 3-4 '落' adv=20.0
+cluster 4-13 '(English)' adv=156.0
 cluster 13-14 '和' adv=16.0
 cluster 14-21 '[mixed]' adv=116.0
 cluster 21-22 '说' adv=16.0

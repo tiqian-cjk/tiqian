@@ -1095,10 +1095,13 @@ class ExplainableStubParagraphLayoutEngineTest {
             assertEquals(false, seg.openStart)
             assertEquals(false, seg.openEnd)
         }
-        // 王小明 starts its line: left edge at 0, right after 3 clusters.
+        // 王小明 starts its line: left edge at 0. The line is justified
+        // (双齐 baseline): 3 boundaries share the 8px deficit (+8/3 each),
+        // so the frame's right edge follows the spread glyphs — the last
+        // cluster's trailing justify delta stays OUTSIDE the frame.
         val first = segments.single { it.sourceRange.start == 3 }
         assertEquals(0f, first.left)
-        assertEquals(48f, first.right)
+        assertEquals(160f / 3f, first.right, 0.01f)
         // Frame hugs the CJK character face (字面, no margin):
         // baseline - 0.88em .. baseline + 0.12em.
         val line = result.lines[1]
@@ -1172,7 +1175,6 @@ class ExplainableStubParagraphLayoutEngineTest {
                 content = TiqianTextContent("AB CD EF中文中文中"),
                 constraints = LayoutConstraints(maxWidth = 160f),
                 paragraphStyle = ink.duo3.tiqian.core.ParagraphStyle(
-                    textAlign = ink.duo3.tiqian.core.TextAlign.Justify,
                     firstLineIndentEm = 0f,
                 ),
             ),
@@ -1288,7 +1290,6 @@ class ExplainableStubParagraphLayoutEngineTest {
                 content = TiqianTextContent("中文Hello文中文中文中文中"),
                 constraints = LayoutConstraints(maxWidth = 160f),
                 paragraphStyle = ink.duo3.tiqian.core.ParagraphStyle(
-                    textAlign = ink.duo3.tiqian.core.TextAlign.Justify,
                     firstLineIndentEm = 0f,
                 ),
             ),
@@ -1309,7 +1310,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // glue; the hanzi boundaries absorb the whole deficit instead.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = ink.duo3.tiqian.core.TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文中文话：The quick brown fox jumps"),
                 constraints = LayoutConstraints(maxWidth = 160f),
             ),
@@ -1337,7 +1338,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // boundaries = 32 each, far past the old 4px cap.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = ink.duo3.tiqian.core.TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文中文Considerable中文"),
                 constraints = LayoutConstraints(maxWidth = 160f),
             ),

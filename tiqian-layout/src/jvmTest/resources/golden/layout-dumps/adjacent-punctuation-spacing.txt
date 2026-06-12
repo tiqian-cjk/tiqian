@@ -1,6 +1,6 @@
 fixture: adjacent-punctuation-spacing
 text: 他说：“你好，世界。”！！
-maxWidth: 220.0 align: Start
+maxWidth: 220.0
 == greedy ==
 size 168.0x16.0
 line[0] 0-13 natural=208.0 adjusted=168.0 visual=168.0 repair=- candidates=- justify=-

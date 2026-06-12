@@ -3,7 +3,6 @@ package ink.duo3.tiqian.layout
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LayoutInput
 import ink.duo3.tiqian.core.ParagraphStyle
-import ink.duo3.tiqian.core.TextAlign
 import ink.duo3.tiqian.core.TiqianTextContent
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -36,23 +35,21 @@ class PunctuationBodyFloorInvariantTest {
         val engine = ExplainableStubParagraphLayoutEngine()
         for (text in fixtures) {
             for (maxWidth in widths) {
-                for (align in listOf(TextAlign.Start, TextAlign.Justify)) {
-                    val result = engine.layout(
-                        LayoutInput(
-                            content = TiqianTextContent(text),
-                            constraints = LayoutConstraints(maxWidth = maxWidth),
-                            paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = align),
-                        ),
+                val result = engine.layout(
+                    LayoutInput(
+                        content = TiqianTextContent(text),
+                        constraints = LayoutConstraints(maxWidth = maxWidth),
+                        paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                    ),
+                )
+                result.debug.geometryDecisions.forEach { geometry ->
+                    assertTrue(
+                        geometry.resolvedAdvance >= geometry.bodyWidth - 1e-3f,
+                        "Body floor violated for '${geometry.sourceText}' " +
+                            "(${geometry.range.start}-${geometry.range.end}) in \"$text\" " +
+                            "@maxWidth=$maxWidth: " +
+                            "resolved=${geometry.resolvedAdvance} < body=${geometry.bodyWidth}",
                     )
-                    result.debug.geometryDecisions.forEach { geometry ->
-                        assertTrue(
-                            geometry.resolvedAdvance >= geometry.bodyWidth - 1e-3f,
-                            "Body floor violated for '${geometry.sourceText}' " +
-                                "(${geometry.range.start}-${geometry.range.end}) in \"$text\" " +
-                                "@maxWidth=$maxWidth align=$align: " +
-                                "resolved=${geometry.resolvedAdvance} < body=${geometry.bodyWidth}",
-                        )
-                    }
                 }
             }
         }

@@ -37,7 +37,7 @@ import ink.duo3.tiqian.core.Rect
 import ink.duo3.tiqian.core.RoleOverrideInfo
 import ink.duo3.tiqian.core.Size
 import ink.duo3.tiqian.core.SpacingDecisionInfo
-import ink.duo3.tiqian.core.TextAlign
+import ink.duo3.tiqian.core.LastLineAlignment
 import ink.duo3.tiqian.core.TextRange
 import ink.duo3.tiqian.font.CjkFontRoleClassifier
 import ink.duo3.tiqian.font.FallbackResolver
@@ -384,10 +384,13 @@ class ExplainableStubParagraphLayoutEngine(
         val trimmedClusters = trimmedGeometry.resolveClusters()
         val edgeTrimDecisions = edgeTrimResult.decisions + autoSpaceEdgeDecisions
 
-        val justify = input.paragraphStyle.textAlign == TextAlign.Justify
+        // CLREQ:「中文排版特别是书籍正文排版极少使用左齐右不齐，原则上
+        // 应该进行两端对齐」— justification is the baseline, not an option:
+        // every non-last line goes through the justify chain. The last line
+        // is positioned by ParagraphStyle.lastLineAlignment instead.
         val justificationPlans: List<JustificationPlan?> = lineSolution.lines.mapIndexed { lineIndex, lineCandidate ->
             val isLast = lineIndex == lineSolution.lines.lastIndex
-            if (!justify || isLast) {
+            if (isLast) {
                 null
             } else {
                 justifier.justify(
@@ -440,6 +443,23 @@ class ExplainableStubParagraphLayoutEngine(
             val visualWidth = lineCandidate.clusterRange
                 .sumOf { finalClusters[it].advance.toDouble() }
                 .toFloat()
+            val baseIndent = if (lineCandidate.clusterRange.first == 0) firstLineIndent else 0f
+            // LastLineAlignment: the last line is the paragraph's only
+            // alignment degree of freedom (CLREQ 双齐 baseline). Center/End
+            // express as an extra start-edge inset within the line's usable
+            // measure — renderers and decoration geometry consume
+            // LineBox.indent unchanged.
+            val isLast = lineIndex == lineSolution.lines.lastIndex
+            val limit = input.constraints.maxWidth - baseIndent
+            val alignmentInset = if (!isLast) {
+                0f
+            } else {
+                when (input.paragraphStyle.lastLineAlignment) {
+                    LastLineAlignment.Start -> 0f
+                    LastLineAlignment.Center -> ((limit - visualWidth) / 2f).coerceAtLeast(0f)
+                    LastLineAlignment.End -> (limit - visualWidth).coerceAtLeast(0f)
+                }
+            }
             LineBox(
                 range = lineCandidate.sourceRange,
                 baseline = lineMetrics.baseline + lineIndex * lineMetrics.height,
@@ -448,7 +468,7 @@ class ExplainableStubParagraphLayoutEngine(
                 naturalWidth = lineCandidate.naturalWidth,
                 adjustedWidth = adjustedWidth,
                 visualWidth = visualWidth,
-                indent = if (lineCandidate.clusterRange.first == 0) firstLineIndent else 0f,
+                indent = baseIndent + alignmentInset,
                 debug = LineDebugInfo(
                     repair = lineCandidate.repair?.let { "${it::class.simpleName}:${it.reason}" },
                     notes = listOf(

@@ -1,17 +1,17 @@
 fixture: kinsoku-carry-previous
 text: 提椠中文中文中文。
-maxWidth: 64.0 align: Start
+maxWidth: 64.0
 == greedy ==
 size 64.0x48.0
 line[0] 0-4 natural=64.0 adjusted=64.0 visual=64.0 repair=- candidates=- justify=-
-line[1] 4-7 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
+line[1] 4-7 natural=48.0 adjusted=48.0 visual=64.0 repair=- candidates=- justify=deficit=16.0->0.0 CjkInterChar@4+8.0,CjkInterChar@5+8.0
 line[2] 7-9 natural=32.0 adjusted=24.0 visual=24.0 repair=CarryPrevious(ForbiddenAtLineStart shrink=0.0) candidates=PushIn-,CarryPrevious+ justify=-
 cluster 0-1 '提' adv=16.0
 cluster 1-2 '椠' adv=16.0
 cluster 2-3 '中' adv=16.0
 cluster 3-4 '文' adv=16.0
-cluster 4-5 '中' adv=16.0
-cluster 5-6 '文' adv=16.0
+cluster 4-5 '中' adv=24.0
+cluster 5-6 '文' adv=24.0
 cluster 6-7 '中' adv=16.0
 cluster 7-8 '文' adv=16.0
 cluster 8-9 '。' adv=8.0
@@ -29,11 +29,11 @@ geom 8-9 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 8-9 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 == lookahead ==
 size 64.0x48.0
-line[0] 0-3 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
+line[0] 0-3 natural=48.0 adjusted=48.0 visual=64.0 repair=- candidates=- justify=deficit=16.0->0.0 CjkInterChar@0+8.0,CjkInterChar@1+8.0
 line[1] 3-7 natural=64.0 adjusted=64.0 visual=64.0 repair=- candidates=- justify=-
 line[2] 7-9 natural=32.0 adjusted=24.0 visual=24.0 repair=- candidates=- justify=-
-cluster 0-1 '提' adv=16.0
-cluster 1-2 '椠' adv=16.0
+cluster 0-1 '提' adv=24.0
+cluster 1-2 '椠' adv=24.0
 cluster 2-3 '中' adv=16.0
 cluster 3-4 '文' adv=16.0
 cluster 4-5 '中' adv=16.0

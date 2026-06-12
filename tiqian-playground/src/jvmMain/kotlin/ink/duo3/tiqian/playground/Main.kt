@@ -52,7 +52,6 @@ fun main() {
             content = TiqianTextContent(fixture.text),
             constraints = fixture.constraints,
             paragraphStyle = ink.duo3.tiqian.core.ParagraphStyle(
-                textAlign = fixture.textAlign,
                 lineHeight = fixture.lineHeight,
                 firstLineIndentEm = fixture.firstLineIndentEm,
             ),

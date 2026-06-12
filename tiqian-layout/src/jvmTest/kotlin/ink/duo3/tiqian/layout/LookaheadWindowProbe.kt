@@ -3,7 +3,6 @@ package ink.duo3.tiqian.layout
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LayoutInput
 import ink.duo3.tiqian.core.ParagraphStyle
-import ink.duo3.tiqian.core.TextAlign
 import ink.duo3.tiqian.core.TiqianTextContent
 import ink.duo3.tiqian.shaping.jvm.AwtTextShaper
 import kotlin.test.Test
@@ -45,7 +44,7 @@ class LookaheadWindowProbe {
                     LayoutInput(
                         content = TiqianTextContent(paragraph),
                         constraints = LayoutConstraints(maxWidth = maxWidth),
-                        paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Start),
+                        paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                     ),
                 )
                 val deficits = result.lines.dropLast(1).map { maxWidth - it.adjustedWidth }

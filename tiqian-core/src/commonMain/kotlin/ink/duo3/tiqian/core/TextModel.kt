@@ -40,7 +40,16 @@ enum class DecorationKind {
 }
 
 data class ParagraphStyle(
-    val textAlign: TextAlign = TextAlign.Start,
+    /**
+     * Alignment of the paragraph's LAST line only. CLREQ:「与西文排版不同，
+     * 中文排版特别是书籍正文排版极少使用左齐右不齐，原则上应该进行两端
+     * 对齐」— justification is the baseline behaviour, not an option: every
+     * non-last line is always justified (挤压/拉伸已使行长一致). The only
+     * degree of freedom is the last line — start (default), centered, or
+     * end-aligned (落款、引文出处等特殊用法). A single-line paragraph is its
+     * own last line, so headings and labels are never stretched.
+     */
+    val lastLineAlignment: LastLineAlignment = LastLineAlignment.Start,
     val writingMode: WritingMode = WritingMode.HorizontalTb,
     val lineHeight: Float? = null,
     /**
@@ -56,11 +65,10 @@ data class ParagraphStyle(
     val firstLineIndentEm: Float = 2f,
 )
 
-enum class TextAlign {
+enum class LastLineAlignment {
     Start,
-    End,
     Center,
-    Justify,
+    End,
 }
 
 enum class WritingMode {

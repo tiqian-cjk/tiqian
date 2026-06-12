@@ -14,7 +14,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.singleWindowApplication
 import ink.duo3.tiqian.core.ParagraphStyle
-import ink.duo3.tiqian.core.TextAlign
 import ink.duo3.tiqian.core.TextStyle
 
 private const val PARAGRAPH =
@@ -41,7 +40,6 @@ fun main() = singleWindowApplication(title = "Tiqian Compose Demo") {
             text = PARAGRAPH,
             modifier = Modifier.width(320.dp),
             textStyle = textStyle,
-            paragraphStyle = ParagraphStyle(textAlign = TextAlign.Justify),
         )
         TiqianParagraph(
             text = "他说：“你好，世界。”中文……English——中文。",

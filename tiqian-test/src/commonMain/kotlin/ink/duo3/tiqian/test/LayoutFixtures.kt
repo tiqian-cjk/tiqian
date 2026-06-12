@@ -3,7 +3,6 @@ package ink.duo3.tiqian.test
 import ink.duo3.tiqian.core.DecorationKind
 import ink.duo3.tiqian.core.DecorationSpan
 import ink.duo3.tiqian.core.LayoutConstraints
-import ink.duo3.tiqian.core.TextAlign
 import ink.duo3.tiqian.core.TextRange
 
 data class LayoutFixture(
@@ -11,7 +10,6 @@ data class LayoutFixture(
     val text: String,
     val constraints: LayoutConstraints,
     val notes: String,
-    val textAlign: TextAlign = TextAlign.Start,
     val lineHeight: Float? = null,
     val decorations: List<DecorationSpan> = emptyList(),
     /**
@@ -88,15 +86,13 @@ object EarlyLayoutFixtures {
             id = "justify-cjk-paragraph",
             text = "中文中文中文中文中文中文",
             constraints = LayoutConstraints(maxWidth = 100f),
-            notes = "Justification fills the small deficit on the first line by adding CjkInterChar glue between adjacent CJK clusters. textAlign=Justify.",
-            textAlign = TextAlign.Justify,
+            notes = "Justification fills the small deficit on the first line by adding CjkInterChar glue between adjacent CJK clusters.",
         ),
         LayoutFixture(
             id = "justify-mixed-paragraph",
             text = "中文Hello中文，世界。",
             constraints = LayoutConstraints(maxWidth = 144f),
-            notes = "Justification uses CjkLatinSpace at the CJK↔Latin boundary plus PunctuationGlue if a spacing reduction landed on the line. textAlign=Justify.",
-            textAlign = TextAlign.Justify,
+            notes = "Justification uses CjkLatinSpace at the CJK↔Latin boundary plus PunctuationGlue if a spacing reduction landed on the line.",
         ),
         LayoutFixture(
             id = "ascii-brackets-in-cjk",
@@ -113,7 +109,6 @@ object EarlyLayoutFixtures {
             "，但也不算太离谱。",
             constraints = LayoutConstraints(maxWidth = 320f),
             notes = "Real-text stress test: ~200 chars of authentic Chinese with Latin words, fullwidth/halfwidth brackets, em-dash pair, ellipsis, Chinese quotes, and multiple comma-stop sequences. Triggers multi-line greedy + justification + adjacent punctuation compression simultaneously. Uses the standard 2em 段首缩进 like real body text.",
-            textAlign = TextAlign.Justify,
             firstLineIndentEm = 2f,
         ),
         LayoutFixture(
@@ -123,7 +118,6 @@ object EarlyLayoutFixtures {
             notes = "LatinWordSegmentation: the English sentence wraps at word " +
                 "boundaries instead of overflowing as one unbreakable cluster; " +
                 "spaces collapse at line edges; word spaces stretch under justify.",
-            textAlign = TextAlign.Justify,
         ),
         LayoutFixture(
             id = "emphasis-marks",
@@ -147,7 +141,6 @@ object EarlyLayoutFixtures {
                 "usable measure shrinks to maxWidth-2em and the LineBox carries " +
                 "the indent; later lines use the full measure. Justify targets " +
                 "the indented measure on line 0.",
-            textAlign = TextAlign.Justify,
             firstLineIndentEm = 2f,
         ),
         LayoutFixture(
@@ -158,7 +151,6 @@ object EarlyLayoutFixtures {
                 "the additive model's line-start leading-glue trim halves the " +
                 "quote (CLREQ 缩减该符号始侧二分之一个汉字大小的空白) — visual " +
                 "blank before the quote ink is exactly the 2em indent.",
-            textAlign = TextAlign.Justify,
             firstLineIndentEm = 2f,
         ),
         LayoutFixture(

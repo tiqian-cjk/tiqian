@@ -1,6 +1,6 @@
 fixture: nested-quotes
 text: 他说：“你好，世界。”
-maxWidth: 180.0 align: Start
+maxWidth: 180.0
 == greedy ==
 size 152.0x16.0
 line[0] 0-11 natural=176.0 adjusted=152.0 visual=152.0 repair=- candidates=- justify=-

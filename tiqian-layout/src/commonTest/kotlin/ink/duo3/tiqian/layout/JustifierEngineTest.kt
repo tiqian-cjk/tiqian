@@ -3,43 +3,57 @@ package ink.duo3.tiqian.layout
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LayoutInput
 import ink.duo3.tiqian.core.ParagraphStyle
-import ink.duo3.tiqian.core.TextAlign
 import ink.duo3.tiqian.core.TiqianTextContent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Engine-level justification behaviour: only runs when textAlign=Justify, skips
- * the last line, distributes deficit by priority chain
- * (PunctuationGlue -> CjkLatinSpace -> CjkInterChar) and exposes structured
- * JustificationDecisionInfo entries.
+ * Engine-level justification behaviour: 双齐 is the baseline (CLREQ — every
+ * non-last line is justified), the last line is never stretched, deficit
+ * distributes by priority chain (WordSpace -> CjkLatinSpace -> CjkInterChar)
+ * and exposes structured JustificationDecisionInfo entries.
  */
 class JustifierEngineTest {
     private val engine = ExplainableStubParagraphLayoutEngine()
 
     @Test
-    fun textAlignStartLeavesClustersAtCompressedAdvance() {
-        val result = engine.layout(
-            LayoutInput(
-                content = TiqianTextContent("中文中"),
-                constraints = LayoutConstraints(maxWidth = 80f),
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Start),
-            ),
-        )
-        val line = result.lines.single()
-        assertEquals(48f, line.adjustedWidth)
-        assertEquals(48f, line.visualWidth)
-        assertEquals(0, result.debug.justificationDecisions.size)
+    fun lastLineAlignmentPositionsTheLastLineViaIndent() {
+        // 9 hanzi at maxWidth=100: line 0 (6 clusters) justifies to 100;
+        // line 1 (3 clusters, 48) is the last line — its position comes from
+        // ParagraphStyle.lastLineAlignment expressed as LineBox.indent.
+        fun layoutWith(alignment: ink.duo3.tiqian.core.LastLineAlignment) =
+            engine.layout(
+                LayoutInput(
+                    content = TiqianTextContent("中文中文中文中文中"),
+                    constraints = LayoutConstraints(maxWidth = 100f),
+                    paragraphStyle = ParagraphStyle(
+                        firstLineIndentEm = 0f,
+                        lastLineAlignment = alignment,
+                    ),
+                ),
+            )
+
+        val start = layoutWith(ink.duo3.tiqian.core.LastLineAlignment.Start)
+        assertEquals(100f, start.lines[0].visualWidth)
+        assertEquals(0f, start.lines[1].indent)
+
+        val center = layoutWith(ink.duo3.tiqian.core.LastLineAlignment.Center)
+        assertEquals(26f, center.lines[1].indent)
+        // Non-last lines are not affected by the alignment option.
+        assertEquals(0f, center.lines[0].indent)
+
+        val end = layoutWith(ink.duo3.tiqian.core.LastLineAlignment.End)
+        assertEquals(52f, end.lines[1].indent)
     }
 
     @Test
-    fun lastLineIsNotJustifiedEvenWhenTextAlignJustify() {
+    fun lastLineIsNeverJustified() {
         val result = engine.layout(
             LayoutInput(
                 content = TiqianTextContent("中文中"),
                 constraints = LayoutConstraints(maxWidth = 80f),
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
             ),
         )
         val line = result.lines.single()
@@ -60,7 +74,7 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中文中文中文"),
                 constraints = LayoutConstraints(maxWidth = 80f),
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
             ),
         )
         assertEquals(2, result.lines.size)
@@ -86,7 +100,7 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中，。文"),
                 constraints = LayoutConstraints(maxWidth = 64f),
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
             ),
         )
         // Single line: but justifier needs a non-last line to fire. With only
@@ -110,7 +124,7 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中」。文中文中文中"),
                 constraints = LayoutConstraints(maxWidth = 80f),
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
             ),
         )
         assertTrue(result.lines.size >= 2)
@@ -154,7 +168,7 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中文中文中文中文中文中文"),
                 constraints = LayoutConstraints(maxWidth = 100f),
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
             ),
         )
         assertEquals(2, result.lines.size)
@@ -181,7 +195,7 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中（中文）文中文中文中"),
                 constraints = LayoutConstraints(maxWidth = 100f),
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
             ),
         )
         assertEquals(2, result.lines.size)
@@ -206,7 +220,7 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中文（Hello）中文中文"),
                 constraints = LayoutConstraints(maxWidth = 170f),
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
             ),
         )
         assertEquals(2, result.lines.size)
@@ -229,7 +243,7 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中文 Hello 中文中文中文"),
                 constraints = LayoutConstraints(maxWidth = 180f),
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = TextAlign.Justify),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
             ),
         )
         assertTrue(result.lines.size >= 2)
