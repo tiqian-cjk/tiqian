@@ -15,10 +15,18 @@ import ink.duo3.tiqian.font.FontRole
  *                          the autospace base (0.25em) by up to another
  *                          0.25em — total 0.5em, CLREQ's upper bound.
  *   3. CjkInterChar      — last resort: EVEN inter-character expansion
- *                          （平均拉大字距）. Punctuation-adjacent boundaries
- *                          participate at the SAME cap on their glue side —
- *                          no priority, no extra; trimmed/collapsed blanks
- *                          are never restored.
+ *                          （平均拉大字距）, UNCAPPED — CLREQ's final tier
+ *                          has no upper bound, and a justified line left
+ *                          short reads as an untrimmed line-end blank.
+ *                          Punctuation-adjacent boundaries participate at
+ *                          the SAME even share on their glue side — no
+ *                          priority, no extra; trimmed/collapsed blanks are
+ *                          never restored. `CjkOnlyInterCharBoundary`: BOTH
+ *                          sides must be CJK（汉字或中文标点）— a
+ *                          CjkPunctuation↔Latin boundary never stretches
+ *                          （「中文标点与西文之间不加间距」, mirroring the
+ *                          autospace rule）; ideograph↔alpha belongs to
+ *                          tier 2.
  *
  * CLREQ's expansion list has no punctuation-space tier: punctuation
  * adjustment space participates in COMPRESSION only. The earlier tier-1
@@ -41,7 +49,6 @@ import ink.duo3.tiqian.font.FontRole
  */
 class Justifier(
     private val cjkLatinSpaceEm: Float = 0.25f,
-    private val cjkInterCharMaxEm: Float = 0.25f,
     /** Per-word-space stretch cap (added on top of the natural space). */
     private val wordSpaceStretchEm: Float = 0.25f,
 ) {
@@ -137,11 +144,15 @@ class Justifier(
         if (remaining <= 0f) return finalize(lineClusterRange, deficitBefore, remaining, allocations)
 
         // 3. CjkInterChar — last resort: EVEN expansion across boundaries
-        // （CLREQ「平均拉大字距」）. Punctuation-adjacent boundaries join at
-        // the SAME cap on their glue side (GlueSideAwareJustification) —
-        // trimmed/collapsed punctuation blanks are gone for good and get no
-        // special treatment, only the uniform share every position gets.
-        // Ideograph↔alpha boundaries are excluded (CjkLatinSpace territory).
+        // （CLREQ「平均拉大字距」）, uncapped (equal per-boundary capacity =
+        // the whole remaining deficit, so proportional allocation degenerates
+        // to an exact even split that always fills the line). Punctuation
+        // boundaries join at the SAME share on their glue side
+        // (GlueSideAwareJustification) — trimmed/collapsed punctuation blanks
+        // are gone for good and get no special treatment.
+        // `CjkOnlyInterCharBoundary`: both sides must be CJK — punctuation↔
+        // Latin never stretches（「中文标点与西文之间不加间距」）, and
+        // ideograph↔alpha is tier-2 (CjkLatinSpace) territory.
         val collapsedBoundaries = spacingPlan.adjustments
             .map { it.range.start to it.range.end }
             .toSet()
@@ -150,13 +161,12 @@ class Justifier(
             lineClusterRange = lineClusterRange,
             kind = GlueKind.CjkInterChar,
             priority = 3,
-            capacity = cjkInterCharMaxEm * fontSize,
+            capacity = remaining,
         ) { leftIdx, rightIdx ->
             val left = clusterRoles[leftIdx]
             val right = clusterRoles[rightIdx]
             val boundary = adjustedClusters[leftIdx].range.start to adjustedClusters[rightIdx].range.end
-            (left.isCjkLike() || right.isCjkLike()) &&
-                !left.isIdeographAlphaBoundaryWith(right) &&
+            left.isCjkLike() && right.isCjkLike() &&
                 boundary !in collapsedBoundaries &&
                 boundaryOnGlueSide(leftIdx, rightIdx, clusterRoles, clusterEdgeAnchors)
         }

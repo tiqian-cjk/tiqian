@@ -29,6 +29,15 @@ internal fun DrawScope.drawTiqianLayout(
     val paint = Paint().apply { this.color = color }
     val shaper = Shaper.makeShaperDrivenWrapper()
     val autoSpaceGap = 0.25f * fontSize
+    // Consumed LEADING glue shifts the glyph origin LEFT: the blob still
+    // contains the font's built-in leading blank (e.g. the left half of a
+    // fullwidth `“`), but the engine removed it from the cluster's advance
+    // (line-start trim, 间隔号 two-sided push-in). Without the shift the ink
+    // lands inside the next cluster. Trailing-side consumption needs no
+    // shift — ink is origin-anchored.
+    val leadingConsumedByRange = result.debug.geometryDecisions
+        .filter { it.leadingGlueConsumed > 0f }
+        .associate { it.range to it.leadingGlueConsumed }
 
     drawIntoCanvas { canvas ->
         val skCanvas = canvas.nativeCanvas
@@ -58,8 +67,9 @@ internal fun DrawScope.drawTiqianLayout(
                     .let { if (trailingStrip > 0) it.dropLast(trailingStrip) else it }
 
                 if (paintText.isNotEmpty()) {
+                    val leadingShift = leadingConsumedByRange[cluster.range] ?: 0f
                     shapeTextBlob(shaper, paintText, font, language)?.let { blob ->
-                        skCanvas.drawTextBlob(blob, x + leadingGap, baselineY, paint)
+                        skCanvas.drawTextBlob(blob, x + leadingGap - leadingShift, baselineY, paint)
                     }
                 }
 

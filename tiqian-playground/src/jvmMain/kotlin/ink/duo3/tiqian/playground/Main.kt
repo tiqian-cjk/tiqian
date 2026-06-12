@@ -145,6 +145,11 @@ private fun rasterizeLayoutToPngSkia(result: LayoutResult, fixture: LayoutFixtur
     val paint = org.jetbrains.skia.Paint().apply { color = 0xFF000000.toInt() }
     val shaper = org.jetbrains.skia.shaper.Shaper.makeShaperDrivenWrapper()
     val defaultAutoSpaceGap = 0.25f * fontSize
+    // Consumed leading glue shifts the glyph origin left (the blob keeps the
+    // font's built-in leading blank; the engine removed it from the advance).
+    val leadingConsumedByRange = result.debug.geometryDecisions
+        .filter { it.leadingGlueConsumed > 0f }
+        .associate { it.range to it.leadingGlueConsumed }
 
     for (line in result.lines) {
         val lineClusters = result.clusters.filter {
@@ -172,8 +177,9 @@ private fun rasterizeLayoutToPngSkia(result: LayoutResult, fixture: LayoutFixtur
                 .let { if (trailingStrip > 0) it.dropLast(trailingStrip) else it }
 
             if (paintText.isNotEmpty()) {
+                val leadingShift = leadingConsumedByRange[cluster.range] ?: 0f
                 ink.duo3.tiqian.shaping.skia.shapeTextBlob(shaper, paintText, font, language)?.let { blob ->
-                    canvas.drawTextBlob(blob, x + leadingGap, baselineY, paint)
+                    canvas.drawTextBlob(blob, x + leadingGap - leadingShift, baselineY, paint)
                 }
             }
 
@@ -278,6 +284,9 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
         // profile customises gapEm this rasterizer would over- or under-pad
         // the boundary by the difference. Acceptable for the playground.
         val defaultAutoSpaceGap = 0.25f * fontSize
+        val leadingConsumedAwt = result.debug.geometryDecisions
+            .filter { it.leadingGlueConsumed > 0f }
+            .associate { it.range to it.leadingGlueConsumed }
 
         for (line in result.lines) {
             val lineClusters = result.clusters.filter {
@@ -319,7 +328,11 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
                     .let { if (trailingStrip > 0) it.dropLast(trailingStrip) else it }
 
                 if (paintText.isNotEmpty()) {
-                    g.drawString(paintText, x + leadingGap, baselineY)
+                    // Consumed leading glue shifts the glyph origin left (the
+                    // drawn glyph keeps the font's built-in leading blank; the
+                    // engine removed it from the cluster's advance).
+                    val leadingShift = leadingConsumedAwt[cluster.range] ?: 0f
+                    g.drawString(paintText, x + leadingGap - leadingShift, baselineY)
                 }
 
                 if (leadingStrip > 0 || trailingStrip > 0) {

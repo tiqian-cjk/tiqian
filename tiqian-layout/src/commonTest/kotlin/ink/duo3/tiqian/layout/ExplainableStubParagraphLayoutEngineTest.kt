@@ -1302,6 +1302,57 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun justifyNeverStretchesPunctuationLatinBoundary() {
+        // CjkOnlyInterCharBoundary:「中文标点与西文之间不加间距」also under
+        // justification. Line 0 = 中文中文话：The — the ：|The boundary must
+        // get no CjkInterChar share even though the colon's trailing side is
+        // glue; the hanzi boundaries absorb the whole deficit instead.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = ink.duo3.tiqian.core.TextAlign.Justify),
+                content = TiqianTextContent("中文中文话：The quick brown fox jumps"),
+                constraints = LayoutConstraints(maxWidth = 160f),
+            ),
+        )
+
+        assertTrue(result.lines.size > 1)
+        val line0 = result.debug.justificationDecisions
+            .first { it.lineRange.start == 0 }
+        val colonRange = ink.duo3.tiqian.core.TextRange(5, 6)
+        assertTrue(
+            line0.allocations.none { it.clusterRange == colonRange },
+            "：|The boundary must not stretch: ${line0.allocations}",
+        )
+        assertEquals(0f, line0.deficitAfter)
+    }
+
+    @Test
+    fun justifyFillsSaturatedLineWithUncappedEvenShare() {
+        // CLREQ 平均拉大字距 has no upper bound: when word spaces and
+        // sino-western gaps are exhausted, the remaining deficit spreads
+        // evenly over hanzi boundaries past the old 0.25em cap — a justified
+        // line must reach maxWidth exactly, never stop short.
+        // Stub: 4 hanzi (64) then an unbreakable 12-char Latin word (192)
+        // that must wrap — line 0 deficit = 160 - 64 = 96 over 3 hanzi
+        // boundaries = 32 each, far past the old 4px cap.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, textAlign = ink.duo3.tiqian.core.TextAlign.Justify),
+                content = TiqianTextContent("中文中文Considerable中文"),
+                constraints = LayoutConstraints(maxWidth = 160f),
+            ),
+        )
+
+        val decision = result.debug.justificationDecisions.first { it.lineRange.start == 0 }
+        assertEquals(0f, decision.deficitAfter)
+        assertEquals(160f, result.lines[0].visualWidth)
+        // Even share: all CjkInterChar deltas equal, beyond the old cap.
+        val deltas = decision.allocations.filter { it.kind == "CjkInterChar" }.map { it.delta }
+        assertEquals(3, deltas.size)
+        assertTrue(deltas.all { kotlin.math.abs(it - 32f) < 0.01f }, "deltas=$deltas")
+    }
+
+    @Test
     fun firstLineIndentShrinksFirstLineMeasureOnly() {
         // ParagraphFirstLineIndent: 12 hanzi at maxWidth 160, indent 2em
         // (32). Line 0 measure = 128 → 8 chars; line 1 uses the full 160.
