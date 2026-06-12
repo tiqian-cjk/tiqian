@@ -158,7 +158,11 @@ private fun rasterizeLayoutToPngSkia(result: LayoutResult, fixture: LayoutFixtur
         var x = line.indent
         val baselineY = line.baseline + topPad
         for ((clusterIndexInLine, cluster) in lineClusters.withIndex()) {
-            val role = result.debug.fontDecisions.firstOrNull { it.range == cluster.range }?.role
+            val role = result.debug.fontDecisions.firstOrNull {
+                // Containment: segmented word clusters sit inside the
+                // decision's range (see SkiaLayoutRenderer).
+                cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
+            }?.role
             val font = if (role == "LatinText") latinFont else cjkFont
 
             val autoSpaces = result.debug.autoSpaceDecisions
@@ -295,7 +299,11 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
             var x = line.indent
             val baselineY = line.baseline + topPad
             for ((clusterIndexInLine, cluster) in lineClusters.withIndex()) {
-                val role = result.debug.fontDecisions.firstOrNull { it.range == cluster.range }?.role
+                val role = result.debug.fontDecisions.firstOrNull {
+                // Containment: segmented word clusters sit inside the
+                // decision's range (see SkiaLayoutRenderer).
+                cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
+            }?.role
                 g.font = when (role) {
                     "LatinText" -> latinFont
                     else -> cjkFont
@@ -632,7 +640,11 @@ private fun renderEngineColumn(label: String, result: LayoutResult, maxWidth: Fl
             }
             var x = line.indent
             lineClusters.forEach { cluster ->
-                val role = result.debug.fontDecisions.firstOrNull { it.range == cluster.range }?.role
+                val role = result.debug.fontDecisions.firstOrNull {
+                // Containment: segmented word clusters sit inside the
+                // decision's range (see SkiaLayoutRenderer).
+                cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
+            }?.role
                 appendLine(
                     renderGlyphBox(
                         cluster = cluster,

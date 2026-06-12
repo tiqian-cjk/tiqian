@@ -48,7 +48,15 @@ internal fun DrawScope.drawTiqianLayout(
             var x = line.indent
             val baselineY = line.baseline
             for ((clusterIndexInLine, cluster) in lineClusters.withIndex()) {
-                val role = result.debug.fontDecisions.firstOrNull { it.range == cluster.range }?.role
+                // Containment, not equality: LatinWordSegmentation splits a
+                // font decision's range (' espresso') into word/space
+                // clusters ('espresso') — an equality lookup misses and the
+                // word silently falls back to the CJK font, whose Latin
+                // glyphs are narrower than the engine-measured advance (the
+                // difference surfaced as phantom whitespace after each word).
+                val role = result.debug.fontDecisions.firstOrNull {
+                    cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
+                }?.role
                 val font = if (role == "LatinText") latinFont else cjkFont
 
                 val autoSpaces = result.debug.autoSpaceDecisions

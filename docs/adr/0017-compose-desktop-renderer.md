@@ -50,6 +50,14 @@ cluster（首行 `“` 与汉字重叠的实际事故）。trailing 侧消费不
 字面左锚。该规则同样适用于 playground 两个 raster；它是机械应用引擎已
 dump 的几何决策，不构成前端排版决策。
 
+同日第二条：**role 查询必须用包含匹配**。`LatinWordSegmentation`
+（ADR 0019）把 font decision 的 range（` espresso`，含空格）切成多个
+cluster（`espresso`），渲染器原来的 `range == cluster.range` 全等查询
+落空，Latin 词静默退回 CJK 字体——引擎用 Latin 字体量的 advance 与
+实际画出的 CJK-Latin 字形宽度不一致，差值在每个西文词右侧显形为幻影
+空白（`espresso，` 间隙事故）。cluster range ⊆ decision range 才是
+分词后的正确关系。
+
 ## Consequences
 
 - 引擎第一次有了「真前端」：Compose 应用可直接 `TiqianParagraph("…")`。
