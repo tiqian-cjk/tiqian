@@ -4,7 +4,7 @@ maxWidth: 200.0 align: Justify
 == greedy ==
 size 200.0x48.0
 line[0] 0-10 indent=32.0 natural=160.0 adjusted=160.0 visual=168.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkInterChar@0+0.9,CjkInterChar@1+0.9,CjkInterChar@2+0.9,CjkInterChar@3+0.9,CjkInterChar@4+0.9,CjkInterChar@5+0.9,CjkInterChar@6+0.9,CjkInterChar@7+0.9,CjkInterChar@8+0.9
-line[1] 10-22 natural=192.0 adjusted=192.0 visual=200.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkInterChar@11+0.8,CjkInterChar@12+0.8,CjkInterChar@13+0.8,CjkInterChar@14+0.8,CjkInterChar@15+0.8,CjkInterChar@16+0.8,CjkInterChar@17+0.8,CjkInterChar@18+0.8,CjkInterChar@19+0.8,CjkInterChar@20+0.8
+line[1] 10-22 natural=192.0 adjusted=192.0 visual=200.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkInterChar@10+0.7,CjkInterChar@11+0.7,CjkInterChar@12+0.7,CjkInterChar@13+0.7,CjkInterChar@14+0.7,CjkInterChar@15+0.7,CjkInterChar@16+0.7,CjkInterChar@17+0.7,CjkInterChar@18+0.7,CjkInterChar@19+0.7,CjkInterChar@20+0.7
 line[2] 22-28 natural=96.0 adjusted=88.0 visual=88.0 repair=- candidates=- justify=-
 cluster 0-1 '咖' adv=16.9
 cluster 1-2 '啡' adv=16.9
@@ -16,17 +16,17 @@ cluster 6-7 '产' adv=16.9
 cluster 7-8 '地' adv=16.9
 cluster 8-9 '而' adv=16.9
 cluster 9-10 '各' adv=16.0
-cluster 10-11 '异' adv=16.0
-cluster 11-12 '，' adv=16.8
-cluster 12-13 '烘' adv=16.8
-cluster 13-14 '焙' adv=16.8
-cluster 14-15 '的' adv=16.8
-cluster 15-16 '深' adv=16.8
-cluster 16-17 '浅' adv=16.8
-cluster 17-18 '同' adv=16.8
-cluster 18-19 '样' adv=16.8
-cluster 19-20 '会' adv=16.8
-cluster 20-21 '改' adv=16.8
+cluster 10-11 '异' adv=16.7
+cluster 11-12 '，' adv=16.7
+cluster 12-13 '烘' adv=16.7
+cluster 13-14 '焙' adv=16.7
+cluster 14-15 '的' adv=16.7
+cluster 15-16 '深' adv=16.7
+cluster 16-17 '浅' adv=16.7
+cluster 17-18 '同' adv=16.7
+cluster 18-19 '样' adv=16.7
+cluster 19-20 '会' adv=16.7
+cluster 20-21 '改' adv=16.7
 cluster 21-22 '变' adv=16.0
 cluster 22-23 '口' adv=16.0
 cluster 23-24 '感' adv=16.0
@@ -64,13 +64,13 @@ font 26-27 role=CjkText key=cjk-primary display='气' sub=CjkPunctuationGlyphPol
 font 27-28 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 punct 11-12 '，' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
 punct 27-28 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
-geom 11-12 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.8 resolved=16.8
+geom 11-12 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.7 resolved=16.7
 geom 27-28 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 27-28 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 == lookahead ==
 size 200.0x48.0
 line[0] 0-10 indent=32.0 natural=160.0 adjusted=160.0 visual=168.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkInterChar@0+0.9,CjkInterChar@1+0.9,CjkInterChar@2+0.9,CjkInterChar@3+0.9,CjkInterChar@4+0.9,CjkInterChar@5+0.9,CjkInterChar@6+0.9,CjkInterChar@7+0.9,CjkInterChar@8+0.9
-line[1] 10-22 natural=192.0 adjusted=192.0 visual=200.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkInterChar@11+0.8,CjkInterChar@12+0.8,CjkInterChar@13+0.8,CjkInterChar@14+0.8,CjkInterChar@15+0.8,CjkInterChar@16+0.8,CjkInterChar@17+0.8,CjkInterChar@18+0.8,CjkInterChar@19+0.8,CjkInterChar@20+0.8
+line[1] 10-22 natural=192.0 adjusted=192.0 visual=200.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkInterChar@10+0.7,CjkInterChar@11+0.7,CjkInterChar@12+0.7,CjkInterChar@13+0.7,CjkInterChar@14+0.7,CjkInterChar@15+0.7,CjkInterChar@16+0.7,CjkInterChar@17+0.7,CjkInterChar@18+0.7,CjkInterChar@19+0.7,CjkInterChar@20+0.7
 line[2] 22-28 natural=96.0 adjusted=88.0 visual=88.0 repair=- candidates=- justify=-
 cluster 0-1 '咖' adv=16.9
 cluster 1-2 '啡' adv=16.9
@@ -82,17 +82,17 @@ cluster 6-7 '产' adv=16.9
 cluster 7-8 '地' adv=16.9
 cluster 8-9 '而' adv=16.9
 cluster 9-10 '各' adv=16.0
-cluster 10-11 '异' adv=16.0
-cluster 11-12 '，' adv=16.8
-cluster 12-13 '烘' adv=16.8
-cluster 13-14 '焙' adv=16.8
-cluster 14-15 '的' adv=16.8
-cluster 15-16 '深' adv=16.8
-cluster 16-17 '浅' adv=16.8
-cluster 17-18 '同' adv=16.8
-cluster 18-19 '样' adv=16.8
-cluster 19-20 '会' adv=16.8
-cluster 20-21 '改' adv=16.8
+cluster 10-11 '异' adv=16.7
+cluster 11-12 '，' adv=16.7
+cluster 12-13 '烘' adv=16.7
+cluster 13-14 '焙' adv=16.7
+cluster 14-15 '的' adv=16.7
+cluster 15-16 '深' adv=16.7
+cluster 16-17 '浅' adv=16.7
+cluster 17-18 '同' adv=16.7
+cluster 18-19 '样' adv=16.7
+cluster 19-20 '会' adv=16.7
+cluster 20-21 '改' adv=16.7
 cluster 21-22 '变' adv=16.0
 cluster 22-23 '口' adv=16.0
 cluster 23-24 '感' adv=16.0
@@ -130,6 +130,6 @@ font 26-27 role=CjkText key=cjk-primary display='气' sub=CjkPunctuationGlyphPol
 font 27-28 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 punct 11-12 '，' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
 punct 27-28 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
-geom 11-12 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.8 resolved=16.8
+geom 11-12 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.7 resolved=16.7
 geom 27-28 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 27-28 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation

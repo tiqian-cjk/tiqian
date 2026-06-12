@@ -3,17 +3,17 @@ text: 他引用了一句话：The quick brown fox jumps over the lazy dog，然�
 maxWidth: 240.0 align: Justify
 == greedy ==
 size 240.0x83.2
-line[0] 0-12 natural=192.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+10.7,CjkInterChar@1+10.7,CjkInterChar@2+10.7,CjkInterChar@3+10.7,CjkInterChar@4+10.7,CjkInterChar@5+10.7
+line[0] 0-12 natural=192.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+9.1,CjkInterChar@1+9.1,CjkInterChar@2+9.1,CjkInterChar@3+9.1,CjkInterChar@4+9.1,CjkInterChar@5+9.1,CjkInterChar@6+9.1
 line[1] 12-27 natural=240.0 adjusted=240.0 visual=240.0 repair=- candidates=- justify=-
 line[2] 27-42 natural=240.0 adjusted=224.0 visual=232.0 repair=- candidates=- justify=deficit=16.0->8.0 WordSpace@33+4.0,WordSpace@38+4.0
 line[3] 42-58 natural=256.0 adjusted=228.0 visual=228.0 repair=PushIn(ForbiddenAtLineStart shrink=16.0) candidates=PushIn+ justify=-
-cluster 0-1 '他' adv=26.7
-cluster 1-2 '引' adv=26.7
-cluster 2-3 '用' adv=26.7
-cluster 3-4 '了' adv=26.7
-cluster 4-5 '一' adv=26.7
-cluster 5-6 '句' adv=26.7
-cluster 6-7 '话' adv=16.0
+cluster 0-1 '他' adv=25.1
+cluster 1-2 '引' adv=25.1
+cluster 2-3 '用' adv=25.1
+cluster 3-4 '了' adv=25.1
+cluster 4-5 '一' adv=25.1
+cluster 5-6 '句' adv=25.1
+cluster 6-7 '话' adv=25.1
 cluster 7-8 '：' adv=16.0
 cluster 8-11 'The' adv=48.0
 cluster 11-12 ' ' adv=0.0
@@ -66,17 +66,17 @@ edgetrim 27-28 side=leading trim=16.0 reason=LineEdgeWordSpaceCollapse
 edgetrim 42-43 side=leading trim=16.0 reason=LineEdgeWordSpaceCollapse
 == lookahead ==
 size 240.0x83.2
-line[0] 0-12 natural=192.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+10.7,CjkInterChar@1+10.7,CjkInterChar@2+10.7,CjkInterChar@3+10.7,CjkInterChar@4+10.7,CjkInterChar@5+10.7
+line[0] 0-12 natural=192.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+9.1,CjkInterChar@1+9.1,CjkInterChar@2+9.1,CjkInterChar@3+9.1,CjkInterChar@4+9.1,CjkInterChar@5+9.1,CjkInterChar@6+9.1
 line[1] 12-27 natural=240.0 adjusted=240.0 visual=240.0 repair=- candidates=- justify=-
 line[2] 27-42 natural=240.0 adjusted=224.0 visual=232.0 repair=- candidates=- justify=deficit=16.0->8.0 WordSpace@33+4.0,WordSpace@38+4.0
 line[3] 42-58 natural=256.0 adjusted=228.0 visual=228.0 repair=PushIn(ForbiddenAtLineStart shrink=16.0) candidates=PushIn+ justify=-
-cluster 0-1 '他' adv=26.7
-cluster 1-2 '引' adv=26.7
-cluster 2-3 '用' adv=26.7
-cluster 3-4 '了' adv=26.7
-cluster 4-5 '一' adv=26.7
-cluster 5-6 '句' adv=26.7
-cluster 6-7 '话' adv=16.0
+cluster 0-1 '他' adv=25.1
+cluster 1-2 '引' adv=25.1
+cluster 2-3 '用' adv=25.1
+cluster 3-4 '了' adv=25.1
+cluster 4-5 '一' adv=25.1
+cluster 5-6 '句' adv=25.1
+cluster 6-7 '话' adv=25.1
 cluster 7-8 '：' adv=16.0
 cluster 8-11 'The' adv=48.0
 cluster 11-12 ' ' adv=0.0

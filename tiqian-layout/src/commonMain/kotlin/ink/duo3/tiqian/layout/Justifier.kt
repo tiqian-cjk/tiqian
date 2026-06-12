@@ -18,15 +18,6 @@ import ink.duo3.tiqian.font.FontRole
  *                          （平均拉大字距）, UNCAPPED — CLREQ's final tier
  *                          has no upper bound, and a justified line left
  *                          short reads as an untrimmed line-end blank.
- *                          Punctuation-adjacent boundaries participate at
- *                          the SAME even share on their glue side — no
- *                          priority, no extra; trimmed/collapsed blanks are
- *                          never restored. `CjkOnlyInterCharBoundary`: BOTH
- *                          sides must be CJK（汉字或中文标点）— a
- *                          CjkPunctuation↔Latin boundary never stretches
- *                          （「中文标点与西文之间不加间距」, mirroring the
- *                          autospace rule）; ideograph↔alpha belongs to
- *                          tier 2.
  *
  * CLREQ's expansion list has no punctuation-space tier: punctuation
  * adjustment space participates in COMPRESSION only. The earlier tier-1
@@ -36,16 +27,16 @@ import ink.duo3.tiqian.font.FontRole
  * Each [JustificationAllocation] targets a specific cluster: the delta is
  * understood as trailing space added to that cluster's advance.
  *
- * Boundary eligibility — named heuristic `GlueSideAwareJustification`:
- * expansion may only open on a punctuation atom's glue side, never the
- * body-anchored (solid) side. Concretely, for MainlandSimplified:
- *
- * - after an Opening mark (`（「`) — the bracket's inner side — is solid;
- * - before a Closing / PauseOrStop mark (`）。，`) is solid;
- * - the opposite sides (before Opening, after Closing) carry the atom's
- *   glue and may expand;
- * - boundaries collapsed by PunctuationSpacingCompressor (`」。` `，「`) are
- *   EXCLUDED: the CLREQ adjacent-punctuation collapse is a hard rule.
+ * Tier-3 eligibility — `CjkOnlyInterCharBoundary`: 平均拉大字距 is UNIFORM
+ * TRACKING over every CJK↔CJK boundary（汉字↔汉字、汉字↔标点的任一侧、
+ * 标点↔标点——含已折叠的相邻标点对）, all at the same share. Collapsed or
+ * trimmed punctuation blanks are never PREFERENTIALLY refilled (their
+ * original width is gone for good), but they take the uniform share like
+ * every other position — the user-ratified reading of「加空白也是跟其他
+ * 一样尽量均匀地加」. Excluded: any boundary touching a Latin-role cluster
+ * — intra-word letter spacing does not exist as a tier at all, punctuation↔
+ * Latin never stretches（「中文标点与西文之间不加间距」）, and ideograph↔
+ * alpha belongs to tier 2.
  */
 class Justifier(
     private val cjkLatinSpaceEm: Float = 0.25f,
@@ -57,10 +48,8 @@ class Justifier(
         clusterRoles: List<FontRole>,
         lineClusterRange: IntRange,
         maxWidth: Float,
-        spacingPlan: PunctuationSpacingCompressionResult,
         fontSize: Float,
         skip: Boolean,
-        clusterEdgeAnchors: Map<Int, ClusterEdgeAnchors> = emptyMap(),
         /**
          * 「在一些排版风格中，中西间距固定默认宽度……不允许被拉伸」—
          * false disables the CjkLatinSpace tier (AdjustmentStylePolicy).
@@ -146,16 +135,11 @@ class Justifier(
         // 3. CjkInterChar — last resort: EVEN expansion across boundaries
         // （CLREQ「平均拉大字距」）, uncapped (equal per-boundary capacity =
         // the whole remaining deficit, so proportional allocation degenerates
-        // to an exact even split that always fills the line). Punctuation
-        // boundaries join at the SAME share on their glue side
-        // (GlueSideAwareJustification) — trimmed/collapsed punctuation blanks
-        // are gone for good and get no special treatment.
-        // `CjkOnlyInterCharBoundary`: both sides must be CJK — punctuation↔
-        // Latin never stretches（「中文标点与西文之间不加间距」）, and
-        // ideograph↔alpha is tier-2 (CjkLatinSpace) territory.
-        val collapsedBoundaries = spacingPlan.adjustments
-            .map { it.range.start to it.range.end }
-            .toSet()
+        // to an exact even split that always fills the line).
+        // `CjkOnlyInterCharBoundary`: uniform tracking over EVERY CJK↔CJK
+        // boundary — punctuation solid sides and collapsed pairs included,
+        // all at the same share (no preferential refill of trimmed blanks;
+        // see class doc). Latin-touching boundaries never qualify.
         val cjkInterOpps = buildBoundaryOpportunities(
             adjustedClusters = adjustedClusters,
             lineClusterRange = lineClusterRange,
@@ -163,12 +147,7 @@ class Justifier(
             priority = 3,
             capacity = remaining,
         ) { leftIdx, rightIdx ->
-            val left = clusterRoles[leftIdx]
-            val right = clusterRoles[rightIdx]
-            val boundary = adjustedClusters[leftIdx].range.start to adjustedClusters[rightIdx].range.end
-            left.isCjkLike() && right.isCjkLike() &&
-                boundary !in collapsedBoundaries &&
-                boundaryOnGlueSide(leftIdx, rightIdx, clusterRoles, clusterEdgeAnchors)
+            clusterRoles[leftIdx].isCjkLike() && clusterRoles[rightIdx].isCjkLike()
         }
         remaining = allocate(
             deficit = remaining,
@@ -201,33 +180,6 @@ class Justifier(
             }
         }
         return opps
-    }
-
-    /**
-     * `GlueSideAwareJustification` eligibility for the boundary between
-     * [leftIdx] and [rightIdx]. The allocation renders as space *between*
-     * the two clusters (trailing delta on the left cluster), so:
-     *
-     * - left punctuation must carry glue on its trailing side — anchor
-     *   Leading (`。，）」` body sits left) or Center; anchor Trailing
-     *   (`（「` body sits right, boundary is the solid inner side) forbids;
-     * - right punctuation must carry glue on its leading side — anchor
-     *   Trailing or Center; anchor Leading forbids.
-     *
-     * A punctuation-role cluster without recorded edge anchors is treated
-     * as solid on both sides (conservative: no expansion).
-     */
-    private fun boundaryOnGlueSide(
-        leftIdx: Int,
-        rightIdx: Int,
-        clusterRoles: List<FontRole>,
-        clusterEdgeAnchors: Map<Int, ClusterEdgeAnchors>,
-    ): Boolean {
-        val leftOk = clusterRoles[leftIdx] != FontRole.CjkPunctuation ||
-            clusterEdgeAnchors[leftIdx]?.trailing.let { it != null && it != PunctuationAnchor.Trailing }
-        val rightOk = clusterRoles[rightIdx] != FontRole.CjkPunctuation ||
-            clusterEdgeAnchors[rightIdx]?.leading.let { it != null && it != PunctuationAnchor.Leading }
-        return leftOk && rightOk
     }
 
     private fun allocate(
@@ -311,17 +263,6 @@ class Justifier(
         return prevLatinWord && nextLatinWord
     }
 }
-
-/**
- * Edge anchors of a cluster's punctuation atoms, used by
- * `GlueSideAwareJustification`. `leading` / `trailing` are the anchors of
- * the atoms sitting flush at the cluster's start / end; null when that edge
- * is not punctuation.
- */
-data class ClusterEdgeAnchors(
-    val leading: PunctuationAnchor?,
-    val trailing: PunctuationAnchor?,
-)
 
 data class JustificationOpportunity(
     val targetClusterIndex: Int,

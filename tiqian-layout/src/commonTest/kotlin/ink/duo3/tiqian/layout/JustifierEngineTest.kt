@@ -115,30 +115,29 @@ class JustifierEngineTest {
         )
         assertTrue(result.lines.size >= 2)
         val firstDecision = result.debug.justificationDecisions.first()
-        // The collapse is MANDATORY — justification must not re-open `」。`.
-        // CLREQ expansion order has no punctuation tier: the deficit fills
-        // by EVEN CjkInterChar expansion across eligible boundaries —
-        // 。→文 (。's glue side) and 文→中 get the same share (+4 each);
-        // 中→」 (」 leading is solid) and the collapsed 」→。 are excluded.
+        // CjkOnlyInterCharBoundary: 平均拉大字距 is uniform tracking — every
+        // CJK↔CJK boundary takes the SAME share, including 中→」 (solid
+        // side) and the collapsed 」→。 pair. The collapse is never
+        // PREFERENTIALLY refilled (trailingGlueConsumed stays 8); the
+        // uniform share is all it gets. 4 boundaries × +2 = deficit 8.
         assertEquals(8f, firstDecision.deficitBefore)
         assertEquals(0f, firstDecision.deficitAfter)
-        assertEquals(2, firstDecision.allocations.size)
+        assertEquals(4, firstDecision.allocations.size)
         assertTrue(firstDecision.allocations.all { it.kind == "CjkInterChar" })
-        assertTrue(firstDecision.allocations.all { it.delta == 4f })
+        assertTrue(firstDecision.allocations.all { it.delta == 2f })
         assertEquals(
-            listOf(2, 3),
+            listOf(0, 1, 2, 3),
             firstDecision.allocations.map { it.clusterRange.start }.sorted(),
         )
 
         assertEquals(80f, result.lines[0].visualWidth)
-        // Cluster 」 (range 1-2) stays at its collapsed advance: the spacing
-        // compression is not elastic.
-        val closingCluster = result.clusters.single { it.text == "」" }
-        assertEquals(8f, closingCluster.advance)
+        // Cluster 」 (range 1-2): the compression itself is not elastic —
+        // consumed glue stays consumed; only the uniform tracking share
+        // (+2) lands on top of the collapsed advance.
         val closingGeometry = result.debug.geometryDecisions.single { it.sourceText == "」" }
         assertEquals(8f, closingGeometry.trailingGlueConsumed)
-        assertEquals(0f, closingGeometry.justificationDelta)
-        assertEquals(8f, closingGeometry.resolvedAdvance)
+        assertEquals(2f, closingGeometry.justificationDelta)
+        assertEquals(10f, closingGeometry.resolvedAdvance)
     }
 
     @Test
@@ -172,15 +171,12 @@ class JustifierEngineTest {
     }
 
     @Test
-    fun glueSideAwareJustificationNeverExpandsInsideBrackets() {
+    fun uniformTrackingIncludesBracketInnerSides() {
         // text = "中（中文）文中文中文中"  (11 CJK-width clusters @16f)
         // maxWidth=100 → greedy line 0 = clusters 0..5 (96), deficit 4.
-        // EVEN CjkInterChar expansion; eligible boundaries inside line 0:
-        //   中→（  eligible   (（ leading edge carries its glue)
-        //   （→中  FORBIDDEN  (（ anchor=Trailing: inner side is solid body)
-        //   中→文  eligible
-        //   文→）  FORBIDDEN  (） anchor=Leading: inner side is solid body)
-        //   ）→文  eligible   (） trailing edge carries its glue)
+        // CjkOnlyInterCharBoundary: uniform tracking over ALL five CJK↔CJK
+        // boundaries — bracket inner sides (（→中, 文→）) included, same
+        // share as everything else (user-ratified「所有都要参与」).
         val result = engine.layout(
             LayoutInput(
                 content = TiqianTextContent("中（中文）文中文中文中"),
@@ -191,13 +187,12 @@ class JustifierEngineTest {
         assertEquals(2, result.lines.size)
         val decision = result.debug.justificationDecisions.single()
         assertEquals(0f, decision.deficitAfter)
-        // Allocation target = left cluster of the boundary; the bracket
-        // inner sides (（ at 1-2 trailing, 文 at 3-4 trailing) must be absent;
-        // every eligible boundary gets the SAME share (4/3 each).
+        // Allocation target = left cluster of the boundary; all five
+        // boundaries (incl. bracket inner sides) get the SAME share (0.8).
         val targets = decision.allocations.map { it.clusterRange.start }
-        assertEquals(listOf(0, 2, 4), targets.sorted())
+        assertEquals(listOf(0, 1, 2, 3, 4), targets.sorted())
         assertTrue(decision.allocations.all { it.kind == "CjkInterChar" })
-        decision.allocations.forEach { assertEquals(4f / 3f, it.delta, 0.01f) }
+        decision.allocations.forEach { assertEquals(0.8f, it.delta, 0.01f) }
     }
 
     @Test
