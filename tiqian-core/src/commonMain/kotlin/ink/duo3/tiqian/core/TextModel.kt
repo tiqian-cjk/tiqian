@@ -75,21 +75,48 @@ data class ParagraphStyle(
      */
     val printingSides: PrintingSides = PrintingSides.SingleSided,
     /**
-     * 段首缩进, in ems of the paragraph font size. CLREQ: 「段首缩排以两个
-     * 汉字的空间为标准」— hence the default 2. Multi-column magazine styles
-     * commonly use 1; 0 disables the indent. The indent insets the FIRST
-     * line's start edge only (in vertical writing this becomes a block-start
-     * inset of the first column). A first line opening with a bracket or
-     * quote needs no special casing: the additive glue model already trims
-     * the opening punctuation's leading blank at every line start, which IS
-     * CLREQ's「缩减该符号始侧二分之一个汉字大小的空白」.
+     * 段首缩进的**显式覆盖**, in ems of the paragraph font size. `0` disables
+     * the indent; any non-null value pins it regardless of measure. `null`
+     * (default) means「不指定」→ 由 [firstLineIndentPolicy] 按行长自适应决定
+     * （CLREQ「段首缩排以两个汉字的空间为标准」，窄行缩一字）。The indent
+     * insets the FIRST line's start edge only (in vertical writing this
+     * becomes a block-start inset of the first column). A first line opening
+     * with a bracket or quote needs no special casing: the additive glue model
+     * already trims the opening punctuation's leading blank at every line
+     * start, which IS CLREQ's「缩减该符号始侧二分之一个汉字大小的空白」.
      */
-    val firstLineIndentEm: Float = 2f,
+    val firstLineIndentEm: Float? = null,
+    /**
+     * 段首缩进随行长自适应的默认策略（仅当 [firstLineIndentEm] 为 null 时
+     * 生效）. See [MeasureAdaptiveFirstLineIndent].
+     */
+    val firstLineIndentPolicy: MeasureAdaptiveFirstLineIndent = MeasureAdaptiveFirstLineIndent(),
     /**
      * 行长字号整数倍量化（grid-first, ADR 0007 的完整形态）. See [LineLengthGrid].
      */
     val lineLengthGrid: LineLengthGrid = LineLengthGrid(),
 )
+
+/**
+ * `MeasureAdaptiveFirstLineIndent`（ADR 0021 amendment）：段首缩进随行长
+ * 自适应——窄行（measure < [shortBelowEm] 字）缩 [shortEm] 字，宽行缩
+ * [longEm] 字。窄栏（多栏杂志、手机正文）里 2 字缩进占比过重，CLREQ 也记
+ * 多栏常缩一字，故默认窄行缩一字。
+ *
+ * 阈值默认 14 字，与 `MeasureAdaptiveKinsoku` 的悬挂阈值同值但**独立**——
+ * 两者回答不同问题（悬挂：整字下移是否过松；缩进：2 字是否过重），可分别
+ * 调，且本策略在 `KinsokuMode.Fixed` 下仍生效（不依赖悬挂信号）。
+ *
+ * 与行长无关地固定缩进，用 [ParagraphStyle.firstLineIndentEm]（显式值，含
+ * 0 关闭）覆盖。
+ */
+data class MeasureAdaptiveFirstLineIndent(
+    val shortBelowEm: Float = 14f,
+    val shortEm: Float = 1f,
+    val longEm: Float = 2f,
+) {
+    fun resolveEm(measureEm: Float): Float = if (measureEm < shortBelowEm) shortEm else longEm
+}
 
 /**
  * 把可用行长向下取整到字号的整数倍（N 字宽），让正文严格落在字格上

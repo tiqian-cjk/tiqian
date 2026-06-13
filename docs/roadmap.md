@@ -13,7 +13,7 @@
 ## 当前位置
 
 ```text
-Last completed: 行长字号整数倍量化（grid-first 完整形态，ADR 0028）——向下取整到 N 字版心、余量按末行对齐在容器内摆放正文、默认开可旁路
+Last completed: 段首缩进随行长自适应（`MeasureAdaptiveFirstLineIndent`，ADR 0021 amendment）——窄行<14 字缩 1 字、宽行 2 字，阈值独立于悬挂、Fixed 下仍生效；显式 `firstLineIndentEm` 覆盖。前一项：行长字号整数倍量化（ADR 0028）
 Up next:        第二阶段方向待定：竖排预研 / Android 真渲染（均见「不在第一阶段做的」）
 ```
 

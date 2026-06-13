@@ -110,6 +110,14 @@ class LayoutDumpGoldenTest {
                 )
             }
         }
+        debug.firstLineIndentDecision?.let { f ->
+            if (f.source != "Explicit") {
+                appendLine(
+                    "firstindent ${f.resolvedEm.fmt()}字 measure=${f.measureEm.fmt()}字 " +
+                        "threshold=${f.thresholdEm.fmt()}字 ${f.source}",
+                )
+            }
+        }
         debug.kinsokuDecision?.let { k ->
             appendLine("kinsoku measure=${k.measureEm.fmt()}字 level=${k.level} hang=${k.hanging} reason=${k.reason}")
         }

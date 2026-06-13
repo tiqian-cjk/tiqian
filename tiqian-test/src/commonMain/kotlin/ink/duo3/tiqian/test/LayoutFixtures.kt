@@ -15,9 +15,11 @@ data class LayoutFixture(
     /**
      * Fixtures pin 0 unless they exercise 段首缩进 — the maxWidth geometry
      * of the micro fixtures above is hand-tuned to specific break points
-     * and the engine default of 2em would obscure what each one tests.
+     * and a non-zero indent would obscure what each one tests. `null` opts
+     * into the `MeasureAdaptiveFirstLineIndent` default (1 字 on short lines,
+     * 2 字 otherwise).
      */
-    val firstLineIndentEm: Float = 0f,
+    val firstLineIndentEm: Float? = 0f,
     /**
      * Repair-mechanism fixtures pin the kinsoku mode to Fixed(Basic, no hang)
      * so the MeasureAdaptive default (which enables hanging below 14 字)
@@ -153,6 +155,15 @@ object EarlyLayoutFixtures {
                 "the indent; later lines use the full measure. Justify targets " +
                 "the indented measure on line 0.",
             firstLineIndentEm = 2f,
+        ),
+        LayoutFixture(
+            id = "adaptive-short-line-indent",
+            text = "提椠是一个面向中文正文的排版引擎",
+            constraints = LayoutConstraints(maxWidth = 160f),
+            notes = "MeasureAdaptiveFirstLineIndent: with no explicit indent and a " +
+                "short measure (10 字 < 14), the段首缩进 default narrows to 1 字 " +
+                "(not 2). The firstindent decision line records measure/threshold/source.",
+            firstLineIndentEm = null,
         ),
         LayoutFixture(
             id = "indent-opening-quote",

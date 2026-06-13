@@ -41,6 +41,7 @@ import ink.duo3.tiqian.core.SpacingDecisionInfo
 import ink.duo3.tiqian.core.LastLineAlignment
 import ink.duo3.tiqian.core.KinsokuDecisionInfo
 import ink.duo3.tiqian.core.LineLengthGridDecisionInfo
+import ink.duo3.tiqian.core.FirstLineIndentDecisionInfo
 import kotlin.math.floor
 import ink.duo3.tiqian.core.LineSpacingDecisionInfo
 import ink.duo3.tiqian.core.PrintingSides
@@ -371,12 +372,25 @@ class ExplainableStubParagraphLayoutEngine(
             bodyOffset = gridBodyOffset,
             reason = if (grid.enabled) "LineLengthGridQuantization" else "GridBypassed",
         )
+        val measureEm = measure / fontSize
         // ParagraphFirstLineIndent (CLREQ 段首缩排): the first line's usable
         // measure shrinks by the indent; rendering shifts its start edge.
-        val firstLineIndent = input.paragraphStyle.firstLineIndentEm.coerceAtLeast(0f) * fontSize
+        // MeasureAdaptiveFirstLineIndent: the indent default narrows to 1 字 on
+        // short measures (< shortBelowEm 字); an explicit firstLineIndentEm
+        // overrides. Threshold defaults to 14 字 like MeasureAdaptiveKinsoku's
+        // hanging but is an INDEPENDENT knob (ADR 0021 amendment).
+        val explicitIndentEm = input.paragraphStyle.firstLineIndentEm
+        val indentPolicy = input.paragraphStyle.firstLineIndentPolicy
+        val resolvedIndentEm = (explicitIndentEm ?: indentPolicy.resolveEm(measureEm)).coerceAtLeast(0f)
+        val firstLineIndent = resolvedIndentEm * fontSize
+        val firstLineIndentDecision = FirstLineIndentDecisionInfo(
+            source = if (explicitIndentEm != null) "Explicit" else "MeasureAdaptiveFirstLineIndent",
+            measureEm = measureEm,
+            thresholdEm = indentPolicy.shortBelowEm,
+            resolvedEm = resolvedIndentEm,
+        )
         // Resolve 禁则档 + 悬挂 from the kinsoku mode and the measure in 字
         // (MeasureAdaptiveKinsoku default keys on measure/fontSize).
-        val measureEm = measure / fontSize
         val resolvedKinsoku = clreqProfile.kinsokuMode.resolve(measureEm)
         val kinsokuDecision = KinsokuDecisionInfo(
             measureEm = measureEm,
@@ -777,6 +791,7 @@ class ExplainableStubParagraphLayoutEngine(
                 lineSpacingDecision = lineSpacingDecision,
                 kinsokuDecision = kinsokuDecision,
                 lineLengthGridDecision = lineLengthGridDecision,
+                firstLineIndentDecision = firstLineIndentDecision,
             ),
         )
     }

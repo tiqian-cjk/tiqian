@@ -85,6 +85,19 @@ data class LayoutDebugInfo(
     val lineSpacingDecision: LineSpacingDecisionInfo? = null,
     val kinsokuDecision: KinsokuDecisionInfo? = null,
     val lineLengthGridDecision: LineLengthGridDecisionInfo? = null,
+    val firstLineIndentDecision: FirstLineIndentDecisionInfo? = null,
+)
+
+/**
+ * 段首缩进的解析：[source] = "MeasureAdaptiveFirstLineIndent"（按 [measureEm]
+ * 字数自适应，< [thresholdEm] 字缩窄）或 "Explicit"（`firstLineIndentEm`
+ * 显式覆盖）；[resolvedEm] 是最终缩进字数。
+ */
+data class FirstLineIndentDecisionInfo(
+    val source: String,
+    val measureEm: Float,
+    val thresholdEm: Float,
+    val resolvedEm: Float,
 )
 
 /**

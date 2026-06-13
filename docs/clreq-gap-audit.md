@@ -89,9 +89,12 @@ CLREQ 挤压顺序：①行末标点固定半宽 →②西文词距 →1/4em →
 段落级特性完全缺失：`ParagraphStyle` 无 indent；首行行首开括号的半宽缩减是
 配套规则。
 
-已实现：`ParagraphStyle.firstLineIndentEm` 默认 2（CLREQ 标准），首行
-行宽收窄 + `LineBox.indent` 渲染偏移。开括号半宽缩减不需要实现——加法
-模型的行首 leading glue trim（ADR 0010）已天然给出该行为。
+已实现：首行行宽收窄 + `LineBox.indent` 渲染偏移；开括号半宽缩减不需要
+实现——加法模型的行首 leading glue trim（ADR 0010）已天然给出该行为。
+缩进默认随行长自适应（`MeasureAdaptiveFirstLineIndent`，2026-06-13 amendment，
+ADR 0021）：窄行（measure < 14 字）缩 1 字、宽行 2 字，阈值与悬挂同默认但
+独立、在 `KinsokuMode.Fixed` 下仍生效；`firstLineIndentEm`（`Float?`）为
+显式覆盖。
 
 ### 6. 行尾点号悬挂——已解决（Slice 17，ADR 0006 amendment）
 

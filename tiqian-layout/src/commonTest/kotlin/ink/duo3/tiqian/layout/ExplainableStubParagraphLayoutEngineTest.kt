@@ -1826,12 +1826,14 @@ class ExplainableStubParagraphLayoutEngineTest {
 
     @Test
     fun firstLineIndentShrinksFirstLineMeasureOnly() {
-        // ParagraphFirstLineIndent: 12 hanzi at maxWidth 160, indent 2em
-        // (32). Line 0 measure = 128 → 8 chars; line 1 uses the full 160.
-        // LineBox carries the inset; width fields exclude it; result width
-        // accounts for indent + visual.
+        // ParagraphFirstLineIndent: 12 hanzi at maxWidth 160, indent pinned to
+        // 2em (32) — 10 字 is below the adaptive threshold, so pin explicitly to
+        // exercise the inset mechanism at 2 字. Line 0 measure = 128 → 8 chars;
+        // line 1 uses the full 160. LineBox carries the inset; width fields
+        // exclude it; result width accounts for indent + visual.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 2f),
                 content = TiqianTextContent("中文中文中文中文中文中文"),
                 constraints = LayoutConstraints(maxWidth = 160f),
             ),
@@ -1847,24 +1849,42 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
-    fun firstLineIndentDefaultsToTwoEmAndZeroDisables() {
-        // CLREQ:「段首缩排以两个汉字的空间为标准」— the engine default.
-        val indented = ExplainableStubParagraphLayoutEngine().layout(
-            LayoutInput(
-                content = TiqianTextContent("中文"),
-                constraints = LayoutConstraints(maxWidth = 240f),
-            ),
-        )
-        assertEquals(32f, indented.lines.single().indent)
+    fun firstLineIndentAdaptsToMeasureAndCanBeOverridden() {
+        // MeasureAdaptiveFirstLineIndent (ADR 0021 amendment): default narrows
+        // to 1 字 on short measures (< 14 字), 2 字 otherwise. CLREQ:「段首缩排
+        // 以两个汉字的空间为标准」（宽行）；窄栏常缩一字.
+        fun indentOf(engine: ExplainableStubParagraphLayoutEngine, width: Float, style: ParagraphStyle? = null) =
+            engine.layout(
+                LayoutInput(
+                    paragraphStyle = style ?: ParagraphStyle(),
+                    content = TiqianTextContent("中文"),
+                    constraints = LayoutConstraints(maxWidth = width),
+                ),
+            )
 
-        val disabled = ExplainableStubParagraphLayoutEngine().layout(
-            LayoutInput(
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
-                content = TiqianTextContent("中文"),
-                constraints = LayoutConstraints(maxWidth = 240f),
-            ),
+        // Long line (15 字 ≥ 14): default 2 字.
+        val long = indentOf(ExplainableStubParagraphLayoutEngine(), 240f)
+        assertEquals(32f, long.lines.single().indent)
+        assertEquals("MeasureAdaptiveFirstLineIndent", long.debug.firstLineIndentDecision!!.source)
+        assertEquals(2f, long.debug.firstLineIndentDecision!!.resolvedEm)
+
+        // Short line (10 字 < 14): default narrows to 1 字.
+        val short = indentOf(ExplainableStubParagraphLayoutEngine(), 160f)
+        assertEquals(16f, short.lines.single().indent)
+        assertEquals(1f, short.debug.firstLineIndentDecision!!.resolvedEm)
+
+        // Decoupled from hanging: still adapts under KinsokuMode.Fixed.
+        assertEquals(16f, indentOf(fixedBasicEngine(), 160f).lines.single().indent)
+
+        // Explicit firstLineIndentEm overrides the adaptive default both ways.
+        assertEquals(
+            0f,
+            indentOf(ExplainableStubParagraphLayoutEngine(), 240f, ParagraphStyle(firstLineIndentEm = 0f))
+                .lines.single().indent,
         )
-        assertEquals(0f, disabled.lines.single().indent)
+        val pinned = indentOf(ExplainableStubParagraphLayoutEngine(), 160f, ParagraphStyle(firstLineIndentEm = 2f))
+        assertEquals(32f, pinned.lines.single().indent) // 2 字 even on the short line
+        assertEquals("Explicit", pinned.debug.firstLineIndentDecision!!.source)
     }
 
     @Test

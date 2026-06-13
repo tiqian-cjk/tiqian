@@ -417,6 +417,11 @@ private fun printEngineDump(label: String, result: LayoutResult) {
     println(
         "  [$label] size=${result.size.width.oneDecimal()}x${result.size.height.oneDecimal()} lines=${result.lines.size} visual-sum=${totalVisual.oneDecimal()} repairs=$repairs justifications=$justifications",
     )
+    result.debug.firstLineIndentDecision?.let { f ->
+        if (f.source != "Explicit") {
+            println("    firstindent ${f.resolvedEm.oneDecimal()}字 measure=${f.measureEm.oneDecimal()}字 threshold=${f.thresholdEm.oneDecimal()}字 ${f.source}")
+        }
+    }
     result.debug.lineLengthGridDecision?.let { g ->
         if (g.enabled && g.slack > 0f) {
             println(

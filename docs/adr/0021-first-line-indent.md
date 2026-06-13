@@ -11,12 +11,31 @@ CLREQ：「段首缩排以两个汉字的空间为标准。若遇到杂志等多
 
 ## Decision
 
-### `ParagraphStyle.firstLineIndentEm`，默认 2
+### `ParagraphStyle.firstLineIndentEm` = 显式覆盖，默认随行长自适应
 
-缩进是段落样式而非 CLREQ profile 规则——量纲用 em，跟随字号。默认取
-CLREQ 标准两字宽：本引擎面向中文正文，默认输出即应是合格正文段落。
-多栏/杂志风格配 1，置 0 关闭。手调几何的 fixture 与单测显式 pin 0
-（缩进不是它们要验证的变量）。
+缩进是段落样式而非 CLREQ profile 规则——量纲用 em，跟随字号。
+`firstLineIndentEm` 现为**显式覆盖**（`Float?`，含 0 关闭）；默认 `null`，
+由 `firstLineIndentPolicy`（[MeasureAdaptiveFirstLineIndent]）按行长决定。
+手调几何的 fixture 与单测显式 pin 0（缩进不是它们要验证的变量）。
+
+### `MeasureAdaptiveFirstLineIndent`：窄行缩一字（2026-06-13 amendment）
+
+CLREQ 标准两字宽是宽行正文的取值；窄栏（多栏杂志、手机正文）里 2 字缩进
+占行比过重，CLREQ 也记多栏「时有改用缩排一字」。故默认改为**随行长自适应**：
+`measure < shortBelowEm 字` 缩 `shortEm`（默认 1）字，否则 `longEm`（默认 2）
+字。`resolveEm(measureEm)` 在引擎里以**量化后的版心**（measure/fontSize）
+为输入，与 grid（ADR 0028）/kinsoku 同源。
+
+**阈值默认 14 字，与 `MeasureAdaptiveKinsoku` 的悬挂阈值同值但独立**——两者
+回答不同问题（悬挂：整字下移是否过松；缩进：2 字是否过重），按用户拍板
+取同一默认值但各自一个 knob，可分别调；且本策略**不依赖悬挂信号**，在
+`KinsokuMode.Fixed` 下照常生效（与悬挂解耦，避免 Fixed 模式下失去自适应）。
+
+显式 `firstLineIndentEm` 任意非 null 值都覆盖自适应（含窄行强行 2 字、宽行
+强行 0）。决策入 dump：`FirstLineIndentDecisionInfo`
+（source=Explicit/MeasureAdaptiveFirstLineIndent + measure/threshold/resolved），
+golden 与 playground 在 source 非 Explicit 时打印 `firstindent N字 measure=…
+threshold=… …`。`adaptive-short-line-indent` fixture 端到端印证（10 字→1 字）。
 
 ### 缩进 = 首行可用行宽收窄 + 渲染起点偏移
 
