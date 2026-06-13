@@ -3,6 +3,7 @@ text: 悼念：王小明同志、张大同同志。
 maxWidth: 72.0
 == greedy ==
 size 72.0x144.0
+kinsoku measure=4.5字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:4字→Basic+Hang
 line[0] 0-3 natural=48.0 adjusted=40.0 visual=72.0 repair=- candidates=- justify=deficit=32.0->0.0 CjkInterChar@0+16.0,CjkInterChar@1+16.0
 line[1] 3-7 natural=64.0 adjusted=64.0 visual=72.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkInterChar@3+2.7,CjkInterChar@4+2.7,CjkInterChar@5+2.7
 line[2] 7-9 natural=32.0 adjusted=24.0 visual=72.0 repair=- candidates=- justify=deficit=48.0->0.0 CjkInterChar@7+48.0
@@ -52,6 +53,7 @@ decobox 3-6 kind=Mourning line=1 rect=0.0,29.1,53.3,45.1 open=-/- reason=Mournin
 decobox 9-12 kind=Mourning line=3 rect=0.0,86.7,53.3,102.7 open=-/- reason=MourningSpanKeptUnbroken
 == lookahead ==
 size 72.0x144.0
+kinsoku measure=4.5字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:4字→Basic+Hang
 line[0] 0-3 natural=48.0 adjusted=40.0 visual=72.0 repair=- candidates=- justify=deficit=32.0->0.0 CjkInterChar@0+16.0,CjkInterChar@1+16.0
 line[1] 3-7 natural=64.0 adjusted=64.0 visual=72.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkInterChar@3+2.7,CjkInterChar@4+2.7,CjkInterChar@5+2.7
 line[2] 7-9 natural=32.0 adjusted=24.0 visual=72.0 repair=- candidates=- justify=deficit=48.0->0.0 CjkInterChar@7+48.0

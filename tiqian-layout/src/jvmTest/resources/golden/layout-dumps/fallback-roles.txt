@@ -3,6 +3,7 @@ text: 提椠……Hello——世界。
 maxWidth: 240.0
 == greedy ==
 size 216.0x20.8
+kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
 line[0] 0-14 natural=224.0 adjusted=216.0 visual=216.0 repair=- candidates=- justify=-
 cluster 0-1 '提' adv=16.0
 cluster 1-2 '椠' adv=16.0
@@ -30,6 +31,7 @@ geom 13-14 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 13-14 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 == lookahead ==
 size 216.0x20.8
+kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
 line[0] 0-14 natural=224.0 adjusted=216.0 visual=216.0 repair=- candidates=- justify=-
 cluster 0-1 '提' adv=16.0
 cluster 1-2 '椠' adv=16.0

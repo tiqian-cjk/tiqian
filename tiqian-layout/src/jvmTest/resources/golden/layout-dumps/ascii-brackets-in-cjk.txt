@@ -3,6 +3,7 @@ text: 中文段落(English)和[mixed]说明。
 maxWidth: 240.0
 == greedy ==
 size 240.0x41.6
+kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
 line[0] 0-14 natural=232.0 adjusted=232.0 visual=240.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkLatinSpace@3+4.0,CjkLatinSpace@4+4.0
 line[1] 14-24 natural=168.0 adjusted=156.0 visual=156.0 repair=- candidates=- justify=-
 cluster 0-1 '中' adv=16.0
@@ -35,6 +36,7 @@ edgetrim 23-24 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 14-21 side=leading trim=4.0 reason=TextAutoSpaceLineEdgeTrim
 == lookahead ==
 size 240.0x41.6
+kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
 line[0] 0-14 natural=232.0 adjusted=232.0 visual=240.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkLatinSpace@3+4.0,CjkLatinSpace@4+4.0
 line[1] 14-24 natural=168.0 adjusted=156.0 visual=156.0 repair=- candidates=- justify=-
 cluster 0-1 '中' adv=16.0

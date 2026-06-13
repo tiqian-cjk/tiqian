@@ -22,6 +22,24 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class ExplainableStubParagraphLayoutEngineTest {
+    /**
+     * Engine pinned to Fixed(Basic, no hang) for narrow-width repair tests —
+     * the MeasureAdaptive default would enable hanging below 14 字 and
+     * replace the specific repair under test.
+     */
+    private fun fixedBasicEngine(
+        adjustment: ink.duo3.tiqian.clreq.AdjustmentStylePolicy = ink.duo3.tiqian.clreq.AdjustmentStylePolicy(),
+    ) = ExplainableStubParagraphLayoutEngine(
+        clreqProfileResolver = ClreqProfileResolver {
+            ClreqProfile.MainlandHorizontal.copy(
+                kinsokuMode = ink.duo3.tiqian.clreq.KinsokuMode.Fixed(
+                    ink.duo3.tiqian.clreq.KinsokuLevel.Basic,
+                ),
+                adjustment = adjustment,
+            )
+        },
+    )
+
     @Test
     fun returnsDebuggableSingleLineResult() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
@@ -717,7 +735,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // Pure greedy at maxWidth=64 -> line 0: 中文中文 (clusters 0..3), line 1: 。
         // 。 is PauseOrStop, forbidden at line start, so CarryPrevious pulls
         // 文 (cluster 3) to line 1: line 0 = 中文中, line 1 = 文。.
-        val result = ExplainableStubParagraphLayoutEngine().layout(
+        val result = fixedBasicEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文中文。"),
@@ -836,7 +854,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // English is one cluster (7 chars, 112f). At maxWidth=96, greedy keeps it on
         // line 0 alone (i > lineStart guard) and pushes 。 to line 1. Previous line
         // has only one cluster, so CarryPrevious cannot apply -> LeaveRagged.
-        val result = ExplainableStubParagraphLayoutEngine().layout(
+        val result = fixedBasicEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("English。"),
@@ -1237,7 +1255,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // (idx 6) overflows by 16. Capacities: offender 。 tier-1 (8) +
         // mid-line 。 idx3 tier-4 (8) = 16 → PushIn succeeds by default.
         val text = "中中中。中中。"
-        val default = ExplainableStubParagraphLayoutEngine().layout(
+        val default = fixedBasicEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent(text),
@@ -1250,14 +1268,10 @@ class ExplainableStubParagraphLayoutEngineTest {
         // Knob off: mid-line 。 keeps full width (its glue is lineEndOnly);
         // capacity drops to the offender's own 8 < 16 → PushIn rejected,
         // CarryPrevious instead.
-        val noInline = ExplainableStubParagraphLayoutEngine(
-            clreqProfileResolver = ClreqProfileResolver {
-                ClreqProfile.MainlandHorizontal.copy(
-                    adjustment = ink.duo3.tiqian.clreq.AdjustmentStylePolicy(
-                        allowInlineStopCompression = false,
-                    ),
-                )
-            },
+        val noInline = fixedBasicEngine(
+            adjustment = ink.duo3.tiqian.clreq.AdjustmentStylePolicy(
+                allowInlineStopCompression = false,
+            ),
         ).layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
@@ -1360,7 +1374,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         fun engineAt(level: ink.duo3.tiqian.clreq.KinsokuLevel) =
             ExplainableStubParagraphLayoutEngine(
                 clreqProfileResolver = ClreqProfileResolver {
-                    ClreqProfile.MainlandHorizontal.copy(kinsokuLevel = level)
+                    ClreqProfile.MainlandHorizontal.copy(kinsokuMode = ink.duo3.tiqian.clreq.KinsokuMode.Fixed(level))
                 },
             )
         val input = LayoutInput(
@@ -1385,7 +1399,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         fun layoutAt(level: ink.duo3.tiqian.clreq.KinsokuLevel) =
             ExplainableStubParagraphLayoutEngine(
                 clreqProfileResolver = ClreqProfileResolver {
-                    ClreqProfile.MainlandHorizontal.copy(kinsokuLevel = level)
+                    ClreqProfile.MainlandHorizontal.copy(kinsokuMode = ink.duo3.tiqian.clreq.KinsokuMode.Fixed(level))
                 },
             ).layout(
                 LayoutInput(
@@ -1414,8 +1428,9 @@ class ExplainableStubParagraphLayoutEngineTest {
         val engine = ExplainableStubParagraphLayoutEngine(
             clreqProfileResolver = ClreqProfileResolver {
                 ClreqProfile.MainlandHorizontal.copy(
-                    adjustment = ink.duo3.tiqian.clreq.AdjustmentStylePolicy(
-                        hangingPunctuation = ink.duo3.tiqian.clreq.HangingPunctuationStyle.PauseStops,
+                    kinsokuMode = ink.duo3.tiqian.clreq.KinsokuMode.Fixed(
+                        level = ink.duo3.tiqian.clreq.KinsokuLevel.Basic,
+                        hanging = ink.duo3.tiqian.clreq.HangingPunctuationStyle.PauseStops,
                     ),
                 )
             },
@@ -1438,8 +1453,17 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertTrue(line0.visualWidth > 64f, "hung mark must overflow: ${line0.visualWidth}")
         assertEquals("Hang", result.debug.lineDecisions[0].repair)
 
-        // Disabled (default) → no hang; the 逗号 wraps via CarryPrevious.
-        val plain = ExplainableStubParagraphLayoutEngine().layout(
+        // Fixed Disabled → no hang; the 逗号 wraps via CarryPrevious.
+        val plain = ExplainableStubParagraphLayoutEngine(
+            clreqProfileResolver = ClreqProfileResolver {
+                ClreqProfile.MainlandHorizontal.copy(
+                    kinsokuMode = ink.duo3.tiqian.clreq.KinsokuMode.Fixed(
+                        level = ink.duo3.tiqian.clreq.KinsokuLevel.Basic,
+                        hanging = ink.duo3.tiqian.clreq.HangingPunctuationStyle.Disabled,
+                    ),
+                )
+            },
+        ).layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文中文，中文。"),
@@ -1594,7 +1618,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // CLREQ 挤压⑥：中西间距最小挤为 1/8 汉字宽，不是 0。两个 gap
         // (advance 4) 各只有 2px 容量：。 推入需要 16，可用 8+2+2=12 →
         // PushIn 拒绝，CarryPrevious 兜底。（floor 为 0 的旧行为会接受。）
-        val result = ExplainableStubParagraphLayoutEngine().layout(
+        val result = fixedBasicEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文 AB 中。"),

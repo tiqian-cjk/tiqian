@@ -83,6 +83,18 @@ data class LayoutDebugInfo(
     val decorationDecisions: List<DecorationDecisionInfo> = emptyList(),
     val decorationSegments: List<DecorationSegmentInfo> = emptyList(),
     val lineSpacingDecision: LineSpacingDecisionInfo? = null,
+    val kinsokuDecision: KinsokuDecisionInfo? = null,
+)
+
+/**
+ * Which kinsoku level + hanging style the paragraph resolved to, and why
+ * (`MeasureAdaptiveKinsoku` keys on the measure in 字; `Fixed` pins it).
+ */
+data class KinsokuDecisionInfo(
+    val measureEm: Float,
+    val level: String,
+    val hanging: String,
+    val reason: String,
 )
 
 /**

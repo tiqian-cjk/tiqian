@@ -3,6 +3,7 @@ text: 中文中文中文。
 maxWidth: 48.0
 == greedy ==
 size 48.0x48.0
+kinsoku measure=3.0字 level=Basic hang=Disabled reason=Fixed:Basic
 line[0] 0-3 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
 line[1] 3-5 natural=32.0 adjusted=32.0 visual=48.0 repair=- candidates=- justify=deficit=16.0->0.0 CjkInterChar@3+16.0
 line[2] 5-7 natural=32.0 adjusted=24.0 visual=24.0 repair=CarryPrevious(ForbiddenAtLineStart shrink=0.0) candidates=PushIn-,CarryPrevious+ justify=-
@@ -25,6 +26,7 @@ geom 6-7 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 6-7 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 == lookahead ==
 size 48.0x48.0
+kinsoku measure=3.0字 level=Basic hang=Disabled reason=Fixed:Basic
 line[0] 0-2 natural=32.0 adjusted=32.0 visual=48.0 repair=- candidates=- justify=deficit=16.0->0.0 CjkInterChar@0+16.0
 line[1] 2-5 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
 line[2] 5-7 natural=32.0 adjusted=24.0 visual=24.0 repair=- candidates=- justify=-

@@ -3,6 +3,7 @@ text: 他引用了一句话：The quick brown fox jumps over the lazy dog，然�
 maxWidth: 240.0
 == greedy ==
 size 240.0x83.2
+kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
 line[0] 0-12 natural=192.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+9.1,CjkInterChar@1+9.1,CjkInterChar@2+9.1,CjkInterChar@3+9.1,CjkInterChar@4+9.1,CjkInterChar@5+9.1,CjkInterChar@6+9.1
 line[1] 12-27 natural=240.0 adjusted=240.0 visual=240.0 repair=- candidates=- justify=-
 line[2] 27-42 natural=240.0 adjusted=224.0 visual=232.0 repair=- candidates=- justify=deficit=16.0->8.0 WordSpace@33+4.0,WordSpace@38+4.0
@@ -66,6 +67,7 @@ edgetrim 27-28 side=leading trim=16.0 reason=LineEdgeWordSpaceCollapse
 edgetrim 42-43 side=leading trim=16.0 reason=LineEdgeWordSpaceCollapse
 == lookahead ==
 size 240.0x83.2
+kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
 line[0] 0-12 natural=192.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+9.1,CjkInterChar@1+9.1,CjkInterChar@2+9.1,CjkInterChar@3+9.1,CjkInterChar@4+9.1,CjkInterChar@5+9.1,CjkInterChar@6+9.1
 line[1] 12-27 natural=240.0 adjusted=240.0 visual=240.0 repair=- candidates=- justify=-
 line[2] 27-42 natural=240.0 adjusted=224.0 visual=232.0 repair=- candidates=- justify=deficit=16.0->8.0 WordSpace@33+4.0,WordSpace@38+4.0

@@ -3,6 +3,7 @@ text: 中文Hello中文，世界。
 maxWidth: 144.0
 == greedy ==
 size 144.0x41.6
+kinsoku measure=9.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:9字→Basic+Hang
 line[0] 0-8 natural=136.0 adjusted=136.0 visual=144.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkLatinSpace@1+4.0,CjkLatinSpace@2+4.0
 line[1] 8-13 natural=80.0 adjusted=72.0 visual=72.0 repair=- candidates=- justify=-
 cluster 0-1 '中' adv=16.0
@@ -32,6 +33,7 @@ autospace 2-7 side=trailing boundary=CjkText reduction=-4.0
 edgetrim 12-13 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 == lookahead ==
 size 144.0x41.6
+kinsoku measure=9.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:9字→Basic+Hang
 line[0] 0-8 natural=136.0 adjusted=136.0 visual=144.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkLatinSpace@1+4.0,CjkLatinSpace@2+4.0
 line[1] 8-13 natural=80.0 adjusted=72.0 visual=72.0 repair=- candidates=- justify=-
 cluster 0-1 '中' adv=16.0

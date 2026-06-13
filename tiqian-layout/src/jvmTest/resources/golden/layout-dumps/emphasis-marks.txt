@@ -3,6 +3,7 @@ text: 他强调：豆子新鲜最要紧，烘焙其次。
 maxWidth: 128.0
 == greedy ==
 size 128.0x51.2
+kinsoku measure=8.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:8字→Basic+Hang
 line[0] 0-8 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=-
 line[1] 8-17 natural=144.0 adjusted=128.0 visual=128.0 repair=PushIn(ForbiddenAtLineStart shrink=16.0) candidates=PushIn+ justify=-
 cluster 0-1 '他' adv=16.0
@@ -60,6 +61,7 @@ deco 15-16 '次' kind=Emphasis applied=true anchor=112.0,45.6 reason=EmphasisDot
 linespacing natural=16.0 requested=25.6 resolved=25.6 floor=8.0 sides=SingleSided applied=false reason=InterlinearMarkLineSpacingFloor
 == lookahead ==
 size 128.0x51.2
+kinsoku measure=8.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:8字→Basic+Hang
 line[0] 0-8 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=-
 line[1] 8-17 natural=144.0 adjusted=128.0 visual=128.0 repair=PushIn(ForbiddenAtLineStart shrink=16.0) candidates=PushIn+ justify=-
 cluster 0-1 '他' adv=16.0

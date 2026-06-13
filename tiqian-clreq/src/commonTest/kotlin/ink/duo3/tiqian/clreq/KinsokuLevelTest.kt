@@ -62,7 +62,26 @@ class KinsokuLevelTest {
     }
 
     @Test
-    fun profileDefaultsToBasic() {
-        assertEquals(KinsokuLevel.Basic, ClreqProfile.MainlandHorizontal.kinsokuLevel)
+    fun profileDefaultsToMeasureAdaptive() {
+        assertTrue(ClreqProfile.MainlandHorizontal.kinsokuMode is KinsokuMode.MeasureAdaptive)
+    }
+
+    @Test
+    fun measureAdaptiveResolvesPerLineWidth() {
+        val m = KinsokuMode.MeasureAdaptive()
+        // < 14 字：基本处理 + 悬挂.
+        m.resolve(10f).let {
+            assertEquals(KinsokuLevel.Basic, it.level)
+            assertEquals(HangingPunctuationStyle.PauseStops, it.hanging)
+        }
+        // 14–24 字：基本处理，无悬挂.
+        m.resolve(20f).let {
+            assertEquals(KinsokuLevel.Basic, it.level)
+            assertEquals(HangingPunctuationStyle.Disabled, it.hanging)
+        }
+        // > 24 字：GB 法.
+        assertEquals(KinsokuLevel.GbStyle, m.resolve(28f).level)
+        // > 32 字：严格处理.
+        assertEquals(KinsokuLevel.Strict, m.resolve(40f).level)
     }
 }

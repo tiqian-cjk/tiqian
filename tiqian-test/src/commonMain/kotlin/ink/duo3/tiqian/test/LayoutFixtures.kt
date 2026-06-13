@@ -18,6 +18,13 @@ data class LayoutFixture(
      * and the engine default of 2em would obscure what each one tests.
      */
     val firstLineIndentEm: Float = 0f,
+    /**
+     * Repair-mechanism fixtures pin the kinsoku mode to Fixed(Basic, no hang)
+     * so the MeasureAdaptive default (which enables hanging below 14 字)
+     * doesn't replace the specific repair they exercise — same spirit as
+     * pinning firstLineIndentEm = 0.
+     */
+    val pinBasicNoHang: Boolean = false,
 )
 
 object EarlyLayoutFixtures {
@@ -63,24 +70,28 @@ object EarlyLayoutFixtures {
             text = "提椠中文中文中文。",
             constraints = LayoutConstraints(maxWidth = 64f),
             notes = "Forces a kinsoku CarryPrevious repair: greedy break would put 。 at line start, so the engine pulls the preceding character down.",
+            pinBasicNoHang = true,
         ),
         LayoutFixture(
             id = "kinsoku-push-in",
             text = "中文中。",
             constraints = LayoutConstraints(maxWidth = 60f),
             notes = "Forces PushIn: greedy would put 。 at line start, then line-end punctuation glue shrinks enough to keep it on the previous line.",
+            pinBasicNoHang = true,
         ),
         LayoutFixture(
             id = "lookahead-future-push-in",
             text = "中文中文中文。",
             constraints = LayoutConstraints(maxWidth = 60f),
             notes = "Forces a PushIn repair inside lookahead's future lines; lookahead should score that cheap repair instead of adding an earlier break.",
+            pinBasicNoHang = true,
         ),
         LayoutFixture(
             id = "lookahead-avoids-repair",
             text = "中文中文中文。",
             constraints = LayoutConstraints(maxWidth = 48f),
             notes = "At width 48 greedy ends up with a CarryPrevious repair on the last line; lookahead shifts the first break earlier to avoid the conflict entirely.",
+            pinBasicNoHang = true,
         ),
         LayoutFixture(
             id = "justify-cjk-paragraph",

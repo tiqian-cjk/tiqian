@@ -3,6 +3,7 @@ text: 屈原写下离骚，顾炎武王夫之并称。
 maxWidth: 224.0
 == greedy ==
 size 224.0x48.0
+kinsoku measure=14.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:14字→Basic
 line[0] 0-14 natural=224.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=-
 line[1] 14-16 natural=32.0 adjusted=24.0 visual=24.0 repair=- candidates=- justify=-
 cluster 0-1 '屈' adv=16.0
@@ -49,6 +50,7 @@ decobox 7-10 kind=ProperNoun line=0 rect=112.0,14.9,159.0,14.9 open=-/- reason=I
 decobox 10-13 kind=ProperNoun line=0 rect=161.0,14.9,208.0,14.9 open=-/- reason=InterlinearLinePerAnnotatedItem;AdjacentInterlinearLineShortening
 == lookahead ==
 size 224.0x48.0
+kinsoku measure=14.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:14字→Basic
 line[0] 0-14 natural=224.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=-
 line[1] 14-16 natural=32.0 adjusted=24.0 visual=24.0 repair=- candidates=- justify=-
 cluster 0-1 '屈' adv=16.0

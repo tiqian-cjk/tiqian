@@ -39,6 +39,7 @@ import ink.duo3.tiqian.core.RoleOverrideInfo
 import ink.duo3.tiqian.core.Size
 import ink.duo3.tiqian.core.SpacingDecisionInfo
 import ink.duo3.tiqian.core.LastLineAlignment
+import ink.duo3.tiqian.core.KinsokuDecisionInfo
 import ink.duo3.tiqian.core.LineSpacingDecisionInfo
 import ink.duo3.tiqian.core.PrintingSides
 import ink.duo3.tiqian.core.TextRange
@@ -336,17 +337,26 @@ class ExplainableStubParagraphLayoutEngine(
         // ParagraphFirstLineIndent (CLREQ 段首缩排): the first line's usable
         // measure shrinks by the indent; rendering shifts its start edge.
         val firstLineIndent = input.paragraphStyle.firstLineIndentEm.coerceAtLeast(0f) * fontSize
+        // Resolve 禁则档 + 悬挂 from the kinsoku mode and the measure in 字
+        // (MeasureAdaptiveKinsoku default keys on maxWidth/fontSize).
+        val measureEm = input.constraints.maxWidth / fontSize
+        val resolvedKinsoku = clreqProfile.kinsokuMode.resolve(measureEm)
+        val kinsokuDecision = KinsokuDecisionInfo(
+            measureEm = measureEm,
+            level = resolvedKinsoku.level.name,
+            hanging = resolvedKinsoku.hanging.name,
+            reason = resolvedKinsoku.reason,
+        )
         // LineEndHangingPunctuation (CLREQ 行尾点号悬挂, ADR 0006): which
-        // clusters may hang past the measure. Opt-in; 顿/逗/句 only.
-        val hangableClusters: Set<Int> = when (adjustmentStyle.hangingPunctuation) {
+        // clusters may hang past the measure. 顿/逗/句 only.
+        val hangableClusters: Set<Int> = when (resolvedKinsoku.hanging) {
             HangingPunctuationStyle.Disabled -> emptySet()
             HangingPunctuationStyle.PauseStops -> naturalClusters.indices.filterTo(mutableSetOf()) { idx ->
                 naturalClusters[idx].displayText.singleOrNull() in HANGABLE_PUNCTUATION
             }
         }
-        // 行首禁则按 profile 的 KinsokuLevel 解析（CLREQ 四档）；空集表示
-        // 该档不禁任何字符（不处理档）。
-        val kinsokuRule = ClreqKinsokuRule(clreqProfile.kinsokuLevel)
+        // 行首禁则按解析出的 KinsokuLevel（CLREQ 四档）；空集 = 不处理档.
+        val kinsokuRule = ClreqKinsokuRule(resolvedKinsoku.level)
         val forbiddenLineStartClusters: Set<Int> = naturalClusters.indices.filterTo(mutableSetOf()) { idx ->
             kinsokuRule.forbiddenAtLineStart(naturalClusters[idx])
         }
@@ -722,6 +732,7 @@ class ExplainableStubParagraphLayoutEngine(
                 decorationDecisions = decorationDecisions,
                 decorationSegments = decorationSegments,
                 lineSpacingDecision = lineSpacingDecision,
+                kinsokuDecision = kinsokuDecision,
             ),
         )
     }

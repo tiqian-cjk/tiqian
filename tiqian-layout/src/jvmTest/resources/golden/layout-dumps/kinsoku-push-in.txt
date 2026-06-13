@@ -3,6 +3,7 @@ text: 中文中。
 maxWidth: 60.0
 == greedy ==
 size 56.0x16.0
+kinsoku measure=3.8字 level=Basic hang=Disabled reason=Fixed:Basic
 line[0] 0-4 natural=64.0 adjusted=56.0 visual=56.0 repair=PushIn(ForbiddenAtLineStart shrink=4.0) candidates=PushIn+ justify=-
 cluster 0-1 '中' adv=16.0
 cluster 1-2 '文' adv=16.0
@@ -17,6 +18,7 @@ geom 3-4 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 3-4 side=trailing trim=4.0 reason=LineEndHalfWidthPunctuation
 == lookahead ==
 size 56.0x16.0
+kinsoku measure=3.8字 level=Basic hang=Disabled reason=Fixed:Basic
 line[0] 0-4 natural=64.0 adjusted=56.0 visual=56.0 repair=PushIn(ForbiddenAtLineStart shrink=4.0) candidates=PushIn+ justify=-
 cluster 0-1 '中' adv=16.0
 cluster 1-2 '文' adv=16.0

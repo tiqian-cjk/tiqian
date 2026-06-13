@@ -15,15 +15,14 @@ data class ClreqProfile(
     val region: ClreqRegion,
     val punctuationGlyphPolicy: CjkPunctuationGlyphPolicy = CjkPunctuationGlyphPolicy.PreferClreqRecommendedCodepoints,
     val coalesceRepeatablePunctuation: Set<Int> = DefaultCoalesceRepeatablePunctuation,
-    val hangingPunctuation: HangingPunctuationPolicy = HangingPunctuationPolicy.Disabled,
     val autoSpace: AutoSpacePolicy = AutoSpacePolicy.Default,
     val gluePlacement: PunctuationGluePlacement = PunctuationGluePlacement.forRegion(region),
     val adjustment: AdjustmentStylePolicy = AdjustmentStylePolicy(),
     /**
-     * 行首行尾禁则档（CLREQ 第六节四档）。默认 [KinsokuLevel.Basic]
-     * ——CLREQ 标注的「最推荐」档。
+     * 行首行尾禁则档 + 行尾悬挂的解析方式。默认 [KinsokuMode.MeasureAdaptive]
+     * ——按行长（字数）自适应；[KinsokuMode.Fixed] 固定一档。
      */
-    val kinsokuLevel: KinsokuLevel = KinsokuLevel.Basic,
+    val kinsokuMode: KinsokuMode = KinsokuMode.MeasureAdaptive(),
 ) {
     companion object {
         // CoalesceRepeatablePunctuation: codepoints that, when written as consecutive
@@ -61,27 +60,6 @@ enum class ClreqRegion {
     Taiwan,
     HongKong,
     Custom,
-}
-
-/**
- * HangingPunctuationPolicy — controls whether and which punctuation is allowed
- * to hang past the line-end (悬挂).
- *
- * The default is [Disabled] per CLREQ commentary and JIS 4051 precedent:
- * hanging is an *optional, design-driven* refinement on top of the two
- * fundamental kinsoku operations (推入 PushIn / 推出 CarryPrevious), not a
- * generic fallback. See [ADR 0006](docs/adr/0006-hanging-punctuation-opt-in.md).
- *
- * When enabled, hanging is restricted to a small allowlist matching widespread
- * conventions:
- * - [EnabledForPauseStop]: only 。 and ，  (the JIS 4051 / InDesign default).
- * - [EnabledForExtendedCjk]: additionally hangs ！？： per mainland convention
- *   (these glyphs are visually offset in mainland fonts) and curly quotes.
- */
-enum class HangingPunctuationPolicy {
-    Disabled,
-    EnabledForPauseStop,
-    EnabledForExtendedCjk,
 }
 
 /**
@@ -213,13 +191,6 @@ data class AdjustmentStylePolicy(
      * 也不参与 justify 的 CjkLatinSpace 拉伸档。
      */
     val allowSinoWesternGapAdjustment: Boolean = true,
-    /**
-     * CLREQ 行尾点号悬挂（`LineEndHangingPunctuation`）：当顿号/逗号/句号
-     * 将落到行首时，允许把它悬挂到前一行行尾、突出版心，而非挤进或推出。
-     * 「绝大多数的中文出版物没有悬挂行尾点号的惯例」→ 默认关闭。窄行宽下
-     * （如手机正文）悬挂可避免 CarryPrevious 拉走整字造成的大幅字距拉宽。
-     */
-    val hangingPunctuation: HangingPunctuationStyle = HangingPunctuationStyle.Disabled,
 )
 
 enum class LineEndPunctuationStyle {
@@ -242,6 +213,61 @@ enum class KinsokuLevel {
     Basic,
     GbStyle,
     Strict,
+}
+
+/** Resolved kinsoku level + hanging style for a given measure. */
+data class ResolvedKinsoku(
+    val level: KinsokuLevel,
+    val hanging: HangingPunctuationStyle,
+    val reason: String,
+)
+
+/**
+ * How禁则档 + 悬挂 are chosen. [Fixed] pins them; [MeasureAdaptive] keys on
+ * the line measure in 字（汉字数）, per the wiki/lit corpus experiment:
+ *
+ * - 行长 < 14 字：启用行尾悬挂——窄行（手机正文）悬挂消灭无法修复的行、
+ *   腰斩 CarryPrevious 的整字推出（收益在此区间最明显）；
+ * - 行长 > 24 字：用 GB 法（追加分隔号禁行尾）；
+ * - 行长 > 32 字：用严格处理（追加破折号/省略号禁行首）——宽行可负担
+ *   更严的禁则（实验：宽行下更严档的代价趋零）；
+ * - 其余：基本处理（CLREQ「最推荐」）。
+ *
+ * 注：CLREQ 主张「一份文档内禁则级别应统一」；自适应是面向响应式/移动端
+ * 重排（measure 随容器变）的现代扩展，决策记入 dump。
+ */
+sealed interface KinsokuMode {
+    fun resolve(measureEm: Float): ResolvedKinsoku
+
+    data class Fixed(
+        val level: KinsokuLevel,
+        val hanging: HangingPunctuationStyle = HangingPunctuationStyle.Disabled,
+    ) : KinsokuMode {
+        override fun resolve(measureEm: Float): ResolvedKinsoku =
+            ResolvedKinsoku(level, hanging, "Fixed:$level${if (hanging != HangingPunctuationStyle.Disabled) "+Hang" else ""}")
+    }
+
+    data class MeasureAdaptive(
+        val hangBelowEm: Float = 14f,
+        val gbAboveEm: Float = 24f,
+        val strictAboveEm: Float = 32f,
+    ) : KinsokuMode {
+        override fun resolve(measureEm: Float): ResolvedKinsoku {
+            val level = when {
+                measureEm > strictAboveEm -> KinsokuLevel.Strict
+                measureEm > gbAboveEm -> KinsokuLevel.GbStyle
+                else -> KinsokuLevel.Basic
+            }
+            val hanging = if (measureEm < hangBelowEm) {
+                HangingPunctuationStyle.PauseStops
+            } else {
+                HangingPunctuationStyle.Disabled
+            }
+            val tag = "MeasureAdaptiveKinsoku:${measureEm.toInt()}字→$level" +
+                if (hanging != HangingPunctuationStyle.Disabled) "+Hang" else ""
+            return ResolvedKinsoku(level, hanging, tag)
+        }
+    }
 }
 
 enum class HangingPunctuationStyle {

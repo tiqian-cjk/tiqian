@@ -13,7 +13,7 @@
 ## 当前位置
 
 ```text
-Last completed: Slice 17 (行尾点号悬挂 opt-in，gap audit 缺口 6，ADR 0006 amendment)
+Last completed: Slice 18 (按行长自适应禁则档 + 悬挂默认，ADR 0025；附 KinsokuHangingExperimentProbe 实测)
 Up next:        gap audit 第一阶段七缺口全部关闭；更远期：Android composable 渲染、竖排预研、Slice 3 表收口
 ```
 
@@ -40,6 +40,7 @@ Up next:        gap audit 第一阶段七缺口全部关闭；更远期：Androi
 | 15 | — | 双齐为基线：删 `TextAlign`，非末行恒走 justify 链；`lastLineAlignment` Start/Center/End 经 `LineBox.indent` 控末行 | 全部多行 fixture（非末行 visual≈maxWidth）；`lastLineAlignmentPositionsTheLastLineViaIndent` 单测 | golden diff review + playground 目检 | done (单行段落即末行，标题/标签不被拉伸；渲染层零改动；ADR 0023) |
 | 16 | — | 行间线：`ProperNoun`/`BookTitle` decoration，一项一线、贴字 +0.18em、随 justify 延长、相邻侧回缩 1/16em，直线/波浪线渲染 | `interlinear-lines` fixture（含相邻专名） | golden + 几何单测 + playground 目检 | done (segment 几何复用示亡号通道；`AdjacentInterlinearLineShortening`；行距 floor 自动生效；ADR 0024) |
 | 17 | — | 行尾点号悬挂 opt-in：`AdjustmentStylePolicy.hangingPunctuation`（默认关，顿逗句），kinsoku 链 PushIn→Hang→Carry→Ragged，悬挂标点出版心、内容满排 | `hangingPunctuationFillsLineToMeasureAndOverflowsVisual` 等单测 | `./gradlew :tiqian-layout:jvmTest` | done (`LineEndHangingPunctuation`；measure-fill 排除悬挂、visualWidth 溢出；行尾只挂一个；渲染零改动；ADR 0006 amendment) |
+| 18 | — | 按行长自适应禁则档 + 悬挂：`KinsokuMode.MeasureAdaptive` 默认（<14 字悬挂 / >24 GB / >32 严格），决策入 dump；阈值由 Wikipedia/文学体语料实测标定 | golden `kinsoku` 决策行；`measureAdaptiveResolvesPerLineWidth` 单测；`KinsokuHangingExperimentProbe` | golden diff + `:tiqian-clreq:jvmTest` | done (合并 `kinsokuLevel`/`hangingPunctuation` 为 `kinsokuMode`；repair fixture pin Fixed；ADR 0025) |
 
 Slice 15 的依据（CLREQ 原文）：
 

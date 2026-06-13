@@ -43,7 +43,21 @@ class LayoutDumpGoldenTest {
                     "greedy" to GreedyLineBreaker(),
                     "lookahead" to LookaheadLineBreaker(),
                 )) {
-                    val result = ExplainableStubParagraphLayoutEngine(lineBreaker = breaker).layout(
+                    val engine = if (fixture.pinBasicNoHang) {
+                        ExplainableStubParagraphLayoutEngine(
+                            lineBreaker = breaker,
+                            clreqProfileResolver = {
+                                ink.duo3.tiqian.clreq.ClreqProfile.MainlandHorizontal.copy(
+                                    kinsokuMode = ink.duo3.tiqian.clreq.KinsokuMode.Fixed(
+                                        ink.duo3.tiqian.clreq.KinsokuLevel.Basic,
+                                    ),
+                                )
+                            },
+                        )
+                    } else {
+                        ExplainableStubParagraphLayoutEngine(lineBreaker = breaker)
+                    }
+                    val result = engine.layout(
                         LayoutInput(
                             content = TiqianTextContent(fixture.text),
                             constraints = fixture.constraints,
@@ -88,6 +102,9 @@ class LayoutDumpGoldenTest {
     private fun LayoutResult.dump(label: String): String = buildString {
         appendLine("== $label ==")
         appendLine("size ${size.width.fmt()}x${size.height.fmt()}")
+        debug.kinsokuDecision?.let { k ->
+            appendLine("kinsoku measure=${k.measureEm.fmt()}字 level=${k.level} hang=${k.hanging} reason=${k.reason}")
+        }
         lines.forEachIndexed { i, line ->
             val decision = debug.lineDecisions.getOrNull(i)
             val repair = decision?.repairDecision?.let { r ->
