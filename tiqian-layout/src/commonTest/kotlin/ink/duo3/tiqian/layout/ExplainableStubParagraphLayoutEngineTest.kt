@@ -1419,6 +1419,38 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun autoSpaceDigitModeIsWiredIndependentlyOfLetterMode() {
+        // CLREQ distinguishes 字母 from 数字: cjkDigit gates CJK↔digit gaps
+        // separately. cjkLatin=Insert, cjkDigit=Disabled → 中A gets a gap,
+        // 中5 does not (mode keyed on the boundary-adjacent char).
+        val result = ExplainableStubParagraphLayoutEngine(
+            clreqProfileResolver = ClreqProfileResolver {
+                ClreqProfile.MainlandHorizontal.copy(
+                    autoSpace = ink.duo3.tiqian.clreq.AutoSpacePolicy(
+                        cjkLatin = ink.duo3.tiqian.clreq.AutoSpaceMode.Insert,
+                        cjkDigit = ink.duo3.tiqian.clreq.AutoSpaceMode.Disabled,
+                    ),
+                )
+            },
+        ).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                content = TiqianTextContent("中A中5中"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val letterGap = result.debug.autoSpaceDecisions.filter {
+            result.clusters.any { c -> c.range == it.clusterRange && c.text == "A" }
+        }
+        val digitGap = result.debug.autoSpaceDecisions.filter {
+            result.clusters.any { c -> c.range == it.clusterRange && c.text == "5" }
+        }
+        assertTrue(letterGap.isNotEmpty(), "中↔letter must still gap")
+        assertTrue(digitGap.isEmpty(), "中↔digit must NOT gap when cjkDigit=Disabled")
+    }
+
+    @Test
     fun lineEndKinsokuMovesDanglingOpenerToNextLine() {
         // CLREQ 行尾禁则 (Basic): 开括号不得居行尾. 中中中（中中）中 @maxWidth
         // 64: greedy would end line 0 on （ — the engine derives the

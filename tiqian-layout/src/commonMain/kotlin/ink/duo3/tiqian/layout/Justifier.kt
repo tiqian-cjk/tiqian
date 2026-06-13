@@ -40,7 +40,17 @@ import ink.duo3.tiqian.font.FontRole
  */
 class Justifier(
     private val cjkLatinSpaceEm: Float = 0.25f,
-    /** Per-word-space stretch cap (added on top of the natural space). */
+    /**
+     * Per-word-space stretch headroom added on top of the natural space.
+     *
+     * CLREQ 拉伸第①档 says the word space's FINAL width is at most 0.5em
+     * (半个汉字字宽). Modelling that as an absolute cap (`0.5em − natural`)
+     * is strictly more correct, but the divergence is ≤~0.08em and only for
+     * fonts whose space already exceeds 0.25em — and the deterministic stub
+     * shaper gives every codepoint 1em (space included), so an absolute cap
+     * would zero the stub's headroom and remove all WordSpace test coverage
+     * for no observable gain. Kept additive; see clreq-gap-audit「已知偏离」.
+     */
     private val wordSpaceStretchEm: Float = 0.25f,
 ) {
     fun justify(

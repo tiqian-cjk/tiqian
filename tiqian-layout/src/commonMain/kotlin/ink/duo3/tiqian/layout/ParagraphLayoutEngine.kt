@@ -1180,17 +1180,27 @@ class ExplainableStubParagraphLayoutEngine(
         val roles = map { cluster -> fontDecisions.firstOrNull { cluster.range.isInside(it.range) }?.role }
         val decisions = mutableListOf<AutoSpaceDecisionInfo>()
         val gap = policy.gapEm * fontSize
-        val mode = policy.cjkLatin
+        // CLREQ distinguishes 字母 from 数字: the mode is chosen by the
+        // BOUNDARY-adjacent western character (`cjkDigit` for a digit,
+        // `cjkLatin` for a letter). Default they are identical (both Insert).
+        fun modeForWestern(boundaryChar: Char?): AutoSpaceMode =
+            if (boundaryChar != null && boundaryChar.isDigit()) policy.cjkDigit else policy.cjkLatin
 
         val updated = mapIndexed { idx, cluster ->
             if (roles[idx] != FontRole.LatinText) return@mapIndexed cluster
-            if (mode == AutoSpaceMode.Disabled) return@mapIndexed cluster
             val prevRole = if (idx > 0) roles[idx - 1] else null
             val nextRole = if (idx < lastIndex) roles[idx + 1] else null
 
             if (cluster.isSpaceRun()) {
                 val cjkAdjacent = prevRole == FontRole.CjkText || nextRole == FontRole.CjkText
                 if (!cjkAdjacent) return@mapIndexed cluster
+                // The western token sits on the non-CJK side of the space; its
+                // boundary char (nearest the space) selects digit vs letter.
+                val westernChar = when {
+                    prevRole == FontRole.CjkText -> getOrNull(idx + 1)?.text?.firstOrNull()
+                    else -> getOrNull(idx - 1)?.text?.lastOrNull()
+                }
+                if (modeForWestern(westernChar) == AutoSpaceMode.Disabled) return@mapIndexed cluster
                 val reduction = cluster.advance - gap
                 if (reduction == 0f) return@mapIndexed cluster
                 decisions += AutoSpaceDecisionInfo(
@@ -1205,28 +1215,32 @@ class ExplainableStubParagraphLayoutEngine(
                 )
                 cluster.copy(advance = gap)
             } else {
-                if (mode != AutoSpaceMode.Insert) return@mapIndexed cluster
                 var added = 0f
-                if (prevRole == FontRole.CjkText) {
+                // Each side keys on the cluster's own boundary char.
+                if (prevRole == FontRole.CjkText &&
+                    modeForWestern(cluster.text.firstOrNull()) == AutoSpaceMode.Insert
+                ) {
                     added += gap
                     decisions += AutoSpaceDecisionInfo(
                         clusterRange = cluster.range,
                         side = "leading",
                         boundaryRole = FontRole.CjkText.name,
-                        mode = mode.name,
+                        mode = AutoSpaceMode.Insert.name,
                         charactersAffected = 0,
                         reductionPerChar = 0f,
                         totalReduction = -gap,
                         reason = "TextAutoSpaceInsert:ideograph-alpha:quarter-em",
                     )
                 }
-                if (nextRole == FontRole.CjkText) {
+                if (nextRole == FontRole.CjkText &&
+                    modeForWestern(cluster.text.lastOrNull()) == AutoSpaceMode.Insert
+                ) {
                     added += gap
                     decisions += AutoSpaceDecisionInfo(
                         clusterRange = cluster.range,
                         side = "trailing",
                         boundaryRole = FontRole.CjkText.name,
-                        mode = mode.name,
+                        mode = AutoSpaceMode.Insert.name,
                         charactersAffected = 0,
                         reductionPerChar = 0f,
                         totalReduction = -gap,
