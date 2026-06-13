@@ -4,10 +4,10 @@ maxWidth: 240.0
 == greedy ==
 size 240.0x83.2
 kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
-line[0] 0-12 natural=192.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+9.1,CjkInterChar@1+9.1,CjkInterChar@2+9.1,CjkInterChar@3+9.1,CjkInterChar@4+9.1,CjkInterChar@5+9.1,CjkInterChar@6+9.1
-line[1] 12-27 natural=240.0 adjusted=240.0 visual=240.0 repair=- candidates=- justify=-
-line[2] 27-42 natural=240.0 adjusted=224.0 visual=232.0 repair=- candidates=- justify=deficit=16.0->8.0 WordSpace@33+4.0,WordSpace@38+4.0
-line[3] 42-58 natural=256.0 adjusted=228.0 visual=228.0 repair=PushIn(ForbiddenAtLineStart shrink=16.0) candidates=PushIn+ justify=-
+line[0] 0-12 natural=184.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+9.1,CjkInterChar@1+9.1,CjkInterChar@2+9.1,CjkInterChar@3+9.1,CjkInterChar@4+9.1,CjkInterChar@5+9.1,CjkInterChar@6+9.1
+line[1] 12-28 natural=232.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=deficit=16.0->16.0 
+line[2] 28-43 natural=216.0 adjusted=208.0 visual=208.0 repair=- candidates=- justify=deficit=32.0->32.0 
+line[3] 43-58 natural=232.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=-
 cluster 0-1 '他' adv=25.1
 cluster 1-2 '引' adv=25.1
 cluster 2-3 '用' adv=25.1
@@ -19,19 +19,19 @@ cluster 7-8 '：' adv=16.0
 cluster 8-11 'The' adv=48.0
 cluster 11-12 ' ' adv=0.0
 cluster 12-17 'quick' adv=80.0
-cluster 17-18 ' ' adv=16.0
+cluster 17-18 ' ' adv=8.0
 cluster 18-23 'brown' adv=80.0
-cluster 23-24 ' ' adv=16.0
+cluster 23-24 ' ' adv=8.0
 cluster 24-27 'fox' adv=48.0
 cluster 27-28 ' ' adv=0.0
 cluster 28-33 'jumps' adv=80.0
-cluster 33-34 ' ' adv=20.0
+cluster 33-34 ' ' adv=8.0
 cluster 34-38 'over' adv=64.0
-cluster 38-39 ' ' adv=20.0
+cluster 38-39 ' ' adv=8.0
 cluster 39-42 'the' adv=48.0
 cluster 42-43 ' ' adv=0.0
 cluster 43-47 'lazy' adv=64.0
-cluster 47-48 ' ' adv=12.0
+cluster 47-48 ' ' adv=8.0
 cluster 48-51 'dog' adv=48.0
 cluster 51-52 '，' adv=16.0
 cluster 52-53 '然' adv=16.0
@@ -62,16 +62,17 @@ punct 57-58 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=
 geom 7-8 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
 geom 51-52 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
 geom 57-58 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
-edgetrim 11-12 side=trailing trim=16.0 reason=LineEdgeWordSpaceCollapse
-edgetrim 27-28 side=leading trim=16.0 reason=LineEdgeWordSpaceCollapse
-edgetrim 42-43 side=leading trim=16.0 reason=LineEdgeWordSpaceCollapse
+edgetrim 57-58 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+edgetrim 11-12 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
+edgetrim 27-28 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
+edgetrim 42-43 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
 == lookahead ==
 size 240.0x83.2
 kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
-line[0] 0-12 natural=192.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+9.1,CjkInterChar@1+9.1,CjkInterChar@2+9.1,CjkInterChar@3+9.1,CjkInterChar@4+9.1,CjkInterChar@5+9.1,CjkInterChar@6+9.1
-line[1] 12-27 natural=240.0 adjusted=240.0 visual=240.0 repair=- candidates=- justify=-
-line[2] 27-42 natural=240.0 adjusted=224.0 visual=232.0 repair=- candidates=- justify=deficit=16.0->8.0 WordSpace@33+4.0,WordSpace@38+4.0
-line[3] 42-58 natural=256.0 adjusted=228.0 visual=228.0 repair=PushIn(ForbiddenAtLineStart shrink=16.0) candidates=PushIn+ justify=-
+line[0] 0-11 natural=176.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+9.1,CjkInterChar@1+9.1,CjkInterChar@2+9.1,CjkInterChar@3+9.1,CjkInterChar@4+9.1,CjkInterChar@5+9.1,CjkInterChar@6+9.1
+line[1] 11-27 natural=232.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=deficit=16.0->16.0 
+line[2] 27-43 natural=224.0 adjusted=208.0 visual=208.0 repair=- candidates=- justify=deficit=32.0->32.0 
+line[3] 43-58 natural=232.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=-
 cluster 0-1 '他' adv=25.1
 cluster 1-2 '引' adv=25.1
 cluster 2-3 '用' adv=25.1
@@ -83,19 +84,19 @@ cluster 7-8 '：' adv=16.0
 cluster 8-11 'The' adv=48.0
 cluster 11-12 ' ' adv=0.0
 cluster 12-17 'quick' adv=80.0
-cluster 17-18 ' ' adv=16.0
+cluster 17-18 ' ' adv=8.0
 cluster 18-23 'brown' adv=80.0
-cluster 23-24 ' ' adv=16.0
+cluster 23-24 ' ' adv=8.0
 cluster 24-27 'fox' adv=48.0
 cluster 27-28 ' ' adv=0.0
 cluster 28-33 'jumps' adv=80.0
-cluster 33-34 ' ' adv=20.0
+cluster 33-34 ' ' adv=8.0
 cluster 34-38 'over' adv=64.0
-cluster 38-39 ' ' adv=20.0
+cluster 38-39 ' ' adv=8.0
 cluster 39-42 'the' adv=48.0
 cluster 42-43 ' ' adv=0.0
 cluster 43-47 'lazy' adv=64.0
-cluster 47-48 ' ' adv=12.0
+cluster 47-48 ' ' adv=8.0
 cluster 48-51 'dog' adv=48.0
 cluster 51-52 '，' adv=16.0
 cluster 52-53 '然' adv=16.0
@@ -126,6 +127,7 @@ punct 57-58 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=
 geom 7-8 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
 geom 51-52 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
 geom 57-58 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
-edgetrim 11-12 side=trailing trim=16.0 reason=LineEdgeWordSpaceCollapse
-edgetrim 27-28 side=leading trim=16.0 reason=LineEdgeWordSpaceCollapse
-edgetrim 42-43 side=leading trim=16.0 reason=LineEdgeWordSpaceCollapse
+edgetrim 57-58 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+edgetrim 11-12 side=leading trim=8.0 reason=LineEdgeWordSpaceCollapse
+edgetrim 42-43 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
+edgetrim 27-28 side=leading trim=8.0 reason=LineEdgeWordSpaceCollapse

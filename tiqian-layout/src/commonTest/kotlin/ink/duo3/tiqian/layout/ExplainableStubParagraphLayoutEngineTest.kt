@@ -291,7 +291,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun autoSpaceReplacesTypedSpaceAtCjkLatinBoundary() {
         // " CJK " becomes one Latin cluster (5 chars * 16 = 80px nominal).
         // At maxWidth large enough, default AutoSpacePolicy.Replace shrinks
-        // each boundary space from 1em (16) to 0.25em (4), saving 24px total.
+        // each boundary space from 二分空 0.5em (8) to 0.25em (4).
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
@@ -301,14 +301,14 @@ class ExplainableStubParagraphLayoutEngineTest {
         )
 
         // LatinWordSegmentation: [ ][CJK][ ] — each CJK-adjacent space
-        // cluster IS the gap and normalises from 1em to 0.25em.
+        // cluster IS the gap and normalises from 二分空 0.5em to 0.25em.
         val spaces = result.clusters.filter { it.text == " " }
         assertEquals(2, spaces.size)
         assertTrue(spaces.all { it.advance == 4f })
         assertEquals(2, result.debug.autoSpaceDecisions.size)
         assertTrue(
             result.debug.autoSpaceDecisions.all {
-                it.mode == "Replace" && it.side == "gap" && it.totalReduction == 12f
+                it.mode == "Replace" && it.side == "gap" && it.totalReduction == 4f
             },
         )
     }
@@ -317,7 +317,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun autoSpaceDoesNotShrinkSpacesBetweenLatinWords() {
         // "Hello world" — space between two Latin words, no CJK boundary.
         // AutoSpace.Replace only applies at CJK boundaries; word-internal
-        // spaces stay at their nominal 1em.
+        // spaces stay at their nominal 二分空 0.5em.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
@@ -331,12 +331,12 @@ class ExplainableStubParagraphLayoutEngineTest {
         // by justification.
         assertEquals(3, result.clusters.size)
         val wordSpace = result.clusters.single { it.text == " " }
-        assertEquals(16f, wordSpace.advance)
+        assertEquals(8f, wordSpace.advance)
         assertEquals(0, result.debug.autoSpaceDecisions.size)
     }
 
     @Test
-    fun autoSpaceDisabledKeepsTypedSpacesAtOneEm() {
+    fun autoSpaceDisabledKeepsTypedSpacesAtHalfEm() {
         val engine = ExplainableStubParagraphLayoutEngine(
             clreqProfileResolver = ClreqProfileResolver {
                 ClreqProfile.MainlandHorizontal.copy(
@@ -353,10 +353,10 @@ class ExplainableStubParagraphLayoutEngineTest {
             ),
         )
 
-        // Disabled: space clusters keep their nominal 1em.
+        // Disabled: space clusters keep their nominal 二分空 0.5em.
         val spaces = result.clusters.filter { it.text == " " }
         assertEquals(2, spaces.size)
-        assertTrue(spaces.all { it.advance == 16f })
+        assertTrue(spaces.all { it.advance == 8f })
         assertEquals(0, result.debug.autoSpaceDecisions.size)
     }
 
@@ -1181,13 +1181,12 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
-    fun wordSpacesStretchFirstUnderJustification() {
-        // "AB CD EF中文中文中" — two word spaces (Latin|space|Latin) plus a
-        // mid-line EF↔中 sino-western boundary. CLREQ expansion order:
-        // word spaces stretch FIRST (simultaneously, equally), then the
-        // sino-western gap, hanzi spacing untouched.
-        // Stub: AB=32 sp=16 CD=32 sp=16 EF=32+insert(4)=36 中=16 → line0 =
-        // AB·CD·EF中 (148); 文 → 164 > 160 → deficit 12.
+    fun halfEmWordSpacesDoNotStretchUnderJustification() {
+        // A 二分空 (0.5em) word space is already at CLREQ's word-space max
+        // (≤0.5em final), so it does NOT stretch — the deficit fills via the
+        // sino-western gap (CjkLatinSpace) and even CjkInterChar instead.
+        // (A finer proportional space from a real font WOULD stretch; the
+        // deterministic stub models U+0020 as 二分空.)
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 content = TiqianTextContent("AB CD EF中文中文中"),
@@ -1200,16 +1199,13 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         assertTrue(result.lines.size >= 2)
         val decision = result.debug.justificationDecisions.first()
-        assertEquals(12f, decision.deficitBefore)
         assertEquals(0f, decision.deficitAfter)
-        // Word spaces saturate first (+4 each, equal), the sino-western gap
-        // takes the remaining 4; no CjkInterChar needed.
-        val wordAllocs = decision.allocations.filter { it.kind == "WordSpace" }
-        assertEquals(2, wordAllocs.size)
-        assertTrue(wordAllocs.all { it.delta == 4f })
-        val latinGapAlloc = decision.allocations.single { it.kind == "CjkLatinSpace" }
-        assertEquals(4f, latinGapAlloc.delta)
-        assertTrue(decision.allocations.none { it.kind == "CjkInterChar" })
+        // The 二分空 word spaces are at the cap → no WordSpace allocation.
+        assertTrue(
+            decision.allocations.none { it.kind == "WordSpace" },
+            "二分空 word spaces must not stretch: ${decision.allocations}",
+        )
+        assertTrue(decision.allocations.isNotEmpty())
         assertEquals(160f, result.lines.first().visualWidth)
     }
 

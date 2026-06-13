@@ -41,17 +41,12 @@ import ink.duo3.tiqian.font.FontRole
 class Justifier(
     private val cjkLatinSpaceEm: Float = 0.25f,
     /**
-     * Per-word-space stretch headroom added on top of the natural space.
-     *
-     * CLREQ 拉伸第①档 says the word space's FINAL width is at most 0.5em
-     * (半个汉字字宽). Modelling that as an absolute cap (`0.5em − natural`)
-     * is strictly more correct, but the divergence is ≤~0.08em and only for
-     * fonts whose space already exceeds 0.25em — and the deterministic stub
-     * shaper gives every codepoint 1em (space included), so an absolute cap
-     * would zero the stub's headroom and remove all WordSpace test coverage
-     * for no observable gain. Kept additive; see clreq-gap-audit「已知偏离」.
+     * CLREQ 拉伸第①档：「每个西文词距最大可以拉伸到半个汉字字宽」——the
+     * word space's FINAL width is capped at this (absolute). Headroom is
+     * `cap − naturalSpaceWidth`, so a 二分空 (0.5em) is already at the cap
+     * and does not stretch (a finer proportional space would).
      */
-    private val wordSpaceStretchEm: Float = 0.25f,
+    private val wordSpaceMaxEm: Float = 0.5f,
 ) {
     fun justify(
         adjustedClusters: List<Cluster>,
@@ -103,13 +98,18 @@ class Justifier(
         val wordSpaceOpps = buildList {
             for (idx in lineClusterRange) {
                 if (!adjustedClusters[idx].isWordSpaceBetweenLatin(idx, adjustedClusters, clusterRoles)) continue
-                if (adjustedClusters[idx].advance <= 0f) continue
+                val naturalWidth = adjustedClusters[idx].advance
+                if (naturalWidth <= 0f) continue
+                // Headroom to the absolute cap (CLREQ ≤ 0.5em final width);
+                // a 二分空 already at the cap gets none.
+                val headroom = (wordSpaceMaxEm * fontSize - naturalWidth).coerceAtLeast(0f)
+                if (headroom <= 0f) continue
                 add(
                     JustificationOpportunity(
                         targetClusterIndex = idx,
                         kind = GlueKind.WordSpace,
                         priority = 0,
-                        capacity = wordSpaceStretchEm * fontSize,
+                        capacity = headroom,
                     ),
                 )
             }

@@ -83,6 +83,11 @@ class ExplainableStubTextShaper : TextShaper {
     private fun String.nominalAdvanceEm(displayText: String): Float =
         when {
             this == "⸺" || displayText == "⸺" -> 2f
+            // U+0020 in a Simplified-Chinese grid is 二分空 (half-em), not a
+            // full-width blank. The deterministic stub models each space as
+            // 0.5em so word spaces and sino-western gaps sit at realistic
+            // sub-/at-em widths instead of an artificial 1em.
+            isNotEmpty() && all { it == ' ' } -> 0.5f * length
             else -> maxOf(codePointCount(), displayText.codePointCount()).toFloat()
         }
 
