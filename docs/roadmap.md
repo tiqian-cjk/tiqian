@@ -13,7 +13,7 @@
 ## 当前位置
 
 ```text
-Last completed: Slice 3 表收口（最后一条 wip→done）；第一阶段 Slice 0–18 全 done
+Last completed: 第一阶段整体 review + 修复（行尾禁则 ADR 0026、渲染器合并、文档漂移）；Slice 0–18 全 done
 Up next:        第二阶段方向待定：竖排预研 / Android 真渲染（均见「不在第一阶段做的」）；零散 profile 项：GB 固定半宽标点、连续三标点禁则
 ```
 

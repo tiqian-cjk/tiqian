@@ -34,7 +34,10 @@
   级别」不处理 / 基本处理 / GB 法 / 严格处理——`KinsokuLevel` 命名对齐
   原文，默认基本处理（CLREQ「最推荐」，= 原有行为），逐档收紧分隔号行尾、
   破折号省略号行首；CLREQ 明示「行首行尾禁则规定属于排版风格……可以选择
-  或者自定义」，故落为 `ClreqProfile.kinsokuLevel` 开关。
+  或者自定义」，故落为 `ClreqProfile.kinsokuMode`（`Fixed` 固定一档 /
+  `MeasureAdaptive` 按行长自适应，默认后者，ADR 0025）。行首与**行尾**
+  禁则均生效——行尾违禁标点（开括号；GB·严格的分隔号）用断点回退处理
+  （`CarryNext`，ADR 0026）。
 
 ## 缺口（按影响排序）
 
@@ -98,11 +101,12 @@ CLREQ 挤压顺序：①行末标点固定半宽 →②西文词距 →1/4em →
 
 实现时的细则已齐：限一个、顿逗句优先、简体可扩大范围。
 
-已实现：`AdjustmentStylePolicy.hangingPunctuation` 默认 `Disabled` /
-`PauseStops`（顿逗句）；`LineEndHangingPunctuation` 在 kinsoku 链中排
-PushIn 之后、CarryPrevious 之前；悬挂标点排除出 measure-fill（内容满排
-版心、标点出版心），行尾只挂一个；窄行宽（手机正文）下避免 Carry 整字
-的大幅字距重摊。简体扩大范围、连续标点悬挂留作后续。
+已实现：悬挂落在 `ClreqProfile.kinsokuMode`（`Fixed` 的 `hanging` 或
+`MeasureAdaptive` 的 <14 字自动开，ADR 0025）；`LineEndHangingPunctuation`
+在 kinsoku 链中排 PushIn 之后、CarryPrevious 之前；悬挂标点排除出
+measure-fill（内容满排版心、标点出版心），行尾只挂一个；窄行宽（手机
+正文）下避免 Carry 整字的大幅字距重摊。简体扩大范围、连续标点悬挂
+留作后续。
 
 ### 7. 行间线：专名号与书名号甲式（波浪线）——已解决（Slice 16，ADR 0024）
 
