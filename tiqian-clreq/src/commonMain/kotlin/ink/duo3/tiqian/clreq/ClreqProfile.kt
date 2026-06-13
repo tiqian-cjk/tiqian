@@ -23,6 +23,8 @@ data class ClreqProfile(
      * ——按行长（字数）自适应；[KinsokuMode.Fixed] 固定一档。
      */
     val kinsokuMode: KinsokuMode = KinsokuMode.MeasureAdaptive(),
+    /** 标点宽度风格（全身式 / 开明式；GB 固定半宽连接号等）. */
+    val punctuationWidth: PunctuationWidthPolicy = PunctuationWidthPolicy(),
 ) {
     companion object {
         // CoalesceRepeatablePunctuation: codepoints that, when written as consecutive
@@ -215,6 +217,27 @@ enum class KinsokuLevel {
     Strict,
 }
 
+/**
+ * 标点宽度风格——标点的默认占宽，落到加法模型上即「字面 + 空隙」中空隙
+ * 是否默认归零（半字、不可调）。
+ *
+ * - [interior] 全身式（默认）vs 开明式：开明式下**句中点号**（逗号、顿号、
+ *   分号、冒号）与**夹注/括号/引号**占半字，**句末点号**（句号、问号、
+ *   感叹号）仍占一字。CLREQ issue #572：「句中点号、夹注号半字，句末点号
+ *   （除行末外）一字」。
+ * - [gbFixedSeparators] GB 式固定半宽：连接号、间隔号、分隔号固定半字、
+ *   不可调整（CLREQ「不可调整的标点……固定半个字宽」）。
+ */
+data class PunctuationWidthPolicy(
+    val interior: InteriorPunctuationStyle = InteriorPunctuationStyle.FullWidth,
+    val gbFixedSeparators: Boolean = false,
+)
+
+enum class InteriorPunctuationStyle {
+    FullWidth,
+    Kaiming,
+}
+
 /** Resolved kinsoku level + hanging style for a given measure. */
 data class ResolvedKinsoku(
     val level: KinsokuLevel,
@@ -361,6 +384,34 @@ object ClreqPunctuationPolicies {
             '—', '⸺' -> PunctuationClass.Dash
             else -> PunctuationClass.Other
         }
+
+    /** 句末点号（句号、问号、感叹号）——开明式下仍占一字. */
+    private val SentenceEndStops = setOf('。', '！', '？', '．')
+
+    /**
+     * Whether [char] is forced to a fixed half-width (body only, no
+     * adjustable glue) by the punctuation-width [policy]. Drives the atom
+     * builder's advance override.
+     */
+    fun forcedHalfWidth(char: Char, policy: PunctuationWidthPolicy): Boolean {
+        val cls = classify(char)
+        if (policy.gbFixedSeparators &&
+            cls in setOf(
+                PunctuationClass.Connector,
+                PunctuationClass.MiddleDot,
+                PunctuationClass.Interpunct,
+                PunctuationClass.Solidus,
+            )
+        ) {
+            return true
+        }
+        if (policy.interior == InteriorPunctuationStyle.Kaiming) {
+            // 句中点号(，、；：) + 夹注/括号/引号 半字；句末点号(。！？) 全字.
+            if (cls == PunctuationClass.Opening || cls == PunctuationClass.Closing) return true
+            if (cls == PunctuationClass.PauseOrStop && char !in SentenceEndStops) return true
+        }
+        return false
+    }
 
     fun policyFor(char: Char): PunctuationPolicy {
         val punctuationClass = classify(char)

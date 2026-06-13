@@ -1446,6 +1446,68 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertTrue(digitGap.isEmpty(), "中↔digit must NOT gap when cjkDigit=Disabled")
     }
 
+    private fun advanceOfMidLinePunct(
+        text: String,
+        punct: String,
+        width: ink.duo3.tiqian.clreq.PunctuationWidthPolicy,
+    ): Float {
+        val result = ExplainableStubParagraphLayoutEngine(
+            clreqProfileResolver = ClreqProfileResolver {
+                ClreqProfile.MainlandHorizontal.copy(punctuationWidth = width)
+            },
+        ).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                content = TiqianTextContent(text),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+        return result.clusters.first { it.text == punct }.advance
+    }
+
+    @Test
+    fun kaimingStyleHalvesInteriorPunctuationButNotSentenceEnd() {
+        val full = ink.duo3.tiqian.clreq.PunctuationWidthPolicy()
+        val kaiming = ink.duo3.tiqian.clreq.PunctuationWidthPolicy(
+            interior = ink.duo3.tiqian.clreq.InteriorPunctuationStyle.Kaiming,
+        )
+        // 句中点号 逗号：全身式 1em → 开明式半字 0.5em.
+        assertEquals(16f, advanceOfMidLinePunct("中，中文", "，", full))
+        assertEquals(8f, advanceOfMidLinePunct("中，中文", "，", kaiming))
+        // 夹注/括号：开明式半字.
+        assertEquals(8f, advanceOfMidLinePunct("中（中）文", "（", kaiming))
+        // 句末点号 句号：开明式仍占一字（行中）.
+        assertEquals(16f, advanceOfMidLinePunct("中。中文", "。", kaiming))
+    }
+
+    @Test
+    fun gbFixedSeparatorsAreHalfWidthAndUnadjustable() {
+        val default = ink.duo3.tiqian.clreq.PunctuationWidthPolicy()
+        val gb = ink.duo3.tiqian.clreq.PunctuationWidthPolicy(gbFixedSeparators = true)
+        // 间隔号 ·：默认 1em → GB 固定半宽 0.5em.
+        assertEquals(16f, advanceOfMidLinePunct("中·中文", "·", default))
+        assertEquals(8f, advanceOfMidLinePunct("中·中文", "·", gb))
+
+        // Fixed = unadjustable: no shrink opportunity for the 间隔号 under GB,
+        // so a tight line cannot compress it (verified via no PushIn on it).
+        val result = ExplainableStubParagraphLayoutEngine(
+            clreqProfileResolver = ClreqProfileResolver {
+                ClreqProfile.MainlandHorizontal.copy(
+                    punctuationWidth = ink.duo3.tiqian.clreq.PunctuationWidthPolicy(gbFixedSeparators = true),
+                )
+            },
+        ).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                content = TiqianTextContent("中文·中文"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+        val mid = result.debug.geometryDecisions.single { it.sourceText == "·" }
+        assertEquals(0f, mid.trailingGlueNatural)
+        assertEquals(0f, mid.leadingGlueNatural)
+    }
+
     @Test
     fun lineEndKinsokuMovesDanglingOpenerToNextLine() {
         // CLREQ 行尾禁则 (Basic): 开括号不得居行尾. 中中中（中中）中 @maxWidth

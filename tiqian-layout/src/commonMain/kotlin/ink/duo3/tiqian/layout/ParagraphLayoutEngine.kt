@@ -184,6 +184,7 @@ class ExplainableStubParagraphLayoutEngine(
                 builder = punctuationAtomBuilder,
                 shapedGlyphs = shapedGlyphsByClusterRange[cluster.range].orEmpty(),
                 gluePlacement = clreqProfile.gluePlacement,
+                widthPolicy = clreqProfile.punctuationWidth,
             )
         }
         val spacingPlan = punctuationSpacingCompressor.compress(punctuationAtoms, em = fontSize)
@@ -1010,6 +1011,7 @@ class ExplainableStubParagraphLayoutEngine(
         builder: PunctuationAtomBuilder,
         shapedGlyphs: List<Glyph>,
         gluePlacement: PunctuationGluePlacement,
+        widthPolicy: ink.duo3.tiqian.clreq.PunctuationWidthPolicy,
     ): List<PunctuationAtom> {
         if (displayText.isEmpty()) return emptyList()
 
@@ -1020,6 +1022,7 @@ class ExplainableStubParagraphLayoutEngine(
                 em = em,
                 inkInput = punctuationInkInputFor(index, shapedGlyphs),
                 gluePlacement = gluePlacement,
+                widthPolicy = widthPolicy,
             )
         }
     }

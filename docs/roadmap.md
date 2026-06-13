@@ -13,8 +13,8 @@
 ## 当前位置
 
 ```text
-Last completed: 第一阶段整体 review + 修复（行尾禁则 ADR 0026、渲染器合并、文档漂移）；Slice 0–18 全 done
-Up next:        第二阶段方向待定：竖排预研 / Android 真渲染（均见「不在第一阶段做的」）；零散 profile 项：GB 固定半宽标点、连续三标点禁则
+Last completed: 标点宽度风格（GB 固定半宽 + 开明式，ADR 0027）
+Up next:        第二阶段方向待定：竖排预研 / Android 真渲染（均见「不在第一阶段做的」）；零散 profile 项：连续三标点禁则、连接号按字细分宽度
 ```
 
 ## Slice / Milestone 对照表

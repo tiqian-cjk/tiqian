@@ -186,6 +186,8 @@ class PunctuationSpacingCompressor {
 
 class PunctuationAtomBuilder(
     private val gluePlacement: PunctuationGluePlacement = PunctuationGluePlacement.MainlandSimplified,
+    private val widthPolicy: ink.duo3.tiqian.clreq.PunctuationWidthPolicy =
+        ink.duo3.tiqian.clreq.PunctuationWidthPolicy(),
 ) {
     fun build(text: String, index: Int, em: Float): PunctuationAtom? {
         val char = text.getOrNull(index) ?: return null
@@ -226,13 +228,17 @@ class PunctuationAtomBuilder(
         em: Float,
         inkInput: PunctuationInkInput? = null,
         gluePlacement: PunctuationGluePlacement = this.gluePlacement,
+        widthPolicy: ink.duo3.tiqian.clreq.PunctuationWidthPolicy = this.widthPolicy,
     ): PunctuationAtom? {
         val policy = ClreqPunctuationPolicies.policyFor(char)
         if (policy.punctuationClass == PunctuationClass.Other) return null
 
         val policyAdvance = policy.defaultAdvanceEm * em
         val shapedAdvance = inkInput?.advance?.takeIf { it > 0f }
-        val advance = shapedAdvance ?: policyAdvance
+        // 标点宽度风格（开明式 / GB 固定半宽）：把该类标点的占宽强制为半字
+        // （= body，glue 归零 → 半宽且不可调），覆盖 shaped/policy 占宽。
+        val forcedHalf = ClreqPunctuationPolicies.forcedHalfWidth(char, widthPolicy)
+        val advance = if (forcedHalf) 0.5f * em else (shapedAdvance ?: policyAdvance)
         // FontHaltDerivedBody: when the font provides an alternate half-width
         // advance via `halt`, that is the designer-defined solid body — it
         // replaces the policy 0.5em. Glue direction stays profile-derived
