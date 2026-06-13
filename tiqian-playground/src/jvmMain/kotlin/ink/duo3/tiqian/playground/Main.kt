@@ -417,6 +417,14 @@ private fun printEngineDump(label: String, result: LayoutResult) {
     println(
         "  [$label] size=${result.size.width.oneDecimal()}x${result.size.height.oneDecimal()} lines=${result.lines.size} visual-sum=${totalVisual.oneDecimal()} repairs=$repairs justifications=$justifications",
     )
+    result.debug.lineLengthGridDecision?.let { g ->
+        if (g.enabled && g.slack > 0f) {
+            println(
+                "    grid container=${g.containerWidth.oneDecimal()} measure=${g.measure.oneDecimal()}(${g.cells}字) " +
+                    "slack=${g.slack.oneDecimal()} body=${g.bodyAlignment}@${g.bodyOffset.oneDecimal()}",
+            )
+        }
+    }
     result.lines.forEachIndexed { lineIndex, line ->
         val repair = result.debug.lineDecisions.getOrNull(lineIndex)?.repair
         val justify = result.debug.justificationDecisions.firstOrNull { it.lineRange == line.range }

@@ -2,12 +2,13 @@ fixture: ellipsis-and-dash
 text: 中文……English——中文。
 maxWidth: 220.0
 == greedy ==
-size 220.0x41.6
-kinsoku measure=13.8字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:13字→Basic+Hang
-line[0] 0-13 natural=208.0 adjusted=208.0 visual=220.0 repair=- candidates=- justify=deficit=12.0->0.0 CjkInterChar@0+6.0,CjkInterChar@1+6.0
+size 208.0x41.6
+grid container=220.0 measure=208.0(13字) slack=12.0 body=Start@0.0
+kinsoku measure=13.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:13字→Basic+Hang
+line[0] 0-13 natural=208.0 adjusted=208.0 visual=208.0 repair=- candidates=- justify=-
 line[1] 13-16 natural=48.0 adjusted=40.0 visual=40.0 repair=- candidates=- justify=-
-cluster 0-1 '中' adv=22.0
-cluster 1-2 '文' adv=22.0
+cluster 0-1 '中' adv=16.0
+cluster 1-2 '文' adv=16.0
 cluster 2-4 '⋯⋯' adv=32.0
 cluster 4-11 'English' adv=112.0
 cluster 11-13 '⸺' adv=32.0
@@ -31,12 +32,13 @@ geom 11-13 body=32.0 lead=0.0/0.0 trail=0.0/0.0 justify=0.0 resolved=32.0
 geom 15-16 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 15-16 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 == lookahead ==
-size 220.0x41.6
-kinsoku measure=13.8字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:13字→Basic+Hang
-line[0] 0-13 natural=208.0 adjusted=208.0 visual=220.0 repair=- candidates=- justify=deficit=12.0->0.0 CjkInterChar@0+6.0,CjkInterChar@1+6.0
+size 208.0x41.6
+grid container=220.0 measure=208.0(13字) slack=12.0 body=Start@0.0
+kinsoku measure=13.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:13字→Basic+Hang
+line[0] 0-13 natural=208.0 adjusted=208.0 visual=208.0 repair=- candidates=- justify=-
 line[1] 13-16 natural=48.0 adjusted=40.0 visual=40.0 repair=- candidates=- justify=-
-cluster 0-1 '中' adv=22.0
-cluster 1-2 '文' adv=22.0
+cluster 0-1 '中' adv=16.0
+cluster 1-2 '文' adv=16.0
 cluster 2-4 '⋯⋯' adv=32.0
 cluster 4-11 'English' adv=112.0
 cluster 11-13 '⸺' adv=32.0

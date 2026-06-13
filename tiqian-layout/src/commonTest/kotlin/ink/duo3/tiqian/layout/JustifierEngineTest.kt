@@ -2,6 +2,7 @@ package ink.duo3.tiqian.layout
 
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LayoutInput
+import ink.duo3.tiqian.core.LineLengthGrid
 import ink.duo3.tiqian.core.ParagraphStyle
 import ink.duo3.tiqian.core.TiqianTextContent
 import kotlin.test.Test
@@ -51,6 +52,9 @@ class JustifierEngineTest {
                     paragraphStyle = ParagraphStyle(
                         firstLineIndentEm = 0f,
                         lastLineAlignment = alignment,
+                        // Pin the exact measure (100 is not a 字-multiple); this
+                        // test is about last-line alignment, not the grid.
+                        lineLengthGrid = LineLengthGrid(enabled = false),
                     ),
                 ),
             )
@@ -189,7 +193,12 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中文中文中文中文中文中文"),
                 constraints = LayoutConstraints(maxWidth = 100f),
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                // Pin the exact measure (100 ∤ 16); this exercises the justify
+                // chain at a chosen deficit, not the grid.
+                paragraphStyle = ParagraphStyle(
+                    firstLineIndentEm = 0f,
+                    lineLengthGrid = LineLengthGrid(enabled = false),
+                ),
             ),
         )
         assertEquals(2, result.lines.size)
@@ -216,7 +225,10 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中（中文）文中文中文中"),
                 constraints = LayoutConstraints(maxWidth = 100f),
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                paragraphStyle = ParagraphStyle(
+                    firstLineIndentEm = 0f,
+                    lineLengthGrid = LineLengthGrid(enabled = false),
+                ),
             ),
         )
         assertEquals(2, result.lines.size)
@@ -241,7 +253,10 @@ class JustifierEngineTest {
             LayoutInput(
                 content = TiqianTextContent("中文（Hello）中文中文"),
                 constraints = LayoutConstraints(maxWidth = 170f),
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                paragraphStyle = ParagraphStyle(
+                    firstLineIndentEm = 0f,
+                    lineLengthGrid = LineLengthGrid(enabled = false),
+                ),
             ),
         )
         assertEquals(2, result.lines.size)

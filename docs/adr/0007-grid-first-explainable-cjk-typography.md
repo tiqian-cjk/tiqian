@@ -88,6 +88,9 @@ Hang 继续遵守 ADR 0006：默认关闭，只能由 profile 显式启用。
 
 ## Follow-up
 
+- 行长字号整数倍量化已落地，见 ADR 0028（`LineLengthGridQuantization` /
+  `GridBodyAlignment`）——grid-first 的「行长」部分。剩下的「行内内容凑整」
+  （混排西文/数字用弹性空白凑到整字位）仍属远期，见 clreq-gap-audit「8 杂项」。
 - 引入 line grid / em-count fixture，覆盖 12em、15em、22em 等典型行宽。
 - 扩展 `LineDecisionInfo`，记录 target width、natural width、candidate repairs、chosen repair、available shrink / stretch。
 - Slice 4b 实现 PushIn 时，把 `PunctuationGlue` capacity 作为前置条件。

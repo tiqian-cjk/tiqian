@@ -7,6 +7,7 @@ import ink.duo3.tiqian.core.Cluster
 import ink.duo3.tiqian.core.Glyph
 import ink.duo3.tiqian.core.GlyphRun
 import ink.duo3.tiqian.core.LayoutConstraints
+import ink.duo3.tiqian.core.LineLengthGrid
 import ink.duo3.tiqian.core.LayoutInput
 import ink.duo3.tiqian.core.ParagraphStyle
 import ink.duo3.tiqian.core.Rect
@@ -784,7 +785,12 @@ class ExplainableStubParagraphLayoutEngineTest {
         // 。 trailing=8, PushIn uses 4, edge trim uses 4 → 。 advance=8.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                // Pin the exact measure (60 ∤ 16); this test is about PushIn +
+                // edge-trim geometry, not the grid.
+                paragraphStyle = ParagraphStyle(
+                    firstLineIndentEm = 0f,
+                    lineLengthGrid = LineLengthGrid(enabled = false),
+                ),
                 content = TiqianTextContent("中文中。"),
                 constraints = LayoutConstraints(maxWidth = 60f),
             ),
@@ -1087,7 +1093,12 @@ class ExplainableStubParagraphLayoutEngineTest {
         // segment each.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                // Pin the exact measure (72 ∤ 16); this test is about the
+                // mourning-span unbroken break, not the grid.
+                paragraphStyle = ParagraphStyle(
+                    firstLineIndentEm = 0f,
+                    lineLengthGrid = LineLengthGrid(enabled = false),
+                ),
                 content = TiqianTextContent("悼念：王小明同志、张大同同志。"),
                 constraints = LayoutConstraints(maxWidth = 72f),
                 decorations = listOf(
@@ -1466,6 +1477,58 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun lineLengthGridFloorsMeasureToWholeCharsAndOffsetsBody() {
+        // 8 hanzi (128px) at maxWidth=104 (6.5 字, fontSize 16). Grid floors
+        // the measure to 6 字 = 96; greedy then breaks 6 + 2.
+        fun layoutWith(grid: LineLengthGrid) =
+            ExplainableStubParagraphLayoutEngine().layout(
+                LayoutInput(
+                    paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f, lineLengthGrid = grid),
+                    content = TiqianTextContent("中文中文中文中文"),
+                    constraints = LayoutConstraints(maxWidth = 104f),
+                ),
+            )
+
+        // Default: enabled, body at start (follows default Start last-line).
+        val start = layoutWith(LineLengthGrid())
+        val g = start.debug.lineLengthGridDecision!!
+        assertTrue(g.enabled)
+        assertEquals(6, g.cells)
+        assertEquals(96f, g.measure)
+        assertEquals(8f, g.slack)
+        assertEquals(0f, g.bodyOffset)
+        assertEquals(2, start.lines.size)
+        assertEquals(96f, start.lines[0].visualWidth) // justified to the floored measure
+        assertEquals(0f, start.lines[0].indent)
+
+        // bodyAlignment override (Center) shifts the WHOLE body by slack/2,
+        // independently of the (Start) last-line alignment.
+        val centered = layoutWith(LineLengthGrid(bodyAlignment = ink.duo3.tiqian.core.LastLineAlignment.Center))
+        assertEquals(4f, centered.debug.lineLengthGridDecision!!.bodyOffset)
+        assertEquals(4f, centered.lines[0].indent)
+        assertEquals(4f, centered.lines[1].indent) // last line, Start within body → only the body offset
+    }
+
+    @Test
+    fun lineLengthGridCanBeBypassedForExactWidths() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(
+                    firstLineIndentEm = 0f,
+                    lineLengthGrid = LineLengthGrid(enabled = false),
+                ),
+                content = TiqianTextContent("中文中文中文中文"),
+                constraints = LayoutConstraints(maxWidth = 104f),
+            ),
+        )
+        val g = result.debug.lineLengthGridDecision!!
+        assertEquals(false, g.enabled)
+        assertEquals(104f, g.measure) // raw container, no flooring
+        assertEquals(0f, g.bodyOffset)
+        assertEquals(104f, result.lines[0].visualWidth) // justified to the full 104
+    }
+
+    @Test
     fun shortHyphenConnectorIsHalfWidthWavyTildeFullWidth() {
         // CLREQ 5.1.6: 短横线（–, U+2013）占半个字位置；浪纹线（～, U+FF5E）
         // 占一字。Both classify as Connector but differ in width.
@@ -1743,7 +1806,10 @@ class ExplainableStubParagraphLayoutEngineTest {
         // PushIn 拒绝，CarryPrevious 兜底。（floor 为 0 的旧行为会接受。）
         val result = fixedBasicEngine().layout(
             LayoutInput(
-                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                paragraphStyle = ParagraphStyle(
+                    firstLineIndentEm = 0f,
+                    lineLengthGrid = LineLengthGrid(enabled = false),
+                ),
                 content = TiqianTextContent("中文 AB 中。"),
                 constraints = LayoutConstraints(maxWidth = 88f),
             ),

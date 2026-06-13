@@ -102,6 +102,14 @@ class LayoutDumpGoldenTest {
     private fun LayoutResult.dump(label: String): String = buildString {
         appendLine("== $label ==")
         appendLine("size ${size.width.fmt()}x${size.height.fmt()}")
+        debug.lineLengthGridDecision?.let { g ->
+            if (g.enabled && g.slack > 0f) {
+                appendLine(
+                    "grid container=${g.containerWidth.fmt()} measure=${g.measure.fmt()}(${g.cells}字) " +
+                        "slack=${g.slack.fmt()} body=${g.bodyAlignment}@${g.bodyOffset.fmt()}",
+                )
+            }
+        }
         debug.kinsokuDecision?.let { k ->
             appendLine("kinsoku measure=${k.measureEm.fmt()}字 level=${k.level} hang=${k.hanging} reason=${k.reason}")
         }

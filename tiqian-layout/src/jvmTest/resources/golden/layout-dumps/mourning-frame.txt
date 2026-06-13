@@ -2,25 +2,26 @@ fixture: mourning-frame
 text: 悼念：王小明同志、张大同同志。
 maxWidth: 72.0
 == greedy ==
-size 72.0x144.0
-kinsoku measure=4.5字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:4字→Basic+Hang
-line[0] 0-3 natural=48.0 adjusted=40.0 visual=72.0 repair=- candidates=- justify=deficit=32.0->0.0 CjkInterChar@0+16.0,CjkInterChar@1+16.0
-line[1] 3-7 natural=64.0 adjusted=64.0 visual=72.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkInterChar@3+2.7,CjkInterChar@4+2.7,CjkInterChar@5+2.7
-line[2] 7-9 natural=32.0 adjusted=24.0 visual=72.0 repair=- candidates=- justify=deficit=48.0->0.0 CjkInterChar@7+48.0
-line[3] 9-13 natural=64.0 adjusted=64.0 visual=72.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkInterChar@9+2.7,CjkInterChar@10+2.7,CjkInterChar@11+2.7
+size 64.0x144.0
+grid container=72.0 measure=64.0(4字) slack=8.0 body=Start@0.0
+kinsoku measure=4.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:4字→Basic+Hang
+line[0] 0-3 natural=48.0 adjusted=40.0 visual=64.0 repair=- candidates=- justify=deficit=24.0->0.0 CjkInterChar@0+12.0,CjkInterChar@1+12.0
+line[1] 3-7 natural=64.0 adjusted=64.0 visual=64.0 repair=- candidates=- justify=-
+line[2] 7-9 natural=32.0 adjusted=24.0 visual=64.0 repair=- candidates=- justify=deficit=40.0->0.0 CjkInterChar@7+40.0
+line[3] 9-13 natural=64.0 adjusted=64.0 visual=64.0 repair=- candidates=- justify=-
 line[4] 13-15 natural=32.0 adjusted=24.0 visual=24.0 repair=- candidates=- justify=-
-cluster 0-1 '悼' adv=32.0
-cluster 1-2 '念' adv=32.0
+cluster 0-1 '悼' adv=28.0
+cluster 1-2 '念' adv=28.0
 cluster 2-3 '：' adv=8.0
-cluster 3-4 '王' adv=18.7
-cluster 4-5 '小' adv=18.7
-cluster 5-6 '明' adv=18.7
+cluster 3-4 '王' adv=16.0
+cluster 4-5 '小' adv=16.0
+cluster 5-6 '明' adv=16.0
 cluster 6-7 '同' adv=16.0
-cluster 7-8 '志' adv=64.0
+cluster 7-8 '志' adv=56.0
 cluster 8-9 '、' adv=8.0
-cluster 9-10 '张' adv=18.7
-cluster 10-11 '大' adv=18.7
-cluster 11-12 '同' adv=18.7
+cluster 9-10 '张' adv=16.0
+cluster 10-11 '大' adv=16.0
+cluster 11-12 '同' adv=16.0
 cluster 12-13 '同' adv=16.0
 cluster 13-14 '志' adv=16.0
 cluster 14-15 '。' adv=8.0
@@ -49,28 +50,29 @@ edgetrim 2-3 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 8-9 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 14-15 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 linespacing natural=16.0 requested=28.8 resolved=28.8 floor=8.0 sides=SingleSided applied=false reason=InterlinearMarkLineSpacingFloor
-decobox 3-6 kind=Mourning line=1 rect=0.0,29.1,53.3,45.1 open=-/- reason=MourningSpanKeptUnbroken
-decobox 9-12 kind=Mourning line=3 rect=0.0,86.7,53.3,102.7 open=-/- reason=MourningSpanKeptUnbroken
+decobox 3-6 kind=Mourning line=1 rect=0.0,29.1,48.0,45.1 open=-/- reason=MourningSpanKeptUnbroken
+decobox 9-12 kind=Mourning line=3 rect=0.0,86.7,48.0,102.7 open=-/- reason=MourningSpanKeptUnbroken
 == lookahead ==
-size 72.0x144.0
-kinsoku measure=4.5字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:4字→Basic+Hang
-line[0] 0-3 natural=48.0 adjusted=40.0 visual=72.0 repair=- candidates=- justify=deficit=32.0->0.0 CjkInterChar@0+16.0,CjkInterChar@1+16.0
-line[1] 3-7 natural=64.0 adjusted=64.0 visual=72.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkInterChar@3+2.7,CjkInterChar@4+2.7,CjkInterChar@5+2.7
-line[2] 7-9 natural=32.0 adjusted=24.0 visual=72.0 repair=- candidates=- justify=deficit=48.0->0.0 CjkInterChar@7+48.0
-line[3] 9-13 natural=64.0 adjusted=64.0 visual=72.0 repair=- candidates=- justify=deficit=8.0->0.0 CjkInterChar@9+2.7,CjkInterChar@10+2.7,CjkInterChar@11+2.7
+size 64.0x144.0
+grid container=72.0 measure=64.0(4字) slack=8.0 body=Start@0.0
+kinsoku measure=4.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:4字→Basic+Hang
+line[0] 0-3 natural=48.0 adjusted=40.0 visual=64.0 repair=- candidates=- justify=deficit=24.0->0.0 CjkInterChar@0+12.0,CjkInterChar@1+12.0
+line[1] 3-7 natural=64.0 adjusted=64.0 visual=64.0 repair=- candidates=- justify=-
+line[2] 7-9 natural=32.0 adjusted=24.0 visual=64.0 repair=- candidates=- justify=deficit=40.0->0.0 CjkInterChar@7+40.0
+line[3] 9-13 natural=64.0 adjusted=64.0 visual=64.0 repair=- candidates=- justify=-
 line[4] 13-15 natural=32.0 adjusted=24.0 visual=24.0 repair=- candidates=- justify=-
-cluster 0-1 '悼' adv=32.0
-cluster 1-2 '念' adv=32.0
+cluster 0-1 '悼' adv=28.0
+cluster 1-2 '念' adv=28.0
 cluster 2-3 '：' adv=8.0
-cluster 3-4 '王' adv=18.7
-cluster 4-5 '小' adv=18.7
-cluster 5-6 '明' adv=18.7
+cluster 3-4 '王' adv=16.0
+cluster 4-5 '小' adv=16.0
+cluster 5-6 '明' adv=16.0
 cluster 6-7 '同' adv=16.0
-cluster 7-8 '志' adv=64.0
+cluster 7-8 '志' adv=56.0
 cluster 8-9 '、' adv=8.0
-cluster 9-10 '张' adv=18.7
-cluster 10-11 '大' adv=18.7
-cluster 11-12 '同' adv=18.7
+cluster 9-10 '张' adv=16.0
+cluster 10-11 '大' adv=16.0
+cluster 11-12 '同' adv=16.0
 cluster 12-13 '同' adv=16.0
 cluster 13-14 '志' adv=16.0
 cluster 14-15 '。' adv=8.0
@@ -99,5 +101,5 @@ edgetrim 2-3 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 8-9 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 14-15 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 linespacing natural=16.0 requested=28.8 resolved=28.8 floor=8.0 sides=SingleSided applied=false reason=InterlinearMarkLineSpacingFloor
-decobox 3-6 kind=Mourning line=1 rect=0.0,29.1,53.3,45.1 open=-/- reason=MourningSpanKeptUnbroken
-decobox 9-12 kind=Mourning line=3 rect=0.0,86.7,53.3,102.7 open=-/- reason=MourningSpanKeptUnbroken
+decobox 3-6 kind=Mourning line=1 rect=0.0,29.1,48.0,45.1 open=-/- reason=MourningSpanKeptUnbroken
+decobox 9-12 kind=Mourning line=3 rect=0.0,86.7,48.0,102.7 open=-/- reason=MourningSpanKeptUnbroken

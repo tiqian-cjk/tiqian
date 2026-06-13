@@ -133,8 +133,13 @@ justify 延长、`AdjacentInterlinearLineShortening`（相邻侧各回缩 1/16em
   落为 `forcedHalfWidth` 对短横线无条件返回 true（grid 占位，覆盖 glyph
   advance）。
 - **省略号两个连用**「占四个汉字位置并须单独占一行」——`…………` 四字宽特例。
-- **纵横对齐（grid）**：西文前后用 0~1/2 em 弹性空白凑整字宽——ADR 0007 的
-  grid-first 哲学的完整形态，远期。
+- **行长字号整数倍**——已解决（ADR 0028）：grid-first 的行长部分。向下取整
+  maxWidth 到 N×fontSize 版心（`LineLengthGridQuantization`），余量按末行
+  对齐在容器内摆放正文（`GridBodyAlignment`），默认开、可旁路。纯汉字行落格
+  后 justify 余量归零。
+- **纵横对齐（grid）的行内凑整**：西文/数字前后用 0~1/2 em 弹性空白把混排
+  行内内容也凑到整字位——grid-first 的**行内内容**部分（行长部分已由
+  ADR 0028 解决），远期。
 - **三个以上标点连续**时禁则的放宽——**有意不做**（非缺口）。CLREQ 第六节
   注：遇连续三标点（如 `。』」`）可局部「不处理」行首行尾禁则以免字距过松，
   但原文明示「**应视为救济措施的个例，不作为推荐**」；另一 facet（纵横对齐

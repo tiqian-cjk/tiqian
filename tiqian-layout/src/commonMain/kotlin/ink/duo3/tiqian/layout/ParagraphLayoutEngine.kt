@@ -40,6 +40,8 @@ import ink.duo3.tiqian.core.Size
 import ink.duo3.tiqian.core.SpacingDecisionInfo
 import ink.duo3.tiqian.core.LastLineAlignment
 import ink.duo3.tiqian.core.KinsokuDecisionInfo
+import ink.duo3.tiqian.core.LineLengthGridDecisionInfo
+import kotlin.math.floor
 import ink.duo3.tiqian.core.LineSpacingDecisionInfo
 import ink.duo3.tiqian.core.PrintingSides
 import ink.duo3.tiqian.core.TextRange
@@ -335,12 +337,46 @@ class ExplainableStubParagraphLayoutEngine(
                 reason = "InterlinearMarkLineSpacingFloor",
             )
         }
+        // LineLengthGridQuantization (grid-first, ADR 0028): floor the
+        // container to an integer number of 字 (N×fontSize) so the body lands
+        // on the grid; the sub-字 leftover places the whole body within the
+        // container by bodyAlignment. Bypassable for known-exact widths.
+        val grid = input.paragraphStyle.lineLengthGrid
+        val containerWidth = input.constraints.maxWidth
+        val gridCells = floor(containerWidth / fontSize).toInt().coerceAtLeast(1)
+        val measure = if (grid.enabled) {
+            (gridCells * fontSize).coerceAtMost(containerWidth)
+        } else {
+            containerWidth
+        }
+        val gridSlack = containerWidth - measure
+        val gridBodyAlignment = grid.bodyAlignment ?: input.paragraphStyle.lastLineAlignment
+        val gridBodyOffset = if (!grid.enabled) {
+            0f
+        } else {
+            when (gridBodyAlignment) {
+                LastLineAlignment.Start -> 0f
+                LastLineAlignment.Center -> gridSlack / 2f
+                LastLineAlignment.End -> gridSlack
+            }
+        }
+        val lineLengthGridDecision = LineLengthGridDecisionInfo(
+            enabled = grid.enabled,
+            containerWidth = containerWidth,
+            fontSize = fontSize,
+            cells = if (grid.enabled) gridCells else (measure / fontSize).toInt(),
+            measure = measure,
+            slack = gridSlack,
+            bodyAlignment = gridBodyAlignment.name,
+            bodyOffset = gridBodyOffset,
+            reason = if (grid.enabled) "LineLengthGridQuantization" else "GridBypassed",
+        )
         // ParagraphFirstLineIndent (CLREQ 段首缩排): the first line's usable
         // measure shrinks by the indent; rendering shifts its start edge.
         val firstLineIndent = input.paragraphStyle.firstLineIndentEm.coerceAtLeast(0f) * fontSize
         // Resolve 禁则档 + 悬挂 from the kinsoku mode and the measure in 字
-        // (MeasureAdaptiveKinsoku default keys on maxWidth/fontSize).
-        val measureEm = input.constraints.maxWidth / fontSize
+        // (MeasureAdaptiveKinsoku default keys on measure/fontSize).
+        val measureEm = measure / fontSize
         val resolvedKinsoku = clreqProfile.kinsokuMode.resolve(measureEm)
         val kinsokuDecision = KinsokuDecisionInfo(
             measureEm = measureEm,
@@ -370,7 +406,7 @@ class ExplainableStubParagraphLayoutEngine(
             lineBreaker.breakLines(
                 naturalClusters = naturalClusters,
                 adjustedClusters = clusters,
-                maxWidth = input.constraints.maxWidth,
+                maxWidth = measure,
                 firstLineIndent = firstLineIndent,
                 shrinkOpportunities = shrinkOpportunities,
                 // MourningSpanKeptUnbroken: 示亡号 spans stay on one line
@@ -503,9 +539,9 @@ class ExplainableStubParagraphLayoutEngine(
                     clusterRoles = clusterRoles,
                     lineClusterRange = justifyRange,
                     maxWidth = if (lineCandidate.clusterRange.first == 0) {
-                        input.constraints.maxWidth - firstLineIndent
+                        measure - firstLineIndent
                     } else {
-                        input.constraints.maxWidth
+                        measure
                     },
                     fontSize = fontSize,
                     skip = false,
@@ -564,7 +600,7 @@ class ExplainableStubParagraphLayoutEngine(
             // measure — renderers and decoration geometry consume
             // LineBox.indent unchanged.
             val isLast = lineIndex == lineSolution.lines.lastIndex
-            val limit = input.constraints.maxWidth - baseIndent
+            val limit = measure - baseIndent
             val alignmentInset = if (!isLast) {
                 0f
             } else {
@@ -582,7 +618,9 @@ class ExplainableStubParagraphLayoutEngine(
                 naturalWidth = lineCandidate.naturalWidth,
                 adjustedWidth = adjustedWidth,
                 visualWidth = visualWidth,
-                indent = baseIndent + alignmentInset,
+                // GridBodyAlignment: the whole body shifts by the container
+                // slack offset; per-line indent (段首缩进 + 末行对齐) stacks on top.
+                indent = gridBodyOffset + baseIndent + alignmentInset,
                 debug = LineDebugInfo(
                     repair = lineCandidate.repair?.let { "${it::class.simpleName}:${it.reason}" },
                     notes = listOf(
@@ -738,6 +776,7 @@ class ExplainableStubParagraphLayoutEngine(
                 decorationSegments = decorationSegments,
                 lineSpacingDecision = lineSpacingDecision,
                 kinsokuDecision = kinsokuDecision,
+                lineLengthGridDecision = lineLengthGridDecision,
             ),
         )
     }

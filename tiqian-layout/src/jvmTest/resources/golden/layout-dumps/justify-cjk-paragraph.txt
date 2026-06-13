@@ -2,15 +2,16 @@ fixture: justify-cjk-paragraph
 text: 中文中文中文中文中文中文
 maxWidth: 100.0
 == greedy ==
-size 100.0x32.0
-kinsoku measure=6.3字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:6字→Basic+Hang
-line[0] 0-6 natural=96.0 adjusted=96.0 visual=100.0 repair=- candidates=- justify=deficit=4.0->0.0 CjkInterChar@0+0.8,CjkInterChar@1+0.8,CjkInterChar@2+0.8,CjkInterChar@3+0.8,CjkInterChar@4+0.8
+size 96.0x32.0
+grid container=100.0 measure=96.0(6字) slack=4.0 body=Start@0.0
+kinsoku measure=6.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:6字→Basic+Hang
+line[0] 0-6 natural=96.0 adjusted=96.0 visual=96.0 repair=- candidates=- justify=-
 line[1] 6-12 natural=96.0 adjusted=96.0 visual=96.0 repair=- candidates=- justify=-
-cluster 0-1 '中' adv=16.8
-cluster 1-2 '文' adv=16.8
-cluster 2-3 '中' adv=16.8
-cluster 3-4 '文' adv=16.8
-cluster 4-5 '中' adv=16.8
+cluster 0-1 '中' adv=16.0
+cluster 1-2 '文' adv=16.0
+cluster 2-3 '中' adv=16.0
+cluster 3-4 '文' adv=16.0
+cluster 4-5 '中' adv=16.0
 cluster 5-6 '文' adv=16.0
 cluster 6-7 '中' adv=16.0
 cluster 7-8 '文' adv=16.0
@@ -31,15 +32,16 @@ font 9-10 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPoli
 font 10-11 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 font 11-12 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 == lookahead ==
-size 100.0x32.0
-kinsoku measure=6.3字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:6字→Basic+Hang
-line[0] 0-6 natural=96.0 adjusted=96.0 visual=100.0 repair=- candidates=- justify=deficit=4.0->0.0 CjkInterChar@0+0.8,CjkInterChar@1+0.8,CjkInterChar@2+0.8,CjkInterChar@3+0.8,CjkInterChar@4+0.8
+size 96.0x32.0
+grid container=100.0 measure=96.0(6字) slack=4.0 body=Start@0.0
+kinsoku measure=6.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:6字→Basic+Hang
+line[0] 0-6 natural=96.0 adjusted=96.0 visual=96.0 repair=- candidates=- justify=-
 line[1] 6-12 natural=96.0 adjusted=96.0 visual=96.0 repair=- candidates=- justify=-
-cluster 0-1 '中' adv=16.8
-cluster 1-2 '文' adv=16.8
-cluster 2-3 '中' adv=16.8
-cluster 3-4 '文' adv=16.8
-cluster 4-5 '中' adv=16.8
+cluster 0-1 '中' adv=16.0
+cluster 1-2 '文' adv=16.0
+cluster 2-3 '中' adv=16.0
+cluster 3-4 '文' adv=16.0
+cluster 4-5 '中' adv=16.0
 cluster 5-6 '文' adv=16.0
 cluster 6-7 '中' adv=16.0
 cluster 7-8 '文' adv=16.0

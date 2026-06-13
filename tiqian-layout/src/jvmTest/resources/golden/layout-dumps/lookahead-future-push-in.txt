@@ -2,14 +2,16 @@ fixture: lookahead-future-push-in
 text: 中文中文中文。
 maxWidth: 60.0
 == greedy ==
-size 60.0x32.0
-kinsoku measure=3.8字 level=Basic hang=Disabled reason=Fixed:Basic
-line[0] 0-3 natural=48.0 adjusted=48.0 visual=60.0 repair=- candidates=- justify=deficit=12.0->0.0 CjkInterChar@0+6.0,CjkInterChar@1+6.0
-line[1] 3-7 natural=64.0 adjusted=56.0 visual=56.0 repair=PushIn(ForbiddenAtLineStart shrink=4.0) candidates=PushIn+ justify=-
-cluster 0-1 '中' adv=22.0
-cluster 1-2 '文' adv=22.0
+size 48.0x48.0
+grid container=60.0 measure=48.0(3字) slack=12.0 body=Start@0.0
+kinsoku measure=3.0字 level=Basic hang=Disabled reason=Fixed:Basic
+line[0] 0-3 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
+line[1] 3-5 natural=32.0 adjusted=32.0 visual=48.0 repair=- candidates=- justify=deficit=16.0->0.0 CjkInterChar@3+16.0
+line[2] 5-7 natural=32.0 adjusted=24.0 visual=24.0 repair=CarryPrevious(ForbiddenAtLineStart shrink=0.0) candidates=PushIn-,CarryPrevious+ justify=-
+cluster 0-1 '中' adv=16.0
+cluster 1-2 '文' adv=16.0
 cluster 2-3 '中' adv=16.0
-cluster 3-4 '文' adv=16.0
+cluster 3-4 '文' adv=32.0
 cluster 4-5 '中' adv=16.0
 cluster 5-6 '文' adv=16.0
 cluster 6-7 '。' adv=8.0
@@ -22,14 +24,16 @@ font 5-6 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolic
 font 6-7 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 punct 6-7 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
 geom 6-7 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
-edgetrim 6-7 side=trailing trim=4.0 reason=LineEndHalfWidthPunctuation
+edgetrim 6-7 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 == lookahead ==
-size 60.0x32.0
-kinsoku measure=3.8字 level=Basic hang=Disabled reason=Fixed:Basic
-line[0] 0-3 natural=48.0 adjusted=48.0 visual=60.0 repair=- candidates=- justify=deficit=12.0->0.0 CjkInterChar@0+6.0,CjkInterChar@1+6.0
-line[1] 3-7 natural=64.0 adjusted=56.0 visual=56.0 repair=PushIn(ForbiddenAtLineStart shrink=4.0) candidates=PushIn+ justify=-
-cluster 0-1 '中' adv=22.0
-cluster 1-2 '文' adv=22.0
+size 48.0x48.0
+grid container=60.0 measure=48.0(3字) slack=12.0 body=Start@0.0
+kinsoku measure=3.0字 level=Basic hang=Disabled reason=Fixed:Basic
+line[0] 0-2 natural=32.0 adjusted=32.0 visual=48.0 repair=- candidates=- justify=deficit=16.0->0.0 CjkInterChar@0+16.0
+line[1] 2-5 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
+line[2] 5-7 natural=32.0 adjusted=24.0 visual=24.0 repair=- candidates=- justify=-
+cluster 0-1 '中' adv=32.0
+cluster 1-2 '文' adv=16.0
 cluster 2-3 '中' adv=16.0
 cluster 3-4 '文' adv=16.0
 cluster 4-5 '中' adv=16.0
@@ -44,4 +48,4 @@ font 5-6 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolic
 font 6-7 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 punct 6-7 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
 geom 6-7 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
-edgetrim 6-7 side=trailing trim=4.0 reason=LineEndHalfWidthPunctuation
+edgetrim 6-7 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation

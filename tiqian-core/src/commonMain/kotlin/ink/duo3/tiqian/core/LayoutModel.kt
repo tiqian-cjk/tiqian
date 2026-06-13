@@ -84,6 +84,26 @@ data class LayoutDebugInfo(
     val decorationSegments: List<DecorationSegmentInfo> = emptyList(),
     val lineSpacingDecision: LineSpacingDecisionInfo? = null,
     val kinsokuDecision: KinsokuDecisionInfo? = null,
+    val lineLengthGridDecision: LineLengthGridDecisionInfo? = null,
+)
+
+/**
+ * `LineLengthGridQuantization` (grid-first, ADR 0007/0028): how the container
+ * [containerWidth] was floored to an integer number of [cells] (字) of
+ * [fontSize] to get the layout measure, and how the leftover [slack] placed
+ * the whole body within the container ([bodyOffset] by [bodyAlignment]).
+ * `enabled = false` records the bypass (measure == container, offset 0).
+ */
+data class LineLengthGridDecisionInfo(
+    val enabled: Boolean,
+    val containerWidth: Float,
+    val fontSize: Float,
+    val cells: Int,
+    val measure: Float,
+    val slack: Float,
+    val bodyAlignment: String,
+    val bodyOffset: Float,
+    val reason: String,
 )
 
 /**

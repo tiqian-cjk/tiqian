@@ -3,7 +3,8 @@ text: 他说：“你好，世界。”！！
 maxWidth: 220.0
 == greedy ==
 size 168.0x16.0
-kinsoku measure=13.8字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:13字→Basic+Hang
+grid container=220.0 measure=208.0(13字) slack=12.0 body=Start@0.0
+kinsoku measure=13.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:13字→Basic+Hang
 line[0] 0-13 natural=208.0 adjusted=168.0 visual=168.0 repair=- candidates=- justify=-
 cluster 0-1 '他' adv=16.0
 cluster 1-2 '说' adv=16.0
@@ -52,7 +53,8 @@ spacing 11-13 '！！' inner=8.0->0.0 target=11-12
 edgetrim 12-13 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 == lookahead ==
 size 168.0x16.0
-kinsoku measure=13.8字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:13字→Basic+Hang
+grid container=220.0 measure=208.0(13字) slack=12.0 body=Start@0.0
+kinsoku measure=13.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:13字→Basic+Hang
 line[0] 0-13 natural=208.0 adjusted=168.0 visual=168.0 repair=- candidates=- justify=-
 cluster 0-1 '他' adv=16.0
 cluster 1-2 '说' adv=16.0

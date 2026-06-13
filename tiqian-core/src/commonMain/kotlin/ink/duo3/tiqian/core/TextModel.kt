@@ -85,6 +85,30 @@ data class ParagraphStyle(
      * CLREQ's「缩减该符号始侧二分之一个汉字大小的空白」.
      */
     val firstLineIndentEm: Float = 2f,
+    /**
+     * 行长字号整数倍量化（grid-first, ADR 0007 的完整形态）. See [LineLengthGrid].
+     */
+    val lineLengthGrid: LineLengthGrid = LineLengthGrid(),
+)
+
+/**
+ * 把可用行长向下取整到字号的整数倍（N 字宽），让正文严格落在字格上
+ * （grid-first, ADR 0007）. 响应式 / 实际容器宽度几乎不会恰好是字号的整数
+ * 倍；引擎不能要求调用方在排版前就给出对齐字格的精确值，因此默认**向下
+ * 取整**得到版心，余下不足一字的空白（slack ∈ [0, fontSize)）按
+ * [bodyAlignment] 在容器内左右摆放整块正文。
+ *
+ * 某些边缘情形——已知精确像素行长、非中文正文、或调用方自己做了字格
+ * 对齐——可 `enabled = false` 绕过，直接用原始 maxWidth。
+ */
+data class LineLengthGrid(
+    val enabled: Boolean = true,
+    /**
+     * 正文块在容器内（量化后余量上）的横向对齐。CLREQ 双齐正文的唯一对齐
+     * 自由度是末行（[ParagraphStyle.lastLineAlignment]）；正文块在容器内
+     * 的摆放默认**跟随**该末行对齐（`null`），也可在此独立 override。
+     */
+    val bodyAlignment: LastLineAlignment? = null,
 )
 
 enum class LastLineAlignment {
