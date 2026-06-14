@@ -62,8 +62,11 @@ import ink.duo3.tiqian.font.PreferCjkForAmbiguousPunctuationResolver
 import ink.duo3.tiqian.font.RawFontMetrics
 import ink.duo3.tiqian.font.ScriptAwareFontMetricsNormalizer
 import ink.duo3.tiqian.font.StubFontMetricsResolver
+import ink.duo3.tiqian.linebreak.Hyphenator
+import ink.duo3.tiqian.linebreak.NoHyphenator
 import ink.duo3.tiqian.shaping.ExplainableStubTextShaper
 import ink.duo3.tiqian.shaping.ShapingInput
+import ink.duo3.tiqian.shaping.ShapingResult
 import ink.duo3.tiqian.shaping.TextShaper
 
 interface ParagraphLayoutEngine {
@@ -82,6 +85,12 @@ class ExplainableStubParagraphLayoutEngine(
     private val lineBreaker: LineBreaker = GreedyLineBreaker(),
     private val justifier: Justifier = Justifier(),
     private val textShaper: TextShaper = ExplainableStubTextShaper(),
+    /**
+     * Western syllable hyphenation source (CLREQ「可使用连字符处」). Default
+     * [NoHyphenator] = no mid-word breaks (data-free); inject a real one (e.g.
+     * `EnglishHyphenation.enUs`) to enable `LineEndHangingHyphen`.
+     */
+    private val hyphenator: Hyphenator = NoHyphenator,
 ) : ParagraphLayoutEngine {
     override fun layout(input: LayoutInput): LayoutResult {
         val text = input.content.text
@@ -131,40 +140,84 @@ class ExplainableStubParagraphLayoutEngine(
         // When the shaper reports .notdef glyphs for a substituted cluster,
         // re-shape with the source text and record the rollback.
         val substitutionRollbackRanges = mutableSetOf<TextRange>()
-        // LatinWordSegmentation (gap audit 缺口 2): Latin runs are shaped per
-        // word/space segment so each word and each space run becomes its own
-        // cluster — line breaks happen at word boundaries, word spaces become
-        // first-class adjustable clusters (CLREQ 西文词距). Cross-segment
-        // kerning at a space boundary is negligible.
-        val shapingResults = fontDecisions.flatMap { decision ->
-            decision.shapingSegments(text).map { segmentRange ->
-                val sourceText = text.substring(segmentRange.start, segmentRange.end)
-                val substitution = punctuationGlyphSubstitutor.substitute(sourceText)
-                val shaped = textShaper.shape(
+        fun shapeSegment(decision: FontDecision, segmentRange: TextRange): ShapingResult {
+            val sourceText = text.substring(segmentRange.start, segmentRange.end)
+            val substitution = punctuationGlyphSubstitutor.substitute(sourceText)
+            val shaped = textShaper.shape(
+                ShapingInput(
+                    text = text,
+                    range = segmentRange,
+                    style = input.textStyle,
+                    fontDecision = decision,
+                    displayText = substitution.displayText,
+                ),
+            )
+            return if (substitution.displayText == sourceText || shaped.decisions.none { it.missingGlyphs > 0 }) {
+                shaped
+            } else {
+                substitutionRollbackRanges += segmentRange
+                textShaper.shape(
                     ShapingInput(
                         text = text,
                         range = segmentRange,
                         style = input.textStyle,
                         fontDecision = decision,
-                        displayText = substitution.displayText,
+                        displayText = sourceText,
                     ),
                 )
-                if (substitution.displayText == sourceText || shaped.decisions.none { it.missingGlyphs > 0 }) {
-                    shaped
+            }
+        }
+        // LatinWordSegmentation (gap audit 缺口 2): Latin runs are shaped per
+        // word/space segment so each word and each space run becomes its own
+        // cluster — line breaks happen at word boundaries, word spaces become
+        // first-class adjustable clusters (CLREQ 西文词距). Cross-segment
+        // kerning at a space boundary is negligible.
+        //
+        // LineEndHangingHyphen (CLREQ §换行与断词连字「可使用连字符处」, ADR 0029):
+        // an all-letter Latin word is additionally split at the [hyphenator]'s
+        // syllable points so the breaker may wrap it there. The hyphen HANGS at
+        // the line end (like 行尾点号悬挂) — never reserved in the measure — so
+        // the content's 行尾对齐 holds. `hyphenOffsets` are the absolute source
+        // offsets a break at which earns a trailing hyphen. The default
+        // NoHyphenator returns no points ⇒ no split, zero golden churn.
+        val hyphenOffsets = mutableSetOf<Int>()
+        var hyphenAdvanceOrNull: Float? = null
+        val shapingResults = fontDecisions.flatMap { decision ->
+            decision.shapingSegments(text).flatMap { segmentRange ->
+                val shaped = shapeSegment(decision, segmentRange)
+                val word = shaped.clusters.singleOrNull()
+                val points = if (
+                    decision.role == FontRole.LatinText && word != null &&
+                    word.text.isNotEmpty() && word.text.all { it.isLetter() }
+                ) {
+                    hyphenator.hyphenate(word.text)
                 } else {
-                    substitutionRollbackRanges += segmentRange
-                    textShaper.shape(
-                        ShapingInput(
-                            text = text,
-                            range = segmentRange,
-                            style = input.textStyle,
-                            fontDecision = decision,
-                            displayText = sourceText,
-                        ),
-                    )
+                    emptyList()
+                }
+                if (points.isEmpty()) {
+                    listOf(shaped)
+                } else {
+                    if (hyphenAdvanceOrNull == null) {
+                        hyphenAdvanceOrNull = textShaper.shape(
+                            ShapingInput(
+                                text = "-",
+                                range = TextRange(0, 1),
+                                style = input.textStyle,
+                                fontDecision = decision,
+                                displayText = "-",
+                            ),
+                        ).clusters.singleOrNull()?.advance ?: (0.5f * fontSize)
+                    }
+                    val cuts = points.map { segmentRange.start + it }
+                    hyphenOffsets += cuts
+                    val bounds = listOf(segmentRange.start) + cuts + listOf(segmentRange.end)
+                    (0 until bounds.size - 1).map { k ->
+                        shapeSegment(decision, TextRange(bounds[k], bounds[k + 1]))
+                    }
                 }
             }
         }
+        val hyphenAdvance = hyphenAdvanceOrNull ?: 0f
         val rawNaturalClusters = shapingResults.flatMap { it.clusters }
         val shapedGlyphsByClusterRange = shapingResults
             .flatMap { it.glyphRuns }
@@ -614,6 +667,14 @@ class ExplainableStubParagraphLayoutEngine(
             // measure — renderers and decoration geometry consume
             // LineBox.indent unchanged.
             val isLast = lineIndex == lineSolution.lines.lastIndex
+            // LineEndHangingHyphen: this line ends mid-word when the NEXT line
+            // begins at a hyphenation source offset (a syllable continuation).
+            val lineHyphenAdvance = if (!isLast && hyphenOffsets.isNotEmpty()) {
+                val nextFirst = lineSolution.lines[lineIndex + 1].clusterRange.first
+                if (finalClusters[nextFirst].range.start in hyphenOffsets) hyphenAdvance else 0f
+            } else {
+                0f
+            }
             val limit = measure - baseIndent
             val alignmentInset = if (!isLast) {
                 0f
@@ -635,6 +696,7 @@ class ExplainableStubParagraphLayoutEngine(
                 // GridBodyAlignment: the whole body shifts by the container
                 // slack offset; per-line indent (段首缩进 + 末行对齐) stacks on top.
                 indent = gridBodyOffset + baseIndent + alignmentInset,
+                hyphenAdvance = lineHyphenAdvance,
                 debug = LineDebugInfo(
                     repair = lineCandidate.repair?.let { "${it::class.simpleName}:${it.reason}" },
                     notes = listOf(
@@ -662,7 +724,7 @@ class ExplainableStubParagraphLayoutEngine(
             fontSize = fontSize,
         )
 
-        val widestLine = lines.maxOfOrNull { it.indent + it.visualWidth } ?: 0f
+        val widestLine = lines.maxOfOrNull { it.indent + it.visualWidth + it.hyphenAdvance } ?: 0f
         val totalHeight = if (lines.isEmpty()) lineMetrics.height else lines.size * lineMetrics.height
         val resultWidth = widestLine.coerceAtMost(input.constraints.maxWidth)
 

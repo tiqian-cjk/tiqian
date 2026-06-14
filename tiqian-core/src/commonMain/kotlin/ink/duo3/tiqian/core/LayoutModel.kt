@@ -51,6 +51,14 @@ data class LineBox(
      * this offset; width fields above exclude it.
      */
     val indent: Float = 0f,
+    /**
+     * Width of a hyphen hanging at this line's end (`LineEndHangingHyphen`,
+     * ADR 0029): non-zero when the line ends mid-word at a Western hyphenation
+     * point. The hyphen sits just past [visualWidth] (it is NOT included in the
+     * width fields, mirroring 行尾点号悬挂) — renderers draw a '-' at
+     * `indent + visualWidth`. 0 elsewhere.
+     */
+    val hyphenAdvance: Float = 0f,
     val debug: LineDebugInfo = LineDebugInfo(),
 )
 
