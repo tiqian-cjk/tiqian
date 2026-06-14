@@ -8,6 +8,7 @@ import ink.duo3.tiqian.core.Glyph
 import ink.duo3.tiqian.core.GlyphRun
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LineLengthGrid
+import ink.duo3.tiqian.linebreak.NoHyphenator
 import ink.duo3.tiqian.core.LayoutInput
 import ink.duo3.tiqian.core.ParagraphStyle
 import ink.duo3.tiqian.core.Rect
@@ -39,6 +40,8 @@ class ExplainableStubParagraphLayoutEngineTest {
                 adjustment = adjustment,
             )
         },
+        // Repair/kinsoku fixtures stay deterministic: no default hyphenation.
+        hyphenator = NoHyphenator,
     )
 
     @Test
@@ -142,7 +145,7 @@ class ExplainableStubParagraphLayoutEngineTest {
 
     @Test
     fun recordsFallbackDecisionsPerCluster() {
-        val result = ExplainableStubParagraphLayoutEngine().layout(
+        val result = ExplainableStubParagraphLayoutEngine(hyphenator = NoHyphenator).layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("提椠……English——世界。"),
@@ -719,7 +722,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // no syllable points (NoHyphenator default), so it hard-breaks at a
         // character boundary with a hanging hyphen, keeping 前二后三 — "En" head,
         // "ish" tail.
-        val result = ExplainableStubParagraphLayoutEngine().layout(
+        val result = ExplainableStubParagraphLayoutEngine(hyphenator = NoHyphenator).layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中English"),
@@ -1362,7 +1365,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // the measure (≤160, NOT hard-broken) but overflows after the hanzi and
         // wraps whole — line 0 deficit = 160 - 64 = 96 over 3 hanzi boundaries =
         // 32 each, far past the old 4px cap.
-        val result = ExplainableStubParagraphLayoutEngine().layout(
+        val result = ExplainableStubParagraphLayoutEngine(hyphenator = NoHyphenator).layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
                 content = TiqianTextContent("中文中文Network中文"),

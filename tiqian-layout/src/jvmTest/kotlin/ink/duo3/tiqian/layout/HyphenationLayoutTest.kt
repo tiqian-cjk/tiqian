@@ -29,6 +29,23 @@ class HyphenationLayoutTest {
     private fun Char.isLatinLetter() = this in 'a'..'z' || this in 'A'..'Z'
 
     @Test
+    fun hyphenationIsOnByDefault() {
+        // The default engine (no explicit hyphenator) uses the platform
+        // hyphenator — en-US on JVM — so a fitting word hyphenates without
+        // opting in: "coffee" → cof-fee with a hanging hyphen.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                content = TiqianTextContent("中文中 coffee"),
+                constraints = LayoutConstraints(maxWidth = 112f),
+            ),
+        )
+        assertTrue(result.clusters.any { it.text == "cof" })
+        assertTrue(result.clusters.any { it.text == "fee" })
+        assertTrue(result.lines.any { it.hyphenAdvance > 0f })
+    }
+
+    @Test
     fun fittingWordHyphenatesOnlyWhenAHyphenatorIsInjected() {
         // "coffee" (96) fits the measure (112), so without a hyphenator it stays
         // whole and wraps as a unit; with one it splits cof-fee and a hyphen

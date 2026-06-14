@@ -26,8 +26,10 @@
 `hyph-en-us`（Kuiken/hyph-utf8，宽松许可、文件头声明原样保留——**非公有领域**），
 `EnglishHyphenation.enUs` 加载之，左 2 右 3。
 
-**接入：`LineEndHangingHyphen`。** 引擎注入 `hyphenator`（默认 `NoHyphenator`
-⇒ 不连字、golden 零漂移）。shaping 后把每个**全字母**西文词按连字点拆成音节
+**接入：`LineEndHangingHyphen`。** 引擎注入 `hyphenator`。**默认启用**——
+中西混排常见、短行尤其受益，故引擎默认取平台连字器（`defaultHyphenator()`，
+`expect/actual`：JVM = en-US，无内置/原生断词器的平台退化为不连字）；显式传
+`NoHyphenator` 关闭。shaping 后把每个**全字母**西文词按连字点拆成音节
 子 cluster（逐音节重排，真实宽度），断行器照常在 cluster 边界断（无需改断行器）。
 连字符**悬挂**在行尾——像 CLREQ 行尾点号悬挂那样**不占版心**：内容填满版心、
 连字符挂在其外，故内容的行尾对齐不被连字符破坏。`LineBox.hyphenAdvance` 记该行
@@ -58,10 +60,11 @@
   行尾挂连字符；短词、纯 CJK 行不受影响。
 - **源文本不动**：连字符只在显示层（行尾画 `-`），source range / 复制 / 搜索保持
   输入（与码点替换同一原则）。
-- 默认 `NoHyphenator` ⇒ 既有 golden 零漂移；连字行为靠注入 `enUs` 显式开启，
-  `western-hyphenation` fixture（`LayoutFixture.useEnglishHyphenation`）端到端印证，
-  另有 `HyphenationLayoutTest` 单测锁定「拆分点恰等于 hyphenator 输出、连字符不计
-  入版心」。
+- 默认启用（JVM=en-US）。golden/单测等确定性测试**显式 pin**
+  `NoHyphenator`（同 repair fixture pin `Fixed` kinsoku 的先例）——故既有 golden
+  零漂移；连字 fixture（`western-hyphenation`，`LayoutFixture.useEnglishHyphenation`）
+  显式注入 `enUs`。`HyphenationLayoutTest` 锁定「默认引擎即连字」「拆分点恰等于
+  hyphenator 输出」「连字符不计入版心」。
 - 渲染：共享 skia cluster-walk（`drawTiqianGlyphs`，compose + playground 共用）与
   playground AWT 在内容末尾画 `-`；dump（golden + playground）的行尾加 `hyphen=` 标记。
 - 未实现：仅 en-US（接口语种无关，按需加模式）；Android 原生断词器可后续接同一

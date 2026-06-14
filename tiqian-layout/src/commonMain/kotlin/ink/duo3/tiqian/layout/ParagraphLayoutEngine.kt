@@ -86,11 +86,12 @@ class ExplainableStubParagraphLayoutEngine(
     private val justifier: Justifier = Justifier(),
     private val textShaper: TextShaper = ExplainableStubTextShaper(),
     /**
-     * Western syllable hyphenation source (CLREQ「可使用连字符处」). Default
-     * [NoHyphenator] = no mid-word breaks (data-free); inject a real one (e.g.
-     * `EnglishHyphenation.enUs`) to enable `LineEndHangingHyphen`.
+     * Western syllable hyphenation source (CLREQ「可使用连字符处」). Defaults to
+     * the platform hyphenator ([defaultHyphenator]: en-US on JVM) so
+     * `LineEndHangingHyphen` is ON by default; pass [NoHyphenator] to opt out.
+     * (`LatinForcedHyphenBreak` over-long hard-break fires regardless.)
      */
-    private val hyphenator: Hyphenator = NoHyphenator,
+    private val hyphenator: Hyphenator = defaultHyphenator(),
 ) : ParagraphLayoutEngine {
     override fun layout(input: LayoutInput): LayoutResult {
         val text = input.content.text
