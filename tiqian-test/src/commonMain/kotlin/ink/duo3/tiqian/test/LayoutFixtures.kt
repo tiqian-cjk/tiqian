@@ -163,6 +163,14 @@ object EarlyLayoutFixtures {
             firstLineIndentEm = 2f,
         ),
         LayoutFixture(
+            id = "latin-existing-hyphen",
+            text = "out-of-the-way",
+            constraints = LayoutConstraints(maxWidth = 128f),
+            notes = "ExistingHyphenBreak (CY/T 154-2017 §9.3): a hyphenated compound " +
+                "wraps AT its existing '-' (no new hyphen, no synthetic 短横线 atom). " +
+                "Keeps ≥2 letters each side (§9.4).",
+        ),
+        LayoutFixture(
             id = "latin-hard-break",
             text = "中Network",
             constraints = LayoutConstraints(maxWidth = 64f),

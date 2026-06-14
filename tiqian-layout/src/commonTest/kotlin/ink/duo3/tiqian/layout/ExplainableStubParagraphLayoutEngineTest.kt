@@ -287,8 +287,12 @@ class ExplainableStubParagraphLayoutEngineTest {
             ),
         )
 
-        assertEquals("well-known/path", result.clusters.single().text)
-        assertEquals("latin-primary", result.clusters.single().fontKey)
+        // Technical punctuation stays in the Latin run (latin-primary, not the
+        // symbol fallback). CY/T §9.3 splits the compound at its '-' so it can
+        // wrap there, but every piece is still Latin.
+        assertEquals("well-known/path", result.clusters.joinToString("") { it.text })
+        assertTrue(result.clusters.all { it.fontKey == "latin-primary" })
+        assertTrue(result.clusters.any { it.text == "well-" }) // split at the existing hyphen
     }
 
     @Test
@@ -714,6 +718,27 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals(2, result.debug.lineDecisions.size)
         assertTrue(result.debug.lineDecisions.all { it.kind == "greedy" })
         assertEquals(32f, result.size.height)
+    }
+
+    @Test
+    fun hyphenatedCompoundBreaksAtExistingHyphenWithoutAddingOne() {
+        // CY/T 154-2017 §9.3: "out-of-the-way" wraps AT an existing '-' — the
+        // existing hyphen sits at the line end and NO new hyphen is added.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                content = TiqianTextContent("out-of-the-way"),
+                constraints = LayoutConstraints(maxWidth = 128f),
+            ),
+        )
+
+        assertEquals(2, result.lines.size)
+        assertTrue(result.lines.all { it.hyphenAdvance == 0f }) // no synthetic hyphen added
+        assertTrue(result.clusters.any { it.text == "out-" })
+        assertTrue(result.clusters.any { it.text == "way" })
+        // Line 0 ends on the existing hyphen.
+        val line0Last = result.clusters.last { it.range.end <= result.lines[0].range.end }
+        assertTrue(line0Last.text.endsWith("-"), "line 0 should end at the existing hyphen: ${line0Last.text}")
     }
 
     @Test

@@ -96,6 +96,30 @@
 锁定（逗号 trailing glue 被压）；行内无可压 glue（如 `中Network` 只有 autospace
 间距、不在 shrinkOpportunities）时照旧悬挂——「真的放不下」。
 
+## Amendment (2026-06-14): CY/T 154-2017 §9 对齐 + 已有连字符处断词（§9.3）
+
+**CY/T 154-2017《中文出版物夹用英文的编辑规范》§9 转行的规则**是本场景（中文
+夹用英文）最直接的权威依据，比 CLREQ 更对口。逐条对齐：
+
+- **§9.1** 中文夹英文、英文在行末尽量不拆，确需才按英文断词 → 我们的**最后一档**
+  （`decideHyphenBreak`）。
+- **§9.2** 按音节/构词断 + **加英文连字符**在断开词前半行尾 → 音节连字 +
+  行尾连字符（`LineEndHangingHyphen`）。
+- **§9.3** 带连字符的合成词**在连字符处断、一般不再加新连字符** → 本次新增
+  `ExistingHyphenBreak`：含 `-` 的 Latin run 在**已有 `-` 处**拆 cluster、**不进
+  `hyphenOffsets`**（不加合成连字符，已有的 `-` 自然落行尾），是 clean 断点（非
+  最后一档，像词边界）。保持**两侧各 ≥2 字母**（§9.4），顺带把数字区间 `3-4`、
+  缩写带数字 `COVID-19` 排除（数字不计字母数）。
+- **§9.4** 不留单个字母、单音节词/人名/缩写/数字+单位不断词 → 数字已由
+  `all { isLetter() }` 排除；不留单字母由前二后三（硬断）/ ≥2 两侧（已有连字符）
+  保证；**人名/缩写不断词**未做（难可靠识别，留作后续）。
+
+附带修掉一个潜伏 bug：`punctuationAtoms` 此前对**所有** cluster 建标点 atom，
+导致含 ASCII `-`/`/` 的 **LatinText cluster**（英文连字符，非 CJK 连接号）被
+误当 短横线 forcedHalfWidth、占宽塌成 0.5em。改为**跳过 LatinText cluster**
+（标点 atom 是 CJK 文本的事）。`latin-existing-hyphen` fixture 印证
+`out-of-/the-way`。
+
 ## Consequences
 
 - 长西文词在窄版心混排时按 en-US 音节断点换行（`in-ter-na-tion-al-iza-tion`），

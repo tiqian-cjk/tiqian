@@ -243,29 +243,64 @@ class ExplainableStubParagraphLayoutEngine(
             }
             return cuts.toList()
         }
+        // ExistingHyphenBreak (CY/T 154-2017 §9.3): a hyphenated compound breaks
+        // AT its existing hyphens — no NEW hyphen added, the existing one sits at
+        // the line end. Keeps ≥2 letters on each side (§9.4「不要把单个字母放在
+        // 一行的行末或行首」), which also leaves number ranges / abbreviation-number
+        // tokens (3-4, COVID-19) unbroken. These are clean break boundaries, not
+        // synthetic-hyphen points, so they never enter `hyphenOffsets`.
+        fun existingHyphenCuts(wordRange: TextRange): List<Int> {
+            val w = text.substring(wordRange.start, wordRange.end)
+            val cuts = mutableListOf<Int>()
+            for (i in w.indices) {
+                if (w[i] != '-') continue
+                var before = 0
+                var j = i - 1
+                while (j >= 0 && w[j].isLetter()) { before += 1; j -= 1 }
+                var after = 0
+                var k = i + 1
+                while (k < w.length && w[k].isLetter()) { after += 1; k += 1 }
+                if (before >= 2 && after >= 2) cuts += wordRange.start + i + 1
+            }
+            return cuts
+        }
         val shapingResults = fontDecisions.flatMap { decision ->
             decision.shapingSegments(text).flatMap { segmentRange ->
                 val shaped = shapeSegment(decision, segmentRange)
                 val word = shaped.clusters.singleOrNull()
-                val isLatinWord = decision.role == FontRole.LatinText && word != null &&
-                    word.text.isNotEmpty() && word.text.all { it.isLetter() }
-                val cuts = if (isLatinWord) latinWordCuts(decision, segmentRange) else emptyList()
-                if (cuts.isEmpty()) {
+                val isLatin = decision.role == FontRole.LatinText && word != null && word.text.isNotEmpty()
+                // §9.3 existing-hyphen breaks (no new hyphen) take precedence; only
+                // an all-letter word with none gets §9.2 syllable/hard hyphenation
+                // (CY/T「一般不要再增加新的连字符」).
+                val cleanCuts = if (isLatin && word!!.text.contains('-')) {
+                    existingHyphenCuts(segmentRange)
+                } else {
+                    emptyList()
+                }
+                val hyphenCuts = if (isLatin && cleanCuts.isEmpty() && word!!.text.all { it.isLetter() }) {
+                    latinWordCuts(decision, segmentRange)
+                } else {
+                    emptyList()
+                }
+                val allCuts = (cleanCuts + hyphenCuts).distinct().sorted()
+                if (allCuts.isEmpty()) {
                     listOf(shaped)
                 } else {
-                    if (hyphenAdvanceOrNull == null) {
-                        hyphenAdvanceOrNull = textShaper.shape(
-                            ShapingInput(
-                                text = "-",
-                                range = TextRange(0, 1),
-                                style = input.textStyle,
-                                fontDecision = decision,
-                                displayText = "-",
-                            ),
-                        ).clusters.singleOrNull()?.advance ?: (0.5f * fontSize)
+                    if (hyphenCuts.isNotEmpty()) {
+                        hyphenOffsets += hyphenCuts
+                        if (hyphenAdvanceOrNull == null) {
+                            hyphenAdvanceOrNull = textShaper.shape(
+                                ShapingInput(
+                                    text = "-",
+                                    range = TextRange(0, 1),
+                                    style = input.textStyle,
+                                    fontDecision = decision,
+                                    displayText = "-",
+                                ),
+                            ).clusters.singleOrNull()?.advance ?: (0.5f * fontSize)
+                        }
                     }
-                    hyphenOffsets += cuts
-                    val bounds = listOf(segmentRange.start) + cuts + listOf(segmentRange.end)
+                    val bounds = listOf(segmentRange.start) + allCuts + listOf(segmentRange.end)
                     (0 until bounds.size - 1).map { k ->
                         shapeSegment(decision, TextRange(bounds[k], bounds[k + 1]))
                     }
@@ -288,8 +323,17 @@ class ExplainableStubParagraphLayoutEngine(
         )
         val naturalClusters = autoSpaceResult.clusters
         val autoSpaceDecisions = autoSpaceResult.decisions
+        val clusterRoles = naturalClusters.map { cluster ->
+            fontDecisions.first { cluster.range.isInside(it.range) }.role
+        }
 
-        val punctuationAtoms = naturalClusters.flatMap { cluster ->
+        // Punctuation atoms are a CJK-text concern: a LatinText cluster's ASCII
+        // punctuation ('-', '/', ',') is part of the Latin glyph run (an English
+        // hyphen, not a CJK 连接号), so it must NOT get a 短横线/标点 atom that
+        // would collapse the cluster to half-width.
+        val punctuationAtoms = naturalClusters.mapIndexedNotNull { idx, cluster ->
+            if (clusterRoles[idx] == FontRole.LatinText) null else cluster
+        }.flatMap { cluster ->
             cluster.punctuationAtoms(
                 em = fontSize,
                 builder = punctuationAtomBuilder,
@@ -486,9 +530,6 @@ class ExplainableStubParagraphLayoutEngine(
         }
         val forbiddenLineEndClusters: Set<Int> = naturalClusters.indices.filterTo(mutableSetOf()) { idx ->
             kinsokuRule.forbiddenAtLineEnd(naturalClusters[idx])
-        }
-        val clusterRoles = naturalClusters.map { cluster ->
-            fontDecisions.first { cluster.range.isInside(it.range) }.role
         }
         // LineEndHangingHyphen as a LAST resort (ADR 0029 amendment): a break
         // before one of these clusters is a syllable/hard-break continuation —
