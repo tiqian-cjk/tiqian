@@ -43,9 +43,15 @@ class LayoutDumpGoldenTest {
                     "greedy" to GreedyLineBreaker(),
                     "lookahead" to LookaheadLineBreaker(),
                 )) {
+                    val hyphenator = if (fixture.useEnglishHyphenation) {
+                        ink.duo3.tiqian.linebreak.EnglishHyphenation.enUs
+                    } else {
+                        ink.duo3.tiqian.linebreak.NoHyphenator
+                    }
                     val engine = if (fixture.pinBasicNoHang) {
                         ExplainableStubParagraphLayoutEngine(
                             lineBreaker = breaker,
+                            hyphenator = hyphenator,
                             clreqProfileResolver = {
                                 ink.duo3.tiqian.clreq.ClreqProfile.MainlandHorizontal.copy(
                                     kinsokuMode = ink.duo3.tiqian.clreq.KinsokuMode.Fixed(
@@ -55,7 +61,7 @@ class LayoutDumpGoldenTest {
                             },
                         )
                     } else {
-                        ExplainableStubParagraphLayoutEngine(lineBreaker = breaker)
+                        ExplainableStubParagraphLayoutEngine(lineBreaker = breaker, hyphenator = hyphenator)
                     }
                     val result = engine.layout(
                         LayoutInput(
@@ -135,8 +141,9 @@ class LayoutDumpGoldenTest {
                         j.allocations.joinToString(",") { "${it.kind}@${it.clusterRange.start}+${it.delta.fmt()}" }
                 } ?: "-"
             val indent = if (line.indent > 0f) "indent=${line.indent.fmt()} " else ""
+            val hyphen = if (line.hyphenAdvance > 0f) "hyphen=${line.hyphenAdvance.fmt()} " else ""
             appendLine(
-                "line[$i] ${line.range.start}-${line.range.end} $indent" +
+                "line[$i] ${line.range.start}-${line.range.end} $indent$hyphen" +
                     "natural=${line.naturalWidth.fmt()} adjusted=${line.adjustedWidth.fmt()} " +
                     "visual=${line.visualWidth.fmt()} repair=$repair candidates=$candidates justify=$justify",
             )

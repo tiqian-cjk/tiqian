@@ -125,6 +125,13 @@ fun drawTiqianGlyphs(
             }
             x += cluster.advance
         }
+        // LineEndHangingHyphen (ADR 0029): a hyphen hangs just past the content
+        // at a mid-word line end. x is now indent + visualWidth (content end).
+        if (line.hyphenAdvance > 0f) {
+            shapeTextBlob(shaper, "-", latinFont, language)?.let { blob ->
+                canvas.drawTextBlob(blob, x, baselineY, paint)
+            }
+        }
     }
 }
 

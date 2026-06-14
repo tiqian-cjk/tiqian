@@ -27,6 +27,12 @@ data class LayoutFixture(
      * pinning firstLineIndentEm = 0.
      */
     val pinBasicNoHang: Boolean = false,
+    /**
+     * Inject the bundled English hyphenator so a long Western word wraps at
+     * syllable points with a hanging hyphen (`LineEndHangingHyphen`, ADR 0029).
+     * Default off — the deterministic stub has no hyphenator.
+     */
+    val useEnglishHyphenation: Boolean = false,
 )
 
 object EarlyLayoutFixtures {
@@ -155,6 +161,16 @@ object EarlyLayoutFixtures {
                 "the indent; later lines use the full measure. Justify targets " +
                 "the indented measure on line 0.",
             firstLineIndentEm = 2f,
+        ),
+        LayoutFixture(
+            id = "western-hyphenation",
+            text = "请运行 internationalization 命令",
+            constraints = LayoutConstraints(maxWidth = 160f),
+            notes = "LineEndHangingHyphen (ADR 0029): the long English word is " +
+                "split at en-US syllable points so it wraps inside the measure; a " +
+                "hyphen hangs at the line end (行尾点号悬挂-style). The 'hyphen=' " +
+                "line tag marks where. Needs the injected English hyphenator.",
+            useEnglishHyphenation = true,
         ),
         LayoutFixture(
             id = "adaptive-short-line-indent",

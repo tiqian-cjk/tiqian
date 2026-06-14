@@ -34,20 +34,27 @@ import javax.imageio.ImageIO
 fun main() {
     val shaperMode = ShaperMode.fromEnvironment()
     val textShaper = shaperMode.createShaper()
-    val greedyEngine = ExplainableStubParagraphLayoutEngine(
-        lineBreaker = GreedyLineBreaker(),
-        textShaper = textShaper,
-    )
-    val lookaheadEngine = ExplainableStubParagraphLayoutEngine(
-        lineBreaker = LookaheadLineBreaker(),
-        textShaper = textShaper,
-    )
     val reportItems = mutableListOf<PlaygroundReportItem>()
 
     println("shaper=${shaperMode.id} (${shaperMode.description})")
     println()
 
     EarlyLayoutFixtures.all.forEach { fixture ->
+        val hyphenator = if (fixture.useEnglishHyphenation) {
+            ink.duo3.tiqian.linebreak.EnglishHyphenation.enUs
+        } else {
+            ink.duo3.tiqian.linebreak.NoHyphenator
+        }
+        val greedyEngine = ExplainableStubParagraphLayoutEngine(
+            lineBreaker = GreedyLineBreaker(),
+            textShaper = textShaper,
+            hyphenator = hyphenator,
+        )
+        val lookaheadEngine = ExplainableStubParagraphLayoutEngine(
+            lineBreaker = LookaheadLineBreaker(),
+            textShaper = textShaper,
+            hyphenator = hyphenator,
+        )
         val input = LayoutInput(
             content = TiqianTextContent(fixture.text),
             constraints = fixture.constraints,
@@ -283,6 +290,10 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
                 }
                 x += cluster.advance
             }
+            // LineEndHangingHyphen (ADR 0029): hyphen hangs past the content end.
+            if (line.hyphenAdvance > 0f) {
+                g.drawString("-", x, baselineY)
+            }
         }
 
         // Emphasis dots — the AWT raster is the legacy debug view; a filled
@@ -439,8 +450,9 @@ private fun printEngineDump(label: String, result: LayoutResult) {
             " justify=$kinds(+${(justify.deficitBefore - justify.deficitAfter).oneDecimal()})"
         } else ""
         val indentTag = if (line.indent > 0f) " indent=${line.indent.oneDecimal()}" else ""
+        val hyphenTag = if (line.hyphenAdvance > 0f) " hyphen=${line.hyphenAdvance.oneDecimal()}" else ""
         println(
-            "    line[$lineIndex]$indentTag adjusted=${line.adjustedWidth.oneDecimal()} visual=${line.visualWidth.oneDecimal()} range=${line.range.start}-${line.range.end}$repairTag$justifyTag",
+            "    line[$lineIndex]$indentTag$hyphenTag adjusted=${line.adjustedWidth.oneDecimal()} visual=${line.visualWidth.oneDecimal()} range=${line.range.start}-${line.range.end}$repairTag$justifyTag",
         )
     }
 }
