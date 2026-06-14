@@ -54,6 +54,27 @@
 （更易读），是 CLREQ 字面之外的实用兜底（一个词放不下时总得断在某处），不是
 纵横对齐那套。`latin-hard-break` fixture（`中Network`@64）印证：`中 Ne-`/`tw-`/`ork`。
 
+## Amendment (2026-06-14): 连字是最后一档（按行松紧触发）
+
+最初的接法是 eager——断行器在任何音节 cluster 边界即时断，能塞就塞。这不对：
+连字应当是**最后手段**，排在拉伸之后。改为：断行器**优先整词换行**，只有当
+（a）词本身超宽放不下（mandatory），或（b）整词换行会把这行的**汉字间距**拉得
+超过 `HYPHEN_LAST_RESORT_CJK_STRETCH_EM`（**0.5em/间距**）时，才回退到音节断
+（last resort）。低于阈值则宁可拉伸汉字间距、不连字。
+
+机制落在断行器一个共享判定 `decideHyphenBreak`（greedy + lookahead 共用）：贪心
+溢出后，先退到最近的**整词边界**；若该词从行首就放不下 ⇒ 必断；否则量一下整词行
+的松紧（`deficit / CJK↔CJK 间距数`），超阈才在音节点断。引擎把
+`hyphenBreakClusters`（哪些 cluster 前是音节/硬断续接）、`cjkInterCharBoundaries`
+（可拉伸的汉字间距）、阈值喂给断行器。**不动 justifier**——「必然填满」（ADR
+0004）保留：断行器在「会太松」时改用连字把行填满，justifier 只需拉 ≤0.5em；连字
+救不了（没有可连词、或词太短）时，再走原来的无上限拉伸兜底。所以连字符恰好插在
+「带上限的汉字间距拉伸」与「无上限兜底拉伸」之间。
+
+近似：松紧用 `deficit / CJK间距数`，未先扣除词距/中西间距能吸收的部分，故偏保守
+（略多连字）；阈值可调。`hyphenationIsSkippedWhenStretchingCjkStaysTight` 单测
+锁定「够紧就不连字」，`western-hyphenation` golden 是够松仍连字的一侧。
+
 ## Consequences
 
 - 长西文词在窄版心混排时按 en-US 音节断点换行（`in-ter-na-tion-al-iza-tion`），

@@ -55,7 +55,49 @@ interface LineBreaker {
          * line-end prohibition (e.g. KinsokuLevel.None).
          */
         forbiddenLineEndClusters: Set<Int> = emptySet(),
+        /**
+         * `LineEndHangingHyphen` (ADR 0029): cluster indices a break before which
+         * is a Western syllable / hard-break continuation. The breaker prefers a
+         * whole-word break and only takes one of these when the word is over-long
+         * (mandatory) or the whole-word line would stretch 汉字间距 past
+         * [maxCjkStretchPerGap] (last resort). Empty = no hyphenation.
+         */
+        hyphenBreakClusters: Set<Int> = emptySet(),
+        /** CJK↔CJK boundary cluster indices — the stretchable gaps looseness is measured over. */
+        cjkInterCharBoundaries: Set<Int> = emptySet(),
+        /** Per-CJK-gap stretch above which a whole-word line counts as「太松」⇒ hyphenate. */
+        maxCjkStretchPerGap: Float = Float.POSITIVE_INFINITY,
     ): LineSolution
+}
+
+/**
+ * Where to break given a greedy overflow at [overflowAt] (the first cluster that
+ * does not fit). Prefers the last whole-word boundary; takes the hyphenation
+ * break (returns [overflowAt]) only when the word is over-long (fills from
+ * [lineStart]) or wrapping it whole would stretch the line's 汉字间距 past
+ * [maxCjkStretchPerGap]. With no [hyphenBreakClusters] this is a no-op
+ * (returns [overflowAt]).
+ */
+internal fun decideHyphenBreak(
+    lineStart: Int,
+    overflowAt: Int,
+    adjustedClusters: List<Cluster>,
+    lineLimit: Float,
+    hyphenBreakClusters: Set<Int>,
+    cjkInterCharBoundaries: Set<Int>,
+    maxCjkStretchPerGap: Float,
+): Int {
+    if (overflowAt !in hyphenBreakClusters) return overflowAt // overflow at a word boundary
+    var wholeWordEnd = overflowAt
+    while (wholeWordEnd > lineStart && wholeWordEnd in hyphenBreakClusters) wholeWordEnd -= 1
+    if (wholeWordEnd <= lineStart) return overflowAt // over-long word fills from lineStart: must hyphenate
+    var width = 0f
+    for (k in lineStart until wholeWordEnd) width += adjustedClusters[k].advance
+    val deficit = lineLimit - width
+    if (deficit <= 0f) return wholeWordEnd
+    val gaps = (lineStart + 1 until wholeWordEnd).count { it in cjkInterCharBoundaries }
+    val tooLoose = gaps == 0 || deficit / gaps > maxCjkStretchPerGap
+    return if (tooLoose) overflowAt else wholeWordEnd
 }
 
 /**
@@ -168,6 +210,9 @@ class GreedyLineBreaker(
         hangableClusters: Set<Int>,
         forbiddenLineStartClusters: Set<Int>?,
         forbiddenLineEndClusters: Set<Int>,
+        hyphenBreakClusters: Set<Int>,
+        cjkInterCharBoundaries: Set<Int>,
+        maxCjkStretchPerGap: Float,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -177,6 +222,7 @@ class GreedyLineBreaker(
         val greedy = greedyFill(
             naturalClusters, adjustedClusters, maxWidth, unbreakableRanges,
             firstLineIndent, forbiddenLineEndClusters,
+            hyphenBreakClusters, cjkInterCharBoundaries, maxCjkStretchPerGap,
         )
         return applyKinsokuRepairs(
             initial = greedy,
@@ -202,6 +248,9 @@ class GreedyLineBreaker(
         unbreakableRanges: List<IntRange>,
         firstLineIndent: Float,
         forbiddenLineEndClusters: Set<Int>,
+        hyphenBreakClusters: Set<Int>,
+        cjkInterCharBoundaries: Set<Int>,
+        maxCjkStretchPerGap: Float,
     ): List<LineCandidate> {
         val lines = mutableListOf<LineCandidate>()
         var lineStart = 0
@@ -213,7 +262,12 @@ class GreedyLineBreaker(
             val nextAdjusted = adjustedAccum + adjustedClusters[i].advance
             val overflows = nextAdjusted > lineLimit(maxWidth, firstLineIndent, lineStart) && i > lineStart
             if (overflows) {
-                val afterUnbreak = adjustBreakForUnbreakables(i, lineStart, unbreakableRanges)
+                val decided = decideHyphenBreak(
+                    lineStart, i, adjustedClusters,
+                    lineLimit(maxWidth, firstLineIndent, lineStart),
+                    hyphenBreakClusters, cjkInterCharBoundaries, maxCjkStretchPerGap,
+                )
+                val afterUnbreak = adjustBreakForUnbreakables(decided, lineStart, unbreakableRanges)
                 val breakAt = adjustBreakForLineEnd(afterUnbreak, lineStart, forbiddenLineEndClusters)
                 lines += closeFilledLine(
                     lineStart..(breakAt - 1), afterUnbreak, naturalClusters, adjustedClusters,
@@ -303,6 +357,9 @@ class LookaheadLineBreaker(
         hangableClusters: Set<Int>,
         forbiddenLineStartClusters: Set<Int>?,
         forbiddenLineEndClusters: Set<Int>,
+        hyphenBreakClusters: Set<Int>,
+        cjkInterCharBoundaries: Set<Int>,
+        maxCjkStretchPerGap: Float,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -316,12 +373,21 @@ class LookaheadLineBreaker(
         while (lineStart < adjustedClusters.size) {
             // Line-end retreat is applied at commit (below), not here, so the
             // chosen break's pre-retreat position is known and CarryNext can
-            // be labelled.
+            // be labelled. decideHyphenBreak makes the greedy baseline obey the
+            // last-resort hyphenation rule (whole-word unless over-long/太松).
             val greedyEnd = adjustBreakForUnbreakables(
-                breakAt = findGreedyEnd(
-                    adjustedClusters,
-                    lineStart,
-                    lineLimit(maxWidth, firstLineIndent, lineStart),
+                breakAt = decideHyphenBreak(
+                    lineStart = lineStart,
+                    overflowAt = findGreedyEnd(
+                        adjustedClusters,
+                        lineStart,
+                        lineLimit(maxWidth, firstLineIndent, lineStart),
+                    ),
+                    adjustedClusters = adjustedClusters,
+                    lineLimit = lineLimit(maxWidth, firstLineIndent, lineStart),
+                    hyphenBreakClusters = hyphenBreakClusters,
+                    cjkInterCharBoundaries = cjkInterCharBoundaries,
+                    maxCjkStretchPerGap = maxCjkStretchPerGap,
                 ),
                 lineStart = lineStart,
                 unbreakableRanges = unbreakableRanges,
@@ -358,6 +424,9 @@ class LookaheadLineBreaker(
                     firstLineIndent = firstLineIndent,
                     hangableClusters = hangableClusters,
                     forbiddenLineStartClusters = forbiddenLineStartClusters,
+                    hyphenBreakClusters = hyphenBreakClusters,
+                    cjkInterCharBoundaries = cjkInterCharBoundaries,
+                    maxCjkStretchPerGap = maxCjkStretchPerGap,
                 )
                 if (score < bestScore) {
                     bestScore = score
@@ -401,6 +470,9 @@ class LookaheadLineBreaker(
         firstLineIndent: Float,
         hangableClusters: Set<Int>,
         forbiddenLineStartClusters: Set<Int>?,
+        hyphenBreakClusters: Set<Int>,
+        cjkInterCharBoundaries: Set<Int>,
+        maxCjkStretchPerGap: Float,
     ): Float {
         val firstLine = rebuildLine(s..(e - 1), natural, adjusted)
         val future = rawGreedyLinesFrom(
@@ -408,6 +480,9 @@ class LookaheadLineBreaker(
             natural = natural,
             adjusted = adjusted,
             maxWidth = maxWidth,
+            hyphenBreakClusters = hyphenBreakClusters,
+            cjkInterCharBoundaries = cjkInterCharBoundaries,
+            maxCjkStretchPerGap = maxCjkStretchPerGap,
         )
         // Apply kinsoku once across [firstLine] + future so both splice
         // conflicts and future-line conflicts are scored with the same PushIn
@@ -441,6 +516,9 @@ class LookaheadLineBreaker(
         natural: List<Cluster>,
         adjusted: List<Cluster>,
         maxWidth: Float,
+        hyphenBreakClusters: Set<Int>,
+        cjkInterCharBoundaries: Set<Int>,
+        maxCjkStretchPerGap: Float,
     ): List<LineCandidate> {
         if (start >= adjusted.size) return emptyList()
 
@@ -448,19 +526,26 @@ class LookaheadLineBreaker(
         var lineStart = start
         var adjustedAccum = 0f
 
-        for (i in start until adjusted.size) {
+        var i = start
+        while (i < adjusted.size) {
             val nextAdjusted = adjustedAccum + adjusted[i].advance
             val overflows = nextAdjusted > maxWidth && i > lineStart
             if (overflows) {
+                val breakAt = decideHyphenBreak(
+                    lineStart, i, adjusted, maxWidth,
+                    hyphenBreakClusters, cjkInterCharBoundaries, maxCjkStretchPerGap,
+                )
                 lines += rebuildLine(
-                    clusterRange = lineStart..(i - 1),
+                    clusterRange = lineStart..(breakAt - 1),
                     naturalClusters = natural,
                     adjustedClusters = adjusted,
                 )
-                lineStart = i
-                adjustedAccum = adjusted[i].advance
+                lineStart = breakAt
+                adjustedAccum = adjusted[breakAt].advance
+                i = breakAt + 1
             } else {
                 adjustedAccum = nextAdjusted
+                i += 1
             }
         }
 

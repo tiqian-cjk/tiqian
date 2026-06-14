@@ -487,6 +487,25 @@ class ExplainableStubParagraphLayoutEngine(
         val forbiddenLineEndClusters: Set<Int> = naturalClusters.indices.filterTo(mutableSetOf()) { idx ->
             kinsokuRule.forbiddenAtLineEnd(naturalClusters[idx])
         }
+        val clusterRoles = naturalClusters.map { cluster ->
+            fontDecisions.first { cluster.range.isInside(it.range) }.role
+        }
+        // LineEndHangingHyphen as a LAST resort (ADR 0029 amendment): a break
+        // before one of these clusters is a syllable/hard-break continuation —
+        // the breaker prefers whole-word wrap + justification and only takes it
+        // when the line would otherwise stretch 汉字间距 past the threshold.
+        val hyphenBreakClusters: Set<Int> = if (hyphenOffsets.isEmpty()) {
+            emptySet()
+        } else {
+            naturalClusters.indices.filterTo(mutableSetOf()) {
+                naturalClusters[it].range.start in hyphenOffsets
+            }
+        }
+        // CJK↔CJK boundaries — the stretchable 汉字间距 the breaker gauges line
+        // looseness against.
+        val cjkInterCharBoundaries: Set<Int> = (1 until naturalClusters.size).filterTo(mutableSetOf()) {
+            clusterRoles[it - 1] == FontRole.CjkText && clusterRoles[it] == FontRole.CjkText
+        }
         val lineSolution = if (text.isEmpty()) {
             LineSolution(emptyList())
         } else {
@@ -504,11 +523,10 @@ class ExplainableStubParagraphLayoutEngine(
                 hangableClusters = hangableClusters,
                 forbiddenLineStartClusters = forbiddenLineStartClusters,
                 forbiddenLineEndClusters = forbiddenLineEndClusters,
+                hyphenBreakClusters = hyphenBreakClusters,
+                cjkInterCharBoundaries = cjkInterCharBoundaries,
+                maxCjkStretchPerGap = HYPHEN_LAST_RESORT_CJK_STRETCH_EM * fontSize,
             )
-        }
-
-        val clusterRoles = naturalClusters.map { cluster ->
-            fontDecisions.first { cluster.range.isInside(it.range) }.role
         }
         val pushInAllocations = lineSolution.lines
             .mapNotNull { it.repair as? RepairOption.PushIn }
@@ -1780,6 +1798,12 @@ private const val EMPHASIS_DOT_CENTER_EM = 0.45f
 /** `LatinForcedHyphenBreak` 硬断时尽量满足的左右边界（前二后三，同 en-US 连字）. */
 private const val HYPHEN_MIN_LEFT = 2
 private const val HYPHEN_MIN_RIGHT = 3
+
+/**
+ * 连字作为最后一档（ADR 0029 amendment）：整词换行后，若填满版心需要给每个汉字
+ * 间距加超过此值（半个字宽）才回头连字；以下则宁可拉伸汉字间距、不连字。
+ */
+private const val HYPHEN_LAST_RESORT_CJK_STRETCH_EM = 0.5f
 
 /** CLREQ 挤压第②档：西文词距最小压至四分之一汉字宽. */
 private const val WORD_SPACE_MIN_EM = 0.25f

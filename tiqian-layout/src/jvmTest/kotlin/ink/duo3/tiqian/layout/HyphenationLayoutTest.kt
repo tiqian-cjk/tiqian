@@ -46,6 +46,25 @@ class HyphenationLayoutTest {
     }
 
     @Test
+    fun hyphenationIsSkippedWhenStretchingCjkStaysTight() {
+        // Last resort (ADR 0029 amend): 8 hanzi (128) + " coffee" at maxWidth=180
+        // (grid off). "cof" fits the line, but wrapping "coffee" whole leaves a
+        // deficit of ~52 over 7 汉字间距 ≈ 7.4px/gap < 0.5em(8px) — tight enough,
+        // so it does NOT hyphenate; "coffee" wraps whole and the CJK stretches.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(
+                    firstLineIndentEm = 0f,
+                    lineLengthGrid = ink.duo3.tiqian.core.LineLengthGrid(enabled = false),
+                ),
+                content = TiqianTextContent("中文中文中文中文 coffee"),
+                constraints = LayoutConstraints(maxWidth = 180f),
+            ),
+        )
+        assertTrue(result.lines.none { it.hyphenAdvance > 0f }, "should not hyphenate when tight")
+    }
+
+    @Test
     fun fittingWordHyphenatesOnlyWhenAHyphenatorIsInjected() {
         // "coffee" (96) fits the measure (112), so without a hyphenator it stays
         // whole and wraps as a unit; with one it splits cof-fee and a hyphen
