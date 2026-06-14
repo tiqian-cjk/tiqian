@@ -14,7 +14,7 @@
 
 ```text
 Last completed: 中西混排西文音节连字收口（`LineEndHangingHyphen`，ADR 0029）——内置 en-US TeX 模式 + `LiangHyphenator`；**默认启用**（`defaultHyphenator()` expect/actual，JVM=en-US）；**最后一档**触发（`decideHyphenBreak`：整词换行优先，松紧扣中西间距容量后 >0.5em/间距才连字）；超宽词补连字符硬断（前二后三）；连字符**占版心宽**、溢出先**标点挤压**（复用 `shrinkOpportunities`）、挤不动才悬挂。renderer 画连字符、playground 目检过
-Up next:        第二阶段方向待定：竖排预研 / Android 真渲染（均见「不在第一阶段做的」）。西文连字零散后续：CY/T §9.4 人名/缩写不断词（难识别）、整段最优连字、Android 原生断词器接同一 `Hyphenator` 接口。（已有连字符处断词 §9.3 已做）
+Up next:        第二阶段方向待定：竖排预研 / Android 真渲染（均见「不在第一阶段做的」）。西文连字零散后续：整段最优连字、Android 原生断词器接同一 `Hyphenator` 接口。（CY/T §9.3 已有连字符断词、§9.4 全大写缩写不断词、驼峰处断 都已做；单人名靠纯大小写不可靠，有意不做）
 ```
 
 ## Slice / Milestone 对照表

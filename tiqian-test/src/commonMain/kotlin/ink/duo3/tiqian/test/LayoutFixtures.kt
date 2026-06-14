@@ -163,6 +163,14 @@ object EarlyLayoutFixtures {
             firstLineIndentEm = 2f,
         ),
         LayoutFixture(
+            id = "latin-camelcase",
+            text = "用PowerPoint做",
+            constraints = LayoutConstraints(maxWidth = 128f),
+            notes = "CamelCaseBreak: a camelCase token wraps at its hump (Power|Point) " +
+                "with NO hyphen — the capital signals the break. All-caps abbreviations " +
+                "(NASA) and single Title-case words are NOT treated this way.",
+        ),
+        LayoutFixture(
             id = "latin-existing-hyphen",
             text = "out-of-the-way",
             constraints = LayoutConstraints(maxWidth = 128f),

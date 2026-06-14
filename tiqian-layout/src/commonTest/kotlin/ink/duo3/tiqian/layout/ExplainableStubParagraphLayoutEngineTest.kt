@@ -721,6 +721,38 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun camelCaseTokenBreaksAtTheHumpWithoutAHyphen() {
+        // camelCase product names break at the hump — no hyphen added (the
+        // capital signals the break). "Power" + "Point".
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                content = TiqianTextContent("PowerPoint"),
+                constraints = LayoutConstraints(maxWidth = 128f),
+            ),
+        )
+
+        assertEquals(2, result.lines.size)
+        assertTrue(result.lines.all { it.hyphenAdvance == 0f }) // no hyphen at a camel break
+        assertTrue(result.clusters.any { it.text == "Power" })
+        assertTrue(result.clusters.any { it.text == "Point" })
+    }
+
+    @Test
+    fun allCapsAbbreviationIsNeverBroken() {
+        // CY/T §9.4: an all-caps abbreviation is not broken even when over-long.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                content = TiqianTextContent("INTERNATIONALIZATION中"),
+                constraints = LayoutConstraints(maxWidth = 128f),
+            ),
+        )
+
+        assertTrue(result.clusters.any { it.text == "INTERNATIONALIZATION" }) // stays one cluster
+    }
+
+    @Test
     fun hyphenatedCompoundBreaksAtExistingHyphenWithoutAddingOne() {
         // CY/T 154-2017 §9.3: "out-of-the-way" wraps AT an existing '-' — the
         // existing hyphen sits at the line end and NO new hyphen is added.

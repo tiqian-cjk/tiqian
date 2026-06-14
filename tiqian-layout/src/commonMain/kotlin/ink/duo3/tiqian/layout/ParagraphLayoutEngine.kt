@@ -264,20 +264,44 @@ class ExplainableStubParagraphLayoutEngine(
             }
             return cuts
         }
+        // CamelCaseBreak: a camelCase/PascalCase product token (internal capital)
+        // breaks at its humps — lowercase→uppercase, or an acronym boundary
+        // Upper→Upper-then-lower (XML|Http) — with NO hyphen (the capital signals
+        // the break). ≥2 letters each side (§9.4). Clean breaks, not hyphenOffsets.
+        fun camelCaseCuts(wordRange: TextRange): List<Int> {
+            val w = text.substring(wordRange.start, wordRange.end)
+            val humps = (1 until w.length).filter { i ->
+                w[i].isUpperCase() && (
+                    w[i - 1].isLowerCase() ||
+                        (w[i - 1].isUpperCase() && i + 1 < w.length && w[i + 1].isLowerCase())
+                    )
+            }
+            val bounds = listOf(0) + humps + listOf(w.length)
+            return humps.filter { h ->
+                h - bounds.last { it < h } >= 2 && bounds.first { it > h } - h >= 2
+            }.map { wordRange.start + it }
+        }
         val shapingResults = fontDecisions.flatMap { decision ->
             decision.shapingSegments(text).flatMap { segmentRange ->
                 val shaped = shapeSegment(decision, segmentRange)
                 val word = shaped.clusters.singleOrNull()
                 val isLatin = decision.role == FontRole.LatinText && word != null && word.text.isNotEmpty()
-                // §9.3 existing-hyphen breaks (no new hyphen) take precedence; only
-                // an all-letter word with none gets §9.2 syllable/hard hyphenation
-                // (CY/T「一般不要再增加新的连字符」).
-                val cleanCuts = if (isLatin && word!!.text.contains('-')) {
-                    existingHyphenCuts(segmentRange)
-                } else {
-                    emptyList()
+                val w = if (isLatin) word!!.text else ""
+                val allLetters = isLatin && w.all { it.isLetter() }
+                // §9.4 全大写缩写不断词；驼峰式在驼峰处断（无连字符）；含 '-' 在
+                // 已有连字符处断（§9.3，无新连字符）。以上都是 clean 断点（不进
+                // hyphenOffsets）。其余全字母词走 §9.2 音节 + 硬断（加合成连字符）。
+                val isAbbreviation = allLetters && w.length >= 2 && w.none { it.isLowerCase() }
+                val isCamelCase = allLetters && !isAbbreviation && (1 until w.length).any { w[it].isUpperCase() }
+                val cleanCuts = when {
+                    !isLatin -> emptyList()
+                    w.contains('-') -> existingHyphenCuts(segmentRange)
+                    isCamelCase -> camelCaseCuts(segmentRange)
+                    else -> emptyList()
                 }
-                val hyphenCuts = if (isLatin && cleanCuts.isEmpty() && word!!.text.all { it.isLetter() }) {
+                val hyphenCuts = if (
+                    allLetters && !isAbbreviation && !isCamelCase && !w.contains('-') && cleanCuts.isEmpty()
+                ) {
                     latinWordCuts(decision, segmentRange)
                 } else {
                     emptyList()
