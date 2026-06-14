@@ -506,6 +506,14 @@ class ExplainableStubParagraphLayoutEngine(
         val cjkInterCharBoundaries: Set<Int> = (1 until naturalClusters.size).filterTo(mutableSetOf()) {
             clusterRoles[it - 1] == FontRole.CjkText && clusterRoles[it] == FontRole.CjkText
         }
+        // CJK↔Latin boundaries — 中西间距 absorbs deficit BEFORE 汉字间距 (CLREQ
+        // 拉伸顺序), so the breaker discounts their capacity from the looseness.
+        val sinoWesternBoundaries: Set<Int> = (1 until naturalClusters.size).filterTo(mutableSetOf()) {
+            val a = clusterRoles[it - 1]
+            val b = clusterRoles[it]
+            (a == FontRole.CjkText && b == FontRole.LatinText) ||
+                (a == FontRole.LatinText && b == FontRole.CjkText)
+        }
         val lineSolution = if (text.isEmpty()) {
             LineSolution(emptyList())
         } else {
@@ -526,6 +534,8 @@ class ExplainableStubParagraphLayoutEngine(
                 hyphenBreakClusters = hyphenBreakClusters,
                 cjkInterCharBoundaries = cjkInterCharBoundaries,
                 maxCjkStretchPerGap = HYPHEN_LAST_RESORT_CJK_STRETCH_EM * fontSize,
+                sinoWesternBoundaries = sinoWesternBoundaries,
+                sinoWesternStretchCap = HYPHEN_SINO_WESTERN_STRETCH_CAP_EM * fontSize,
             )
         }
         val pushInAllocations = lineSolution.lines
@@ -1811,6 +1821,9 @@ private const val HYPHEN_MIN_RIGHT = 3
  * 间距加超过此值（半个字宽）才回头连字；以下则宁可拉伸汉字间距、不连字。
  */
 private const val HYPHEN_LAST_RESORT_CJK_STRETCH_EM = 0.5f
+
+/** 中西间距可拉伸余量（justify CjkLatinSpace cap 0.5em − 自然 0.25em），算松紧时先扣它. */
+private const val HYPHEN_SINO_WESTERN_STRETCH_CAP_EM = 0.25f
 
 /** CLREQ 挤压第②档：西文词距最小压至四分之一汉字宽. */
 private const val WORD_SPACE_MIN_EM = 0.25f

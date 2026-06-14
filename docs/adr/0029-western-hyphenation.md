@@ -71,9 +71,13 @@
 救不了（没有可连词、或词太短）时，再走原来的无上限拉伸兜底。所以连字符恰好插在
 「带上限的汉字间距拉伸」与「无上限兜底拉伸」之间。
 
-近似：松紧用 `deficit / CJK间距数`，未先扣除词距/中西间距能吸收的部分，故偏保守
-（略多连字）；阈值可调。`hyphenationIsSkippedWhenStretchingCjkStaysTight` 单测
-锁定「够紧就不连字」，`western-hyphenation` golden 是够松仍连字的一侧。
+松紧度量：按 CLREQ 拉伸顺序，**先扣中西间距能吸收的**（每个 CJK↔Latin 间距
+0.25em 余量 = cap 0.5 − 自然 0.25；词距是二分空、已在 0.5em cap，不吸收），
+剩下的才是真正落到汉字间距的增量 `cjkDeficit / 汉字间距数`，与 0.5em 比。
+`decideHyphenBreak` 收 `sinoWesternBoundaries` + 每档容量；
+`DecideHyphenBreakTest` 锁定「扣掉中西间距后由松转不连字」。
+`hyphenationIsSkippedWhenStretchingCjkStaysTight` 锁定「够紧就不连字」，
+`western-hyphenation` golden 是够松仍连字的一侧。
 
 ## Amendment (2026-06-14): 连字符占版心宽、放不下才悬挂
 
