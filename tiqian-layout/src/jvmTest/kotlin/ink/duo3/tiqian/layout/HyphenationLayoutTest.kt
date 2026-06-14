@@ -105,15 +105,15 @@ class HyphenationLayoutTest {
     }
 
     @Test
-    fun hangingHyphenIsNotCountedInTheMeasureFill() {
-        // The hyphen hangs past the content: a hyphenated line's visualWidth (the
-        // content) still respects the measure; the hyphen sits beyond it.
-        val hyphenated = layoutWith(EnglishHyphenation.enUs)
+    fun hyphenIsReservedWithinTheMeasureNotHungPastIt() {
+        // The hyphen takes real width inside the measure (like a line-end mark):
+        // content fills only `measure − hyphen`, so content + hyphen lands at the
+        // measure edge — the hyphen does not hang past it (the word fits here).
+        val hyphenated = layoutWith(EnglishHyphenation.enUs, "请运行 internationalization 命令", 160f)
         val hyphenLine = hyphenated.lines.first { it.hyphenAdvance > 0f }
         assertTrue(
-            hyphenLine.indent + hyphenLine.visualWidth <= 160f + 0.01f,
-            "content overflowed the measure: ${hyphenLine.indent + hyphenLine.visualWidth}",
+            hyphenLine.indent + hyphenLine.visualWidth + hyphenLine.hyphenAdvance <= 160f + 0.01f,
+            "hyphen hung past the measure: ${hyphenLine.indent + hyphenLine.visualWidth + hyphenLine.hyphenAdvance}",
         )
-        assertTrue(hyphenLine.hyphenAdvance > 0f)
     }
 }

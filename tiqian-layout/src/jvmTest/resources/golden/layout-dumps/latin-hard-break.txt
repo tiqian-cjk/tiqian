@@ -4,10 +4,10 @@ maxWidth: 64.0
 == greedy ==
 size 64.0x62.4
 kinsoku measure=4.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:4字→Basic+Hang
-line[0] 0-3 hyphen=16.0 natural=52.0 adjusted=52.0 visual=56.0 repair=- candidates=- justify=deficit=12.0->8.0 CjkLatinSpace@0+4.0
-line[1] 3-5 hyphen=16.0 natural=32.0 adjusted=32.0 visual=32.0 repair=- candidates=- justify=deficit=32.0->32.0 
+line[0] 0-3 hyphen=16.0 natural=52.0 adjusted=52.0 visual=52.0 repair=- candidates=- justify=-
+line[1] 3-5 hyphen=16.0 natural=32.0 adjusted=32.0 visual=32.0 repair=- candidates=- justify=deficit=16.0->16.0 
 line[2] 5-8 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
-cluster 0-1 '中' adv=20.0
+cluster 0-1 '中' adv=16.0
 cluster 1-3 'Ne' adv=36.0
 cluster 3-4 't' adv=16.0
 cluster 4-5 'w' adv=16.0
@@ -18,10 +18,10 @@ autospace 1-3 side=leading boundary=CjkText reduction=-4.0
 == lookahead ==
 size 64.0x62.4
 kinsoku measure=4.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:4字→Basic+Hang
-line[0] 0-3 hyphen=16.0 natural=52.0 adjusted=52.0 visual=56.0 repair=- candidates=- justify=deficit=12.0->8.0 CjkLatinSpace@0+4.0
-line[1] 3-5 hyphen=16.0 natural=32.0 adjusted=32.0 visual=32.0 repair=- candidates=- justify=deficit=32.0->32.0 
+line[0] 0-3 hyphen=16.0 natural=52.0 adjusted=52.0 visual=52.0 repair=- candidates=- justify=-
+line[1] 3-5 hyphen=16.0 natural=32.0 adjusted=32.0 visual=32.0 repair=- candidates=- justify=deficit=16.0->16.0 
 line[2] 5-8 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
-cluster 0-1 '中' adv=20.0
+cluster 0-1 '中' adv=16.0
 cluster 1-3 'Ne' adv=36.0
 cluster 3-4 't' adv=16.0
 cluster 4-5 'w' adv=16.0

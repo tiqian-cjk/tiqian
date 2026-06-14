@@ -4,11 +4,11 @@ maxWidth: 160.0
 == greedy ==
 size 160.0x62.4
 kinsoku measure=10.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:10字→Basic+Hang
-line[0] 0-9 hyphen=16.0 natural=132.0 adjusted=132.0 visual=160.0 repair=- candidates=- justify=deficit=28.0->0.0 CjkInterChar@0+14.0,CjkInterChar@1+14.0
-line[1] 9-17 hyphen=16.0 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=deficit=32.0->32.0 
+line[0] 0-9 hyphen=16.0 natural=132.0 adjusted=132.0 visual=144.0 repair=- candidates=- justify=deficit=12.0->0.0 CjkInterChar@0+6.0,CjkInterChar@1+6.0
+line[1] 9-17 hyphen=16.0 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=deficit=16.0->16.0 
 line[2] 17-27 natural=148.0 adjusted=148.0 visual=148.0 repair=- candidates=- justify=-
-cluster 0-1 '请' adv=30.0
-cluster 1-2 '运' adv=30.0
+cluster 0-1 '请' adv=22.0
+cluster 1-2 '运' adv=22.0
 cluster 2-3 '行' adv=16.0
 cluster 3-4 ' ' adv=4.0
 cluster 4-6 'in' adv=32.0
@@ -32,11 +32,11 @@ autospace 24-25 side=gap boundary=CjkText reduction=4.0
 == lookahead ==
 size 160.0x62.4
 kinsoku measure=10.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:10字→Basic+Hang
-line[0] 0-9 hyphen=16.0 natural=132.0 adjusted=132.0 visual=160.0 repair=- candidates=- justify=deficit=28.0->0.0 CjkInterChar@0+14.0,CjkInterChar@1+14.0
-line[1] 9-17 hyphen=16.0 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=deficit=32.0->32.0 
+line[0] 0-9 hyphen=16.0 natural=132.0 adjusted=132.0 visual=144.0 repair=- candidates=- justify=deficit=12.0->0.0 CjkInterChar@0+6.0,CjkInterChar@1+6.0
+line[1] 9-17 hyphen=16.0 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=deficit=16.0->16.0 
 line[2] 17-27 natural=148.0 adjusted=148.0 visual=148.0 repair=- candidates=- justify=-
-cluster 0-1 '请' adv=30.0
-cluster 1-2 '运' adv=30.0
+cluster 0-1 '请' adv=22.0
+cluster 1-2 '运' adv=22.0
 cluster 2-3 '行' adv=16.0
 cluster 3-4 ' ' adv=4.0
 cluster 4-6 'in' adv=32.0

@@ -623,6 +623,17 @@ class ExplainableStubParagraphLayoutEngine(
                 else -> false
             }
         }
+        // LineEndHangingHyphen reserved width (ADR 0029 amend): a line that ends
+        // mid-word at a hyphenation point gives the trailing hyphen real width
+        // inside the measure — like a line-end punctuation mark, NOT hung by
+        // default. The content therefore fills only `measure − hyphen`; when the
+        // content can't be squeezed that far (over-long words with no room) the
+        // hyphen falls past the edge (hangs) as a last resort, automatically.
+        fun lineHyphenAdvanceAt(lineIndex: Int): Float {
+            if (hyphenOffsets.isEmpty() || lineIndex >= lineSolution.lines.lastIndex) return 0f
+            val nextFirst = lineSolution.lines[lineIndex + 1].clusterRange.first
+            return if (naturalClusters[nextFirst].range.start in hyphenOffsets) hyphenAdvance else 0f
+        }
         // CLREQ:「中文排版特别是书籍正文排版极少使用左齐右不齐，原则上
         // 应该进行两端对齐」— justification is the baseline, not an option:
         // every non-last line goes through the justify chain. The last line
@@ -643,11 +654,11 @@ class ExplainableStubParagraphLayoutEngine(
                     adjustedClusters = trimmedClusters,
                     clusterRoles = clusterRoles,
                     lineClusterRange = justifyRange,
-                    maxWidth = if (lineCandidate.clusterRange.first == 0) {
+                    maxWidth = (if (lineCandidate.clusterRange.first == 0) {
                         measure - firstLineIndent
                     } else {
                         measure
-                    },
+                    }) - lineHyphenAdvanceAt(lineIndex),
                     fontSize = fontSize,
                     skip = false,
                     allowSinoWesternGapStretch = adjustmentStyle.allowSinoWesternGapAdjustment,
@@ -706,13 +717,9 @@ class ExplainableStubParagraphLayoutEngine(
             // LineBox.indent unchanged.
             val isLast = lineIndex == lineSolution.lines.lastIndex
             // LineEndHangingHyphen: this line ends mid-word when the NEXT line
-            // begins at a hyphenation source offset (a syllable continuation).
-            val lineHyphenAdvance = if (!isLast && hyphenOffsets.isNotEmpty()) {
-                val nextFirst = lineSolution.lines[lineIndex + 1].clusterRange.first
-                if (finalClusters[nextFirst].range.start in hyphenOffsets) hyphenAdvance else 0f
-            } else {
-                0f
-            }
+            // begins at a hyphenation source offset (reserved in the justify
+            // measure above; renderers draw it at indent + visualWidth).
+            val lineHyphenAdvance = lineHyphenAdvanceAt(lineIndex)
             val limit = measure - baseIndent
             val alignmentInset = if (!isLast) {
                 0f

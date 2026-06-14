@@ -75,6 +75,20 @@
 （略多连字）；阈值可调。`hyphenationIsSkippedWhenStretchingCjkStaysTight` 单测
 锁定「够紧就不连字」，`western-hyphenation` golden 是够松仍连字的一侧。
 
+## Amendment (2026-06-14): 连字符占版心宽、放不下才悬挂
+
+最初连字符**默认悬挂**（突出版心、不计入测量）。改为：连字符像行末标点一样
+**占版心内的实宽**——连字行的内容只 justify 到 `measure − 连字符宽`，连字符落
+在版心边缘内（content + 连字符 = 版心），不再默认突出。只有当内容宽于
+`measure − 连字符`（超宽词、或行太窄塞不进）时，连字符才落到版心外（**悬挂**）
+——「真的放不下了再悬挂」自然成立（justify 只拉不压，内容压不下去就让连字符
+出界）。`western-hyphenation` golden：连字行 visual 由 160 变 144（=160−16），
+汉字间距也少拉了（连字符填掉了那 16）。
+
+未做（窄案）：内容只比 `measure − 连字符` 宽一点点、而行内**有可挤压标点**时，
+理想是先**挤压标点**腾出那几像素、把连字符收进版心（CLREQ 标点挤压），现在是
+直接让连字符悬挂那点残差。这要把连字符溢出接进 shrink 管线，留作后续。
+
 ## Consequences
 
 - 长西文词在窄版心混排时按 en-US 音节断点换行（`in-ter-na-tion-al-iza-tion`），
