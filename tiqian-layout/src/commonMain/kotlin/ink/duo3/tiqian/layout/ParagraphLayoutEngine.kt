@@ -561,6 +561,48 @@ class ExplainableStubParagraphLayoutEngine(
                     pushInRawTrims.merge(alloc.clusterIndex, alloc.shrink) { a, b -> a + b }
             }
         }
+        // LineEndHangingHyphen 标点挤压 (ADR 0029 amend): a reserved hyphen that
+        // would overflow the measure first squeezes the line's compressible glue
+        // (the same `shrinkOpportunities`, in CLREQ 挤压 tier order, minus what
+        // PushIn already took); only the residual it cannot recover hangs past
+        // the edge. Augments the PushIn consume maps so the geometry applies both.
+        fun lineHyphenAdvanceAt(lineIndex: Int): Float {
+            if (hyphenOffsets.isEmpty() || lineIndex >= lineSolution.lines.lastIndex) return 0f
+            val nextFirst = lineSolution.lines[lineIndex + 1].clusterRange.first
+            return if (naturalClusters[nextFirst].range.start in hyphenOffsets) hyphenAdvance else 0f
+        }
+        if (hyphenOffsets.isNotEmpty()) {
+            lineSolution.lines.forEachIndexed { lineIndex, line ->
+                val hyphen = lineHyphenAdvanceAt(lineIndex)
+                if (hyphen <= 0f) return@forEachIndexed
+                val lineLimit = if (line.clusterRange.first == 0) measure - firstLineIndent else measure
+                val content = line.clusterRange.sumOf { clusters[it].advance.toDouble() }.toFloat()
+                var shortfall = content + hyphen - lineLimit
+                if (shortfall <= 0.001f) return@forEachIndexed
+                for (opp in shrinkOpportunities.filter { it.clusterIndex in line.clusterRange && !it.lineEndOnly }.sortedBy { it.tier }) {
+                    if (shortfall <= 0.001f) break
+                    val used = when (opp.channel) {
+                        ShrinkChannel.TrailingGlue -> pushInTrailing[opp.clusterIndex] ?: 0f
+                        ShrinkChannel.LeadingGlue -> pushInLeading[opp.clusterIndex] ?: 0f
+                        ShrinkChannel.RawAdvance -> pushInRawTrims[opp.clusterIndex] ?: 0f
+                        ShrinkChannel.LeadingAndTrailingGlue ->
+                            (pushInLeading[opp.clusterIndex] ?: 0f) + (pushInTrailing[opp.clusterIndex] ?: 0f)
+                    }
+                    val take = minOf(shortfall, (opp.capacity - used).coerceAtLeast(0f))
+                    if (take <= 0f) continue
+                    when (opp.channel) {
+                        ShrinkChannel.TrailingGlue -> pushInTrailing.merge(opp.clusterIndex, take) { a, b -> a + b }
+                        ShrinkChannel.LeadingGlue -> pushInLeading.merge(opp.clusterIndex, take) { a, b -> a + b }
+                        ShrinkChannel.LeadingAndTrailingGlue -> {
+                            pushInLeading.merge(opp.clusterIndex, take / 2f) { a, b -> a + b }
+                            pushInTrailing.merge(opp.clusterIndex, take / 2f) { a, b -> a + b }
+                        }
+                        ShrinkChannel.RawAdvance -> pushInRawTrims.merge(opp.clusterIndex, take) { a, b -> a + b }
+                    }
+                    shortfall -= take
+                }
+            }
+        }
         val pushInGeometry = baseGeometry
             .consumeTrailingByCluster(pushInTrailing)
             .consumeLeadingByCluster(pushInLeading)
@@ -639,11 +681,6 @@ class ExplainableStubParagraphLayoutEngine(
         // default. The content therefore fills only `measure − hyphen`; when the
         // content can't be squeezed that far (over-long words with no room) the
         // hyphen falls past the edge (hangs) as a last resort, automatically.
-        fun lineHyphenAdvanceAt(lineIndex: Int): Float {
-            if (hyphenOffsets.isEmpty() || lineIndex >= lineSolution.lines.lastIndex) return 0f
-            val nextFirst = lineSolution.lines[lineIndex + 1].clusterRange.first
-            return if (naturalClusters[nextFirst].range.start in hyphenOffsets) hyphenAdvance else 0f
-        }
         // CLREQ:「中文排版特别是书籍正文排版极少使用左齐右不齐，原则上
         // 应该进行两端对齐」— justification is the baseline, not an option:
         // every non-last line goes through the justify chain. The last line

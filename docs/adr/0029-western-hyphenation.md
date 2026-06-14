@@ -89,9 +89,12 @@
 出界）。`western-hyphenation` golden：连字行 visual 由 160 变 144（=160−16），
 汉字间距也少拉了（连字符填掉了那 16）。
 
-未做（窄案）：内容只比 `measure − 连字符` 宽一点点、而行内**有可挤压标点**时，
-理想是先**挤压标点**腾出那几像素、把连字符收进版心（CLREQ 标点挤压），现在是
-直接让连字符悬挂那点残差。这要把连字符溢出接进 shrink 管线，留作后续。
+标点挤压（CLREQ）：内容宽于 `measure − 连字符` 时，先**挤压本行可压的标点/词距/
+中西间距 glue**（复用 PushIn 那套 `shrinkOpportunities`，按 CLREQ 挤压 tier 顺序、
+扣掉 PushIn 已用的）把连字符收回版心，只有挤不动的残差才悬挂。落在 geometry 前、
+并入 PushIn 的 consume map。`reservedHyphenSqueezesPunctuationGlueToPullItIn` 单测
+锁定（逗号 trailing glue 被压）；行内无可压 glue（如 `中Network` 只有 autospace
+间距、不在 shrinkOpportunities）时照旧悬挂——「真的放不下」。
 
 ## Consequences
 

@@ -46,6 +46,24 @@ class HyphenationLayoutTest {
     }
 
     @Test
+    fun reservedHyphenSqueezesPunctuationGlueToPullItIn() {
+        // A reserved hyphen that would overflow first squeezes the comma's
+        // trailing glue (标点挤压) before hanging the residual.
+        val result = ExplainableStubParagraphLayoutEngine(hyphenator = EnglishHyphenation.enUs).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(
+                    firstLineIndentEm = 0f,
+                    lineLengthGrid = ink.duo3.tiqian.core.LineLengthGrid(enabled = false),
+                ),
+                content = TiqianTextContent("中文，internationalization"),
+                constraints = LayoutConstraints(maxWidth = 128f),
+            ),
+        )
+        val comma = result.clusters.first { it.text == "，" }
+        assertTrue(comma.advance < 16f, "comma glue not compressed for the hyphen: ${comma.advance}")
+    }
+
+    @Test
     fun hyphenationIsSkippedWhenStretchingCjkStaysTight() {
         // Last resort (ADR 0029 amend): 8 hanzi (128) + " coffee" at maxWidth=180
         // (grid off). "cof" fits the line, but wrapping "coffee" whole leaves a
