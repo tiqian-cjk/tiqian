@@ -66,6 +66,15 @@ data class ParagraphStyle(
      */
     val lastLineAlignment: LastLineAlignment = LastLineAlignment.Start,
     val writingMode: WritingMode = WritingMode.HorizontalTb,
+    /**
+     * Baseline-to-baseline line height, in **the same units as
+     * [TextStyle.fontSize] (engine pixels), not a multiplier**. `null` = the
+     * natural height (字面 + any [InterlinearMarkLineSpacingFloor]). A value is
+     * **clamped up** to that natural height — a line shorter than the content
+     * would overlap glyphs, so values below ~1em have no effect (the resolution
+     * is recorded in `LineSpacingDecisionInfo`). To set 1.5× of a 16px font,
+     * pass `24f`, not `1.5f`.
+     */
     val lineHeight: Float? = null,
     /**
      * 单面装/双面装（印刷是否正反两面）。CLREQ 5.6.1.1：为保证行间标点的
