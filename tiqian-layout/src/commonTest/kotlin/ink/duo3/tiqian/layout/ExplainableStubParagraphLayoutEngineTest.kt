@@ -1143,11 +1143,13 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         // Anchor maths for 豆 (4-5): line 0 holds clusters 0..7, x offset of
         // index 4 = 4×16 = 64, glyph centre 64+8 = 72; anchorY = line 0
-        // baseline + 16×0.45 (clear daylight under the character face).
+        // baseline + 16×0.34 (seated between the face and the next line); the
+        // dot is a 0.22em circle, not the full `•` glyph.
         val first = decisions.single { it.sourceText == "豆" }
         assertEquals(72f, first.anchorX)
+        assertEquals(16f * 0.22f, first.dotDiameter, 0.01f)
         val line0Baseline = result.lines.first().baseline
-        assertEquals(line0Baseline + 7.2f, first.anchorY, 0.01f)
+        assertEquals(line0Baseline + 5.44f, first.anchorY, 0.01f)
     }
 
     @Test

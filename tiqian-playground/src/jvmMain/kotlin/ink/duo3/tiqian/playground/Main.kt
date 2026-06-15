@@ -125,7 +125,6 @@ private fun rasterizeLayoutToPngSkia(result: LayoutResult, fixture: LayoutFixtur
     val maxWidth = fixture.constraints.maxWidth.coerceAtLeast(1f)
     val height = result.size.height.coerceAtLeast(16f)
     val fontSize = result.input.textStyle.fontSize
-    val language = result.input.textStyle.locale
 
     val cjkFont = org.jetbrains.skia.Font(ink.duo3.tiqian.shaping.skia.SkiaSystemTypefaces.cjk, fontSize)
     val latinFont = org.jetbrains.skia.Font(ink.duo3.tiqian.shaping.skia.SkiaSystemTypefaces.latin, fontSize)
@@ -156,20 +155,12 @@ private fun rasterizeLayoutToPngSkia(result: LayoutResult, fixture: LayoutFixtur
     // renderer uses; topPad shifts the baseline for the raster canvas.
     ink.duo3.tiqian.shaping.skia.drawTiqianGlyphs(canvas, result, cjkFont, latinFont, paint, shaper, topPad)
 
-    // Emphasis dots (ADR 0018): align the dot glyph's ink centre to the
-    // engine-decided anchor; topPad shifts engine canvas coords like the
-    // baselines above.
-    val appliedDots = result.debug.decorationDecisions.filter { it.applied }
-    if (appliedDots.isNotEmpty()) {
-        val dotGlyph = cjkFont.getUTF32Glyph(EMPHASIS_DOT.code)
-        val dotInk = cjkFont.getBounds(shortArrayOf(dotGlyph)).firstOrNull()
-        val dotBlob = ink.duo3.tiqian.shaping.skia.shapeTextBlob(shaper, EMPHASIS_DOT.toString(), cjkFont, language)
-        if (dotBlob != null && dotInk != null) {
-            val inkCenterX = (dotInk.left + dotInk.right) / 2f
-            val inkCenterY = (dotInk.top + dotInk.bottom) / 2f
-            for (dot in appliedDots) {
-                canvas.drawTextBlob(dotBlob, dot.anchorX - inkCenterX, topPad + dot.anchorY - inkCenterY, paint)
-            }
+    // Emphasis dots (ADR 0018): a filled circle of the engine-decided diameter
+    // centred on the anchor (topPad shifts engine canvas coords like the
+    // baselines above) — smaller than the `•` glyph so it seats in the gap.
+    for (dot in result.debug.decorationDecisions) {
+        if (dot.applied && dot.dotDiameter > 0f) {
+            canvas.drawCircle(dot.anchorX, topPad + dot.anchorY, dot.dotDiameter / 2f, paint)
         }
     }
 
@@ -206,9 +197,6 @@ private fun rasterizeLayoutToPngSkia(result: LayoutResult, fixture: LayoutFixtur
     val dataUri = "data:image/png;base64,${Base64.getEncoder().encodeToString(bytes)}"
     return RasterResult(dataUri = dataUri, widthPx = canvasWidth, heightPx = canvasHeight)
 }
-
-/** CLREQ 着重号 glyph: U+2022 BULLET (CLREQ allows U+25CF or U+2022). */
-private const val EMPHASIS_DOT = '•'
 
 private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, scale: Int = 2): RasterResult {
     val maxWidth = fixture.constraints.maxWidth.coerceAtLeast(1f)
@@ -298,12 +286,11 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
             }
         }
 
-        // Emphasis dots — the AWT raster is the legacy debug view; a filled
-        // circle approximates the dot glyph (the skia raster draws the real
-        // U+2022 glyph aligned to the same engine anchor).
-        val dotDiameter = fontSize * 0.22f
+        // Emphasis dots — a filled circle of the engine-decided diameter, the
+        // same dot the Skia raster and Compose renderer draw.
         for (dot in result.debug.decorationDecisions) {
-            if (!dot.applied) continue
+            if (!dot.applied || dot.dotDiameter <= 0f) continue
+            val dotDiameter = dot.dotDiameter
             g.fillOval(
                 (dot.anchorX - dotDiameter / 2f).toInt(),
                 (topPad + dot.anchorY - dotDiameter / 2f).toInt(),

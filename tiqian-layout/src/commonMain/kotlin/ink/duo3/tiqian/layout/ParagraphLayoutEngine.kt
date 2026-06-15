@@ -1072,6 +1072,7 @@ class ExplainableStubParagraphLayoutEngine(
                             },
                             anchorX = x + glyphAdvance / 2f,
                             anchorY = lineBoxes[lineIndex].baseline + fontSize * EMPHASIS_DOT_CENTER_EM,
+                            dotDiameter = if (applied) fontSize * EMPHASIS_DOT_DIAMETER_EM else 0f,
                         )
                     }
                     x += cluster.advance
@@ -1910,8 +1911,22 @@ private data class LineEdgeTrimResult(
     val decisions: List<LineEdgeTrimDecisionInfo>,
 )
 
-/** ADR 0018: dot ink centre sits this far below the BASELINE. */
-private const val EMPHASIS_DOT_CENTER_EM = 0.45f
+/**
+ * ADR 0018: 着重号 dot ink centre sits this far below the BASELINE. Sized for
+ * the tight case — the minimum 着重号 line height (natural + 0.5em floor) —
+ * so an [EMPHASIS_DOT_DIAMETER_EM] dot seats roughly midway between the
+ * character face below the baseline and the next line's ink, clearing both.
+ * (The old 0.45 + a full-size `•` glyph overlapped the next line by ~1px on
+ * real fonts — measured by `EmphasisClearanceProbe`.)
+ */
+private const val EMPHASIS_DOT_CENTER_EM = 0.34f
+
+/**
+ * ADR 0018: 着重号 dot diameter, as a fraction of em. CLREQ 着重号 is a small
+ * solid dot, much smaller than the font's `•` glyph (~0.375em); renderers draw
+ * a filled circle of this size so it fits the line gap. Matches the AWT raster.
+ */
+private const val EMPHASIS_DOT_DIAMETER_EM = 0.22f
 
 /** `LatinForcedHyphenBreak` 硬断时尽量满足的左右边界（前二后三，同 en-US 连字）. */
 private const val HYPHEN_MIN_LEFT = 2

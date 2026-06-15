@@ -6,7 +6,6 @@ import androidx.compose.ui.graphics.nativeCanvas
 import ink.duo3.tiqian.core.LayoutResult
 import ink.duo3.tiqian.shaping.skia.SkiaSystemTypefaces
 import ink.duo3.tiqian.shaping.skia.drawTiqianGlyphs
-import ink.duo3.tiqian.shaping.skia.shapeTextBlob
 import org.jetbrains.skia.Font
 import org.jetbrains.skia.Paint
 import org.jetbrains.skia.shaper.Shaper
@@ -23,7 +22,6 @@ internal fun DrawScope.drawParagraph(
     color: Int = 0xFF000000.toInt(),
 ) {
     val fontSize = result.input.textStyle.fontSize
-    val language = result.input.textStyle.locale
     val cjkFont = Font(SkiaSystemTypefaces.cjk, fontSize)
     val latinFont = Font(SkiaSystemTypefaces.latin, fontSize)
     val paint = Paint().apply { this.color = color }
@@ -36,19 +34,12 @@ internal fun DrawScope.drawParagraph(
         // drift between the two.
         drawTiqianGlyphs(skCanvas, result, cjkFont, latinFont, paint, shaper)
 
-        // Emphasis dots (ADR 0018): the dot glyph's ink centre lands on the
-        // engine-decided anchor.
-        val appliedDots = result.debug.decorationDecisions.filter { it.applied }
-        if (appliedDots.isNotEmpty()) {
-            val dotGlyph = cjkFont.getUTF32Glyph(EMPHASIS_DOT.code)
-            val dotInk = cjkFont.getBounds(shortArrayOf(dotGlyph)).firstOrNull()
-            val dotBlob = shapeTextBlob(shaper, EMPHASIS_DOT.toString(), cjkFont, language)
-            if (dotBlob != null && dotInk != null) {
-                val inkCenterX = (dotInk.left + dotInk.right) / 2f
-                val inkCenterY = (dotInk.top + dotInk.bottom) / 2f
-                for (dot in appliedDots) {
-                    skCanvas.drawTextBlob(dotBlob, dot.anchorX - inkCenterX, dot.anchorY - inkCenterY, paint)
-                }
+        // Emphasis dots (ADR 0018): a filled circle of the engine-decided
+        // diameter centred on the anchor — smaller than the `•` glyph so it
+        // seats in the line gap without touching the next line.
+        for (dot in result.debug.decorationDecisions) {
+            if (dot.applied && dot.dotDiameter > 0f) {
+                skCanvas.drawCircle(dot.anchorX, dot.anchorY, dot.dotDiameter / 2f, paint)
             }
         }
 
@@ -80,7 +71,4 @@ internal fun DrawScope.drawParagraph(
         }
     }
 }
-
-/** CLREQ 着重号 glyph: U+2022 BULLET (CLREQ allows U+25CF or U+2022). */
-private const val EMPHASIS_DOT = '•'
 

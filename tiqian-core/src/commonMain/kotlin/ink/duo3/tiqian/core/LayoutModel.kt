@@ -189,6 +189,13 @@ data class DecorationDecisionInfo(
     val reason: String,
     val anchorX: Float = 0f,
     val anchorY: Float = 0f,
+    /**
+     * 着重号 dot diameter (px), for the renderer to draw a filled circle of the
+     * size the engine reserved clearance for. The dot is intentionally smaller
+     * than the font's `•` glyph so it seats in the line gap without touching the
+     * next line (ADR 0018). 0 for non-dot decorations.
+     */
+    val dotDiameter: Float = 0f,
 )
 
 data class LineEdgeTrimDecisionInfo(
