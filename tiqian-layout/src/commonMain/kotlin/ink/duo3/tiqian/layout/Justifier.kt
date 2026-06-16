@@ -156,7 +156,12 @@ class Justifier(
             } + buildList {
                 for (idx in lineClusterRange) {
                     if (!adjustedClusters[idx].isSinoWesternTypedSpace(idx, adjustedClusters, clusterRoles)) continue
-                    val headroom = (cjkLatinSpaceMaxEm * fontSize - adjustedClusters[idx].advance).coerceAtLeast(0f)
+                    // A space collapsed to 0 at a line edge (LineEdgeWordSpaceCollapse)
+                    // must NOT be revived as a stretchable gap, or the trimmed edge
+                    // blank reappears at 0.5em.
+                    val width = adjustedClusters[idx].advance
+                    if (width <= 0f) continue
+                    val headroom = (cjkLatinSpaceMaxEm * fontSize - width).coerceAtLeast(0f)
                     if (headroom <= 0f) continue
                     add(
                         JustificationOpportunity(

@@ -293,4 +293,24 @@ class JustifierEngineTest {
         )
         assertTrue(sino.all { it.delta == sino.first().delta }, "同时、同等量")
     }
+
+    @Test
+    fun lineEdgeSinoWesternSpaceStaysCollapsed() {
+        // "中文中文 word 中文中" wraps with the typed space after 中文中文 at
+        // line 0's end. LineEdgeWordSpaceCollapse trims it to 0; the typed-中西
+        // stretch must NOT revive it to 0.5em (a trimmed line-edge blank).
+        val result = engine.layout(
+            LayoutInput(
+                content = TiqianTextContent("中文中文 word 中文中"),
+                constraints = LayoutConstraints(maxWidth = 80f),
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+            ),
+        )
+        result.lines.dropLast(1).forEach { line ->
+            val edge = result.clusters.last { it.range.start < line.range.end }
+            if (edge.text == " ") {
+                assertEquals(0f, edge.advance, "line-edge sino-western space must stay collapsed")
+            }
+        }
+    }
 }
