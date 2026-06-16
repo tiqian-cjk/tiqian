@@ -269,12 +269,13 @@ class JustifierEngineTest {
     }
 
     @Test
-    fun typedSpaceBoundaryDefersToWordSpaceInsteadOfStackingCjkLatinSpace() {
-        // text = "中文 Hello 中文中文中文"; the Latin cluster keeps its typed
-        // U+0020 at both edges (" Hello " = 7 codepoints, stub 112f).
-        // maxWidth=180 → line 0 = 中文 Hello 中文 (176), deficit 4.
-        // The typed-space boundaries must NOT receive CjkLatinSpace on top of
-        // the space the author already typed.
+    fun typedSinoWesternSpacesStretchInTierTwo() {
+        // text = "中文 Hello 中文中文中文": the author-typed U+0020 around
+        // "Hello" are 中西间距 (separate space clusters, autospace base 0.25em).
+        // They MUST stretch in tier ② (`TypedSinoWesternSpaceStretches`), each
+        // exactly once — not fall through every tier (the reverted
+        // `TypedSpaceBoundaryDefersToWordSpace`), and not stacked with a
+        // boundary CjkLatinSpace. CLREQ 拉伸第②档：同时、同等量.
         val result = engine.layout(
             LayoutInput(
                 content = TiqianTextContent("中文 Hello 中文中文中文"),
@@ -284,7 +285,12 @@ class JustifierEngineTest {
         )
         assertTrue(result.lines.size >= 2)
         val decision = result.debug.justificationDecisions.first()
-        assertTrue(decision.allocations.none { it.kind == "CjkLatinSpace" })
-        assertTrue(decision.allocations.all { it.kind == "CjkInterChar" })
+        val sino = decision.allocations.filter { it.kind == "CjkLatinSpace" }
+        assertEquals(2, sino.size) // both typed spaces, once each (no stacking)
+        assertTrue(
+            sino.all { a -> result.clusters.first { it.range.start == a.clusterRange.start }.text == " " },
+            "every 中西 stretch lands on a typed space cluster, not a boundary",
+        )
+        assertTrue(sino.all { it.delta == sino.first().delta }, "同时、同等量")
     }
 }

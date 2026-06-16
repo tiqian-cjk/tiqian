@@ -47,6 +47,8 @@ class Justifier(
      * and does not stretch (a finer proportional space would).
      */
     private val wordSpaceMaxEm: Float = 0.5f,
+    /** CLREQ 拉伸第②档：中西间距 final width cap（≤半个汉字字宽）. */
+    private val cjkLatinSpaceMaxEm: Float = 0.5f,
 ) {
     fun justify(
         adjustedClusters: List<Cluster>,
@@ -122,24 +124,50 @@ class Justifier(
         )
         if (remaining <= 0f) return finalize(lineClusterRange, deficitBefore, remaining, allocations)
 
-        // 2. CjkLatinSpace — open the boundary between CJK and Latin clusters.
-        // `IdeographAlphaJustifyBoundary`: same boundary rule as autospace
-        // (ADR 0009) — only ideograph ↔ alpha. CjkPunctuation ↔ Latin is
-        // punctuation-glue territory and must not get an extra space here.
-        // `TypedSpaceBoundaryDefersToWordSpace`: when the author already
-        // typed a U+0020 at the boundary, the gap is a WordSpace opportunity
-        // (deferred until Latin word splitting) — stacking CjkLatinSpace on
-        // top doubled the visible gap.
-        val cjkLatinOpps = if (!allowSinoWesternGapStretch) emptyList() else buildBoundaryOpportunities(
-            adjustedClusters = adjustedClusters,
-            lineClusterRange = lineClusterRange,
-            kind = GlueKind.CjkLatinSpace,
-            priority = 1,
-            capacity = cjkLatinSpaceEm * fontSize,
-        ) { leftIdx, rightIdx ->
-            clusterRoles[leftIdx].isIdeographAlphaBoundaryWith(clusterRoles[rightIdx]) &&
-                !adjustedClusters[leftIdx].text.endsWith(' ') &&
-                !adjustedClusters[rightIdx].text.startsWith(' ')
+        // 2. CjkLatinSpace — the sino-western gap（中西间距）, stretched from its
+        // 0.25em base up to 0.5em, every instance in the line by equal amounts
+        // (CLREQ 拉伸第②档：同时、同等量). The same gap takes two shapes:
+        //
+        //   (a) VIRTUAL — a CJK↔Latin cluster boundary with no typed space.
+        //       `IdeographAlphaJustifyBoundary`: same rule as autospace
+        //       (ADR 0009), ideograph ↔ alpha only; CjkPunctuation ↔ Latin is
+        //       punctuation-glue territory and gets nothing here.
+        //   (b) TYPED — an author U+0020 between an ideograph and a Latin word,
+        //       which autospace normalised to the 0.25em base. It IS the 中西
+        //       间距 and must stretch too (`TypedSinoWesternSpaceStretches`).
+        //       Earlier `TypedSpaceBoundaryDefersToWordSpace` deferred it to the
+        //       WordSpace tier, but a CJK-adjacent space is not a word space, so
+        //       it fell through ALL tiers — a「了 espresso」line then stretched
+        //       only on its CJK half. The virtual boundary still excludes typed
+        //       spaces so the same gap is never counted twice.
+        val cjkLatinOpps = if (!allowSinoWesternGapStretch) {
+            emptyList()
+        } else {
+            buildBoundaryOpportunities(
+                adjustedClusters = adjustedClusters,
+                lineClusterRange = lineClusterRange,
+                kind = GlueKind.CjkLatinSpace,
+                priority = 1,
+                capacity = cjkLatinSpaceEm * fontSize,
+            ) { leftIdx, rightIdx ->
+                clusterRoles[leftIdx].isIdeographAlphaBoundaryWith(clusterRoles[rightIdx]) &&
+                    !adjustedClusters[leftIdx].text.endsWith(' ') &&
+                    !adjustedClusters[rightIdx].text.startsWith(' ')
+            } + buildList {
+                for (idx in lineClusterRange) {
+                    if (!adjustedClusters[idx].isSinoWesternTypedSpace(idx, adjustedClusters, clusterRoles)) continue
+                    val headroom = (cjkLatinSpaceMaxEm * fontSize - adjustedClusters[idx].advance).coerceAtLeast(0f)
+                    if (headroom <= 0f) continue
+                    add(
+                        JustificationOpportunity(
+                            targetClusterIndex = idx,
+                            kind = GlueKind.CjkLatinSpace,
+                            priority = 1,
+                            capacity = headroom,
+                        ),
+                    )
+                }
+            }
         }
         remaining = allocate(
             deficit = remaining,
@@ -281,6 +309,27 @@ class Justifier(
             roles[idx + 1] == FontRole.LatinText &&
             !clusters[idx + 1].text.all { it == ' ' }
         return prevLatinWord && nextLatinWord
+    }
+
+    /**
+     * A typed sino-western gap: a space-run cluster with an ideograph on one
+     * side and a Latin WORD on the other (`TypedSinoWesternSpaceStretches`).
+     * Mirrors `isIdeographAlphaBoundaryWith` (CjkText ↔ LatinText only — a
+     * punctuation-adjacent typed space is glue territory, not 中西间距).
+     */
+    private fun Cluster.isSinoWesternTypedSpace(
+        idx: Int,
+        clusters: List<Cluster>,
+        roles: List<FontRole>,
+    ): Boolean {
+        if (text.isEmpty() || !text.all { it == ' ' }) return false
+        val leftCjk = idx > 0 && roles[idx - 1] == FontRole.CjkText
+        val rightCjk = idx < clusters.lastIndex && roles[idx + 1] == FontRole.CjkText
+        val leftLatinWord = idx > 0 &&
+            roles[idx - 1] == FontRole.LatinText && !clusters[idx - 1].text.all { it == ' ' }
+        val rightLatinWord = idx < clusters.lastIndex &&
+            roles[idx + 1] == FontRole.LatinText && !clusters[idx + 1].text.all { it == ' ' }
+        return (leftCjk && rightLatinWord) || (leftLatinWord && rightCjk)
     }
 }
 
