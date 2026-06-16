@@ -246,7 +246,7 @@ object EarlyLayoutFixtures {
         LayoutFixture(
             id = "mourning-frame",
             // 悼0念1：2王3小4明5同6志7、8张9大10同11同12志13。14
-            text = "悼念：王小明同志、张大同同志。",
+            text = "悼念：王小明同志、章萧珑同志。",
             constraints = LayoutConstraints(maxWidth = 72f),
             notes = "示亡号 (mourning frames) around 王小明 and 张大同. maxWidth 72 " +
                 "would naturally break inside 王小明 — MourningSpanKeptUnbroken moves " +
