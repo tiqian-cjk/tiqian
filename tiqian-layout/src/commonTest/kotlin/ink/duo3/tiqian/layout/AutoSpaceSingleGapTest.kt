@@ -129,4 +129,33 @@ class AutoSpaceSingleGapTest {
         assertTrue(result.debug.autoSpaceDecisions.all { it.boundaryRole == "CjkText" })
         assertTrue(result.debug.autoSpaceDecisions.all { it.side == "gap" })
     }
+
+    @Test
+    fun autospaceDistinguishesLetterFromDigitAtBoundary() {
+        // CLREQ 字母/数字之分: the boundary-adjacent western char selects
+        // cjkLatin (letter) vs cjkDigit (digit). Disable cjkDigit only —
+        // 汉字↔字母 still inserts a gap, 汉字↔数字 does not.
+        val engine = ExplainableStubParagraphLayoutEngine(
+            clreqProfileResolver = {
+                ink.duo3.tiqian.clreq.ClreqProfile.MainlandHorizontal.copy(
+                    autoSpace = ink.duo3.tiqian.clreq.AutoSpacePolicy(
+                        cjkLatin = ink.duo3.tiqian.clreq.AutoSpaceMode.Insert,
+                        cjkDigit = ink.duo3.tiqian.clreq.AutoSpaceMode.Disabled,
+                    ),
+                )
+            },
+        )
+        val result = engine.layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                content = TiqianTextContent("甲A乙9丙"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+        val decided = result.debug.autoSpaceDecisions
+        val aRange = result.clusters.single { it.text == "A" }.range
+        val nineRange = result.clusters.single { it.text == "9" }.range
+        assertTrue(decided.isNotEmpty() && decided.all { it.clusterRange == aRange }, "only the letter fires: $decided")
+        assertTrue(decided.none { it.clusterRange == nineRange }, "digit boundary must not fire when cjkDigit disabled")
+    }
 }

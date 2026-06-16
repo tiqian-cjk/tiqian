@@ -7,6 +7,7 @@ import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.clreq.ClreqProfileResolver
 import ink.duo3.tiqian.clreq.HangingPunctuationStyle
 import ink.duo3.tiqian.clreq.LineEndPunctuationStyle
+import ink.duo3.tiqian.clreq.NumberSymbolCohesion
 import ink.duo3.tiqian.clreq.PunctuationClass
 import ink.duo3.tiqian.clreq.PunctuationGluePlacement
 import ink.duo3.tiqian.clreq.ClreqPunctuationGlyphSubstitutor
@@ -601,10 +602,23 @@ class ExplainableStubParagraphLayoutEngine(
                 firstLineIndent = firstLineIndent,
                 shrinkOpportunities = shrinkOpportunities,
                 // MourningSpanKeptUnbroken: 示亡号 spans stay on one line
-                // whenever they fit (ADR 0018).
-                unbreakableRanges = input.decorations
-                    .filter { it.kind == DecorationKind.Mourning }
-                    .mapNotNull { span -> naturalClusters.clusterIndexRangeFor(span.range) },
+                // whenever they fit (ADR 0018). NumberSymbolCohesion: CLREQ
+                // 符号分离禁则 keeps 数字 + 前后缀符号/货币 on one line — but only
+                // when the group actually fits the measure; a number wider than
+                // the column can't be kept whole, so it falls back to normal
+                // breaking instead of forcing an impossible constraint.
+                unbreakableRanges = (
+                    input.decorations
+                        .filter { it.kind == DecorationKind.Mourning }
+                        .mapNotNull { span -> naturalClusters.clusterIndexRangeFor(span.range) } +
+                        NumberSymbolCohesion.unbreakableRanges(text)
+                            .mapNotNull { r ->
+                                naturalClusters.clusterIndexRangeFor(TextRange(r.first, r.last + 1))
+                            }
+                            .filter { idxRange ->
+                                idxRange.sumOf { naturalClusters[it].advance.toDouble() } <= measure
+                            }
+                    ),
                 hangableClusters = hangableClusters,
                 forbiddenLineStartClusters = forbiddenLineStartClusters,
                 forbiddenLineEndClusters = forbiddenLineEndClusters,

@@ -138,6 +138,15 @@ justify 延长、`AdjacentInterlinearLineShortening`（相邻侧各回缩 1/16em
 
 ### 8. 杂项（audit 级，暂不动）
 
+- **数字+前后缀符号 符号分离禁则**——已解决（2026-06-16）：CLREQ §符号分离禁则
+  「阿拉伯数字应作为整体不能拆成两行；百分/千分/度数（% ‰ ° ℃ ℉）与其前数字、
+  正负号（+ - ±）与其后数字、货币符号（前置 ¥ / 后置 ₫）与数字 均不能断行」。
+  落为 `NumberSymbolCohesion.unbreakableRanges(text)`（tiqian-clreq，含内部小数点/
+  千分位 `. ,`），引擎并入 breaker 的 `unbreakableRanges`。**仅当该组宽度 ≤ 版心
+  才生效**——比版心还宽的数字组无法整行保留，回退正常断行而非强加不可能约束。
+- **中西自动间距「字母 vs 数字」按边界字符接线**——已解决（`modeForWestern`：
+  边界相邻西文字符是数字→`cjkDigit`、否则→`cjkLatin`，逐侧判定；默认两者相同
+  Insert，`autospaceDistinguishesLetterFromDigitAtBoundary` 单测覆盖）。
 - **GB 式固定半宽标点**——已解决（ADR 0027）：「不可调整的标点包括：GB 式
   半字连接号、间隔号、分隔号，固定半个字宽」。落为 `PunctuationWidthPolicy.
   gbFixedSeparators` opt-in（连接/间隔/分隔→0.5em、glue 0 不可调）；并顺带
@@ -181,6 +190,7 @@ justify 延长、`AdjacentInterlinearLineShortening`（相邻侧各回缩 1/16em
 
 ## 状态
 
-缺口 1–7 全部已解决（Slice 10–17）；行尾禁则（ADR 0026）、`cjkDigit`
-自动间距按边界字符独立接线（CLREQ 字母/数字之分）随整体 review 补上。
+缺口 1–7 全部已解决（Slice 10–17）；行尾禁则（ADR 0026）已落地；`cjkDigit`
+自动间距按边界字符独立接线（CLREQ 字母/数字之分）+ 数字符号分离禁则
+（`NumberSymbolCohesion`）已于 2026-06-16 补齐（见「8 杂项」前两条）。
 剩下只有「8 杂项」的风格选项与远期项，不在第一阶段主线。

@@ -1417,6 +1417,27 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun numberWithSuffixSymbolNeverSplitsAcrossLines() {
+        // CLREQ 符号分离禁则: 数字 + 后缀 % 不可拆行. At maxWidth 120 the natural
+        // greedy break falls between 50 and %; NumberSymbolCohesion moves the
+        // whole 50% group to the next line instead of orphaning % at line start.
+        val text = "销量增长了50%呢"
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent(text),
+                constraints = LayoutConstraints(maxWidth = 120f),
+                paragraphStyle = ParagraphStyle(
+                    firstLineIndentEm = 0f,
+                    lineLengthGrid = ink.duo3.tiqian.core.LineLengthGrid(enabled = false),
+                ),
+            ),
+        )
+        val lineTexts = result.lines.map { text.substring(it.range.start, it.range.end) }
+        assertTrue(lineTexts.any { it.contains("50%") }, "50% must stay together: $lineTexts")
+        assertTrue(lineTexts.none { it.endsWith("50") }, "no line may end mid-number: $lineTexts")
+    }
+
+    @Test
     fun justifyFillsSaturatedLineWithUncappedEvenShare() {
         // CLREQ 平均拉大字距 has no upper bound: when word spaces and
         // sino-western gaps are exhausted, the remaining deficit spreads
