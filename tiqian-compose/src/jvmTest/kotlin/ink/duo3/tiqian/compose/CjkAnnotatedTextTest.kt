@@ -1,6 +1,10 @@
 package ink.duo3.tiqian.compose
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import ink.duo3.tiqian.core.DecorationKind
 import ink.duo3.tiqian.core.TextRange
 import kotlin.test.Test
@@ -38,5 +42,19 @@ class CjkAnnotatedTextTest {
         val byKind = text.cjkDecorations().associateBy { it.kind }
         assertEquals(TextRange(3, 5), byKind.getValue(DecorationKind.Mourning).range)
         assertEquals(TextRange(8, 11), byKind.getValue(DecorationKind.BookTitle).range)
+    }
+
+    @Test
+    fun colorSpansExtractedFromSpanStyle() {
+        val text = buildAnnotatedString {
+            append("黑")
+            withStyle(SpanStyle(color = Color.Red)) { append("红字") }
+            append("黑")
+        }
+        val spans = text.cjkColorSpans()
+        assertEquals(1, spans.size)
+        assertEquals(1, spans[0].start)
+        assertEquals(3, spans[0].end)
+        assertEquals(Color.Red.toArgb(), spans[0].argb)
     }
 }

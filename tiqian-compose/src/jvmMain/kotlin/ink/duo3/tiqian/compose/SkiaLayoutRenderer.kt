@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import ink.duo3.tiqian.core.LayoutResult
+import ink.duo3.tiqian.shaping.skia.ColorSpan
 import ink.duo3.tiqian.shaping.skia.SkiaSystemTypefaces
 import ink.duo3.tiqian.shaping.skia.drawTiqianGlyphs
 import ink.duo3.tiqian.shaping.skia.lineInkSkipIntervals
@@ -21,6 +22,7 @@ import org.jetbrains.skia.shaper.Shaper
 internal fun DrawScope.drawParagraph(
     result: LayoutResult,
     color: Int = 0xFF000000.toInt(),
+    colorSpans: List<ColorSpan> = emptyList(),
 ) {
     val fontSize = result.input.textStyle.fontSize
     val cjkFont = Font(SkiaSystemTypefaces.cjk, fontSize)
@@ -33,7 +35,7 @@ internal fun DrawScope.drawParagraph(
         // Shared cluster-walk (tiqian-shaping-skia) — same path the playground
         // raster uses, so the role-containment / leading-shift handling can't
         // drift between the two.
-        drawTiqianGlyphs(skCanvas, result, cjkFont, latinFont, paint, shaper)
+        drawTiqianGlyphs(skCanvas, result, cjkFont, latinFont, paint, shaper, colorSpans = colorSpans)
 
         // Emphasis dots (ADR 0018): a filled circle of the engine-decided
         // diameter centred on the anchor — smaller than the `•` glyph so it

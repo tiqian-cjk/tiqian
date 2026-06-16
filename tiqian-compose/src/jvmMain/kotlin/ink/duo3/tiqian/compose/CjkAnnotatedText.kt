@@ -2,6 +2,8 @@ package ink.duo3.tiqian.compose
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.withAnnotation
 import ink.duo3.tiqian.clreq.ClreqProfile
@@ -10,6 +12,7 @@ import ink.duo3.tiqian.core.DecorationSpan
 import ink.duo3.tiqian.core.ParagraphStyle
 import ink.duo3.tiqian.core.TextRange
 import ink.duo3.tiqian.core.TextStyle
+import ink.duo3.tiqian.shaping.skia.ColorSpan
 
 /** Annotation tag carrying a [DecorationKind] name over an AnnotatedString range. */
 const val CjkDecorationTag = "ink.duo3.tiqian.decoration"
@@ -47,6 +50,7 @@ fun CjkParagraph(
         paragraphStyle = paragraphStyle,
         profile = profile,
         decorations = text.cjkDecorations(),
+        colorSpans = text.cjkColorSpans(),
         measurer = measurer,
     )
 }
@@ -56,6 +60,15 @@ fun AnnotatedString.cjkDecorations(): List<DecorationSpan> =
     getStringAnnotations(CjkDecorationTag, 0, length).map {
         DecorationSpan(TextRange(it.start, it.end), DecorationKind.valueOf(it.item))
     }
+
+/**
+ * Extracts [ColorSpan]s from `SpanStyle.color` (rich-text 颜色, ADR 0030 A 档).
+ * Other SpanStyle attributes (size/weight/style) are layout-affecting — they
+ * wait for the engine to consume `TiqianTextContent.spans` (B 档).
+ */
+fun AnnotatedString.cjkColorSpans(): List<ColorSpan> =
+    spanStyles.filter { it.item.color != Color.Unspecified }
+        .map { ColorSpan(it.start, it.end, it.item.color.toArgb()) }
 
 /** 着重号 over [block]'s text. */
 inline fun AnnotatedString.Builder.cjkEmphasis(crossinline block: AnnotatedString.Builder.() -> Unit) {

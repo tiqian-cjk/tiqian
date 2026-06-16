@@ -91,6 +91,9 @@ fun shapeTextBlob(
  * - Consumed LEADING glue (line-start 开标点 trim, 间隔号 push-in) shifts the
  *   glyph LEFT — the blob keeps the font's built-in leading blank.
  */
+/** Per-span text color (ARGB) over a SOURCE range — rich-text 颜色 (ADR 0030 A 档). */
+data class ColorSpan(val start: Int, val end: Int, val argb: Int)
+
 fun drawTiqianGlyphs(
     canvas: Canvas,
     result: LayoutResult,
@@ -99,11 +102,23 @@ fun drawTiqianGlyphs(
     paint: org.jetbrains.skia.Paint,
     shaper: Shaper,
     baselineOffset: Float = 0f,
+    colorSpans: List<ColorSpan> = emptyList(),
 ) {
     val language = result.input.textStyle.locale
+    // Color is render-only (no advance change), so it never touches the walk's
+    // positioning — just the paint per cluster, by source offset.
+    val paintByColor = HashMap<Int, org.jetbrains.skia.Paint>()
     result.forEachPositionedCluster(cjkFont, latinFont, baselineOffset) { _, cluster, drawX, baselineY, font ->
+        val argb = if (colorSpans.isEmpty()) {
+            null
+        } else {
+            colorSpans.lastOrNull { cluster.range.start >= it.start && cluster.range.start < it.end }?.argb
+        }
+        val clusterPaint = if (argb == null) paint else paintByColor.getOrPut(argb) {
+            org.jetbrains.skia.Paint().apply { color = argb }
+        }
         shapeTextBlob(shaper, cluster.displayText, font, language)?.let { blob ->
-            canvas.drawTextBlob(blob, drawX, baselineY, paint)
+            canvas.drawTextBlob(blob, drawX, baselineY, clusterPaint)
         }
     }
     // LineEndHangingHyphen (ADR 0029): a hyphen hangs just past the content at a
