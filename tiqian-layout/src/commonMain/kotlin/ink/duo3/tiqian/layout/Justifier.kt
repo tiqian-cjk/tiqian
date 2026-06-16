@@ -39,7 +39,8 @@ import ink.duo3.tiqian.font.FontRole
  * spacing is never a tier).
  */
 class Justifier(
-    private val cjkLatinSpaceEm: Float = 0.25f,
+    /** 中西间距的默认（autospace）宽度，拉伸从此起步. */
+    private val cjkLatinSpaceBaseEm: Float = 0.25f,
     /**
      * CLREQ 拉伸第①档：「每个西文词距最大可以拉伸到半个汉字字宽」——the
      * word space's FINAL width is capped at this (absolute). Headroom is
@@ -47,8 +48,6 @@ class Justifier(
      * and does not stretch (a finer proportional space would).
      */
     private val wordSpaceMaxEm: Float = 0.5f,
-    /** CLREQ 拉伸第②档：中西间距 final width cap（≤半个汉字字宽）. */
-    private val cjkLatinSpaceMaxEm: Float = 0.5f,
 ) {
     fun justify(
         adjustedClusters: List<Cluster>,
@@ -62,6 +61,13 @@ class Justifier(
          * false disables the CjkLatinSpace tier (AdjustmentStylePolicy).
          */
         allowSinoWesternGapStretch: Boolean = true,
+        /**
+         * CLREQ 拉伸第②档：中西间距的拉伸上限（final width）。原文上限是半个
+         * 汉字宽（0.5em），但注②记「很多排版风格实践上只允许拉到三分之一汉字
+         * 宽」——由 `AdjustmentStylePolicy.sinoWesternStretchMaxEm` 提供，默认
+         * 0.5em（CLREQ 上限），可设 1/3em。
+         */
+        cjkLatinSpaceMaxEm: Float = 0.5f,
         /**
          * `AvoidStretchAroundConnectors` — CLREQ 平均拉大字距的限制②：
          * 「避免对连接号、分隔号与其前后的字符进行拉伸处理」。Cluster
@@ -148,7 +154,8 @@ class Justifier(
                 lineClusterRange = lineClusterRange,
                 kind = GlueKind.CjkLatinSpace,
                 priority = 1,
-                capacity = cjkLatinSpaceEm * fontSize,
+                // Headroom from the base 中西间距 up to the (style-set) cap.
+                capacity = ((cjkLatinSpaceMaxEm - cjkLatinSpaceBaseEm) * fontSize).coerceAtLeast(0f),
             ) { leftIdx, rightIdx ->
                 clusterRoles[leftIdx].isIdeographAlphaBoundaryWith(clusterRoles[rightIdx]) &&
                     !adjustedClusters[leftIdx].text.endsWith(' ') &&

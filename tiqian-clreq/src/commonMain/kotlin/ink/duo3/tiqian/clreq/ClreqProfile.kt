@@ -193,6 +193,13 @@ data class AdjustmentStylePolicy(
      * 也不参与 justify 的 CjkLatinSpace 拉伸档。
      */
     val allowSinoWesternGapAdjustment: Boolean = true,
+    /**
+     * CLREQ 拉伸第②档中西间距的拉伸上限（final width，单位 em）。原文上限是半个
+     * 汉字宽（`0.5`），注②记「很多排版风格在实际处理上，只允许最大拉伸到三分之
+     * 一汉字宽」→ 设 `1f / 3f`。仅影响 justify 的 CjkLatinSpace 档上限，不改默认
+     * 间距（`autoSpace.gapEm`）。
+     */
+    val sinoWesternStretchMaxEm: Float = 0.5f,
 )
 
 enum class LineEndPunctuationStyle {

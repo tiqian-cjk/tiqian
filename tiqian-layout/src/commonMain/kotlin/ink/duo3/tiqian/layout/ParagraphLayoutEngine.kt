@@ -786,6 +786,7 @@ class ExplainableStubParagraphLayoutEngine(
                     fontSize = fontSize,
                     skip = false,
                     allowSinoWesternGapStretch = adjustmentStyle.allowSinoWesternGapAdjustment,
+                    cjkLatinSpaceMaxEm = adjustmentStyle.sinoWesternStretchMaxEm,
                     avoidStretchClusters = avoidStretchClusters,
                 )
             }

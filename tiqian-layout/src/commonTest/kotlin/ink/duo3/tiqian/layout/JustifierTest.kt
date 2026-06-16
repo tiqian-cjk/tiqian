@@ -73,4 +73,26 @@ class JustifierTest {
         assertTrue(plan.allocations.any { it.kind == GlueKind.CjkInterChar }, "overflow spills to inter-char")
         assertEquals(0f, plan.unfilledDeficit)
     }
+
+    @Test
+    fun sinoWesternStretchRespectsThirdEmCapWhenStyleSetsIt() {
+        // CLREQ ② 注: a style may cap 中西间距 stretch at ⅓字 instead of ½.
+        val clusters = listOf(cjk(0), space(1), latin(2, 2f * em))
+        val roles = listOf(FontRole.CjkText, FontRole.LatinText, FontRole.LatinText)
+        val natural = clusters.sumOf { it.advance.toDouble() }.toFloat()
+        val plan = Justifier().justify(
+            adjustedClusters = clusters,
+            clusterRoles = roles,
+            lineClusterRange = clusters.indices,
+            maxWidth = natural + 1f * em, // big deficit, beyond the gap's headroom
+            fontSize = em,
+            skip = false,
+            cjkLatinSpaceMaxEm = 1f / 3f,
+        )
+
+        val sino = plan.allocations.single { it.kind == GlueKind.CjkLatinSpace }
+        // base 0.25em → capped at ⅓em, so the typed gap opens at most 1/12 em
+        // (not the 0.25em it would reach under the ½em default).
+        assertEquals((1f / 3f - 0.25f) * em, sino.delta, 0.001f)
+    }
 }
