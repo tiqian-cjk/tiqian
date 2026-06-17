@@ -76,7 +76,7 @@ core ── shaping-api ── font ── linebreak ── clreq ── layout
 type: subject
 ```
 
-`type` 沿用近期 history (`feat`, `fix`, `docs`, `build`, ...)。即使工具默认建议加 Claude/Anthropic co-author，也要去掉。这个仓库 [docs/contributing.md](docs/contributing.md) 和用户都明确说过。
+`type` 沿用近期 history (`feat`, `fix`, `docs`, `build`, ...)。即使工具默认建议加 Claude/Anthropic co-author，也要去掉。
 
 ## 状态快照
 

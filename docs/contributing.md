@@ -28,7 +28,7 @@ text -> fallback -> shaping -> metrics -> punctuation atom -> glue -> line layou
 
 ## 提交格式
 
-单行简化格式，不写 body，不加 co-author：
+单行简化格式。
 
 ```text
 type: subject

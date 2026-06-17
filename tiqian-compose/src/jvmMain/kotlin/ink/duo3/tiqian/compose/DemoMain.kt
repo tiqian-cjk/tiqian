@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -26,7 +27,11 @@ import ink.duo3.tiqian.core.TextRange
 import ink.duo3.tiqian.core.TextStyle
 
 private const val PARAGRAPH =
-    "《原神》是由米哈游自研的一款开放世界冒险RPG。你将在游戏中探索一个被称作「提瓦特」的幻想世界。在这广阔的世界中，你可以踏遍七国，邂逅性格各异、能力独特的同伴，与他们一同对抗强敌，踏上寻回血亲之路；也可以不带目的地漫游，沉浸在充满生机的世界里，让好奇心驱使自己发掘各个角落的奥秘……直到你与分离的血亲重聚，在终点见证一切事物的沉淀。"
+    "咖啡（coffee）在十七世纪经威尼斯传入欧洲。最初它被当作药物出售，价格高得吓人，真正" +
+    "让它流行起来的是随后遍地开花的咖啡馆——读报、辩论、下棋、写作——城市生活忽然多出一个公" +
+    "共客厅。意大利人做出了 espresso，维也纳人往杯里加奶油，土耳其人坚持连渣同煮……" +
+    "每座城市都相信自己手里那一杯才是正统。有人说：「先有咖啡馆，后有启蒙运动」。这话说得夸张" +
+    "，但也不算太离谱。"
 
 fun main() = singleWindowApplication(title = "Tiqian Compose Demo") {
     // Engine units are physical pixels; map dp at the TextStyle boundary
@@ -45,27 +50,28 @@ fun main() = singleWindowApplication(title = "Tiqian Compose Demo") {
 
         TextField(
             value = text,
+            modifier = Modifier.fillMaxWidth(),
             onValueChange = { text = it },
         )
         CjkParagraph(
             text = text,
-            modifier = Modifier.width(480.dp),
+            modifier = Modifier.fillMaxWidth(),
             textStyle = textStyle,
+            paragraphStyle = ParagraphStyle().copy(firstLineIndentEm = 0f)
         )
         CjkParagraph(
             text = PARAGRAPH,
-            modifier = Modifier.width(480.dp),
+            modifier = Modifier.fillMaxWidth(),
             textStyle = textStyle,
-            paragraphStyle = ParagraphStyle(lineHeight = 25F)
         )
         CjkParagraph(
             text = "他说：“你好，世界。”中文……English——中文。",
-            modifier = Modifier.width(480.dp),
+            modifier = Modifier.fillMaxWidth(),
             textStyle = textStyle,
         )
         CjkParagraph(
             text = "他强调：豆子新鲜最要紧，烘焙其次。",
-            modifier = Modifier.width(480.dp),
+            modifier = Modifier.fillMaxWidth(),
             textStyle = textStyle,
             decorations = listOf(
                 DecorationSpan(

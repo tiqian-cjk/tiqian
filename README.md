@@ -1,57 +1,61 @@
 # 提椠 Tíqiàn
 
-提椠是一个面向中文正文的 CJK 段落排版引擎，目标是 [CLREQ](https://w3c.github.io/clreq/)
-横排核心需求：字体 fallback、标点空间、避头尾、两端对齐、着重号与示亡号——
-并且每一个排版决策都可以被 dump 出来解释。
+提椠是一个中日韩段落书写器。
 
-![段落排版示例](docs/images/sample-paragraph.png)
+提椠在平台已有的文字测量与绘制能力之上，额外负责了段落中的断行、避头尾、标点挤压、两端对齐与行内空间分配等排版能力。
 
-上图为引擎实际渲染（320px 版心、两端对齐）：全角括号与拉丁词混排、
-破折号占两字宽且不可拆分、`「」` 引号与相邻标点挤压、行尾标点自然半宽、
-中西文边界自动间距。
+## 当前状态
 
-| 着重号 | 示亡号 |
-|---|---|
-| ![着重号](docs/images/sample-emphasis.png) | ![示亡号](docs/images/sample-mourning.png) |
+目前提椠仍处于早期开发阶段，API 和模块结构可能继续调整。
 
-## 特点
-
-- **决策可解释**：每个 cluster 的字体选择、每个标点的 ink/body/glue、
-  每个断点的候选与修复方案、每行的对齐分配都有结构化记录与 golden 基线。
-- **度量来自字体**：标点半宽 body 取 OpenType `halt`，中文破折号取 `locl`
-  变体，AWT / Skia / Android 三平台 shaping 交叉验证。
-- **真实 pipeline**：`text → fallback → shaping → metrics → punctuation
-  atom → glue → line layout → render`，前端（Compose Desktop 已接）只负责
-  绘制，不做任何排版决策。
+- [x] 简体中文横排
+- - [x] 行内调整
+- - - [ ] 行间注（拼音 / 注音） 
+- - [x] 段落调整
+- - - [ ] 富文本
+- [ ] 繁体中文横排
+- [ ] 简 / 繁直排
+- [ ] 日文排版（JLREQ）
+- [ ] 韩文排版（KLREQ）
 
 ## 模块
 
-| 模块 | 职责 |
-|---|---|
-| `tiqian-core` | 平台无关数据模型（cluster、glyph run、line box、layout result） |
-| `tiqian-font` | 字体 fallback、角色分类、排版度量策略 |
-| `tiqian-shaping-api` / `-jvm` / `-skia` / `-android` | shaping 抽象与 AWT / Skiko / TextPaint 平台 adapter |
-| `tiqian-linebreak` | 断行机会接口 |
-| `tiqian-clreq` | CLREQ profile、标点分类与策略表 |
-| `tiqian-layout` | 标点 atom/glue、断行与避头尾修复、两端对齐、段落引擎 |
-| `tiqian-compose` / `tiqian-android-view` | 前端（Compose Desktop 渲染已接；Android View 为 contract） |
-| `tiqian-playground` / `tiqian-test` | 调试可视化与 fixture |
+| 模块                       | 职责                                                                           |
+|--------------------------|------------------------------------------------------------------------------|
+| `tiqian-core`            | 定义平台无关的布局数据结构，包括文本片段、字形序列、行盒与布局结果。                                           |
+| `tiqian-font`            | 处理字体选择、字符分类与字体度量，把平台返回的字体信息转换为提椠使用的排版度量。                                     |
+| `tiqian-shaping-api`     | 定义文字测量与字形生成的统一接口。                                                            |
+| `tiqian-shaping-jvm`     | 基于 JVM / AWT 实现 `tiqian-shaping-api`，用于测试、调试与桌面环境。                           |
+| `tiqian-shaping-skia`    | 基于 Skia / Skiko 实现 `tiqian-shaping-api`，用于 Compose Desktop 等 Skia 渲染环境。      |
+| `tiqian-shaping-android` | 基于 Android `TextPaint` 实现 `tiqian-shaping-api`，用于 Android 平台接入。              |
+| `tiqian-linebreak`       | 提供断行机会计算，包括 CJK 断行、西文按词换行与连字符断词。                                             |
+| `tiqian-clreq`           | 提供中文排版规则 profile，包括标点分类、禁则规则、标点挤压与间距策略。                                      |
+| `tiqian-layout`          | 段落布局核心。根据文本、字体度量、行宽和排版规则生成最终的 layout result。                                 |
+| `tiqian-compose`         | Compose 前端适配，负责把 `LayoutResult` 渲染到 Compose Desktop / Compose Multiplatform。 |
+| `tiqian-android-view`    | Android View 前端适配接口，用于后续接入原生 Android 视图体系。                                   |
+| `tiqian-playground`      | 生成 layout dump、HTML 调试报告和可视化预览，用于检查布局决策。                                     |
+| `tiqian-test`            | 存放测试 fixture、golden 文件和跨模块测试辅助工具。                                            |
+
 
 ## 上手
 
+编译 + 全部测试
 ```shell
-./gradlew build                              # 编译 + 全部测试
-./gradlew :tiqian-playground:runPlayground   # 生成 layout dump + HTML 调试报告
-./gradlew :tiqian-compose:runComposeDemo     # Compose Desktop 渲染窗口
+./gradlew build
 ```
 
-Playground 报告输出在
-`tiqian-playground/build/reports/tiqian-layout-playground/index.html`，
-默认使用 `jvm-awt` shaper，`TIQIAN_PLAYGROUND_SHAPER=skia|stub` 可切换。
+生成 layout dump + HTML 调试报告
+```shell
+./gradlew :tiqian-playground:runPlayground
+```
 
-## 文档
+Jetpack Compose Desktop Demo
+```shell
+./gradlew :tiqian-compose:runComposeDemo 
+```
 
-- [docs/roadmap.md](docs/roadmap.md) — Slice/Milestone 状态与「当前位置」。
-- [docs/adr/](docs/adr/) — 已确定的取舍。
-- [docs/cjk-layout-engine-design.md](docs/cjk-layout-engine-design.md) — 核心模型设计（讲「为什么」）。
-- [docs/contributing.md](docs/contributing.md) — 实现约束、流程与提交格式。
+## 参考文献
+
+- W3C[《中文排版需求》](https://www.w3.org/TR/clreq/)
+- 教育部[《重訂標點符號手冊》（2008年修訂版）](https://language.moe.gov.tw/001/Upload/FILES/SITE_CONTENT/M0001/HAU/c2.htm)
+- CY/T 154-2017[《中文出版物夹用英文的编辑规范》](https://std.samr.gov.cn/hb/search/stdHBDetailed?id=8B1827F23645BB19E05397BE0A0AB44A)

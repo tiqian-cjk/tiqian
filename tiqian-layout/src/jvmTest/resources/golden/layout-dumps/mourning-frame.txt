@@ -1,5 +1,5 @@
 fixture: mourning-frame
-text: 悼念：王小明同志、章萧珑同志。
+text: 悼念：王小明同志、张大同同志。
 maxWidth: 72.0
 == greedy ==
 size 64.0x120.0
@@ -19,9 +19,9 @@ cluster 5-6 '明' adv=16.0
 cluster 6-7 '同' adv=16.0
 cluster 7-8 '志' adv=56.0
 cluster 8-9 '、' adv=8.0
-cluster 9-10 '章' adv=16.0
-cluster 10-11 '萧' adv=16.0
-cluster 11-12 '珑' adv=16.0
+cluster 9-10 '张' adv=16.0
+cluster 10-11 '大' adv=16.0
+cluster 11-12 '同' adv=16.0
 cluster 12-13 '同' adv=16.0
 cluster 13-14 '志' adv=16.0
 cluster 14-15 '。' adv=8.0
@@ -34,9 +34,9 @@ font 5-6 role=CjkText key=cjk-primary display='明' sub=CjkPunctuationGlyphPolic
 font 6-7 role=CjkText key=cjk-primary display='同' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 font 7-8 role=CjkText key=cjk-primary display='志' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 font 8-9 role=CjkPunctuation key=cjk-primary display='、' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
-font 9-10 role=CjkText key=cjk-primary display='章' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
-font 10-11 role=CjkText key=cjk-primary display='萧' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
-font 11-12 role=CjkText key=cjk-primary display='珑' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 9-10 role=CjkText key=cjk-primary display='张' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 10-11 role=CjkText key=cjk-primary display='大' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-12 role=CjkText key=cjk-primary display='同' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 font 12-13 role=CjkText key=cjk-primary display='同' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 font 13-14 role=CjkText key=cjk-primary display='志' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 font 14-15 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
@@ -70,9 +70,9 @@ cluster 5-6 '明' adv=16.0
 cluster 6-7 '同' adv=16.0
 cluster 7-8 '志' adv=56.0
 cluster 8-9 '、' adv=8.0
-cluster 9-10 '章' adv=16.0
-cluster 10-11 '萧' adv=16.0
-cluster 11-12 '珑' adv=16.0
+cluster 9-10 '张' adv=16.0
+cluster 10-11 '大' adv=16.0
+cluster 11-12 '同' adv=16.0
 cluster 12-13 '同' adv=16.0
 cluster 13-14 '志' adv=16.0
 cluster 14-15 '。' adv=8.0
@@ -85,9 +85,9 @@ font 5-6 role=CjkText key=cjk-primary display='明' sub=CjkPunctuationGlyphPolic
 font 6-7 role=CjkText key=cjk-primary display='同' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 font 7-8 role=CjkText key=cjk-primary display='志' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 font 8-9 role=CjkPunctuation key=cjk-primary display='、' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
-font 9-10 role=CjkText key=cjk-primary display='章' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
-font 10-11 role=CjkText key=cjk-primary display='萧' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
-font 11-12 role=CjkText key=cjk-primary display='珑' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 9-10 role=CjkText key=cjk-primary display='张' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 10-11 role=CjkText key=cjk-primary display='大' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-12 role=CjkText key=cjk-primary display='同' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 font 12-13 role=CjkText key=cjk-primary display='同' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 font 13-14 role=CjkText key=cjk-primary display='志' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 font 14-15 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve

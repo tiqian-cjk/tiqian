@@ -6,6 +6,7 @@ build/
 .idea/
 
 local.properties
+.DS_Store
 
 # Experiment corpora (Wikipedia CC-BY-SA derived; fetched/generated locally, not vendored)
 tiqian-layout/src/jvmTest/resources/wiki-zh-corpus.txt
