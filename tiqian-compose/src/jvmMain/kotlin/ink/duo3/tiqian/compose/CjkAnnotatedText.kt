@@ -15,6 +15,7 @@ import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.core.DecorationKind
 import ink.duo3.tiqian.core.DecorationSpan
 import ink.duo3.tiqian.core.ParagraphStyle
+import ink.duo3.tiqian.core.RubySpan
 import ink.duo3.tiqian.core.TextRange
 import ink.duo3.tiqian.core.TextSpan
 import ink.duo3.tiqian.core.TextStyle
@@ -22,6 +23,9 @@ import ink.duo3.tiqian.shaping.skia.ColorSpan
 
 /** Annotation tag carrying a [DecorationKind] name over an AnnotatedString range. */
 const val CjkDecorationTag = "ink.duo3.tiqian.decoration"
+
+/** Annotation tag carrying 行间注 (ruby) annotation text over its base range. */
+const val CjkRubyTag = "ink.duo3.tiqian.ruby"
 
 /**
  * Authors decorations as attributed text. Instead of counting source offsets
@@ -58,9 +62,31 @@ fun CjkParagraph(
         decorations = text.cjkDecorations(),
         colorSpans = text.cjkColorSpans(),
         spans = text.cjkStyleSpans(textStyle),
+        rubySpans = text.cjkRubySpans(),
         measurer = measurer,
     )
 }
+
+/**
+ * 行间注 (拼音/ruby, ADR 0032): appends [base] and annotates it with the [ruby]
+ * reading placed above it. The reading is NOT part of the source string
+ * (复制/搜索 保真 — only [base] is appended):
+ *
+ * ```
+ * CjkParagraph(buildAnnotatedString {
+ *     append("我爱")
+ *     cjkRuby("北京", "Běijīng")
+ *     append("。")
+ * })
+ * ```
+ */
+fun AnnotatedString.Builder.cjkRuby(base: String, ruby: String) {
+    withAnnotation(CjkRubyTag, ruby) { append(base) }
+}
+
+/** Extracts [RubySpan]s from the [CjkRubyTag] annotations (reading = annotation item). */
+fun AnnotatedString.cjkRubySpans(): List<RubySpan> =
+    getStringAnnotations(CjkRubyTag, 0, length).map { RubySpan(TextRange(it.start, it.end), it.item) }
 
 /** Extracts [DecorationSpan]s from the [CjkDecorationTag] annotations. */
 fun AnnotatedString.cjkDecorations(): List<DecorationSpan> =

@@ -31,6 +31,17 @@ data class DecorationSpan(
     val kind: DecorationKind,
 )
 
+/**
+ * 行间注 (ruby, ADR 0032): small-size annotation [text] over a base SOURCE
+ * [baseRange] — 拼音 above the base (this slice). Unlike [DecorationSpan], ruby
+ * DOES affect layout: it reserves line height and keeps the base unbreakable.
+ * [text] is NOT part of the source (拼音 不进源；复制/搜索保真) — it lives only here.
+ */
+data class RubySpan(
+    val baseRange: TextRange,
+    val text: String,
+)
+
 enum class DecorationKind {
     /** CLREQ 着重号 — a solid dot under each emphasised Han character. */
     Emphasis,
@@ -191,5 +202,6 @@ data class LayoutInput(
     val constraints: LayoutConstraints,
     val profileId: LayoutProfileId = BuiltInLayoutProfiles.ClreqHorizontal,
     val decorations: List<DecorationSpan> = emptyList(),
+    val rubySpans: List<RubySpan> = emptyList(),
 )
 

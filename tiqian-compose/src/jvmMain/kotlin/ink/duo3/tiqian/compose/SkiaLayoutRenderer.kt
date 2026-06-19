@@ -9,6 +9,7 @@ import ink.duo3.tiqian.shaping.skia.ColorSpan
 import ink.duo3.tiqian.shaping.skia.SkiaSystemTypefaces
 import ink.duo3.tiqian.shaping.skia.drawTiqianGlyphs
 import ink.duo3.tiqian.shaping.skia.lineInkSkipIntervals
+import ink.duo3.tiqian.shaping.skia.shapeTextBlob
 import org.jetbrains.skia.Font
 import org.jetbrains.skia.Paint
 import org.jetbrains.skia.shaper.Shaper
@@ -87,6 +88,17 @@ internal fun DrawScope.drawParagraph(
                         if (!seg.openEnd) skCanvas.drawLine(seg.right, seg.top, seg.right, seg.bottom, framePaint)
                     }
                 }
+            }
+        }
+
+        // 行间注 (ruby, ADR 0032): 注文 shaped at its own size and centred over the
+        // base x-span the engine computed. We measure the real注文 width here so a
+        // 注文 wider than the base overhangs symmetrically (v1; 避让 is a follow-up).
+        for (ruby in result.debug.rubyDecisions) {
+            val rubyFont = Font(SkiaSystemTypefaces.latin, ruby.fontSize)
+            val width = rubyFont.measureTextWidth(ruby.text)
+            shapeTextBlob(shaper, ruby.text, rubyFont, result.input.textStyle.locale)?.let { blob ->
+                skCanvas.drawTextBlob(blob, ruby.centerX - width / 2f, ruby.baselineY, paint)
             }
         }
     }

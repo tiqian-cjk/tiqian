@@ -39,6 +39,7 @@ fun CjkParagraph(
     decorations: List<ink.duo3.tiqian.core.DecorationSpan> = emptyList(),
     colorSpans: List<ColorSpan> = emptyList(),
     spans: List<TextSpan> = emptyList(),
+    rubySpans: List<ink.duo3.tiqian.core.RubySpan> = emptyList(),
     measurer: ParagraphMeasurer = rememberParagraphMeasurer(profile),
 ) {
     val result = remember { mutableStateOf<ink.duo3.tiqian.core.LayoutResult?>(null) }
@@ -60,6 +61,7 @@ fun CjkParagraph(
             paragraphStyle = paragraphStyle,
             decorations = decorations,
             spans = spans,
+            rubySpans = rubySpans,
         )
         result.value = laidOut
         layout(

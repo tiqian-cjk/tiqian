@@ -5,6 +5,7 @@ import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LayoutInput
 import ink.duo3.tiqian.core.LayoutResult
 import ink.duo3.tiqian.core.ParagraphStyle
+import ink.duo3.tiqian.core.RubySpan
 import ink.duo3.tiqian.core.TextSpan
 import ink.duo3.tiqian.core.TextStyle
 import ink.duo3.tiqian.core.TiqianTextContent
@@ -27,6 +28,7 @@ class ParagraphMeasurer(
         paragraphStyle: ParagraphStyle = ParagraphStyle(),
         decorations: List<DecorationSpan> = emptyList(),
         spans: List<TextSpan> = emptyList(),
+        rubySpans: List<RubySpan> = emptyList(),
     ): LayoutResult =
         engine.layout(
             LayoutInput(
@@ -35,6 +37,7 @@ class ParagraphMeasurer(
                 paragraphStyle = paragraphStyle,
                 constraints = constraints,
                 decorations = decorations,
+                rubySpans = rubySpans,
             ),
         )
 }

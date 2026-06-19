@@ -215,6 +215,12 @@ class LayoutDumpGoldenTest {
                     "open=${if (seg.openStart) "start" else "-"}/${if (seg.openEnd) "end" else "-"} reason=${seg.reason}",
             )
         }
+        debug.rubyDecisions.forEach { r ->
+            appendLine(
+                "ruby ${r.baseRange.start}-${r.baseRange.end} '${r.text}' line=${r.lineIndex} " +
+                    "centerX=${r.centerX.fmt()} baselineY=${r.baselineY.fmt()} size=${r.fontSize.fmt()} overhang=${r.overhang.fmt()}",
+            )
+        }
     }
 
     private fun diffMessage(id: String, expected: String, actual: String): String {

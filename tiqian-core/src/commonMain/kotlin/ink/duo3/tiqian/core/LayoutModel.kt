@@ -90,6 +90,7 @@ data class LayoutDebugInfo(
     val lineEdgeTrimDecisions: List<LineEdgeTrimDecisionInfo> = emptyList(),
     val decorationDecisions: List<DecorationDecisionInfo> = emptyList(),
     val decorationSegments: List<DecorationSegmentInfo> = emptyList(),
+    val rubyDecisions: List<RubyDecisionInfo> = emptyList(),
     val lineSpacingDecision: LineSpacingDecisionInfo? = null,
     val kinsokuDecision: KinsokuDecisionInfo? = null,
     val lineLengthGridDecision: LineLengthGridDecisionInfo? = null,
@@ -153,6 +154,25 @@ data class LineSpacingDecisionInfo(
     val printingSides: String,
     val floorApplied: Boolean,
     val reason: String,
+)
+
+/**
+ * 行间注 geometry (ruby, ADR 0032): annotation [text] placed over the base
+ * [baseRange] on line [lineIndex]. [centerX] is the base range's horizontal
+ * centre (the注文 centres on it, CLREQ「横排注音注文整体水平向基字居中」);
+ * [baselineY] is the ruby text baseline (inside the reserved band above the
+ * base ascent); [fontSize] is the ruby size (≤ base). [overhang] > 0 means the
+ * 注文 is wider than the base and overhangs each side by that much (v1: allowed,
+ * 避让 is a follow-up).
+ */
+data class RubyDecisionInfo(
+    val baseRange: TextRange,
+    val text: String,
+    val lineIndex: Int,
+    val centerX: Float,
+    val baselineY: Float,
+    val fontSize: Float,
+    val overhang: Float,
 )
 
 /**

@@ -16,6 +16,8 @@ import ink.duo3.tiqian.core.AutoSpaceDecisionInfo
 import ink.duo3.tiqian.core.Cluster
 import ink.duo3.tiqian.core.ClusterGeometryDecisionInfo
 import ink.duo3.tiqian.core.DecorationDecisionInfo
+import ink.duo3.tiqian.core.RubyDecisionInfo
+import ink.duo3.tiqian.core.RubySpan
 import ink.duo3.tiqian.core.DecorationKind
 import ink.duo3.tiqian.core.DecorationSegmentInfo
 import ink.duo3.tiqian.core.DecorationSpan
@@ -115,6 +117,11 @@ class ExplainableStubParagraphLayoutEngine(
         val emphasisRanges = input.decorations.filter { it.kind == DecorationKind.Emphasis }.map { it.range }
         fun emphasisItalicAt(offset: Int): Boolean =
             emphasisRanges.any { offset >= it.start && offset < it.end }
+        // 行间注 (ruby, ADR 0032): 注文 above the base reserves a uniform band in
+        // the line height (CLREQ「行距不随标注与否变」); advance is untouched (注文
+        // wider than 基字 overhangs — v1, 避让 is a follow-up).
+        val rubyFontSize = fontSize * RUBY_FONT_EM
+        val rubyBand = if (input.rubySpans.isEmpty()) 0f else fontSize * RUBY_BAND_EM
         // Span edges force cluster splits so no cluster straddles a style change
         // (a Latin word / coalesced 标点 run otherwise swallows the boundary).
         val spanBoundaries: Set<Int> = sizedSpans.flatMapTo(mutableSetOf()) { listOf(it.range.start, it.range.end) }
@@ -529,6 +536,7 @@ class ExplainableStubParagraphLayoutEngine(
             explicitLineHeight = input.paragraphStyle.lineHeight,
             defaultLineHeight = defaultBodyLineHeight,
             spacingFloor = interlinearSpacingFloor,
+            rubyBand = rubyBand,
         )
         val lineSpacingDecision = if (lineMetrics.height <= 0f) {
             null
@@ -648,6 +656,8 @@ class ExplainableStubParagraphLayoutEngine(
                     input.decorations
                         .filter { it.kind == DecorationKind.Mourning }
                         .mapNotNull { span -> naturalClusters.clusterIndexRangeFor(span.range) } +
+                        // 行间注 (ADR 0032): 基文+注文不可拆 (CLREQ §注释符号).
+                        input.rubySpans.mapNotNull { naturalClusters.clusterIndexRangeFor(it.baseRange) } +
                         NumberSymbolCohesion.unbreakableRanges(text)
                             .mapNotNull { r ->
                                 naturalClusters.clusterIndexRangeFor(TextRange(r.first, r.last + 1))
@@ -953,6 +963,14 @@ class ExplainableStubParagraphLayoutEngine(
             justifyDeltaByCluster = justifyDeltaByCluster,
             fontSize = fontSize,
         )
+        val rubyDecisions = computeRubyDecisions(
+            rubySpans = input.rubySpans,
+            lineRanges = lineSolution.lines.map { it.clusterRange },
+            lineBoxes = lines,
+            finalClusters = finalClusters,
+            fontSize = fontSize,
+            rubyFontSize = rubyFontSize,
+        )
 
         val widestLine = lines.maxOfOrNull { it.indent + it.visualWidth + it.hyphenAdvance } ?: 0f
         val totalHeight = if (lines.isEmpty()) lineMetrics.height else lines.size * lineMetrics.height
@@ -1080,6 +1098,7 @@ class ExplainableStubParagraphLayoutEngine(
                 lineEdgeTrimDecisions = edgeTrimDecisions,
                 decorationDecisions = decorationDecisions,
                 decorationSegments = decorationSegments,
+                rubyDecisions = rubyDecisions,
                 lineSpacingDecision = lineSpacingDecision,
                 kinsokuDecision = kinsokuDecision,
                 lineLengthGridDecision = lineLengthGridDecision,
@@ -1672,10 +1691,59 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
+    /**
+     * 行间注 geometry (ruby, ADR 0032): centre each注文 over the x-span of its
+     * base clusters on the line they land. `advance` is untouched (注文 overhangs
+     * if wider — diagnostic [RubyDecisionInfo.overhang]); the renderer measures
+     * the real注文 width and centres on [RubyDecisionInfo.centerX]. A base split
+     * across lines yields one decision per line (each over its on-line fragment).
+     */
+    private fun computeRubyDecisions(
+        rubySpans: List<RubySpan>,
+        lineRanges: List<IntRange>,
+        lineBoxes: List<LineBox>,
+        finalClusters: List<Cluster>,
+        fontSize: Float,
+        rubyFontSize: Float,
+    ): List<RubyDecisionInfo> {
+        if (rubySpans.isEmpty()) return emptyList()
+        val out = mutableListOf<RubyDecisionInfo>()
+        for (ruby in rubySpans) {
+            lineRanges.forEachIndexed { lineIndex, clusterRange ->
+                var x = lineBoxes[lineIndex].indent
+                var baseLeft = Float.NaN
+                var baseRight = Float.NaN
+                for (idx in clusterRange) {
+                    val cluster = finalClusters[idx]
+                    if (cluster.range.start >= ruby.baseRange.start && cluster.range.end <= ruby.baseRange.end) {
+                        if (baseLeft.isNaN()) baseLeft = x
+                        baseRight = x + cluster.advance
+                    }
+                    x += cluster.advance
+                }
+                if (!baseLeft.isNaN()) {
+                    val baseWidth = baseRight - baseLeft
+                    val estRubyWidth = ruby.text.length * rubyFontSize * 0.5f // diagnostic only
+                    out += RubyDecisionInfo(
+                        baseRange = ruby.baseRange,
+                        text = ruby.text,
+                        lineIndex = lineIndex,
+                        centerX = (baseLeft + baseRight) / 2f,
+                        baselineY = lineBoxes[lineIndex].baseline - fontSize * RUBY_BASELINE_DROP_EM,
+                        fontSize = rubyFontSize,
+                        overhang = ((estRubyWidth - baseWidth) / 2f).coerceAtLeast(0f),
+                    )
+                }
+            }
+        }
+        return out
+    }
+
     private fun List<ClusterMetricDecision>.lineMetrics(
         explicitLineHeight: Float?,
         defaultLineHeight: Float,
         spacingFloor: Float = 0f,
+        rubyBand: Float = 0f,
     ): ResolvedLineMetrics {
         if (isEmpty()) {
             val height = explicitLineHeight ?: 0f
@@ -1685,7 +1753,9 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        val ascent = maxOf { it.layoutMetrics.ascent }
+        // 行间注 (ADR 0032): the注文 band sits ABOVE the base 字面, so it adds to
+        // the ascent — the baseline drops to leave room above and the line grows.
+        val ascent = maxOf { it.layoutMetrics.ascent } + rubyBand
         val descent = maxOf { it.layoutMetrics.descent }
         val naturalHeight = ascent + descent
         // Height = the explicit value, else the CjkBodyLineHeightDefault, but
@@ -2017,6 +2087,13 @@ private const val EMPHASIS_DOT_DIAMETER_EM = 0.22f
  * 仍可顶高。显式 lineHeight 可向下覆盖本默认(仍不低于不重叠下限)。
  */
 private const val DEFAULT_BODY_LINE_HEIGHT_EM = 1.5f
+
+/** 行间注 (ruby, ADR 0032): 注文 ≤ 基字; 拼音 ≈ half-em. */
+private const val RUBY_FONT_EM = 0.5f
+/** Extra ascent reserved above the base 字面 for the ruby band (注文 + gap). */
+private const val RUBY_BAND_EM = 0.55f
+/** Ruby text baseline above the base baseline — seats注文 just over the 字面顶. */
+private const val RUBY_BASELINE_DROP_EM = 0.98f
 
 /** `LatinForcedHyphenBreak` 硬断时尽量满足的左右边界（前二后三，同 en-US 连字）. */
 private const val HYPHEN_MIN_LEFT = 2
