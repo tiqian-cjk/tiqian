@@ -55,9 +55,11 @@ Compose 侧作者面用 `AnnotatedString`（ADR 0030 的 `CjkParagraph(Annotated
     的结构档（grid/缩进）；都各对一半，本规则把两半按归属统一了。
 - **行高** = 行内各 cluster 度量的 `max`（已是 maxOf，喂入 per-cluster 度量即可）；混排字号的
   **基线对齐**规则（CLREQ §文本的间距调整）单独定。
-- **双语强调**（汉字着重号 + 西文斜体）= B 档的自然产物：一个 emphasis span 里西文部分
-  套 `Italic`。是否由 `Emphasis` 装饰**自动**给范围内西文 cluster 加斜体，作为 B 档的一个
-  policy 定。
+- **双语强调**（✅ 已落地 2026-06-19，`BilingualEmphasisWesternItalic`）：`Emphasis`(着重号)
+  span 内，汉字加点（既有），**西文 run 自动斜体、不加点**。引擎按 role(Latin)∩Emphasis 在
+  shaping 时 `italic=true`（advance 真）；renderer 用**同一份** role(`debug.fontDecisions`)+
+  decorations 数据取斜体 typeface，二者一致。着重号点几何本就跳过非汉字（`no-dot-on-non-han`）。
+  当前**恒开**（无 flag）——要可关需把 policy 透到 renderer，后续。
 - **列表**（✅ 已落地 2026-06-19，CLREQ §6.2.1.1 凸排）：`CjkBlock.List(items, marker, indent?, start)`
   + `ListMarker`（`Decimal` `1.` / `CjkNumber` `一、` / `Circled` `①` / `Bullet` `•`）。
   标记**左对齐顶格**于固定宽「标记列」(gutter)，正文整列缩进、续行同列对齐——Compose 侧

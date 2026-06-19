@@ -163,6 +163,12 @@ internal inline fun LayoutResult.forEachPositionedCluster(
     // A cluster covered by a layout-affecting span draws through a font at THAT
     // size + weight + slant (the engine shaped it so), keyed to reuse instances.
     val styledFonts = HashMap<String, Font>()
+    // BilingualEmphasisWesternItalic: a Latin run inside an 着重号 span renders
+    // italic (the engine shaped it so) — mirror that here from the SAME roles +
+    // decorations the engine used, so glyphs match the measured advances.
+    val emphasisRanges = input.decorations
+        .filter { it.kind == ink.duo3.tiqian.core.DecorationKind.Emphasis }
+        .map { it.range }
     val leadingConsumed = debug.geometryDecisions
         .filter { it.leadingGlueConsumed > 0f }
         .associate { it.range to it.leadingGlueConsumed }
@@ -177,15 +183,23 @@ internal inline fun LayoutResult.forEachPositionedCluster(
             val isLatin = role == "LatinText"
             val baseFont = if (isLatin) latinFont else cjkFont
             val style = spans.lastOrNull { cluster.range.start >= it.range.start && cluster.range.start < it.range.end }?.style
-            val font = if (style == null ||
-                (style.fontSize == baseStyle.fontSize && style.fontWeight == 400 && !style.italic)
-            ) {
+            val size = style?.fontSize ?: baseStyle.fontSize
+            val weight = style?.fontWeight ?: 400
+            val italic = (style?.italic ?: false) ||
+                (isLatin && emphasisRanges.any { cluster.range.start >= it.start && cluster.range.start < it.end })
+            val font = if (size == baseStyle.fontSize && weight == 400 && !italic) {
                 baseFont
             } else {
-                styledFonts.getOrPut("$isLatin:${style.fontSize}:${style.fontWeight}:${style.italic}") {
-                    val tf = if (style.fontWeight == 400 && !style.italic) baseFont.typeface
-                        else SkiaSystemTypefaces.styled(isLatin, style.toSkiaFontStyle()) ?: baseFont.typeface
-                    Font(tf, style.fontSize)
+                styledFonts.getOrPut("$isLatin:$size:$weight:$italic") {
+                    val tf = if (weight == 400 && !italic) {
+                        baseFont.typeface
+                    } else {
+                        SkiaSystemTypefaces.styled(
+                            isLatin,
+                            FontStyle(weight, FontStyle.NORMAL.width, if (italic) FontSlant.ITALIC else FontSlant.UPRIGHT),
+                        ) ?: baseFont.typeface
+                    }
+                    Font(tf, size)
                 }
             }
             val hasLeadingGap = debug.autoSpaceDecisions.any { it.clusterRange == cluster.range && it.side == "leading" }

@@ -109,6 +109,12 @@ class ExplainableStubParagraphLayoutEngine(
         fun styleAt(offset: Int) =
             sizedSpans.lastOrNull { offset >= it.range.start && offset < it.range.end }?.style ?: input.textStyle
         fun fontSizeAt(offset: Int): Float = styleAt(offset).fontSize
+        // BilingualEmphasisWesternItalic (ADR 0030/着重号惯例): 着重号 marks Han with
+        // dots, but Western emphasis is ITALIC, not dots. A Latin run inside an
+        // Emphasis span shapes italic (and gets no dot — see computeDecorationDecisions).
+        val emphasisRanges = input.decorations.filter { it.kind == DecorationKind.Emphasis }.map { it.range }
+        fun emphasisItalicAt(offset: Int): Boolean =
+            emphasisRanges.any { offset >= it.start && offset < it.end }
         // Span edges force cluster splits so no cluster straddles a style change
         // (a Latin word / coalesced 标点 run otherwise swallows the boundary).
         val spanBoundaries: Set<Int> = sizedSpans.flatMapTo(mutableSetOf()) { listOf(it.range.start, it.range.end) }
@@ -198,7 +204,12 @@ class ExplainableStubParagraphLayoutEngine(
         fun shapeSegment(decision: FontDecision, segmentRange: TextRange): ShapingResult {
             val sourceText = text.substring(segmentRange.start, segmentRange.end)
             val substitution = punctuationGlyphSubstitutor.substitute(sourceText)
-            val segmentStyle = styleAt(segmentRange.start)
+            val baseSegmentStyle = styleAt(segmentRange.start)
+            val segmentStyle = if (decision.role == FontRole.LatinText && emphasisItalicAt(segmentRange.start)) {
+                baseSegmentStyle.copy(italic = true)
+            } else {
+                baseSegmentStyle
+            }
             val shaped = textShaper.shape(
                 ShapingInput(
                     text = text,
@@ -1084,8 +1095,8 @@ class ExplainableStubParagraphLayoutEngine(
      * geometry is final — decorations never feed back into metrics, breaks
      * or justification. Per CLREQ, only Han text carries a dot: punctuation
      * inside the span is skipped (`clreq-no-dot-on-punctuation`), and
-     * non-Han clusters are skipped (`no-dot-on-non-han`; western emphasis
-     * is italics, out of scope).
+     * non-Han clusters are skipped (`no-dot-on-non-han`; western emphasis is
+     * italics instead — `BilingualEmphasisWesternItalic`, applied at shaping).
      *
      * Anchor = the point the dot INK CENTRE must land on: x is the glyph
      * centre (final position minus the trailing justification delta), y is
