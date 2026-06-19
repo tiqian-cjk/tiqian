@@ -1,5 +1,7 @@
 package ink.duo3.tiqian.layout
 
+import ink.duo3.tiqian.clreq.ClreqProfile
+import ink.duo3.tiqian.clreq.LineAdjustmentStrategy
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LayoutInput
 import ink.duo3.tiqian.core.ParagraphStyle
@@ -69,7 +71,15 @@ class HyphenationLayoutTest {
         // (grid off). "cof" fits the line, but wrapping "coffee" whole leaves a
         // deficit of ~52 over 7 汉字间距 ≈ 7.4px/gap < 0.5em(8px) — tight enough,
         // so it does NOT hyphenate; "coffee" wraps whole and the CJK stretches.
-        val result = ExplainableStubParagraphLayoutEngine().layout(
+        // Pinned to PushOutOnly so the line takes the STRETCH path under test;
+        // Auto would 推入压缩 instead, a separate decision (ADR 0031).
+        val result = ExplainableStubParagraphLayoutEngine(
+            clreqProfileResolver = {
+                ClreqProfile.MainlandHorizontal.let { p ->
+                    p.copy(adjustment = p.adjustment.copy(lineAdjustment = LineAdjustmentStrategy.PushOutOnly))
+                }
+            },
+        ).layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(
                     firstLineIndentEm = 0f,

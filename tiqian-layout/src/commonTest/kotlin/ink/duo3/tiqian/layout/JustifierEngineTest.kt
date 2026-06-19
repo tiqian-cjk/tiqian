@@ -1,5 +1,7 @@
 package ink.duo3.tiqian.layout
 
+import ink.duo3.tiqian.clreq.ClreqProfile
+import ink.duo3.tiqian.clreq.LineAdjustmentStrategy
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LayoutInput
 import ink.duo3.tiqian.core.LineLengthGrid
@@ -14,9 +16,19 @@ import kotlin.test.assertTrue
  * non-last line is justified), the last line is never stretched, deficit
  * distributes by priority chain (WordSpace -> CjkLatinSpace -> CjkInterChar)
  * and exposes structured JustificationDecisionInfo entries.
+ *
+ * Pinned to [LineAdjustmentStrategy.PushOutOnly] so every non-last line takes
+ * the STRETCH path — Auto would 推入压缩 some of these short lines instead, which
+ * is exercised separately by `LineAdjustmentPushInTest`.
  */
 class JustifierEngineTest {
-    private val engine = ExplainableStubParagraphLayoutEngine()
+    private val engine = ExplainableStubParagraphLayoutEngine(
+        clreqProfileResolver = {
+            ClreqProfile.MainlandHorizontal.let { p ->
+                p.copy(adjustment = p.adjustment.copy(lineAdjustment = LineAdjustmentStrategy.PushOutOnly))
+            }
+        },
+    )
 
     @Test
     fun connectorBoundariesAvoidStretchUnderJustification() {

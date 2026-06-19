@@ -70,9 +70,9 @@ linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 sides=SingleSided a
 == lookahead ==
 size 240.0x96.0
 kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
-line[0] 0-11 natural=176.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+8.0,CjkInterChar@1+8.0,CjkInterChar@2+8.0,CjkInterChar@3+8.0,CjkInterChar@4+8.0,CjkInterChar@5+8.0,CjkInterChar@6+8.0,CjkInterChar@7+8.0
-line[1] 11-27 natural=232.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=deficit=16.0->16.0 
-line[2] 27-43 natural=224.0 adjusted=208.0 visual=208.0 repair=- candidates=- justify=deficit=32.0->32.0 
+line[0] 0-12 natural=184.0 adjusted=176.0 visual=240.0 repair=PushIn(LineAdjustmentPushIn shrink=0.0) candidates=PushIn+ justify=deficit=64.0->0.0 CjkInterChar@0+8.0,CjkInterChar@1+8.0,CjkInterChar@2+8.0,CjkInterChar@3+8.0,CjkInterChar@4+8.0,CjkInterChar@5+8.0,CjkInterChar@6+8.0,CjkInterChar@7+8.0
+line[1] 12-28 natural=232.0 adjusted=224.0 visual=224.0 repair=PushIn(LineAdjustmentPushIn shrink=0.0) candidates=PushIn+ justify=deficit=16.0->16.0 
+line[2] 28-43 natural=216.0 adjusted=208.0 visual=208.0 repair=- candidates=- justify=deficit=32.0->32.0 
 line[3] 43-58 natural=232.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=-
 cluster 0-1 '他' adv=24.0
 cluster 1-2 '引' adv=24.0
@@ -129,7 +129,7 @@ geom 7-8 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=8.0 resolved=24.0
 geom 51-52 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
 geom 57-58 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 57-58 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-edgetrim 11-12 side=leading trim=8.0 reason=LineEdgeWordSpaceCollapse
+edgetrim 11-12 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
+edgetrim 27-28 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
 edgetrim 42-43 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
-edgetrim 27-28 side=leading trim=8.0 reason=LineEdgeWordSpaceCollapse
 linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault

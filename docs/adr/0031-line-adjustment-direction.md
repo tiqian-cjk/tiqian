@@ -49,13 +49,29 @@ badness(行) = 拉伸量 × Ws + 压缩量 × Wc ，  Ws/Wc = compressBias（默
 - **PushOutFirst**（先推出）：`bias < 1`——能断就断、拉伸，只有推出明显更差时才回头推入。
 - **PushOutOnly**（仅推出）：不生成推入候选——一律断、拉（**= 0022 否决后的现状**，旧 golden 行为）。
 
-## Mechanism
+## Mechanism（实现 2026-06-19）
 
-1. `Justifier.compress(surplus, shrinkOpportunities)` —— 压缩方向分配器（§6.2.2.3 档序），
-   与 `justify` 对称，吐 `PushInAllocation`，复用现有 channel 应用路径。**已落地**（步骤 ①）。
-2. breaker：在越界处增设**推入候选**（`greedyEnd+1…` 至可压容量耗尽），`badness` 改为
-   **双向不对称**（拉 `Ws`、压 `Wc=Ws/bias`，压不下→不可行罚），随 lookahead 评分一起选。
-3. 引擎 per-line：过满行→`compress` 应用、不足行→`justify`。
+落地为一个**填充推入 pass**（`applyFillPushIn`），是避头尾 PushIn 的兄弟——在
+greedy/lookahead + 避头尾修复**之后**跑，复用现成的 `tryPushIn`/`distributePushInShrink`，
+因此 line-end 削半 / glue 池 / 容量与避头尾 PushIn **完全同一套**对账（低风险，不另造几何路径）：
+
+1. 每个非末行：留着 = 拉 `deficit`（`Ws·deficit`）；把下一行首 cluster 拉上来 = 压
+   `overflow = curr0.advance − deficit`（`Wc·overflow`）。**压得动**（`tryPushIn` 容量够）
+   且 `overflow < deficit × bias`（`bias = Ws/Wc`）就推入。
+2. **守则**（避免重蹈 0022 / 不破坏既有不变量）：① 跳过已带 repair 的行（避头尾
+   PushIn/Hang/CarryNext），不重复消耗 glue；② 不拆 `unbreakableRanges`（数字符号粘连、
+   示亡号）——只拉 curr0 会把整组拆散；③ 不把 forbidden-at-line-end（开引号/括号）拖到
+   行尾，也不让 curr 新行首落在 forbidden-at-line-start。
+3. `LineAdjustmentStrategy` → `(是否推入, bias)`：`PushOutOnly`→(false,–)；`Auto`→(true,
+   `compressBias`=2)；`PushInFirst`→(true,1e6)；`PushOutFirst`→(true,0.5)。
+4. 引擎 per-line 不变：推入行带 `RepairOption.PushIn`（reason `LineAdjustmentPushIn`），
+   走**现有** PushIn 应用路径；不足行照常 `justify`。`Justifier.compress`（步骤 ①）作为
+   与 `justify` 对称的公共压缩分配器保留并单测，当前 fill pass 复用 breaker 内的等价分配器。
+
+> 验证（golden review）：`real-paragraph-1` 20 行里 4 行推入压缩、4 行仍拉伸、其余自然——
+> **选择性、非全行压缩**，正是 0022 否决要避免的反面。dump 用 `LineAdjustmentPushIn` vs
+> `ForbiddenAtLineStart` 区分两类 PushIn。`LineAdjustmentPushInTest` 钉死「Auto 推入>0、
+> PushOutOnly=0、不是每行都推入」。
 
 ## Consequences
 

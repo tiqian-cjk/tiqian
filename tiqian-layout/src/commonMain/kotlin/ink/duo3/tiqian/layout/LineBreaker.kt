@@ -71,6 +71,15 @@ interface LineBreaker {
         sinoWesternBoundaries: Set<Int> = emptySet(),
         /** Per-中西间距 stretch capacity (cap − natural); subtracted before the CJK looseness. */
         sinoWesternStretchCap: Float = 0f,
+        /**
+         * `LineAdjustmentPushIn` (ADR 0031): when true, a fill pass pulls an
+         * over-the-edge cluster onto the previous line and compresses to fit
+         * whenever 压缩 is the smaller (bias-weighted) deviation than stretching.
+         * False (default) = 仅推出, the historical greedy-then-stretch behavior.
+         */
+        lineAdjustmentPushIn: Boolean = false,
+        /** `Ws/Wc` — how much cheaper 压缩 is than 拉伸 (＞1 = 先挤压). See [applyFillPushIn]. */
+        lineAdjustmentCompressBias: Float = 1f,
     ): LineSolution
 }
 
@@ -226,6 +235,8 @@ class GreedyLineBreaker(
         maxCjkStretchPerGap: Float,
         sinoWesternBoundaries: Set<Int>,
         sinoWesternStretchCap: Float,
+        lineAdjustmentPushIn: Boolean,
+        lineAdjustmentCompressBias: Float,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -238,7 +249,7 @@ class GreedyLineBreaker(
             hyphenBreakClusters, cjkInterCharBoundaries, maxCjkStretchPerGap,
             sinoWesternBoundaries, sinoWesternStretchCap,
         )
-        return applyKinsokuRepairs(
+        val repaired = applyKinsokuRepairs(
             initial = greedy,
             naturalClusters = naturalClusters,
             adjustedClusters = adjustedClusters,
@@ -252,6 +263,11 @@ class GreedyLineBreaker(
             firstLineIndent = firstLineIndent,
             hangableClusters = hangableClusters,
             forbiddenLineStartClusters = forbiddenLineStartClusters,
+        )
+        return repaired.withFillPushIn(
+            lineAdjustmentPushIn, naturalClusters, adjustedClusters, maxWidth,
+            shrinkOpportunities, firstLineIndent, lineAdjustmentCompressBias,
+            forbiddenLineStartClusters, forbiddenLineEndClusters, unbreakableRanges, pushInPenalty,
         )
     }
 
@@ -379,6 +395,8 @@ class LookaheadLineBreaker(
         maxCjkStretchPerGap: Float,
         sinoWesternBoundaries: Set<Int>,
         sinoWesternStretchCap: Float,
+        lineAdjustmentPushIn: Boolean,
+        lineAdjustmentCompressBias: Float,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -480,6 +498,10 @@ class LookaheadLineBreaker(
             firstLineIndent = firstLineIndent,
             hangableClusters = hangableClusters,
             forbiddenLineStartClusters = forbiddenLineStartClusters,
+        ).withFillPushIn(
+            lineAdjustmentPushIn, naturalClusters, adjustedClusters, maxWidth,
+            shrinkOpportunities, firstLineIndent, lineAdjustmentCompressBias,
+            forbiddenLineStartClusters, forbiddenLineEndClusters, unbreakableRanges, pushInPenalty,
         )
     }
 
@@ -865,6 +887,12 @@ private fun tryPushIn(
     maxWidth: Float,
     shrinkOpportunities: List<ShrinkOpportunity>,
     pushInPenalty: Int,
+    /**
+     * Why this PushIn fired — `ForbiddenAtLineStart` for 避头尾 repair, or
+     * `LineAdjustmentPushIn` for the `LineAdjustmentStrategy` fill pass
+     * (ADR 0031). Surfaces in the dump so the two callers stay distinguishable.
+     */
+    reasonCode: String = "ForbiddenAtLineStart",
 ): PushInResult {
     val offenderIndex = curr.clusterRange.first
     val expandedRange = prev.clusterRange.first..offenderIndex
@@ -892,7 +920,7 @@ private fun tryPushIn(
             current = curr,
             candidate = RepairCandidate(
                 kind = "PushIn",
-                reasonCode = "ForbiddenAtLineStart",
+                reasonCode = reasonCode,
                 offenderClusterIndex = offenderIndex,
                 penalty = pushInPenalty,
                 accepted = false,
@@ -914,7 +942,7 @@ private fun tryPushIn(
     val offender = adjustedClusters[offenderIndex]
     val candidate = RepairCandidate(
         kind = "PushIn",
-        reasonCode = "ForbiddenAtLineStart",
+        reasonCode = reasonCode,
         offenderClusterIndex = offenderIndex,
         penalty = pushInPenalty,
         accepted = true,
@@ -928,9 +956,9 @@ private fun tryPushIn(
         repair = RepairOption.PushIn(
             penalty = pushInPenalty,
             reason = if (shrink > 0f) {
-                "ForbiddenAtLineStart:${offender.text}:pushed-in=$shrink/$totalCapacity"
+                "$reasonCode:${offender.text}:pushed-in=$shrink/$totalCapacity"
             } else {
-                "ForbiddenAtLineStart:${offender.text}:fits-no-shrink"
+                "$reasonCode:${offender.text}:fits-no-shrink"
             },
             offenderClusterIndex = offenderIndex,
             allocations = allocations,
@@ -949,6 +977,121 @@ private fun tryPushIn(
     }
     return PushInResult(repairedPrevious, repairedCurrent, candidate)
 }
+
+/**
+ * `LineAdjustmentPushIn` (ADR 0031) — the fill counterpart of 避头尾 PushIn.
+ * After greedy/lookahead + 避头尾 repair, every non-last line is otherwise
+ * STRETCHED to 行长; this pass instead pulls the next line's leading cluster UP
+ * and COMPRESSES the line to fit, whenever压缩 is the smaller deviation from
+ * 自然密排 (CLREQ §6.2.2「先挤进、后推出」+「先挤压、后拉伸」).
+ *
+ * Per boundary: leaving the cluster stretches the line by `deficit` (cost
+ * `Ws·deficit`); pulling it in compresses by `overflow = curr0.advance − deficit`
+ * (cost `Wc·overflow`). Pull iff `Wc·overflow < Ws·deficit`, i.e.
+ * `overflow < deficit × [compressBias]` (= `Ws/Wc`), AND [tryPushIn] finds the
+ * room. `compressBias`大 → 先推入；小 → 先推出；`PushOutOnly` never calls this.
+ *
+ * Reuses [tryPushIn] so line-end 削半 / glue-pool / capacity reconcile exactly
+ * as 避头尾 PushIn does. To avoid double-consuming glue it skips lines already
+ * carrying a repair (避头尾 PushIn/Hang/CarryNext) and never strands a
+ * forbidden-at-line-start cluster as the shortened next line's head.
+ */
+internal fun applyFillPushIn(
+    lines: List<LineCandidate>,
+    naturalClusters: List<Cluster>,
+    adjustedClusters: List<Cluster>,
+    maxWidth: Float,
+    shrinkOpportunities: List<ShrinkOpportunity>,
+    firstLineIndent: Float,
+    compressBias: Float,
+    forbiddenLineStartClusters: Set<Int>?,
+    forbiddenLineEndClusters: Set<Int>,
+    unbreakableRanges: List<IntRange>,
+    pushInPenalty: Int,
+): List<LineCandidate> {
+    if (lines.size < 2 || compressBias <= 0f) return lines
+    val out = lines.toMutableList()
+    var i = 0
+    while (i < out.size - 1) {
+        val prev = out[i]
+        val curr = out[i + 1]
+        if (prev.repair != null || prev.hangingClusterIndex != null) {
+            i += 1
+            continue
+        }
+        val limit = lineLimit(maxWidth, firstLineIndent, prev.clusterRange.first)
+        val deficit = limit - prev.adjustedWidth
+        if (deficit <= 0f) {
+            i += 1
+            continue
+        }
+        val curr0 = curr.clusterRange.first
+        // Never split an unbreakable group (NumberSymbolCohesion 数字+符号, 示亡号):
+        // pulling only curr0 would strand the rest of its range on the next line.
+        // Nor drag a forbidden-at-line-END mark (开引号/开括号) to prev's tail.
+        if (unbreakableRanges.any { curr0 in it && it.last > curr0 } || curr0 in forbiddenLineEndClusters) {
+            i += 1
+            continue
+        }
+        val overflow = adjustedClusters[curr0].advance - deficit
+        // 偏差最小化 + 压缩优先 (bias = Ws/Wc): pull in only when compressing is
+        // the cheaper deviation. overflow ≤ 0 (cluster now fits) is always cheaper.
+        if (overflow >= deficit * compressBias) {
+            i += 1
+            continue
+        }
+        // Don't strand a forbidden-at-line-start cluster as curr's new head.
+        if (curr.clusterRange.first < curr.clusterRange.last &&
+            forbiddenLineStartClusters?.contains(curr0 + 1) == true
+        ) {
+            i += 1
+            continue
+        }
+        val result = tryPushIn(
+            prev = prev,
+            curr = curr,
+            naturalClusters = naturalClusters,
+            adjustedClusters = adjustedClusters,
+            maxWidth = limit,
+            shrinkOpportunities = shrinkOpportunities,
+            pushInPenalty = pushInPenalty,
+            reasonCode = "LineAdjustmentPushIn",
+        )
+        if (result.candidate.accepted) {
+            out[i] = result.previous
+            if (result.current == null) out.removeAt(i + 1) else out[i + 1] = result.current
+        }
+        i += 1
+    }
+    return out
+}
+
+/** Gated [applyFillPushIn] over a [LineSolution] — no-op when not [enabled]. */
+internal fun LineSolution.withFillPushIn(
+    enabled: Boolean,
+    naturalClusters: List<Cluster>,
+    adjustedClusters: List<Cluster>,
+    maxWidth: Float,
+    shrinkOpportunities: List<ShrinkOpportunity>,
+    firstLineIndent: Float,
+    compressBias: Float,
+    forbiddenLineStartClusters: Set<Int>?,
+    forbiddenLineEndClusters: Set<Int>,
+    unbreakableRanges: List<IntRange>,
+    pushInPenalty: Int,
+): LineSolution =
+    if (!enabled) {
+        this
+    } else {
+        LineSolution(
+            lines = applyFillPushIn(
+                lines, naturalClusters, adjustedClusters, maxWidth,
+                shrinkOpportunities, firstLineIndent, compressBias,
+                forbiddenLineStartClusters, forbiddenLineEndClusters, unbreakableRanges, pushInPenalty,
+            ),
+            totalBadness = totalBadness,
+        )
+    }
 
 /**
  * Distribute [totalShrink] across [opportunities] in STRICT TIER ORDER

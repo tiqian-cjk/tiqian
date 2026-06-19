@@ -6,6 +6,7 @@ import ink.duo3.tiqian.clreq.BuiltInClreqProfileResolver
 import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.clreq.ClreqProfileResolver
 import ink.duo3.tiqian.clreq.HangingPunctuationStyle
+import ink.duo3.tiqian.clreq.LineAdjustmentStrategy
 import ink.duo3.tiqian.clreq.LineEndPunctuationStyle
 import ink.duo3.tiqian.clreq.NumberSymbolCohesion
 import ink.duo3.tiqian.clreq.PunctuationClass
@@ -652,6 +653,15 @@ class ExplainableStubParagraphLayoutEngine(
                 maxCjkStretchPerGap = HYPHEN_LAST_RESORT_CJK_STRETCH_EM * fontSize,
                 sinoWesternBoundaries = sinoWesternBoundaries,
                 sinoWesternStretchCap = HYPHEN_SINO_WESTERN_STRETCH_CAP_EM * fontSize,
+                // LineAdjustmentStrategy (ADR 0031): 推入/推出 方向取舍。仅 PushOutOnly
+                // 不推入（= 旧行为）；其余以 bias = Ws/Wc 表达「先挤压」力度。
+                lineAdjustmentPushIn = adjustmentStyle.lineAdjustment != LineAdjustmentStrategy.PushOutOnly,
+                lineAdjustmentCompressBias = when (adjustmentStyle.lineAdjustment) {
+                    LineAdjustmentStrategy.Auto -> adjustmentStyle.lineAdjustmentCompressBias
+                    LineAdjustmentStrategy.PushInFirst -> 1_000_000f
+                    LineAdjustmentStrategy.PushOutFirst -> 0.5f
+                    LineAdjustmentStrategy.PushOutOnly -> 0f
+                },
             )
         }
         val pushInAllocations = lineSolution.lines
@@ -1602,8 +1612,10 @@ class ExplainableStubParagraphLayoutEngine(
     private fun RepairOption.toDecisionInfo(clusters: List<Cluster>): LineRepairDecisionInfo =
         when (this) {
             is RepairOption.PushIn -> LineRepairDecisionInfo(
+                // 避头尾 PushIn vs LineAdjustmentPushIn (ADR 0031) — the real
+                // trigger lives in `reason`; don't hardcode it away.
                 kind = "PushIn",
-                reasonCode = "ForbiddenAtLineStart",
+                reasonCode = reason.substringBefore(':'),
                 offenderRange = clusters[offenderClusterIndex].range,
                 penalty = penalty,
                 targetClusterIndex = offenderClusterIndex,

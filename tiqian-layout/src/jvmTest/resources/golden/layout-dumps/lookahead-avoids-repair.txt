@@ -28,13 +28,13 @@ linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided a
 == lookahead ==
 size 48.0x72.0
 kinsoku measure=3.0字 level=Basic hang=Disabled reason=Fixed:Basic
-line[0] 0-2 natural=32.0 adjusted=32.0 visual=48.0 repair=- candidates=- justify=deficit=16.0->0.0 CjkInterChar@0+16.0
-line[1] 2-5 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
+line[0] 0-3 natural=48.0 adjusted=48.0 visual=48.0 repair=PushIn(LineAdjustmentPushIn shrink=0.0) candidates=PushIn+ justify=-
+line[1] 3-5 natural=32.0 adjusted=32.0 visual=48.0 repair=- candidates=- justify=deficit=16.0->0.0 CjkInterChar@3+16.0
 line[2] 5-7 natural=32.0 adjusted=24.0 visual=24.0 repair=- candidates=- justify=-
-cluster 0-1 '中' adv=32.0
+cluster 0-1 '中' adv=16.0
 cluster 1-2 '文' adv=16.0
 cluster 2-3 '中' adv=16.0
-cluster 3-4 '文' adv=16.0
+cluster 3-4 '文' adv=32.0
 cluster 4-5 '中' adv=16.0
 cluster 5-6 '文' adv=16.0
 cluster 6-7 '。' adv=8.0

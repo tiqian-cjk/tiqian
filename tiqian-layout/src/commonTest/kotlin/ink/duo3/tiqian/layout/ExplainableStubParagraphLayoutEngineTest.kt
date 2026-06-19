@@ -3,6 +3,7 @@ package ink.duo3.tiqian.layout
 import ink.duo3.tiqian.clreq.CjkPunctuationGlyphPolicy
 import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.clreq.ClreqProfileResolver
+import ink.duo3.tiqian.clreq.LineAdjustmentStrategy
 import ink.duo3.tiqian.core.Cluster
 import ink.duo3.tiqian.core.Glyph
 import ink.duo3.tiqian.core.GlyphRun
@@ -1267,7 +1268,15 @@ class ExplainableStubParagraphLayoutEngineTest {
         // sino-western gap (CjkLatinSpace) and even CjkInterChar instead.
         // (A finer proportional space from a real font WOULD stretch; the
         // deterministic stub models U+0020 as 二分空.)
-        val result = ExplainableStubParagraphLayoutEngine().layout(
+        // Pinned to PushOutOnly: this asserts the STRETCH tier behaviour, which
+        // Auto would replace with 推入压缩 on this short line (ADR 0031).
+        val result = ExplainableStubParagraphLayoutEngine(
+            clreqProfileResolver = {
+                ClreqProfile.MainlandHorizontal.let { p ->
+                    p.copy(adjustment = p.adjustment.copy(lineAdjustment = LineAdjustmentStrategy.PushOutOnly))
+                }
+            },
+        ).layout(
             LayoutInput(
                 content = TiqianTextContent("AB CD EF中文中文中"),
                 constraints = LayoutConstraints(maxWidth = 160f),
