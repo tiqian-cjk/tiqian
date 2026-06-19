@@ -42,7 +42,13 @@ Compose 侧作者面用 `AnnotatedString`（ADR 0030 的 `CjkParagraph(Annotated
   退最近的正立体（不合成倾斜）——与「斜体只对西文有意义」一致。span 样式在 Compose 侧
   **拍平**成无重叠、整解析的 `TextSpan`（base + 覆盖），故字号/字重/斜体/颜色可任意叠加。
   默认 `(400, upright)` == `FontStyle.NORMAL` → 无 span 时 typeface 不变（golden 零漂移）。
-- **字体（family）**：仍是后续——`SpanStyle.fontFamily` → `TextStyle.fontFamilies` 的映射待接。
+- **字体（family）**（✅ 已落地 2026-06-19）：`SpanStyle.fontFamily`（`GenericFontFamily`
+  Serif/SansSerif/Monospace）→ token 名进 `TextStyle.fontFamilies`。`SkiaSystemTypefaces.typeface
+  (isLatin, family, style)` 一个**共享**解析器：generic 按 role 映射候选（衬线 CJK→宋/明体、
+  Latin→Times；等宽 Latin→Menlo…；CJK 多全宽退回 sans）；具名族先试再退回系统默认。shaper
+  （advance）与 renderer（glyph）走同一解析器 → 不漂。**限制**：自定义 `FontListFontFamily`
+  （加载字体文件，无可移植族名）暂不接；per-cluster **度量**仍用默认字（行高基本不随族变），
+  与字重/斜体同一档的取舍。
 - **混排 em 决策的字号基准 = 该空白的「归属 cluster」的字号**（加性 glue 模型每条空白都有
   归属者）。CLREQ 已为关键决策指定了归属，不是「小的/前一个/段落」的全局选择：
   - **中西间距** = 1/4 **汉字宽**（CLREQ 原文）→ 归属那个**汉字**的字号（西文字号不进式子）；

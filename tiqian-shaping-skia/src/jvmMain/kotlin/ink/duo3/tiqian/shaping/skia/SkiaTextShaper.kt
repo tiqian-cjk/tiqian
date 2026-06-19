@@ -1,10 +1,8 @@
 package ink.duo3.tiqian.shaping.skia
 
 import org.jetbrains.skia.Font
-import org.jetbrains.skia.FontMgr
 import org.jetbrains.skia.FontStyle
 import org.jetbrains.skia.Point
-import org.jetbrains.skia.Typeface
 import org.jetbrains.skia.shaper.RunHandler
 import org.jetbrains.skia.shaper.RunInfo
 import org.jetbrains.skia.shaper.Shaper
@@ -201,25 +199,20 @@ interface SkiaFontResolver {
  *
  * Named heuristic: `SystemSkiaFontProbe`.
  */
-class SystemSkiaFontResolver(
-    private val fontMgr: FontMgr = FontMgr.default,
-) : SkiaFontResolver {
+class SystemSkiaFontResolver : SkiaFontResolver {
     override fun resolve(input: ShapingInput): Font {
-        // Weight/italic (ADR 0030 B 档) select the styled typeface so the SHAPED
-        // advances are the real bold/italic ones; default (400, upright) ==
-        // FontStyle.NORMAL → same typeface as before (golden-safe).
+        // Weight/italic/family (ADR 0030 B 档) select the styled typeface so the
+        // SHAPED advances are the real bold/italic/serif ones; default
+        // (400, upright, role family) == before (golden-safe). Resolved through
+        // the SAME SkiaSystemTypefaces.typeface the renderer uses → no drift.
         val fontStyle = input.style.toSkiaFontStyle()
+        val role = input.fontDecision.role
+        val isLatin = role == FontRole.LatinText || role == FontRole.Symbol ||
+            role == FontRole.Emoji || role == FontRole.Unknown
         val requestedFamily = input.style.fontFamilies.firstOrNull()
             ?: input.fontDecision.candidate.family.takeUnless { it == input.fontDecision.candidate.key }
-        val typeface = requestedFamily?.let { fontMgr.matchFamilyStyle(it, fontStyle) }
-            ?: input.fontDecision.role.resolvedTypeface(fontStyle)
+        val typeface = SkiaSystemTypefaces.typeface(isLatin, requestedFamily, fontStyle)
         return Font(typeface, input.style.fontSize)
-    }
-
-    private fun FontRole.resolvedTypeface(style: FontStyle): Typeface? {
-        val isLatin = this == FontRole.LatinText || this == FontRole.Symbol ||
-            this == FontRole.Emoji || this == FontRole.Unknown
-        return SkiaSystemTypefaces.styled(isLatin, style)
     }
 
 }

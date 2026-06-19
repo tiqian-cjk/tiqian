@@ -16,7 +16,8 @@
 Last completed: 富文本 per-span 样式（2026-06-19）——ADR 0030 **A 档颜色** + **B 档 字号/字重/斜体**：`TiqianTextContent.spans`（拍平成无重叠、整解析的 `TextSpan`，字号/字重/斜体/颜色可叠加）进引擎，span 边界切 cluster，per-segment shaping（按 `FontStyle(weight, slant)` 选真粗体/斜体 typeface，advance 真）+ per-cluster 度量；renderer 同样按 per-cluster `FontStyle`+字号取 styled typeface 绘制。混排 em 按「空白归属者字号」（中西间距=汉字、标点=标点、grid/缩进=段落，边角取小）。粗/斜共用纵向度量 → 行高不变。v1 限定：行高取整段 max、边界 em 仍段落基准、基线共享。无 span 时逐字节同旧 golden（默认 `(400,upright)`==`FontStyle.NORMAL`）
 Last（同日）:    **行调整方向**（ADR 0031）落地：CLREQ §6.2.2「先挤进/后推出」+「先挤压/后拉伸」。`Justifier.compress`（压缩档序分配器）+ `LineAdjustmentStrategy{Auto/PushInFirst/PushOutFirst/PushOutOnly}`（默认 Auto，`compressBias`=2）+ `applyFillPushIn`（复用 `tryPushIn`，避头尾 PushIn 的兄弟 pass）：短行不再一律拉伸，越界字「挤一挤放得下」且压缩偏差更小（bias 加权）时推入压缩。选择性非全行（避开 ADR 0022 否决的 floor 填行）；守 unbreakable/forbidden/已修复行。golden 重生成（dump 区分 `LineAdjustmentPushIn` vs `ForbiddenAtLineStart`）
 之前（同日）:   **列表**（CLREQ §6.2.1.1 凸排）：`CjkBlock.List` + `ListMarker`（`1.`/`一、`/`①`/`•`），标记左对齐顶格、正文固定列缩进续行对齐（Compose 双列，引擎零改动），列宽默认 1 字、自动按最宽标记升整字数（`10.`→2 字）、`indent` 可覆盖
-Up next:        富文本收尾：**字体 family**（`SpanStyle.fontFamily`→`fontFamilies` 映射）+ 列表续档（嵌套、富文本项）。**双语强调**（`BilingualEmphasisWesternItalic`：着重号 span 内汉字加点、西文自动斜体不加点）已落地。其间继续 dogfood `CjkParagraph`/`CjkText`。第二阶段（竖排 / web）等模型冻结、考虑 Rust core 后再起；西文连字零散后续：整段最优连字、Android 原生断词器接 `Hyphenator`
+富文本完结:    color / 字号 / 字重 / 斜体 / 双语强调 / **字体 family**（generic Serif/SansSerif/Monospace，role-aware 解析；自定义字体文件待接）/ 列表——全部落地（ADR 0030）。剩：列表续档（嵌套、富文本项）；per-cluster 度量随族/字重变（行高，当前用默认字）。
+Up next:        在 compose 上**实际 dogfood** 整套（富文本 + 列表 + 推入压缩），把模型用稳再调旋钮。第二阶段（竖排 / web）等模型冻结、考虑 Rust core 后再起；西文连字零散后续：整段最优连字、Android 原生断词器接 `Hyphenator`
 ```
 
 ## Slice / Milestone 对照表

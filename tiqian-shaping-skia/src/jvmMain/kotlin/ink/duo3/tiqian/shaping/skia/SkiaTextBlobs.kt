@@ -187,15 +187,17 @@ internal inline fun LayoutResult.forEachPositionedCluster(
             val weight = style?.fontWeight ?: 400
             val italic = (style?.italic ?: false) ||
                 (isLatin && emphasisRanges.any { cluster.range.start >= it.start && cluster.range.start < it.end })
-            val font = if (size == baseStyle.fontSize && weight == 400 && !italic) {
+            val family = style?.fontFamilies?.firstOrNull()
+            val font = if (size == baseStyle.fontSize && weight == 400 && !italic && family == null) {
                 baseFont
             } else {
-                styledFonts.getOrPut("$isLatin:$size:$weight:$italic") {
-                    val tf = if (weight == 400 && !italic) {
+                styledFonts.getOrPut("$isLatin:$size:$weight:$italic:$family") {
+                    val tf = if (weight == 400 && !italic && family == null) {
                         baseFont.typeface
                     } else {
-                        SkiaSystemTypefaces.styled(
+                        SkiaSystemTypefaces.typeface(
                             isLatin,
+                            family,
                             FontStyle(weight, FontStyle.NORMAL.width, if (italic) FontSlant.ITALIC else FontSlant.UPRIGHT),
                         ) ?: baseFont.typeface
                     }
@@ -281,19 +283,56 @@ object SkiaSystemTypefaces {
         LATIN_CANDIDATES.firstNotNullOfOrNull { FontMgr.default.matchFamilyStyle(it, FontStyle.NORMAL) }
     }
 
-    private val styledCache = HashMap<Pair<Boolean, FontStyle>, Typeface?>()
+    /** 衬线 (serif) candidates — CJK 宋/明体, Latin Times-like (rich-text fontFamily). */
+    val SERIF_CJK_CANDIDATES: List<String> = listOf(
+        "Source Han Serif CN", "Noto Serif CJK SC", "Songti SC", "STSong", "SimSun", "Songti TC",
+    )
+    val SERIF_LATIN_CANDIDATES: List<String> = listOf(
+        "Times New Roman", "Times", "Georgia", "Charter", "Iowan Old Style",
+    )
+
+    /** 等宽 (monospace) candidates. Most CJK is full-width already → falls back to sans CJK. */
+    val MONO_CJK_CANDIDATES: List<String> = listOf("Sarasa Mono SC", "Noto Sans Mono CJK SC")
+    val MONO_LATIN_CANDIDATES: List<String> = listOf(
+        "Menlo", "SF Mono", "Monaco", "Consolas", "Roboto Mono", "Courier New",
+    )
+
+    private val GENERIC_SANS = setOf("sans-serif", "sans", "sansserif")
+    private val GENERIC_SERIF = setOf("serif")
+    private val GENERIC_MONO = setOf("monospace", "mono")
 
     /**
-     * First candidate (Latin or CJK) that matches [style] — the bold / italic
-     * instance the renderer needs for a styled span. CJK families rarely ship an
-     * italic, so `matchFamilyStyle` returns the nearest upright (no synthetic
-     * slant); weight axes (Regular/Bold) do resolve.
+     * Candidate family list for a [family] token under the cluster's role. A
+     * generic (`serif`/`sans-serif`/`monospace`) maps to the role-matched list;
+     * a concrete name is tried first then falls back to the role default — so an
+     * unavailable custom family degrades to the system font instead of tofu.
      */
-    fun styled(isLatin: Boolean, style: FontStyle): Typeface? =
-        styledCache.getOrPut(isLatin to style) {
-            (if (isLatin) LATIN_CANDIDATES else CJK_CANDIDATES)
-                .firstNotNullOfOrNull { FontMgr.default.matchFamilyStyle(it, style) }
+    private fun candidatesFor(isLatin: Boolean, family: String?): List<String> {
+        val fallback = if (isLatin) LATIN_CANDIDATES else CJK_CANDIDATES
+        return when (family?.lowercase()) {
+            null -> fallback
+            in GENERIC_SANS -> fallback
+            in GENERIC_SERIF -> (if (isLatin) SERIF_LATIN_CANDIDATES else SERIF_CJK_CANDIDATES) + fallback
+            in GENERIC_MONO -> (if (isLatin) MONO_LATIN_CANDIDATES else MONO_CJK_CANDIDATES) + fallback
+            else -> listOf(family) + fallback
         }
+    }
+
+    private val typefaceCache = HashMap<Triple<Boolean, String?, FontStyle>, Typeface?>()
+
+    /**
+     * Resolve the typeface for a cluster's role + [family] token + [style] —
+     * the SINGLE family resolver shared by the shaper (advances) and renderer
+     * (glyphs) so they never pick different fonts. `family` null = role default.
+     * CJK rarely ships italic → `matchFamilyStyle` returns the nearest upright.
+     */
+    fun typeface(isLatin: Boolean, family: String?, style: FontStyle): Typeface? =
+        typefaceCache.getOrPut(Triple(isLatin, family?.lowercase(), style)) {
+            candidatesFor(isLatin, family).firstNotNullOfOrNull { FontMgr.default.matchFamilyStyle(it, style) }
+        }
+
+    /** Role default at [style] (weight/italic) — `typeface(isLatin, null, style)`. */
+    fun styled(isLatin: Boolean, style: FontStyle): Typeface? = typeface(isLatin, null, style)
 }
 
 /**

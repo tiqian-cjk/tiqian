@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.GenericFontFamily
 import androidx.compose.ui.text.withAnnotation
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
@@ -87,7 +88,8 @@ fun AnnotatedString.cjkColorSpans(): List<ColorSpan> =
  */
 fun AnnotatedString.cjkStyleSpans(base: TextStyle): List<TextSpan> {
     val relevant = spanStyles.filter {
-        it.item.fontSize != TextUnit.Unspecified || it.item.fontWeight != null || it.item.fontStyle != null
+        it.item.fontSize != TextUnit.Unspecified || it.item.fontWeight != null ||
+            it.item.fontStyle != null || it.item.fontFamily != null
     }
     if (relevant.isEmpty()) return emptyList()
     val bounds = sortedSetOf(0, length)
@@ -103,6 +105,7 @@ fun AnnotatedString.cjkStyleSpans(base: TextStyle): List<TextSpan> {
         var size = base.fontSize
         var weight = base.fontWeight
         var italic = base.italic
+        var families = base.fontFamilies
         for (s in covering) {
             val unit = s.item.fontSize
             if (unit != TextUnit.Unspecified) {
@@ -110,8 +113,15 @@ fun AnnotatedString.cjkStyleSpans(base: TextStyle): List<TextSpan> {
             }
             s.item.fontWeight?.let { weight = it.weight }
             s.item.fontStyle?.let { italic = it == FontStyle.Italic }
+            // Generic families (Serif/SansSerif/Monospace) carry a token name the
+            // engine resolves role-aware; custom FontListFontFamily is not wired
+            // (no portable name) and stays at base (ADR 0030 字体 limitation).
+            (s.item.fontFamily as? GenericFontFamily)?.let { families = listOf(it.name) }
         }
-        out += TextSpan(TextRange(a, b), base.copy(fontSize = size, fontWeight = weight, italic = italic))
+        out += TextSpan(
+            TextRange(a, b),
+            base.copy(fontSize = size, fontWeight = weight, italic = italic, fontFamilies = families),
+        )
     }
     return out
 }

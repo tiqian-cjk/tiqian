@@ -4,9 +4,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.em
 import ink.duo3.tiqian.core.DecorationKind
 import ink.duo3.tiqian.core.TextRange
+import ink.duo3.tiqian.core.TextStyle
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -42,6 +46,24 @@ class CjkAnnotatedTextTest {
         val byKind = text.cjkDecorations().associateBy { it.kind }
         assertEquals(TextRange(3, 5), byKind.getValue(DecorationKind.Mourning).range)
         assertEquals(TextRange(8, 11), byKind.getValue(DecorationKind.BookTitle).range)
+    }
+
+    @Test
+    fun styleSpansFlattenSizeWeightAndGenericFamily() {
+        val base = TextStyle(fontSize = 20f)
+        val text = buildAnnotatedString {
+            append("正")
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 1.5.em, fontFamily = FontFamily.Serif)) {
+                append("强调")
+            }
+            append("文")
+        }
+        val spans = text.cjkStyleSpans(base)
+        val span = spans.first { it.range.start == 1 }
+        assertEquals(3, span.range.end) // 强调
+        assertEquals(30f, span.style.fontSize) // 1.5 × 20 (em relative to base)
+        assertEquals(700, span.style.fontWeight)
+        assertEquals(listOf("serif"), span.style.fontFamilies) // generic token, role-resolved later
     }
 
     @Test
