@@ -232,6 +232,48 @@ class Justifier(
         return finalize(lineClusterRange, deficitBefore, remaining, allocations)
     }
 
+    /**
+     * 压缩到行长 — the COMPRESSION counterpart of [justify] (CLREQ §6.2.2.3
+     * 挤压处理的优先顺序). Distributes a line's [surplus] (adjustedWidth − 行长)
+     * over the engine's tiered [shrinkOpportunities] in ASCENDING tier order
+     * （①行末半宽 ②西文词距 ③间隔号 ④夹注 ⑤逗顿分 ⑥中西间距 ⑦句问叹）: a tier is
+     * exhausted before the next is touched; within a tier every instance shrinks
+     * simultaneously by an equal fraction of its capacity (matching [allocate]'s
+     * stretch sharing). Output [PushInAllocation]s reuse the existing
+     * channel-based application path (ADR 0020), so this is purely the
+     * direction-symmetric distributor — `LineAdjustmentStrategy` decides WHEN to
+     * call it vs [justify]. `lineEndOnly` opportunities (行末削半 promotion) are
+     * the caller's to filter; this only distributes what it is given.
+     */
+    fun compress(
+        surplus: Float,
+        shrinkOpportunities: List<ShrinkOpportunity>,
+    ): CompressionPlan {
+        if (surplus <= 0f) return CompressionPlan(emptyList(), 0f, 0f)
+        var remaining = surplus
+        val allocations = mutableListOf<PushInAllocation>()
+        val byTier = shrinkOpportunities.filter { it.capacity > 0f }.groupBy { it.tier }
+        for (tier in byTier.keys.sorted()) {
+            if (remaining <= 0f) break
+            val tierOpps = byTier.getValue(tier)
+            val totalCapacity = tierOpps.sumOf { it.capacity.toDouble() }.toFloat()
+            if (totalCapacity <= 0f) continue
+            val factor = (remaining / totalCapacity).coerceAtMost(1f)
+            for (opp in tierOpps) {
+                val shrink = opp.capacity * factor
+                if (shrink > 0f) {
+                    allocations += PushInAllocation(opp.clusterIndex, shrink, opp.capacity, opp.channel)
+                }
+            }
+            remaining -= totalCapacity * factor
+        }
+        return CompressionPlan(
+            allocations = allocations,
+            surplusBefore = surplus,
+            unfilledSurplus = remaining.coerceAtLeast(0f),
+        )
+    }
+
     private inline fun buildBoundaryOpportunities(
         adjustedClusters: List<Cluster>,
         lineClusterRange: IntRange,
@@ -378,4 +420,16 @@ data class JustificationPlan(
     val allocations: List<JustificationAllocation>,
     val deficitBefore: Float,
     val unfilledDeficit: Float,
+)
+
+/**
+ * The compression counterpart of [JustificationPlan]: negative-direction
+ * [PushInAllocation]s that shrink a line by [surplusBefore] − [unfilledSurplus]
+ * (CLREQ §6.2.2.3). [unfilledSurplus] > 0 means even full compression could not
+ * absorb the overflow — the caller (`LineAdjustmentStrategy`) must then 推出.
+ */
+data class CompressionPlan(
+    val allocations: List<PushInAllocation>,
+    val surplusBefore: Float,
+    val unfilledSurplus: Float,
 )
