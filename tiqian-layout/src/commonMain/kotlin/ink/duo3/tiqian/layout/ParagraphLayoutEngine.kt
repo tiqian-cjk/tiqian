@@ -402,11 +402,70 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
         val spacingPlan = punctuationSpacingCompressor.compress(punctuationAtoms, em = fontSize)
+        // Measure a 注文's width in ITS OWN font at the ruby size (拼音 is variable-width).
+        fun measureRubyWidth(rubyText: String, families: List<String>): Float {
+            if (rubyText.isEmpty()) return 0f
+            val range = TextRange(0, rubyText.length)
+            val decision = fallbackResolver.resolve(
+                text = rubyText,
+                range = range,
+                request = FontRequest(
+                    preferredFamilies = families.ifEmpty { input.textStyle.fontFamilies },
+                    locale = input.textStyle.locale,
+                    role = FontRole.LatinText,
+                ),
+            )
+            return textShaper.shape(
+                ShapingInput(
+                    text = rubyText,
+                    range = range,
+                    style = input.textStyle.copy(fontSize = rubyFontSize, fontFamilies = families),
+                    fontDecision = decision,
+                    displayText = rubyText,
+                ),
+            ).clusters.sumOf { it.advance.toDouble() }.toFloat()
+        }
+        // 避让: left→right, push a 注文 (and everything after) right by the MINIMAL
+        // amount that restores the word-space gap to the previous 注文; record it as
+        // trailing 字距 on the cluster just before the span. Narrow 注文 (gap already
+        // ok) get nothing → they overhang freely (CLREQ「只要不侵犯最小间距，可允许
+        // 注文伸展到相邻基字上方」). The first span is never pushed.
+        fun computeRubySpread(natural: List<Cluster>, rubySize: Float): Map<Int, Float> {
+            if (input.rubySpans.isEmpty()) return emptyMap()
+            val wordSpace = rubySize * RUBY_MIN_GAP_EM_OF_RUBY
+            val leftX = FloatArray(natural.size)
+            var acc = 0f
+            for (i in natural.indices) { leftX[i] = acc; acc += natural[i].advance }
+            val measures = input.rubySpans.mapNotNull { ruby ->
+                val idxRange = natural.clusterIndexRangeFor(ruby.baseRange) ?: return@mapNotNull null
+                val center = (leftX[idxRange.first] + leftX[idxRange.last] + natural[idxRange.last].advance) / 2f
+                Triple(idxRange.first, center, measureRubyWidth(ruby.text, ruby.fontFamilies))
+            }.sortedBy { it.first }
+            val spread = HashMap<Int, Float>()
+            var shift = 0f
+            var prevRight = Float.NEGATIVE_INFINITY
+            for ((firstCluster, centerNatural, rw) in measures) {
+                var center = centerNatural + shift
+                val needed = prevRight + wordSpace - (center - rw / 2f)
+                if (needed > 0f && firstCluster > 0) {
+                    spread.merge(firstCluster - 1, needed) { a, b -> a + b }
+                    shift += needed
+                    center += needed
+                }
+                prevRight = center + rw / 2f
+            }
+            return spread
+        }
+        // 行间注 避让 (ADR 0032): adjacent 注文 keep ≥ one 注文 word-space — add the
+        // MINIMAL trailing 字距 where they'd crowd (narrower 注文 just overhang).
+        // STRUCTURAL spread baked into baseGeometry so the breaker + final geometry
+        // both see the widened advances.
+        val rubySpread = computeRubySpread(naturalClusters, rubyFontSize)
         val baseGeometry = PunctuationGeometryLedger.from(
             naturalClusters = naturalClusters,
             punctuationAtoms = punctuationAtoms,
             spacingPlan = spacingPlan,
-        )
+        ).withRubySpread(rubySpread)
         val clusters = baseGeometry.resolveClusters()
         // CLREQ 挤压处理优先顺序 (ADR 0020): tiered shrink resources for
         // PushIn. Punctuation classes map to tiers; style knobs gate the
@@ -968,6 +1027,7 @@ class ExplainableStubParagraphLayoutEngine(
             lineRanges = lineSolution.lines.map { it.clusterRange },
             lineBoxes = lines,
             finalClusters = finalClusters,
+            naturalClusters = naturalClusters,
             fontSize = fontSize,
             rubyFontSize = rubyFontSize,
         )
@@ -1703,6 +1763,7 @@ class ExplainableStubParagraphLayoutEngine(
         lineRanges: List<IntRange>,
         lineBoxes: List<LineBox>,
         finalClusters: List<Cluster>,
+        naturalClusters: List<Cluster>,
         fontSize: Float,
         rubyFontSize: Float,
     ): List<RubyDecisionInfo> {
@@ -1712,26 +1773,27 @@ class ExplainableStubParagraphLayoutEngine(
             lineRanges.forEachIndexed { lineIndex, clusterRange ->
                 var x = lineBoxes[lineIndex].indent
                 var baseLeft = Float.NaN
-                var baseRight = Float.NaN
+                var contentWidth = 0f
                 for (idx in clusterRange) {
                     val cluster = finalClusters[idx]
                     if (cluster.range.start >= ruby.baseRange.start && cluster.range.end <= ruby.baseRange.end) {
                         if (baseLeft.isNaN()) baseLeft = x
-                        baseRight = x + cluster.advance
+                        // Centre on the base CONTENT (natural width), NOT the 避让-widened
+                        // slot — the spread is trailing space the注文 must not centre over.
+                        contentWidth += naturalClusters[idx].advance
                     }
                     x += cluster.advance
                 }
                 if (!baseLeft.isNaN()) {
-                    val baseWidth = baseRight - baseLeft
                     val estRubyWidth = ruby.text.length * rubyFontSize * 0.5f // diagnostic only
                     out += RubyDecisionInfo(
                         baseRange = ruby.baseRange,
                         text = ruby.text,
                         lineIndex = lineIndex,
-                        centerX = (baseLeft + baseRight) / 2f,
+                        centerX = baseLeft + contentWidth / 2f,
                         baselineY = lineBoxes[lineIndex].baseline - fontSize * RUBY_BASELINE_DROP_EM,
                         fontSize = rubyFontSize,
-                        overhang = ((estRubyWidth - baseWidth) / 2f).coerceAtLeast(0f),
+                        overhang = ((estRubyWidth - contentWidth) / 2f).coerceAtLeast(0f),
                         fontFamilies = ruby.fontFamilies,
                     )
                 }
@@ -1829,6 +1891,14 @@ private data class PunctuationGeometryLedger(
      * line edge). Applied unconditionally in [resolvedAdvance].
      */
     private val rawEdgeTrimByCluster: Map<Int, Float> = emptyMap(),
+    /**
+     * 行间注 避让 (ADR 0032): trailing advance ADDED to a base cluster so adjacent
+     * 注文 keep ≥ one 注文 word-space between them (CLREQ §罗马拼音). STRUCTURAL —
+     * applied unconditionally, BEFORE breaking, and survives the chain (so the
+     * breaker + final render both see it). Distinct from justify deltas (those
+     * are post-break and get replaced).
+     */
+    private val rubySpreadByCluster: Map<Int, Float> = emptyMap(),
 ) {
     companion object {
         fun from(
@@ -1914,6 +1984,10 @@ private data class PunctuationGeometryLedger(
 
     fun addJustificationDeltas(deltaByCluster: Map<Int, Float>): PunctuationGeometryLedger =
         copy(justificationDeltaByCluster = deltaByCluster)
+
+    /** 行间注 避让 structural spread (ADR 0032) — applied before breaking, kept through the chain. */
+    fun withRubySpread(spreadByCluster: Map<Int, Float>): PunctuationGeometryLedger =
+        if (spreadByCluster.isEmpty()) this else copy(rubySpreadByCluster = spreadByCluster)
 
     fun withRawEdgeTrims(trimByCluster: Map<Int, Float>): PunctuationGeometryLedger =
         if (trimByCluster.isEmpty()) this else copy(rawEdgeTrimByCluster = trimByCluster)
@@ -2020,18 +2094,20 @@ private data class PunctuationGeometryLedger(
 
     private fun resolvedAdvance(index: Int, cluster: Cluster): Float {
         val rawTrim = rawEdgeTrimByCluster[index] ?: 0f
+        val spread = rubySpreadByCluster[index] ?: 0f
         val geometry = geometries[index] ?: run {
             val delta = justificationDeltaByCluster[index] ?: 0f
-            return (cluster.advance + delta - rawTrim).coerceAtLeast(0f)
+            return (cluster.advance + delta + spread - rawTrim).coerceAtLeast(0f)
         }
         val budget = budgets[index]
-            ?: return (geometry.bodyWidth + (justificationDeltaByCluster[index] ?: 0f) - rawTrim).coerceAtLeast(0f)
+            ?: return (geometry.bodyWidth + (justificationDeltaByCluster[index] ?: 0f) + spread - rawTrim).coerceAtLeast(0f)
         val delta = justificationDeltaByCluster[index] ?: 0f
         return (
             geometry.bodyWidth +
                 budget.leadingRemaining +
                 budget.trailingRemaining +
-                delta -
+                delta +
+                spread -
                 rawTrim
             ).coerceAtLeast(0f)
     }
@@ -2091,6 +2167,11 @@ private const val DEFAULT_BODY_LINE_HEIGHT_EM = 1.5f
 
 /** 行间注 (ruby, ADR 0032): 注文常用基文 1/2 字号 (CLREQ 振假名惯例). */
 private const val RUBY_FONT_EM = 0.5f
+/**
+ * 避让 最小间距 (CLREQ §罗马拼音「相邻注文的间距不应小于西文词间空格」): one 注文
+ * word space ≈ 1/4 of the 注文 em. Measured in 注文 units, NOT base 字宽.
+ */
+private const val RUBY_MIN_GAP_EM_OF_RUBY = 0.25f
 /**
  * Ruby baseline above the base baseline. Must clear the base 字面顶 (≈0.88em) by
  * the注文's own DESCENDER (拉丁降部 ≈0.1em at half-em) plus a gap — otherwise

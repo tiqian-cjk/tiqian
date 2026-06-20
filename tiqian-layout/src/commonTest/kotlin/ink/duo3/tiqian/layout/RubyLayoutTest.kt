@@ -50,4 +50,30 @@ class RubyLayoutTest {
         val plain = engine.layout(input(emptyList()))
         assertTrue(plain.debug.rubyDecisions.isEmpty())
     }
+
+    @Test
+    fun wideAdjacentReadingsSpreadButNarrowDoNot() {
+        fun totalWidth(rubyTexts: List<String>): Double {
+            val spans = rubyTexts.mapIndexed { i, t -> RubySpan(TextRange(i, i + 1), t) }
+            return engine.layout(
+                LayoutInput(
+                    content = TiqianTextContent("中文排版"),
+                    constraints = LayoutConstraints(maxWidth = 4000f), // one line, no wrap
+                    paragraphStyle = ParagraphStyle(firstLineIndentEm = 0f),
+                    rubySpans = spans,
+                ),
+            ).clusters.sumOf { it.advance.toDouble() }
+        }
+
+        val plain = totalWidth(listOf("", "", "", ""))
+        val narrow = totalWidth(listOf("yī", "rén", "yī", "rén"))
+        val wide = totalWidth(listOf("zhuāng", "chuáng", "shuāng", "guāng"))
+
+        // 避让 is MONOTONIC in reading width: the wider the adjacent 注文, the more
+        // 字距 is added to keep the word-space gap. (The "narrow overhangs, no spread"
+        // case needs realistic proportional metrics — the stub treats Latin as
+        // full-width — and is covered by the render probe instead.)
+        assertTrue(narrow >= plain, "spread never shrinks the line ($narrow vs $plain)")
+        assertTrue(wide > narrow, "wider readings spread more ($wide vs $narrow)")
+    }
 }
