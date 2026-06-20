@@ -2089,12 +2089,20 @@ private const val EMPHASIS_DOT_DIAMETER_EM = 0.22f
  */
 private const val DEFAULT_BODY_LINE_HEIGHT_EM = 1.5f
 
-/** 行间注 (ruby, ADR 0032): 注文 ≤ 基字; 拼音 ≈ half-em. */
+/** 行间注 (ruby, ADR 0032): 注文常用基文 1/2 字号 (CLREQ 振假名惯例). */
 private const val RUBY_FONT_EM = 0.5f
-/** Extra ascent reserved above the base 字面 for the ruby band (注文 + gap). */
-private const val RUBY_BAND_EM = 0.55f
-/** Ruby text baseline above the base baseline — seats注文 just over the 字面顶. */
-private const val RUBY_BASELINE_DROP_EM = 0.98f
+/**
+ * Ruby baseline above the base baseline. Must clear the base 字面顶 (≈0.88em) by
+ * the注文's own DESCENDER (拉丁降部 ≈0.1em at half-em) plus a gap — otherwise
+ * `g/j/p/y` descenders crowd the base char. 1.12em leaves ≈0.13em daylight.
+ */
+private const val RUBY_BASELINE_DROP_EM = 1.12f
+/**
+ * Ascent reserved above the base 字面 for the ruby band: from the base 字面顶
+ * (0.88em) up to the注文 ascender + 声调号 top (注文基线 1.12em + 注文 cap/调号
+ * ≈0.5em ⇒ ~1.62em above base baseline ⇒ ~0.74em over the 字面顶).
+ */
+private const val RUBY_BAND_EM = 0.74f
 
 /** `LatinForcedHyphenBreak` 硬断时尽量满足的左右边界（前二后三，同 en-US 连字）. */
 private const val HYPHEN_MIN_LEFT = 2
