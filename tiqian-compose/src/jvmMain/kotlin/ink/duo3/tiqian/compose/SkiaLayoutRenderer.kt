@@ -119,11 +119,26 @@ internal fun DrawScope.drawParagraph(
                 when (p.role) {
                     ink.duo3.tiqian.core.ZhuyinGlyphRole.Symbol -> {
                         val f = Font(tf, p.height) // box height = symbol 字面框 (0.3em)
-                        val adv = f.measureTextWidth(p.text)
-                        // vertical=true → `vert` forms (ㄧ etc. take their 竖排 glyph).
+                        // Centre by the VERT glyph's advance (not the plain glyph's — they
+                        // can differ, e.g. half- vs full-width), since we draw the vert form.
+                        val gids = vertGlyphIds(tf, shaper, p.text, result.input.textStyle.locale)
+                        val adv = if (gids.isEmpty()) f.measureTextWidth(p.text) else f.getWidths(gids).sum()
                         shapeTextBlob(shaper, p.text, f, result.input.textStyle.locale, vertical = true)?.let { blob ->
-                            // centre the (full-width) glyph in the box; baseline = top + typo ascent.
                             skCanvas.drawTextBlob(blob, p.left + (p.width - adv) / 2f, p.top + p.height * 0.88f, paint)
+                        }
+                    }
+                    ink.duo3.tiqian.core.ZhuyinGlyphRole.Neutral -> {
+                        // 轻声: full-width vert glyph at the COLUMN-WIDTH size (not scaled);
+                        // h-centre by its vert advance, ink-position the dot into the box.
+                        val gids = vertGlyphIds(tf, shaper, p.text, result.input.textStyle.locale)
+                        if (gids.isEmpty()) continue
+                        val f = Font(tf, p.width) // full-width em = column width (9 份)
+                        val adv = f.getWidths(gids).sum()
+                        val b = f.getBounds(gids).first()
+                        shapeTextBlob(shaper, p.text, f, result.input.textStyle.locale, vertical = true)?.let { blob ->
+                            val drawX = p.left + (p.width - adv) / 2f
+                            val baselineY = p.top + p.height / 2f - (b.top + b.bottom) / 2f
+                            skCanvas.drawTextBlob(blob, drawX, baselineY, paint)
                         }
                     }
                     ink.duo3.tiqian.core.ZhuyinGlyphRole.Tone -> {

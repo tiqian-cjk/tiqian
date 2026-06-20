@@ -205,8 +205,15 @@ enum class ZhuyinGlyphRole {
     /** ㄅㄆㄇ — fill the 9×9 box at the box font size (字面框). */
     Symbol,
 
-    /** 调号 (平上去/入声/轻声) — ink-detect, scale ink width to the box, vertical-centre. */
+    /** 平上去/入声 调号 — ink-detect, scale ink width to the box, vertical-centre. */
     Tone,
+
+    /**
+     * 轻声 ˙ — its vert-alt is FULL-WIDTH (verified). Draw at the box-WIDTH font
+     * size (not scaled), h-centre by the vert advance, ink-position vertically so
+     * the dot lands on the box (the neutral row). The box is the dot's target rect.
+     */
+    Neutral,
 }
 
 /**

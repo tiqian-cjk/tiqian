@@ -1913,10 +1913,12 @@ class ExplainableStubParagraphLayoutEngine(
                         add(box(1f, 9f, topU, botU, ZhuyinGlyphRole.Symbol, sym))
                     }
                     when (parsed.tone) {
-                        // 轻声: small dot in the symbol column top.
+                        // 轻声: full-width vert-alt drawn at the 9-份 column size; the box
+                        // is the DOT's target rect (column-wide × the 2-份 neutral row) —
+                        // the renderer h-centres + ink-positions the dot into it.
                         ZhuyinTone.Neutral -> {
                             val (topU, botU) = zhuyinNeutralRow(n)
-                            add(box(4f, 3f, topU, botU, ZhuyinGlyphRole.Tone, "˙"))
+                            add(box(1f, 9f, topU, botU, ZhuyinGlyphRole.Neutral, "˙"))
                         }
                         // 平上去: 5×5 in the 调号 column [10,15]份, upper-right.
                         ZhuyinTone.Yangping, ZhuyinTone.Shang, ZhuyinTone.Qu -> {
