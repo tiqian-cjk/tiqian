@@ -17,12 +17,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.singleWindowApplication
 import ink.duo3.tiqian.core.ParagraphStyle
-import ink.duo3.tiqian.core.TextStyle
 
 private const val PARAGRAPH =
     "咖啡（coffee）在十七世纪经威尼斯传入欧洲。最初它被当作药物出售，价格高得吓人，真正" +
@@ -32,10 +31,9 @@ private const val PARAGRAPH =
     "，但也不算太离谱。"
 
 fun main() = singleWindowApplication(title = "Tiqian Compose Demo") {
-    // Engine units are physical pixels; map dp at the TextStyle boundary
-    // (ADR 0017) so the demo reads at 15dp on any density.
-    val fontSizePx = with(LocalDensity.current) { 15.dp.toPx() }
-    val textStyle = TextStyle(fontSize = fontSizePx)
+    // Compose-facing CjkTextStyle: `.sp` is lowered to engine px via density inside
+    // the composable — no hand-multiplication needed.
+    val textStyle = CjkTextStyle(fontSize = 15.sp)
     Column(
         modifier = Modifier
             .fillMaxSize()

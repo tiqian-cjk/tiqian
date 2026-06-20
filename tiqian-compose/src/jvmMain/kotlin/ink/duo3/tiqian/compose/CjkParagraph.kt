@@ -3,8 +3,10 @@ package ink.duo3.tiqian.compose
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalDensity
 import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.core.ColorSpan
 import ink.duo3.tiqian.core.DecorationSpan
@@ -23,30 +25,38 @@ import kotlin.math.ceil
 /**
  * Renders [text] as a CJK paragraph with the Tiqian engine (Slice 7, ADR 0017).
  *
- * The composable makes NO layout decisions: measure runs the injected
- * [measurer] against the incoming width constraint and reports
- * `LayoutResult.size`; draw walks the result and paints language-tagged
- * Skia TextBlobs — the same glyph forms the engine measured.
+ * The composable makes NO layout decisions: measure runs the injected [measurer]
+ * against the incoming width constraint and reports `LayoutResult.size`; draw walks
+ * the result and paints language-tagged Skia TextBlobs — the same glyph forms the
+ * engine measured.
  *
- * Engine units are pixels; map density at the [textStyle] boundary
- * (e.g. `fontSize = 16f * density`) until DPI handling lands.
+ * [textStyle] is the Compose-facing [CjkTextStyle] (`.sp`/`Color`/`FontFamily`),
+ * lowered to engine px via `LocalDensity` here — callers no longer hand-multiply
+ * density. [onTextLayout] reports the FULL (pre-clip) [LayoutResult]; the drawn
+ * content is clipped to the (possibly height-bounded) component bounds.
  */
 @Composable
 fun CjkParagraph(
     text: String,
     modifier: Modifier = Modifier,
-    textStyle: TextStyle = TextStyle(),
+    textStyle: CjkTextStyle = CjkTextStyle(),
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
     measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
     onTextLayout: (LayoutResult) -> Unit = {},
-) = CjkParagraphImpl(
-    text = text,
-    modifier = modifier,
-    textStyle = textStyle,
-    paragraphStyle = paragraphStyle,
-    measurer = measurer,
-    onTextLayout = onTextLayout,
-)
+) {
+    val density = LocalDensity.current
+    CjkParagraphImpl(
+        text = text,
+        modifier = modifier,
+        textStyle = textStyle.toCoreTextStyle(density),
+        paragraphStyle = paragraphStyle.copy(
+            lineHeight = textStyle.lineHeightPxOrNull(density) ?: paragraphStyle.lineHeight,
+        ),
+        color = textStyle.colorArgbOrNull() ?: DEFAULT_TEXT_COLOR,
+        measurer = measurer,
+        onTextLayout = onTextLayout,
+    )
+}
 
 /**
  * Advanced/bridge entry: explicit parallel span lists (装饰/颜色/样式/ruby) the
@@ -67,6 +77,7 @@ internal fun CjkParagraphImpl(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = TextStyle(),
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
+    color: Int = DEFAULT_TEXT_COLOR,
     decorations: List<DecorationSpan> = emptyList(),
     colorSpans: List<ColorSpan> = emptyList(),
     spans: List<TextSpan> = emptyList(),
@@ -80,8 +91,11 @@ internal fun CjkParagraphImpl(
     // reads it, so draw never sees a stale result.
     val holder = remember { ParagraphLayoutHolder() }
     Layout(
-        modifier = modifier.drawBehind {
-            holder.result?.let { drawParagraph(it, colorSpans = colorSpans, spans = spans) }
+        // clipToBounds so a paragraph taller than a bounded maxHeight is clipped to
+        // the reported (clamped) height instead of bleeding out (Codex #1); onTextLayout
+        // still reports the FULL layout. No-op when height is unbounded.
+        modifier = modifier.clipToBounds().drawBehind {
+            holder.result?.let { drawParagraph(it, color = color, colorSpans = colorSpans, spans = spans) }
         },
         content = {},
     ) { _, constraints ->
@@ -137,3 +151,4 @@ fun rememberParagraphMeasurer(
     }
 
 private const val DEFAULT_UNBOUNDED_WIDTH = 65_536f
+internal const val DEFAULT_TEXT_COLOR: Int = 0xFF000000.toInt()

@@ -9,6 +9,8 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.GenericFontFamily
 import androidx.compose.ui.text.withAnnotation
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
 import ink.duo3.tiqian.core.DecorationKind
@@ -55,19 +57,24 @@ private const val RubyFontSeparator = "\u001F"
 fun CjkParagraph(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
-    textStyle: TextStyle = TextStyle(),
+    textStyle: CjkTextStyle = CjkTextStyle(),
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
     measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
     onTextLayout: (LayoutResult) -> Unit = {},
 ) {
+    val density = LocalDensity.current
+    val coreStyle = textStyle.toCoreTextStyle(density)
     CjkParagraphImpl(
         text = text.text,
         modifier = modifier,
-        textStyle = textStyle,
-        paragraphStyle = paragraphStyle,
+        textStyle = coreStyle,
+        paragraphStyle = paragraphStyle.copy(
+            lineHeight = textStyle.lineHeightPxOrNull(density) ?: paragraphStyle.lineHeight,
+        ),
+        color = textStyle.colorArgbOrNull() ?: DEFAULT_TEXT_COLOR,
         decorations = text.cjkDecorations(),
         colorSpans = text.cjkColorSpans(),
-        spans = text.cjkStyleSpans(textStyle),
+        spans = text.cjkStyleSpans(coreStyle, density),
         rubySpans = text.cjkRubySpans(),
         measurer = measurer,
         onTextLayout = onTextLayout,
@@ -145,10 +152,11 @@ fun AnnotatedString.cjkColorSpans(): List<ColorSpan> =
  * renderer (rich-text 字号/字重/斜体, ADR 0030 B 档). Each segment's style is
  * [base] with the covering overrides applied (later spans win), so unset fields
  * inherit the paragraph base — `.em` font size is relative to [base] (1.8.em =
- * 1.8× base, the natural inline-emphasis unit), `.sp`/raw is engine px. Segments
- * with no layout-affecting override are dropped (color rides [cjkColorSpans]).
+ * 1.8× base, the natural inline-emphasis unit); `.sp` is resolved to px via
+ * [density] (density + fontScale aware — NOT treated as raw px). Segments with no
+ * layout-affecting override are dropped (color rides [cjkColorSpans]).
  */
-fun AnnotatedString.cjkStyleSpans(base: TextStyle): List<TextSpan> {
+fun AnnotatedString.cjkStyleSpans(base: TextStyle, density: Density): List<TextSpan> {
     val relevant = spanStyles.filter {
         it.item.fontSize != TextUnit.Unspecified || it.item.fontWeight != null ||
             it.item.fontStyle != null || it.item.fontFamily != null
@@ -171,7 +179,11 @@ fun AnnotatedString.cjkStyleSpans(base: TextStyle): List<TextSpan> {
         for (s in covering) {
             val unit = s.item.fontSize
             if (unit != TextUnit.Unspecified) {
-                size = if (unit.type == TextUnitType.Em) base.fontSize * unit.value else unit.value
+                size = when (unit.type) {
+                    TextUnitType.Em -> base.fontSize * unit.value      // relative to base (density-free)
+                    TextUnitType.Sp -> with(density) { unit.toPx() }   // correct px (incl. fontScale)
+                    else -> base.fontSize
+                }
             }
             s.item.fontWeight?.let { weight = it.weight }
             s.item.fontStyle?.let { italic = it == FontStyle.Italic }

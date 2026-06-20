@@ -7,6 +7,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.em
 import ink.duo3.tiqian.core.DecorationKind
 import ink.duo3.tiqian.core.TextRange
@@ -58,7 +59,7 @@ class CjkAnnotatedTextTest {
             }
             append("文")
         }
-        val spans = text.cjkStyleSpans(base)
+        val spans = text.cjkStyleSpans(base, Density(1f))
         val span = spans.first { it.range.start == 1 }
         assertEquals(3, span.range.end) // 强调
         assertEquals(30f, span.style.fontSize) // 1.5 × 20 (em relative to base)

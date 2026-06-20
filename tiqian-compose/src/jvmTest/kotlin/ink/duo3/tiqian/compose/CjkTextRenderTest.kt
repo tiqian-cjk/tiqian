@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.use
-import ink.duo3.tiqian.core.TextStyle
+import androidx.compose.ui.unit.sp
 import ink.duo3.tiqian.core.ic
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -59,7 +59,7 @@ class CjkTextRenderTest {
                 CjkText(
                     text = article.joinToString("\n"),
                     modifier = Modifier.width(320.dp),
-                    textStyle = TextStyle(fontSize = 30f),
+                    textStyle = CjkTextStyle(fontSize = 30.sp),
                     leadStyle = style,
                 )
             }
@@ -85,7 +85,7 @@ class CjkTextRenderTest {
             ),
         )
         val ink = render("mixed") {
-            CjkText(blocks = blocks, modifier = Modifier.width(320.dp), textStyle = TextStyle(fontSize = 30f))
+            CjkText(blocks = blocks, modifier = Modifier.width(320.dp), textStyle = CjkTextStyle(fontSize = 30.sp))
         }
         assertTrue(ink > 2_000, "Expected substantial ink for mixed blocks, got $ink")
     }

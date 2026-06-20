@@ -39,13 +39,16 @@ private const val BODY_LINE_HEIGHT_EM = 1.5f
 fun CjkText(
     blocks: List<CjkBlock>,
     modifier: Modifier = Modifier,
-    textStyle: TextStyle = TextStyle(),
+    textStyle: CjkTextStyle = CjkTextStyle(),
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
     measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
 ) {
-    // 节 (Section) = one blank line of vertical space.
-    val sectionPx = paragraphStyle.lineHeight ?: (textStyle.fontSize * BODY_LINE_HEIGHT_EM)
-    val sectionDp = with(LocalDensity.current) { sectionPx.toDp() }
+    val density = LocalDensity.current
+    val coreStyle = textStyle.toCoreTextStyle(density)
+    // 节 (Section) = one blank line: the resolved line height (style > paragraph > default).
+    val lineHeightPx = textStyle.lineHeightPxOrNull(density) ?: paragraphStyle.lineHeight
+    val sectionPx = lineHeightPx ?: (coreStyle.fontSize * BODY_LINE_HEIGHT_EM)
+    val sectionDp = with(density) { sectionPx.toDp() }
     Column(modifier) {
         blocks.forEach { block ->
             when (block) {
@@ -67,8 +70,8 @@ fun CjkText(
                     // Marker + body are FLUSH (the gutter is the only indent); the
                     // paragraph 段首缩进 must not stack on top of the列.
                     val listStyle = paragraphStyle.copy(firstLineIndent = Ic.Zero, blockIndent = Ic.Zero)
-                    val gutterIc = block.indent ?: autoListGutterEm(block, textStyle, listStyle, measurer)
-                    val gutterDp = with(LocalDensity.current) { gutterIc.toPx(textStyle.fontSize).toDp() }
+                    val gutterIc = block.indent ?: autoListGutterEm(block, coreStyle, listStyle, measurer)
+                    val gutterDp = with(density) { gutterIc.toPx(coreStyle.fontSize).toDp() }
                     val markerStyle = listStyle.copy(lineLengthGrid = LineLengthGrid(enabled = false))
                     block.items.forEachIndexed { i, item ->
                         Row(Modifier.fillMaxWidth()) {
@@ -104,7 +107,7 @@ fun CjkText(
 fun CjkText(
     text: String,
     modifier: Modifier = Modifier,
-    textStyle: TextStyle = TextStyle(),
+    textStyle: CjkTextStyle = CjkTextStyle(),
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
     leadStyle: ParagraphLeadStyle = ParagraphLeadStyle.AllIndent,
     measurer: ParagraphMeasurer = rememberParagraphMeasurer(),

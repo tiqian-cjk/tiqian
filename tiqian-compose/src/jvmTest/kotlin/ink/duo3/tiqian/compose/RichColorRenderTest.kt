@@ -15,8 +15,8 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.use
-import ink.duo3.tiqian.core.TextStyle
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 import kotlin.test.Test
@@ -33,7 +33,7 @@ class RichColorRenderTest {
     fun spanColorsPaintTheirClusters() {
         var red = 0
         var blue = 0
-        ImageComposeScene(width = 520, height = 110) {
+        ImageComposeScene(width = 520, height = 170) {
             Box(Modifier.fillMaxSize().background(Color.White).padding(16.dp)) {
                 CjkParagraph(
                     buildAnnotatedString {
@@ -44,7 +44,7 @@ class RichColorRenderTest {
                         append("。")
                     },
                     modifier = Modifier.width(480.dp),
-                    textStyle = TextStyle(fontSize = 40f),
+                    textStyle = CjkTextStyle(fontSize = 40.sp),
                 )
             }
         }.use { scene ->

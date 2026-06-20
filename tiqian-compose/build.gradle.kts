@@ -15,9 +15,12 @@ kotlin {
 
         jvmMain.dependencies {
             implementation(project(":tiqian-shaping-skia"))
-            implementation(compose.runtime)
+            // runtime + ui carry public-signature types (@Composable, Modifier,
+            // AnnotatedString, TextUnit/Color/FontFamily via CjkTextStyle) → api
+            // so consumers resolve the Tiqian API without re-declaring them.
+            api(compose.runtime)
+            api(compose.ui)
             implementation(compose.foundation)
-            implementation(compose.ui)
             implementation(compose.desktop.currentOs)
         }
 
