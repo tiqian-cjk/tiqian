@@ -29,11 +29,14 @@ class RubyLayoutTest {
         val plain = engine.layout(input(emptyList()))
         val ruby = engine.layout(input(listOf(RubySpan(TextRange(0, 1), "zhōng"))))
 
-        // The ruby band grows the line height (uniform — CLREQ「行距不随标注与否变」).
+        // The ruby band reserves room ABOVE the base 字面 — the baseline drops (the
+        // band fits within the 1.5em leading when it can, CLREQ「注文应标注在此行距间」;
+        // it grows the line only when the band exceeds the leading).
         assertTrue(
-            ruby.size.height > plain.size.height,
-            "ruby line should be taller (${ruby.size.height} vs ${plain.size.height})",
+            ruby.lines.first().baseline > plain.lines.first().baseline,
+            "ruby band should push the baseline down (${ruby.lines.first().baseline} vs ${plain.lines.first().baseline})",
         )
+        assertTrue(ruby.size.height >= plain.size.height, "ruby line never shorter")
         val decisions = ruby.debug.rubyDecisions
         assertEquals(1, decisions.size)
         assertEquals("zhōng", decisions[0].text)

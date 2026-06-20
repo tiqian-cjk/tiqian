@@ -2198,11 +2198,13 @@ private const val RUBY_FONT_EM = 0.5f
  */
 private const val RUBY_MIN_GAP_EM_OF_RUBY = 0.25f
 /**
- * Clearance between the注文 字面框底 and the base 字面框顶 when stacking them
- * (the only placement constant — ascent/descent come from the REAL font metrics,
- * ADR 0002 amendment「用字体声明度量」, not synthesized em guesses).
+ * Extra clearance between the注文 字面框底 and the base 字面框顶 — **default 0**:
+ * the typo boxes already carry ink margins (汉字墨迹不顶字面顶、西文降部不到 descent
+ * 底), so flush-stacking the real font 字面框 (ADR 0002「用字体声明度量」) already
+ * separates the ink. Bump only if a style wants looser ruby. (Placement itself is
+ * the REAL ascent/descent, not a synthesized em.)
  */
-private const val RUBY_STACK_GAP_EM = 0.08f
+private const val RUBY_STACK_GAP_EM = 0f
 
 /** `LatinForcedHyphenBreak` 硬断时尽量满足的左右边界（前二后三，同 en-US 连字）. */
 private const val HYPHEN_MIN_LEFT = 2
