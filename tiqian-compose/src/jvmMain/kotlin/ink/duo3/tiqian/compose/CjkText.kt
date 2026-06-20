@@ -13,7 +13,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
-import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.core.Ic
 import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LineLengthGrid
@@ -42,8 +41,7 @@ fun CjkText(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = TextStyle(),
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
-    profile: ClreqProfile = ClreqProfile.MainlandHorizontal,
-    measurer: ParagraphMeasurer = rememberParagraphMeasurer(profile),
+    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
 ) {
     // 节 (Section) = one blank line of vertical space.
     val sectionPx = paragraphStyle.lineHeight ?: (textStyle.fontSize * BODY_LINE_HEIGHT_EM)
@@ -58,7 +56,6 @@ fun CjkText(
                         text = block.text,
                         textStyle = textStyle,
                         paragraphStyle = paragraphStyle.copy(blockIndent = blockIc, firstLineIndent = firstIc),
-                        profile = profile,
                         measurer = measurer,
                     )
                 }
@@ -80,7 +77,6 @@ fun CjkText(
                                     text = block.marker.format(block.start + i),
                                     textStyle = textStyle,
                                     paragraphStyle = markerStyle,
-                                    profile = profile,
                                     measurer = measurer,
                                 )
                             }
@@ -89,7 +85,6 @@ fun CjkText(
                                 modifier = Modifier.weight(1f),
                                 textStyle = textStyle,
                                 paragraphStyle = listStyle,
-                                profile = profile,
                                 measurer = measurer,
                             )
                         }
@@ -111,12 +106,11 @@ fun CjkText(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = TextStyle(),
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
-    profile: ClreqProfile = ClreqProfile.MainlandHorizontal,
     leadStyle: ParagraphLeadStyle = ParagraphLeadStyle.AllIndent,
-    measurer: ParagraphMeasurer = rememberParagraphMeasurer(profile),
+    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
 ) {
     val blocks = remember(text, leadStyle) { parseBlocks(text, leadStyle) }
-    CjkText(blocks, modifier, textStyle, paragraphStyle, profile, measurer)
+    CjkText(blocks, modifier, textStyle, paragraphStyle, measurer)
 }
 
 /** A block in a CJK document (CLREQ §6.2.1). */

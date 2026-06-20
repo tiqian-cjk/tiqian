@@ -11,9 +11,9 @@ import androidx.compose.ui.text.font.GenericFontFamily
 import androidx.compose.ui.text.withAnnotation
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
-import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.core.DecorationKind
 import ink.duo3.tiqian.core.DecorationSpan
+import ink.duo3.tiqian.core.LayoutResult
 import ink.duo3.tiqian.core.ParagraphStyle
 import ink.duo3.tiqian.core.RubyKind
 import ink.duo3.tiqian.core.RubySpan
@@ -57,20 +57,20 @@ fun CjkParagraph(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = TextStyle(),
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
-    profile: ClreqProfile = ClreqProfile.MainlandHorizontal,
-    measurer: ParagraphMeasurer = rememberParagraphMeasurer(profile),
+    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
+    onTextLayout: (LayoutResult) -> Unit = {},
 ) {
-    CjkParagraph(
+    CjkParagraphImpl(
         text = text.text,
         modifier = modifier,
         textStyle = textStyle,
         paragraphStyle = paragraphStyle,
-        profile = profile,
         decorations = text.cjkDecorations(),
         colorSpans = text.cjkColorSpans(),
         spans = text.cjkStyleSpans(textStyle),
         rubySpans = text.cjkRubySpans(),
         measurer = measurer,
+        onTextLayout = onTextLayout,
     )
 }
 

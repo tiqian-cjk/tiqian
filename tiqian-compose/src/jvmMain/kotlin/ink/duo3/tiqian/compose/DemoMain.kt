@@ -18,12 +18,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.singleWindowApplication
-import ink.duo3.tiqian.core.DecorationKind
-import ink.duo3.tiqian.core.DecorationSpan
 import ink.duo3.tiqian.core.ParagraphStyle
-import ink.duo3.tiqian.core.TextRange
 import ink.duo3.tiqian.core.TextStyle
 
 private const val PARAGRAPH =
@@ -70,15 +68,13 @@ fun main() = singleWindowApplication(title = "Tiqian Compose Demo") {
             textStyle = textStyle,
         )
         CjkParagraph(
-            text = "他强调：豆子新鲜最要紧，烘焙其次。",
+            text = buildAnnotatedString {
+                append("他强调：")
+                cjkEmphasis { append("豆子新鲜最要紧") }
+                append("，烘焙其次。")
+            },
             modifier = Modifier.fillMaxWidth(),
             textStyle = textStyle,
-            decorations = listOf(
-                DecorationSpan(
-                    range = TextRange(4, 16),
-                    kind = DecorationKind.Emphasis,
-                ),
-            ),
         )
     }
 }
