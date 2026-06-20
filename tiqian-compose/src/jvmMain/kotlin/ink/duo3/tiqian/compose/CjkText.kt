@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.core.Ic
@@ -120,22 +121,40 @@ fun CjkText(
 
 /** A block in a CJK document (CLREQ §6.2.1). */
 sealed interface CjkBlock {
+    /**
+     * 段落：富文本 [text]（`buildAnnotatedString` 表达 颜色/字号/字重/斜体/装饰/ruby）。
+     * 纯文本走 [String] 便捷构造。
+     */
     data class Paragraph(
-        val text: String,
+        val text: AnnotatedString,
         val indent: ParagraphIndent = ParagraphIndent.FirstLine,
-    ) : CjkBlock
+    ) : CjkBlock {
+        constructor(text: String, indent: ParagraphIndent = ParagraphIndent.FirstLine) :
+            this(AnnotatedString(text), indent)
+    }
 
     /**
      * 编号/项目列表（CLREQ §6.2.1.1 凸排）：标记 [marker] 左对齐顶格，正文缩进到固定
      * 宽度的「标记列」，续行同列对齐。列宽默认 1 字，自动按列表中最宽标记升到放得下它
-     * 的最小整字数（[indent] 非空则直接用该字数覆盖）。[start] 是首项编号。
+     * 的最小整字数（[indent] 非空则直接用该字数覆盖）。[start] 是首项编号。每项是富文本
+     * （[AnnotatedString]）；纯文本项走 [ofStrings]。
      */
     data class List(
-        val items: kotlin.collections.List<String>,
+        val items: kotlin.collections.List<AnnotatedString>,
         val marker: ListMarker = ListMarker.Decimal,
         val indent: Ic? = null,
         val start: Int = 1,
-    ) : CjkBlock
+    ) : CjkBlock {
+        companion object {
+            /** 纯文本项便捷构造。 */
+            fun ofStrings(
+                items: kotlin.collections.List<String>,
+                marker: ListMarker = ListMarker.Decimal,
+                indent: Ic? = null,
+                start: Int = 1,
+            ): List = List(items.map { AnnotatedString(it) }, marker, indent, start)
+        }
+    }
 
     /** 空行 = 一节的结束（CLREQ）：renders as one blank line of space. */
     data object Section : CjkBlock

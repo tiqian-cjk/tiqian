@@ -1,7 +1,6 @@
 package ink.duo3.tiqian.compose
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -42,10 +41,14 @@ fun CjkParagraph(
     rubySpans: List<ink.duo3.tiqian.core.RubySpan> = emptyList(),
     measurer: ParagraphMeasurer = rememberParagraphMeasurer(profile),
 ) {
-    val result = remember { mutableStateOf<ink.duo3.tiqian.core.LayoutResult?>(null) }
+    // The measure-produced result is read back during the DRAW phase. A plain
+    // remembered holder (not snapshot state) avoids writing observable state
+    // inside the measure lambda; a re-measure always schedules the re-draw that
+    // reads it, so draw never sees a stale result.
+    val holder = remember { ParagraphLayoutHolder() }
     Layout(
         modifier = modifier.drawBehind {
-            result.value?.let { drawParagraph(it, colorSpans = colorSpans, spans = spans) }
+            holder.result?.let { drawParagraph(it, colorSpans = colorSpans, spans = spans) }
         },
         content = {},
     ) { _, constraints ->
@@ -63,12 +66,19 @@ fun CjkParagraph(
             spans = spans,
             rubySpans = rubySpans,
         )
-        result.value = laidOut
+        holder.result = laidOut
         layout(
             width = ceil(laidOut.size.width).toInt().coerceIn(constraints.minWidth, constraints.maxWidth),
-            height = ceil(laidOut.size.height).toInt().coerceAtLeast(constraints.minHeight),
+            // Clamp to the bounded height too (overflow is clipped, like Compose text);
+            // maxHeight is Constraints.Infinity when unbounded → no effective clamp.
+            height = ceil(laidOut.size.height).toInt().coerceIn(constraints.minHeight, constraints.maxHeight),
         ) {}
     }
+}
+
+/** Non-snapshot holder for the measure→draw handoff (see [CjkParagraph]). */
+private class ParagraphLayoutHolder {
+    var result: ink.duo3.tiqian.core.LayoutResult? = null
 }
 
 /**

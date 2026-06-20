@@ -42,7 +42,7 @@ class CjkListTest {
         val ts = TextStyle(fontSize = 24f)
         val ps = ParagraphStyle()
         fun gutter(count: Int) =
-            autoListGutterEm(CjkBlock.List((1..count).map { "项" }, ListMarker.Decimal), ts, ps, measurer)
+            autoListGutterEm(CjkBlock.List.ofStrings((1..count).map { "项" }, ListMarker.Decimal), ts, ps, measurer)
 
         assertEquals(1.ic, gutter(9), "1.–9. fit one 字")
         assertEquals(2.ic, gutter(10), "10. forces the whole列 to two 字")
@@ -51,7 +51,7 @@ class CjkListTest {
     @Test
     fun explicitIndentOverridesAuto() {
         // The List carries the override; auto is only consulted when indent == null.
-        val list = CjkBlock.List(listOf("a", "b"), ListMarker.Decimal, indent = 3.ic)
+        val list = CjkBlock.List.ofStrings(listOf("a", "b"), ListMarker.Decimal, indent = 3.ic)
         assertEquals(3.ic, list.indent)
     }
 }
