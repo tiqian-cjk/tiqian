@@ -17,6 +17,7 @@ import ink.duo3.tiqian.core.Cluster
 import ink.duo3.tiqian.core.ClusterGeometryDecisionInfo
 import ink.duo3.tiqian.core.DecorationDecisionInfo
 import ink.duo3.tiqian.core.RubyDecisionInfo
+import ink.duo3.tiqian.core.RubyKind
 import ink.duo3.tiqian.core.RubySpan
 import ink.duo3.tiqian.core.DecorationKind
 import ink.duo3.tiqian.core.DecorationSegmentInfo
@@ -121,6 +122,9 @@ class ExplainableStubParagraphLayoutEngine(
         // height is the注文 font's REAL ascent+descent stacked over the base 字面顶
         // (computed after metricDecisions below). advance handled by 避让.
         val rubyFontSize = fontSize * RUBY_FONT_EM
+        // 拼音 (above-base) ruby only; 注音 (RubyKind.Zhuyin, right-side) is parsed +
+        // carried but its geometry/advance is the next slice (ADR 0033) — inert here.
+        val pinyinSpans = input.rubySpans.filter { it.kind == RubyKind.Pinyin }
         // Span edges force cluster splits so no cluster straddles a style change
         // (a Latin word / coalesced 标点 run otherwise swallows the boundary).
         val spanBoundaries: Set<Int> = sizedSpans.flatMapTo(mutableSetOf()) { listOf(it.range.start, it.range.end) }
@@ -430,12 +434,12 @@ class ExplainableStubParagraphLayoutEngine(
         // ok) get nothing → they overhang freely (CLREQ「只要不侵犯最小间距，可允许
         // 注文伸展到相邻基字上方」). The first span is never pushed.
         fun computeRubySpread(natural: List<Cluster>, rubySize: Float): Map<Int, Float> {
-            if (input.rubySpans.isEmpty()) return emptyMap()
+            if (pinyinSpans.isEmpty()) return emptyMap()
             val wordSpace = rubySize * RUBY_MIN_GAP_EM_OF_RUBY
             val leftX = FloatArray(natural.size)
             var acc = 0f
             for (i in natural.indices) { leftX[i] = acc; acc += natural[i].advance }
-            val measures = input.rubySpans.mapNotNull { ruby ->
+            val measures = pinyinSpans.mapNotNull { ruby ->
                 val idxRange = natural.clusterIndexRangeFor(ruby.baseRange) ?: return@mapNotNull null
                 val center = (leftX[idxRange.first] + leftX[idxRange.last] + natural[idxRange.last].advance) / 2f
                 Triple(idxRange.first, center, measureRubyWidth(ruby.text, ruby.fontFamilies))
@@ -584,7 +588,7 @@ class ExplainableStubParagraphLayoutEngine(
         // line height = 注文 ascent+descent+gap; the注文 baseline drops below the base
         // baseline by 基字 ascent + 注文 descent + gap.
         val baseAscent = metricDecisions.maxOfOrNull { it.layoutMetrics.ascent } ?: (fontSize * 0.88f)
-        val rubyLayoutMetrics = if (input.rubySpans.isEmpty()) {
+        val rubyLayoutMetrics = if (pinyinSpans.isEmpty()) {
             null
         } else {
             val rubyDecision = fallbackResolver.resolve(
@@ -741,7 +745,7 @@ class ExplainableStubParagraphLayoutEngine(
                         .filter { it.kind == DecorationKind.Mourning }
                         .mapNotNull { span -> naturalClusters.clusterIndexRangeFor(span.range) } +
                         // 行间注 (ADR 0032): 基文+注文不可拆 (CLREQ §注释符号).
-                        input.rubySpans.mapNotNull { naturalClusters.clusterIndexRangeFor(it.baseRange) } +
+                        pinyinSpans.mapNotNull { naturalClusters.clusterIndexRangeFor(it.baseRange) } +
                         NumberSymbolCohesion.unbreakableRanges(text)
                             .mapNotNull { r ->
                                 naturalClusters.clusterIndexRangeFor(TextRange(r.first, r.last + 1))
@@ -1048,7 +1052,7 @@ class ExplainableStubParagraphLayoutEngine(
             fontSize = fontSize,
         )
         val rubyDecisions = computeRubyDecisions(
-            rubySpans = input.rubySpans,
+            rubySpans = pinyinSpans,
             lineRanges = lineSolution.lines.map { it.clusterRange },
             lineBoxes = lines,
             finalClusters = finalClusters,

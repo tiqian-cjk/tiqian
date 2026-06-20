@@ -45,7 +45,17 @@ data class RubySpan(
      * 用各自的字体——注文字体本就该独立于正文（ADR 0032）。空 = 渲染器默认。
      */
     val fontFamilies: List<String> = emptyList(),
+    /** 拼音（上方，ADR 0032）或 注音（右侧竖排 ㄅㄆㄇ，ADR 0033）。 */
+    val kind: RubyKind = RubyKind.Pinyin,
 )
+
+enum class RubyKind {
+    /** 罗马拼音：注文在基字**上方**、水平居中（ADR 0032）。 */
+    Pinyin,
+
+    /** 注音符号：注文在基字**右侧**、ㄅㄆㄇ 竖排 + 调号、纵横对齐（ADR 0033）。 */
+    Zhuyin,
+}
 
 enum class DecorationKind {
     /** CLREQ 着重号 — a solid dot under each emphasised Han character. */

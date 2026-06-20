@@ -15,6 +15,7 @@ import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.core.DecorationKind
 import ink.duo3.tiqian.core.DecorationSpan
 import ink.duo3.tiqian.core.ParagraphStyle
+import ink.duo3.tiqian.core.RubyKind
 import ink.duo3.tiqian.core.RubySpan
 import ink.duo3.tiqian.core.TextRange
 import ink.duo3.tiqian.core.TextSpan
@@ -24,8 +25,11 @@ import ink.duo3.tiqian.shaping.skia.ColorSpan
 /** Annotation tag carrying a [DecorationKind] name over an AnnotatedString range. */
 const val CjkDecorationTag = "ink.duo3.tiqian.decoration"
 
-/** Annotation tag carrying 行间注 (ruby) annotation text over its base range. */
+/** Annotation tag carrying 拼音 (above-base ruby) text over its base range. */
 const val CjkRubyTag = "ink.duo3.tiqian.ruby"
+
+/** Annotation tag carrying 注音 (right-side ㄅㄆㄇ ruby) text over its base range. */
+const val CjkZhuyinTag = "ink.duo3.tiqian.zhuyin"
 
 /** Separates an optional ruby font family from the reading inside the annotation item. */
 private const val RubyFontSeparator = "\u001F"
@@ -92,14 +96,31 @@ fun AnnotatedString.Builder.cjkRuby(base: String, ruby: String, fontFamily: Stri
     withAnnotation(CjkRubyTag, item) { append(base) }
 }
 
-/** Extracts [RubySpan]s from the [CjkRubyTag] annotations (optional `font‹US›reading` item). */
+/**
+ * 注音 (ㄅㄆㄇ, ADR 0033): appends [base] and annotates it with the [zhuyin] reading
+ * (engine parses the tone). Placed on the base's RIGHT side. [fontFamily] should
+ * be a font carrying ㄅㄆㄇ glyphs.
+ *
+ * ```
+ * cjkZhuyin("中", "ㄓㄨㄥ", fontFamily = "BpmfGenYoMin")
+ * ```
+ */
+fun AnnotatedString.Builder.cjkZhuyin(base: String, zhuyin: String, fontFamily: String? = null) {
+    val item = if (fontFamily != null) "$fontFamily$RubyFontSeparator$zhuyin" else zhuyin
+    withAnnotation(CjkZhuyinTag, item) { append(base) }
+}
+
+/** Extracts [RubySpan]s from 拼音 ([CjkRubyTag]) + 注音 ([CjkZhuyinTag]) annotations. */
 fun AnnotatedString.cjkRubySpans(): List<RubySpan> =
-    getStringAnnotations(CjkRubyTag, 0, length).map {
+    rubySpansFor(CjkRubyTag, RubyKind.Pinyin) + rubySpansFor(CjkZhuyinTag, RubyKind.Zhuyin)
+
+private fun AnnotatedString.rubySpansFor(tag: String, kind: RubyKind): List<RubySpan> =
+    getStringAnnotations(tag, 0, length).map {
         val parts = it.item.split(RubyFontSeparator, limit = 2)
         if (parts.size == 2) {
-            RubySpan(TextRange(it.start, it.end), parts[1], fontFamilies = listOf(parts[0]))
+            RubySpan(TextRange(it.start, it.end), parts[1], fontFamilies = listOf(parts[0]), kind = kind)
         } else {
-            RubySpan(TextRange(it.start, it.end), it.item)
+            RubySpan(TextRange(it.start, it.end), it.item, kind = kind)
         }
     }
 
