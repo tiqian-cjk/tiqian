@@ -57,5 +57,6 @@ Jetpack Compose Desktop Demo
 ## 参考文献
 
 - W3C[《中文排版需求》](https://www.w3.org/TR/clreq/)
+- The Type[《孔雀计划：中文字体排印的思路》](https://www.thetype.com/kongque/)
 - 教育部[《重訂標點符號手冊》（2008年修訂版）](https://language.moe.gov.tw/001/Upload/FILES/SITE_CONTENT/M0001/HAU/c2.htm)
 - CY/T 154-2017[《中文出版物夹用英文的编辑规范》](https://std.samr.gov.cn/hb/search/stdHBDetailed?id=8B1827F23645BB19E05397BE0A0AB44A)
