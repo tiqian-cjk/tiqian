@@ -25,7 +25,7 @@ class CjkAnnotatedTextTest {
     fun emphasisBuilderComputesRangeFromStructure() {
         val text = buildAnnotatedString {
             append("他强调：")
-            cjkEmphasis { append("豆子新鲜最要紧") }
+            emphasis { append("豆子新鲜最要紧") }
             append("，烘焙其次。")
         }
         assertEquals("他强调：豆子新鲜最要紧，烘焙其次。", text.text) // source unchanged
@@ -85,8 +85,8 @@ class CjkAnnotatedTextTest {
     fun rubySpansCarryReadingAndOptionalFont() {
         val text = buildAnnotatedString {
             append("我爱")
-            cjkRuby("北京", "Běijīng")
-            cjkRuby("中", "ㄓㄨㄥ", fontFamily = "BpmfGenYoMin")
+            ruby("北京", "Běijīng")
+            ruby("中", "ㄓㄨㄥ", fontFamily = "BpmfGenYoMin")
         }
         assertEquals("我爱北京中", text.text) // readings are NOT in the source
         val spans = text.cjkRubySpans().sortedBy { it.baseRange.start }

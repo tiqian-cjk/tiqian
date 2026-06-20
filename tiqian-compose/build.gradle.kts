@@ -32,7 +32,7 @@ kotlin {
 
 tasks.register<JavaExec>("runComposeDemo") {
     group = "application"
-    description = "Opens a desktop window rendering fixtures via TiqianParagraph."
+    description = "Opens a desktop window rendering fixtures via CjkParagraph."
     dependsOn("jvmJar")
     mainClass.set("ink.duo3.tiqian.compose.DemoMainKt")
     classpath = files(tasks.named("jvmJar")) + configurations.named("jvmRuntimeClasspath").get()

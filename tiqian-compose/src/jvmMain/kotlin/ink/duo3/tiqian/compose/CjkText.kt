@@ -15,6 +15,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import ink.duo3.tiqian.core.Ic
 import ink.duo3.tiqian.core.LayoutConstraints
+import ink.duo3.tiqian.core.LayoutResult
 import ink.duo3.tiqian.core.LineLengthGrid
 import ink.duo3.tiqian.core.ParagraphStyle
 import ink.duo3.tiqian.core.ic
@@ -42,6 +43,9 @@ fun CjkText(
     textStyle: CjkTextStyle = CjkTextStyle(),
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
     measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
+    // Per-block layout出口 (Codex #6): (blockIndex, itemIndex|null for a Paragraph,
+    // result). List markers don't fire; the item BODY does, with its item index.
+    onParagraphLayout: (blockIndex: Int, itemIndex: Int?, result: LayoutResult) -> Unit = { _, _, _ -> },
 ) {
     val density = LocalDensity.current
     val coreStyle = textStyle.toCoreTextStyle(density)
@@ -50,7 +54,7 @@ fun CjkText(
     val sectionPx = lineHeightPx ?: (coreStyle.fontSize * BODY_LINE_HEIGHT_EM)
     val sectionDp = with(density) { sectionPx.toDp() }
     Column(modifier) {
-        blocks.forEach { block ->
+        blocks.forEachIndexed { blockIndex, block ->
             when (block) {
                 is CjkBlock.Section -> Spacer(Modifier.height(sectionDp))
                 is CjkBlock.Paragraph -> {
@@ -60,6 +64,7 @@ fun CjkText(
                         textStyle = textStyle,
                         paragraphStyle = paragraphStyle.copy(blockIndent = blockIc, firstLineIndent = firstIc),
                         measurer = measurer,
+                        onTextLayout = { onParagraphLayout(blockIndex, null, it) },
                     )
                 }
                 is CjkBlock.List -> {
@@ -89,6 +94,7 @@ fun CjkText(
                                 textStyle = textStyle,
                                 paragraphStyle = listStyle,
                                 measurer = measurer,
+                                onTextLayout = { onParagraphLayout(blockIndex, i, it) },
                             )
                         }
                     }
@@ -111,9 +117,10 @@ fun CjkText(
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
     leadStyle: ParagraphLeadStyle = ParagraphLeadStyle.AllIndent,
     measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
+    onParagraphLayout: (blockIndex: Int, itemIndex: Int?, result: LayoutResult) -> Unit = { _, _, _ -> },
 ) {
     val blocks = remember(text, leadStyle) { parseBlocks(text, leadStyle) }
-    CjkText(blocks, modifier, textStyle, paragraphStyle, measurer)
+    CjkText(blocks, modifier, textStyle, paragraphStyle, measurer, onParagraphLayout)
 }
 
 /** A block in a CJK document (CLREQ §6.2.1). */

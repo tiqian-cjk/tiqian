@@ -68,7 +68,7 @@ fun main() = singleWindowApplication(title = "Tiqian Compose Demo") {
         CjkParagraph(
             text = buildAnnotatedString {
                 append("他强调：")
-                cjkEmphasis { append("豆子新鲜最要紧") }
+                emphasis { append("豆子新鲜最要紧") }
                 append("，烘焙其次。")
             },
             modifier = Modifier.fillMaxWidth(),

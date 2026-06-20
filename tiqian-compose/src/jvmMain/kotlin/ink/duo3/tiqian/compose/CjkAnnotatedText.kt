@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
 import ink.duo3.tiqian.core.DecorationKind
 import ink.duo3.tiqian.core.DecorationSpan
+import ink.duo3.tiqian.core.LayoutConstraints
 import ink.duo3.tiqian.core.LayoutResult
 import ink.duo3.tiqian.core.ParagraphStyle
 import ink.duo3.tiqian.core.RubyKind
@@ -24,27 +25,31 @@ import ink.duo3.tiqian.core.TextSpan
 import ink.duo3.tiqian.core.TextStyle
 import ink.duo3.tiqian.core.ColorSpan
 
+// Annotation tags + extractors are the AnnotatedString WIRE PROTOCOL between the
+// public builders (emphasis/ruby/zhuyin/…) and the engine. INTERNAL on purpose —
+// not a versioned public contract (Codex #4); third parties author via the builders.
+
 /** Annotation tag carrying a [DecorationKind] name over an AnnotatedString range. */
-const val CjkDecorationTag = "ink.duo3.tiqian.decoration"
+internal const val CjkDecorationTag = "ink.duo3.tiqian.decoration"
 
 /** Annotation tag carrying 拼音 (above-base ruby) text over its base range. */
-const val CjkRubyTag = "ink.duo3.tiqian.ruby"
+internal const val CjkRubyTag = "ink.duo3.tiqian.ruby"
 
 /** Annotation tag carrying 注音 (right-side ㄅㄆㄇ ruby) text over its base range. */
-const val CjkZhuyinTag = "ink.duo3.tiqian.zhuyin"
+internal const val CjkZhuyinTag = "ink.duo3.tiqian.zhuyin"
 
 /** Separates an optional ruby font family from the reading inside the annotation item. */
 private const val RubyFontSeparator = "\u001F"
 
 /**
  * Authors decorations as attributed text. Instead of counting source offsets
- * into a [DecorationSpan] (`TextRange(4, 16)`), wrap the span in [cjkEmphasis] /
+ * into a [DecorationSpan] (`TextRange(4, 16)`), wrap the span in [emphasis] /
  * [properNoun] / [mourning] / [bookTitle] inside `buildAnnotatedString { … }`:
  *
  * ```
  * CjkParagraph(buildAnnotatedString {
  *     append("他强调：")
- *     cjkEmphasis { append("豆子新鲜最要紧") }
+ *     emphasis { append("豆子新鲜最要紧") }
  *     append("，烘焙其次。")
  * })
  * ```
@@ -89,8 +94,8 @@ fun CjkParagraph(
  * ```
  * CjkParagraph(buildAnnotatedString {
  *     append("我爱")
- *     cjkRuby("北京", "Běijīng")                               // 默认注文字体
- *     cjkRuby("中", "ㄓㄨㄥ", fontFamily = "BpmfGenYoMin")      // 注音用 ㄅㄆㄇ 字体
+ *     ruby("北京", "Běijīng")                               // 默认注文字体
+ *     ruby("中", "ㄓㄨㄥ", fontFamily = "BpmfGenYoMin")      // 注音用 ㄅㄆㄇ 字体
  *     append("。")
  * })
  * ```
@@ -98,7 +103,7 @@ fun CjkParagraph(
  * [fontFamily] sets the 注文-ONLY font (注音 需含 ㄅㄆㄇ 字形的字体；拼音/释义 各取
  * 所需，本就独立于正文)；null = 渲染器默认（ADR 0032）。
  */
-fun AnnotatedString.Builder.cjkRuby(base: String, ruby: String, fontFamily: String? = null) {
+fun AnnotatedString.Builder.ruby(base: String, ruby: String, fontFamily: String? = null) {
     val item = if (fontFamily != null) "$fontFamily$RubyFontSeparator$ruby" else ruby
     withAnnotation(CjkRubyTag, item) { append(base) }
 }
@@ -109,16 +114,16 @@ fun AnnotatedString.Builder.cjkRuby(base: String, ruby: String, fontFamily: Stri
  * be a font carrying ㄅㄆㄇ glyphs.
  *
  * ```
- * cjkZhuyin("中", "ㄓㄨㄥ", fontFamily = "BpmfGenYoMin")
+ * zhuyin("中", "ㄓㄨㄥ", fontFamily = "BpmfGenYoMin")
  * ```
  */
-fun AnnotatedString.Builder.cjkZhuyin(base: String, zhuyin: String, fontFamily: String? = null) {
+fun AnnotatedString.Builder.zhuyin(base: String, zhuyin: String, fontFamily: String? = null) {
     val item = if (fontFamily != null) "$fontFamily$RubyFontSeparator$zhuyin" else zhuyin
     withAnnotation(CjkZhuyinTag, item) { append(base) }
 }
 
 /** Extracts [RubySpan]s from 拼音 ([CjkRubyTag]) + 注音 ([CjkZhuyinTag]) annotations. */
-fun AnnotatedString.cjkRubySpans(): List<RubySpan> =
+internal fun AnnotatedString.cjkRubySpans(): List<RubySpan> =
     rubySpansFor(CjkRubyTag, RubyKind.Pinyin) + rubySpansFor(CjkZhuyinTag, RubyKind.Zhuyin)
 
 private fun AnnotatedString.rubySpansFor(tag: String, kind: RubyKind): List<RubySpan> =
@@ -131,10 +136,11 @@ private fun AnnotatedString.rubySpansFor(tag: String, kind: RubyKind): List<Ruby
         }
     }
 
-/** Extracts [DecorationSpan]s from the [CjkDecorationTag] annotations. */
-fun AnnotatedString.cjkDecorations(): List<DecorationSpan> =
-    getStringAnnotations(CjkDecorationTag, 0, length).map {
-        DecorationSpan(TextRange(it.start, it.end), DecorationKind.valueOf(it.item))
+/** Extracts [DecorationSpan]s from the [CjkDecorationTag] annotations (unknown kinds skipped). */
+internal fun AnnotatedString.cjkDecorations(): List<DecorationSpan> =
+    getStringAnnotations(CjkDecorationTag, 0, length).mapNotNull {
+        runCatching { DecorationKind.valueOf(it.item) }.getOrNull()
+            ?.let { kind -> DecorationSpan(TextRange(it.start, it.end), kind) }
     }
 
 /**
@@ -142,7 +148,7 @@ fun AnnotatedString.cjkDecorations(): List<DecorationSpan> =
  * Other SpanStyle attributes (size/weight/style) are layout-affecting — they
  * wait for the engine to consume `TiqianTextContent.spans` (B 档).
  */
-fun AnnotatedString.cjkColorSpans(): List<ColorSpan> =
+internal fun AnnotatedString.cjkColorSpans(): List<ColorSpan> =
     spanStyles.filter { it.item.color != Color.Unspecified }
         .map { ColorSpan(it.start, it.end, it.item.color.toArgb()) }
 
@@ -156,7 +162,7 @@ fun AnnotatedString.cjkColorSpans(): List<ColorSpan> =
  * [density] (density + fontScale aware — NOT treated as raw px). Segments with no
  * layout-affecting override are dropped (color rides [cjkColorSpans]).
  */
-fun AnnotatedString.cjkStyleSpans(base: TextStyle, density: Density): List<TextSpan> {
+internal fun AnnotatedString.cjkStyleSpans(base: TextStyle, density: Density): List<TextSpan> {
     val relevant = spanStyles.filter {
         it.item.fontSize != TextUnit.Unspecified || it.item.fontWeight != null ||
             it.item.fontStyle != null || it.item.fontFamily != null
@@ -200,22 +206,51 @@ fun AnnotatedString.cjkStyleSpans(base: TextStyle, density: Density): List<TextS
     return out
 }
 
+/**
+ * Pre-layout a rich-text [text] without rendering — the measure-side counterpart to
+ * `CjkParagraph(AnnotatedString)` (Codex #5). Extracts the same layout-affecting
+ * spans (装饰/样式/ruby; color is render-only, not a measure input) and lowers
+ * [textStyle] via [density]. Use for hit-testing / size queries before drawing.
+ */
+fun ParagraphMeasurer.measure(
+    text: AnnotatedString,
+    constraints: LayoutConstraints,
+    density: Density,
+    textStyle: CjkTextStyle = CjkTextStyle(),
+    paragraphStyle: ParagraphStyle = ParagraphStyle(),
+): LayoutResult {
+    val core = textStyle.toCoreTextStyle(density)
+    return measure(
+        text = text.text,
+        constraints = constraints,
+        textStyle = core,
+        paragraphStyle = paragraphStyle.copy(
+            lineHeight = textStyle.lineHeightPxOrNull(density) ?: paragraphStyle.lineHeight,
+        ),
+        decorations = text.cjkDecorations(),
+        spans = text.cjkStyleSpans(core, density),
+        rubySpans = text.cjkRubySpans(),
+    )
+}
+
+// NOT inline: the tag is internal (Codex #4) and a public inline fun can't reference it.
+
 /** 着重号 over [block]'s text. */
-inline fun AnnotatedString.Builder.cjkEmphasis(crossinline block: AnnotatedString.Builder.() -> Unit) {
+fun AnnotatedString.Builder.emphasis(block: AnnotatedString.Builder.() -> Unit) {
     withAnnotation(CjkDecorationTag, DecorationKind.Emphasis.name) { block() }
 }
 
 /** 专名号（straight underline）over [block]'s text. */
-inline fun AnnotatedString.Builder.properNoun(crossinline block: AnnotatedString.Builder.() -> Unit) {
+fun AnnotatedString.Builder.properNoun(block: AnnotatedString.Builder.() -> Unit) {
     withAnnotation(CjkDecorationTag, DecorationKind.ProperNoun.name) { block() }
 }
 
 /** 示亡号（mourning frame）over [block]'s text. */
-inline fun AnnotatedString.Builder.mourning(crossinline block: AnnotatedString.Builder.() -> Unit) {
+fun AnnotatedString.Builder.mourning(block: AnnotatedString.Builder.() -> Unit) {
     withAnnotation(CjkDecorationTag, DecorationKind.Mourning.name) { block() }
 }
 
 /** 书名号甲式（wavy underline）over [block]'s text. */
-inline fun AnnotatedString.Builder.bookTitle(crossinline block: AnnotatedString.Builder.() -> Unit) {
+fun AnnotatedString.Builder.bookTitle(block: AnnotatedString.Builder.() -> Unit) {
     withAnnotation(CjkDecorationTag, DecorationKind.BookTitle.name) { block() }
 }

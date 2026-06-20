@@ -393,12 +393,12 @@ tiqian-layout
   HitTester
 
 tiqian-compose
-  TiqianText
-  rememberTiqianTextLayout
+  CjkText
+  rememberCjkTextLayout
   Compose Canvas renderer
 
 tiqian-view
-  TiqianTextView
+  CjkTextView
   Android View renderer
 
 tiqian-test
@@ -435,7 +435,7 @@ Compose 和 View 都应是外壳。排版决策必须在 core engine 内完成�
 建议 API 方向：
 
 ```kotlin
-TiqianText(
+CjkText(
     text = annotatedString,
     style = style,
     profile = ClreqProfile.MainlandHorizontal,
