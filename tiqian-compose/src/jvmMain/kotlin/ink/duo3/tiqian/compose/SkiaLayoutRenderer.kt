@@ -10,6 +10,7 @@ import ink.duo3.tiqian.shaping.skia.SkiaSystemTypefaces
 import ink.duo3.tiqian.shaping.skia.drawTiqianGlyphs
 import ink.duo3.tiqian.shaping.skia.lineInkSkipIntervals
 import ink.duo3.tiqian.shaping.skia.shapeTextBlob
+import ink.duo3.tiqian.shaping.skia.vertGlyphIds
 import org.jetbrains.skia.Font
 import org.jetbrains.skia.Paint
 import org.jetbrains.skia.shaper.Shaper
@@ -119,20 +120,23 @@ internal fun DrawScope.drawParagraph(
                     ink.duo3.tiqian.core.ZhuyinGlyphRole.Symbol -> {
                         val f = Font(tf, p.height) // box height = symbol 字面框 (0.3em)
                         val adv = f.measureTextWidth(p.text)
-                        shapeTextBlob(shaper, p.text, f, result.input.textStyle.locale)?.let { blob ->
+                        // vertical=true → `vert` forms (ㄧ etc. take their 竖排 glyph).
+                        shapeTextBlob(shaper, p.text, f, result.input.textStyle.locale, vertical = true)?.let { blob ->
                             // centre the (full-width) glyph in the box; baseline = top + typo ascent.
                             skCanvas.drawTextBlob(blob, p.left + (p.width - adv) / 2f, p.top + p.height * 0.88f, paint)
                         }
                     }
                     ink.duo3.tiqian.core.ZhuyinGlyphRole.Tone -> {
-                        val glyphs = tf.getStringGlyphs(p.text)
+                        // Ink-detect the `vert` glyph (the form actually drawn), so the
+                        // scale-to-width + vertical-centre match what lands on screen.
+                        val glyphs = vertGlyphIds(tf, shaper, p.text, result.input.textStyle.locale)
                         if (glyphs.isEmpty()) continue
                         val ref = Font(tf, p.height) // a reference size; rescale to ink width
                         val refBounds = ref.getBounds(glyphs).first()
                         if (refBounds.width <= 0f) continue
                         val scaled = Font(tf, p.height * (p.width / refBounds.width))
                         val b = scaled.getBounds(glyphs).first()
-                        shapeTextBlob(shaper, p.text, scaled, result.input.textStyle.locale)?.let { blob ->
+                        shapeTextBlob(shaper, p.text, scaled, result.input.textStyle.locale, vertical = true)?.let { blob ->
                             // ink left → box left; ink vertical centre → box vertical centre.
                             val drawX = p.left - b.left
                             val baselineY = p.top + p.height / 2f - (b.top + b.bottom) / 2f

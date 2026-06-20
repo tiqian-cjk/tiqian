@@ -7,6 +7,7 @@ import ink.duo3.tiqian.core.TextSpan
 import ink.duo3.tiqian.core.TextStyle
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skia.Font
+import org.jetbrains.skia.FontFeature
 import org.jetbrains.skia.FontMgr
 import org.jetbrains.skia.FontSlant
 import org.jetbrains.skia.FontStyle
@@ -40,17 +41,25 @@ fun shapeTextBlob(
     text: String,
     font: Font,
     language: String,
+    vertical: Boolean = false,
 ): TextBlob? {
     if (text.isEmpty()) return null
     val glyphIds = mutableListOf<Short>()
     val xPositions = mutableListOf<Float>()
+    // 注音 (ADR 0033) draws ㄅㄆㄇ in a VERTICAL mini-column → enable the `vert`
+    // OpenType feature so ㄧ etc. take their vertical-writing glyph forms.
+    val options = if (vertical) {
+        ShapingOptions.DEFAULT.withFeatures(arrayOf(FontFeature("vert", 1)))
+    } else {
+        ShapingOptions.DEFAULT
+    }
     shaper.shape(
         text,
         TrivialFontRunIterator(text, font),
         TrivialBidiRunIterator(text, 0),
         TrivialScriptRunIterator(text, "Hani"),
         TrivialLanguageRunIterator(text, language),
-        ShapingOptions.DEFAULT,
+        options,
         Float.MAX_VALUE,
         object : RunHandler {
             override fun beginLine() {}
@@ -76,6 +85,36 @@ fun shapeTextBlob(
     return TextBlobBuilder()
         .appendRunPosH(font, glyphIds.toShortArray(), xPositions.toFloatArray(), 0f)
         .build()
+}
+
+/**
+ * Glyph ids for [text] shaped with the `vert` feature — so注音 tone ink-detection
+ * (`Font.getBounds`) measures the SAME 竖排 glyph the renderer draws (ADR 0033).
+ */
+fun vertGlyphIds(typeface: Typeface, shaper: Shaper, text: String, language: String): ShortArray {
+    if (text.isEmpty()) return ShortArray(0)
+    val font = Font(typeface, 100f) // size irrelevant for glyph identity
+    val ids = mutableListOf<Short>()
+    shaper.shape(
+        text,
+        TrivialFontRunIterator(text, font),
+        TrivialBidiRunIterator(text, 0),
+        TrivialScriptRunIterator(text, "Hani"),
+        TrivialLanguageRunIterator(text, language),
+        ShapingOptions.DEFAULT.withFeatures(arrayOf(FontFeature("vert", 1))),
+        Float.MAX_VALUE,
+        object : RunHandler {
+            override fun beginLine() {}
+            override fun runInfo(info: RunInfo?) {}
+            override fun commitRunInfo() {}
+            override fun runOffset(info: RunInfo?): Point = Point(0f, 0f)
+            override fun commitRun(info: RunInfo?, glyphs: ShortArray?, positions: Array<Point?>?, clusters: IntArray?) {
+                glyphs?.forEach { ids += it }
+            }
+            override fun commitLine() {}
+        },
+    )
+    return ids.toShortArray()
 }
 
 /**
