@@ -20,7 +20,7 @@ import ink.duo3.tiqian.core.RubySpan
 import ink.duo3.tiqian.core.TextRange
 import ink.duo3.tiqian.core.TextSpan
 import ink.duo3.tiqian.core.TextStyle
-import ink.duo3.tiqian.shaping.skia.ColorSpan
+import ink.duo3.tiqian.core.ColorSpan
 
 /** Annotation tag carrying a [DecorationKind] name over an AnnotatedString range. */
 const val CjkDecorationTag = "ink.duo3.tiqian.decoration"

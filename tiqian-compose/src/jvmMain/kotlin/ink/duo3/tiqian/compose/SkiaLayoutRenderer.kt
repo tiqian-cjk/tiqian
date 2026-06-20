@@ -5,7 +5,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import ink.duo3.tiqian.core.LayoutResult
 import ink.duo3.tiqian.core.TextSpan
-import ink.duo3.tiqian.shaping.skia.ColorSpan
+import ink.duo3.tiqian.core.ColorSpan
 import ink.duo3.tiqian.shaping.skia.SkiaSystemTypefaces
 import ink.duo3.tiqian.shaping.skia.drawTiqianGlyphs
 import ink.duo3.tiqian.shaping.skia.lineInkSkipIntervals

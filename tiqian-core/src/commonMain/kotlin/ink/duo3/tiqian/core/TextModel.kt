@@ -32,6 +32,14 @@ data class DecorationSpan(
 )
 
 /**
+ * Per-span text color (ARGB) over a SOURCE range — rich-text 颜色 (ADR 0030 A 档).
+ * Render-only: like [DecorationSpan] it never affects metrics, breaking or
+ * justification, so it rides beside the layout model rather than inside it.
+ * Platform-neutral (`argb` Int) so the frontend contract carries no Skia type.
+ */
+data class ColorSpan(val start: Int, val end: Int, val argb: Int)
+
+/**
  * 行间注 (ruby, ADR 0032): small-size annotation [text] over a base SOURCE
  * [baseRange] — 拼音 above the base (this slice). Unlike [DecorationSpan], ruby
  * DOES affect layout: it reserves line height and keeps the base unbreakable.

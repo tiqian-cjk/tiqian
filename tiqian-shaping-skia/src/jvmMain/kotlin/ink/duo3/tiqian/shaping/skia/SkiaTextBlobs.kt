@@ -1,6 +1,7 @@
 package ink.duo3.tiqian.shaping.skia
 
 import ink.duo3.tiqian.core.Cluster
+import ink.duo3.tiqian.core.ColorSpan
 import ink.duo3.tiqian.core.LayoutResult
 import ink.duo3.tiqian.core.LineBox
 import ink.duo3.tiqian.core.TextSpan
@@ -133,9 +134,6 @@ fun vertGlyphIds(typeface: Typeface, shaper: Shaper, text: String, language: Str
  * - Consumed LEADING glue (line-start 开标点 trim, 间隔号 push-in) shifts the
  *   glyph LEFT — the blob keeps the font's built-in leading blank.
  */
-/** Per-span text color (ARGB) over a SOURCE range — rich-text 颜色 (ADR 0030 A 档). */
-data class ColorSpan(val start: Int, val end: Int, val argb: Int)
-
 /**
  * The Skia [FontStyle] for a layout-affecting [TextStyle] (ADR 0030 B 档): the
  * OpenType weight axis + italic slant. Default (400, upright) equals

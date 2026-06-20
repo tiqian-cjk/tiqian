@@ -12,7 +12,7 @@ import ink.duo3.tiqian.core.TextSpan
 import ink.duo3.tiqian.core.TextStyle
 import ink.duo3.tiqian.layout.ExplainableStubParagraphLayoutEngine
 import ink.duo3.tiqian.layout.LookaheadLineBreaker
-import ink.duo3.tiqian.shaping.skia.ColorSpan
+import ink.duo3.tiqian.core.ColorSpan
 import ink.duo3.tiqian.shaping.skia.SkiaFontMetricsResolver
 import ink.duo3.tiqian.shaping.skia.SkiaTextShaper
 import kotlin.math.ceil

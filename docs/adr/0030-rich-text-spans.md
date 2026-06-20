@@ -2,6 +2,8 @@
 
 - Status: Accepted
 - Date: 2026-06-17
+- Amendment 2026-06-21：`ColorSpan(start, end, argb)` 移入 `tiqian-core`（与 `DecorationSpan`
+  并列的 render-only span），不再住 `tiqian-shaping-skia`——前端公开签名遂不泄漏 Skia 类型。
 
 ## Context
 
