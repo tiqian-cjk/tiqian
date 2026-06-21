@@ -3,7 +3,6 @@ package ink.duo3.tiqian.compose
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
@@ -32,8 +31,11 @@ import kotlin.math.ceil
  *
  * [textStyle] is the Compose-facing [CjkTextStyle] (`.sp`/`Color`/`FontFamily`),
  * lowered to engine px via `LocalDensity` here — callers no longer hand-multiply
- * density. [onTextLayout] reports the FULL (pre-clip) [LayoutResult]; the drawn
- * content is clipped to the (possibly height-bounded) component bounds.
+ * density. The component reports its FULL content height (no vertical truncation —
+ * that's a `maxLines` feature we don't have yet); [onTextLayout] reports that same
+ * [LayoutResult]. We deliberately do NOT `clipToBounds`: 行间装饰 (ruby overhang,
+ * 注音 right zone, 着重号/示亡号 in the line gap) legitimately paint outside the
+ * content box and must not be cut.
  */
 @Composable
 fun CjkParagraph(
@@ -91,10 +93,11 @@ internal fun CjkParagraphImpl(
     // reads it, so draw never sees a stale result.
     val holder = remember { ParagraphLayoutHolder() }
     Layout(
-        // clipToBounds so a paragraph taller than a bounded maxHeight is clipped to
-        // the reported (clamped) height instead of bleeding out (Codex #1); onTextLayout
-        // still reports the FULL layout. No-op when height is unbounded.
-        modifier = modifier.clipToBounds().drawBehind {
+        // No clipToBounds: 行间装饰 (ruby overhang, 注音 right zone, 着重号/示亡号 in the
+        // line gap) paint outside the engine-reported content box on purpose; clipping to
+        // `size` would cut them. The component reports its full height (below) so the
+        // reported box matches what's drawn — vertical truncation is a maxLines feature.
+        modifier = modifier.drawBehind {
             holder.result?.let { drawParagraph(it, color = color, colorSpans = colorSpans, spans = spans) }
         },
         content = {},
@@ -117,9 +120,10 @@ internal fun CjkParagraphImpl(
         onTextLayout(laidOut)
         layout(
             width = ceil(laidOut.size.width).toInt().coerceIn(constraints.minWidth, constraints.maxWidth),
-            // Clamp to the bounded height too (overflow is clipped, like Compose text);
-            // maxHeight is Constraints.Infinity when unbounded → no effective clamp.
-            height = ceil(laidOut.size.height).toInt().coerceIn(constraints.minHeight, constraints.maxHeight),
+            // Report the FULL content height (only floored to minHeight) — no clamp to
+            // maxHeight: with no clip, clamping would report a box shorter than what we
+            // draw. A height-bounded parent decides whether to scroll/clip itself.
+            height = ceil(laidOut.size.height).toInt().coerceAtLeast(constraints.minHeight),
         ) {}
     }
 }
