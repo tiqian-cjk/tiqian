@@ -1,11 +1,20 @@
 package ink.duo3.tiqian.compose
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.node.DrawModifierNode
+import androidx.compose.ui.node.LayoutModifierNode
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.invalidateDraw
+import androidx.compose.ui.node.invalidateMeasurement
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Constraints
 import ink.duo3.tiqian.clreq.ClreqProfile
 import ink.duo3.tiqian.core.ColorSpan
 import ink.duo3.tiqian.core.DecorationSpan
@@ -87,26 +96,107 @@ internal fun CjkParagraphImpl(
     measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
     onTextLayout: (LayoutResult) -> Unit = {},
 ) {
-    // The measure-produced result is read back during the DRAW phase. A plain
-    // remembered holder (not snapshot state) avoids writing observable state
-    // inside the measure lambda; a re-measure always schedules the re-draw that
-    // reads it, so draw never sees a stale result.
-    val holder = remember { ParagraphLayoutHolder() }
-    Layout(
-        // No clipToBounds: 行间装饰 (ruby overhang, 注音 right zone, 着重号/示亡号 in the
-        // line gap) paint outside the engine-reported content box on purpose; clipping to
-        // `size` would cut them. The component reports its full height (below) so the
-        // reported box matches what's drawn — vertical truncation is a maxLines feature.
-        modifier = modifier.drawBehind {
-            holder.result?.let { drawParagraph(it, color = color, colorSpans = colorSpans, spans = spans) }
-        },
-        content = {},
-    ) { _, constraints ->
-        val maxWidth = if (constraints.hasBoundedWidth) {
-            constraints.maxWidth.toFloat()
-        } else {
-            DEFAULT_UNBOUNDED_WIDTH
-        }
+    // Backed by a single Modifier.Node (like BasicText): it owns BOTH measure and draw,
+    // and its update() explicitly invalidates measurement AND draw on any param change.
+    // That's what makes editing repaint even when the new content lays out to the SAME
+    // size — routing a measure-phase result through snapshot state + drawBehind only
+    // repaints on relayout, leaving stale glyphs while typing.
+    Box(
+        modifier.then(
+            CjkParagraphElement(
+                text, textStyle, paragraphStyle, color,
+                decorations, colorSpans, spans, rubySpans, measurer, onTextLayout,
+            ),
+        ),
+    )
+}
+
+/** Backs [CjkParagraphImpl] — a measure+draw [Modifier.Node] that repaints on update. */
+private class CjkParagraphElement(
+    private val text: String,
+    private val textStyle: TextStyle,
+    private val paragraphStyle: ParagraphStyle,
+    private val color: Int,
+    private val decorations: List<DecorationSpan>,
+    private val colorSpans: List<ColorSpan>,
+    private val spans: List<TextSpan>,
+    private val rubySpans: List<RubySpan>,
+    private val measurer: ParagraphMeasurer,
+    private val onTextLayout: (LayoutResult) -> Unit,
+) : ModifierNodeElement<CjkParagraphNode>() {
+    override fun create() = CjkParagraphNode(
+        text, textStyle, paragraphStyle, color, decorations, colorSpans, spans, rubySpans, measurer, onTextLayout,
+    )
+
+    override fun update(node: CjkParagraphNode) = node.update(
+        text, textStyle, paragraphStyle, color, decorations, colorSpans, spans, rubySpans, measurer, onTextLayout,
+    )
+
+    override fun equals(other: Any?): Boolean =
+        other is CjkParagraphElement && text == other.text && textStyle == other.textStyle &&
+            paragraphStyle == other.paragraphStyle && color == other.color &&
+            decorations == other.decorations && colorSpans == other.colorSpans &&
+            spans == other.spans && rubySpans == other.rubySpans && measurer === other.measurer &&
+            onTextLayout === other.onTextLayout
+
+    override fun hashCode(): Int {
+        var r = text.hashCode()
+        r = 31 * r + textStyle.hashCode()
+        r = 31 * r + paragraphStyle.hashCode()
+        r = 31 * r + color
+        r = 31 * r + decorations.hashCode()
+        r = 31 * r + colorSpans.hashCode()
+        r = 31 * r + spans.hashCode()
+        r = 31 * r + rubySpans.hashCode()
+        r = 31 * r + measurer.hashCode()
+        r = 31 * r + onTextLayout.hashCode()
+        return r
+    }
+}
+
+private class CjkParagraphNode(
+    private var text: String,
+    private var textStyle: TextStyle,
+    private var paragraphStyle: ParagraphStyle,
+    private var color: Int,
+    private var decorations: List<DecorationSpan>,
+    private var colorSpans: List<ColorSpan>,
+    private var spans: List<TextSpan>,
+    private var rubySpans: List<RubySpan>,
+    private var measurer: ParagraphMeasurer,
+    private var onTextLayout: (LayoutResult) -> Unit,
+) : Modifier.Node(), LayoutModifierNode, DrawModifierNode {
+
+    private var result: LayoutResult? = null
+
+    fun update(
+        text: String,
+        textStyle: TextStyle,
+        paragraphStyle: ParagraphStyle,
+        color: Int,
+        decorations: List<DecorationSpan>,
+        colorSpans: List<ColorSpan>,
+        spans: List<TextSpan>,
+        rubySpans: List<RubySpan>,
+        measurer: ParagraphMeasurer,
+        onTextLayout: (LayoutResult) -> Unit,
+    ) {
+        this.text = text
+        this.textStyle = textStyle
+        this.paragraphStyle = paragraphStyle
+        this.color = color
+        this.decorations = decorations
+        this.colorSpans = colorSpans
+        this.spans = spans
+        this.rubySpans = rubySpans
+        this.measurer = measurer
+        this.onTextLayout = onTextLayout
+        invalidateMeasurement() // re-measure (size/result may change)
+        invalidateDraw()        // AND repaint even when the new content is the same size
+    }
+
+    override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
+        val maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth.toFloat() else DEFAULT_UNBOUNDED_WIDTH
         val laidOut = measurer.measure(
             text = text,
             constraints = LayoutConstraints(maxWidth = maxWidth),
@@ -116,21 +206,21 @@ internal fun CjkParagraphImpl(
             spans = spans,
             rubySpans = rubySpans,
         )
-        holder.result = laidOut
+        result = laidOut
         onTextLayout(laidOut)
-        layout(
-            width = ceil(laidOut.size.width).toInt().coerceIn(constraints.minWidth, constraints.maxWidth),
-            // Report the FULL content height (only floored to minHeight) — no clamp to
-            // maxHeight: with no clip, clamping would report a box shorter than what we
-            // draw. A height-bounded parent decides whether to scroll/clip itself.
-            height = ceil(laidOut.size.height).toInt().coerceAtLeast(constraints.minHeight),
-        ) {}
+        // The drawn content (incl. 行间装饰 overhang) paints from draw(); the empty inner
+        // content is placed at 0. Report FULL content height (floored to minHeight) — no
+        // maxHeight clamp (no clip): a height-bounded parent decides to scroll/clip.
+        val placeable = measurable.measure(Constraints.fixed(0, 0))
+        val w = ceil(laidOut.size.width).toInt().coerceIn(constraints.minWidth, constraints.maxWidth)
+        val h = ceil(laidOut.size.height).toInt().coerceAtLeast(constraints.minHeight)
+        return layout(w, h) { placeable.place(0, 0) }
     }
-}
 
-/** Non-snapshot holder for the measure→draw handoff (see [CjkParagraph]). */
-private class ParagraphLayoutHolder {
-    var result: LayoutResult? = null
+    override fun ContentDrawScope.draw() {
+        result?.let { drawParagraph(it, color = color, colorSpans = colorSpans, spans = spans) }
+        drawContent()
+    }
 }
 
 /**
