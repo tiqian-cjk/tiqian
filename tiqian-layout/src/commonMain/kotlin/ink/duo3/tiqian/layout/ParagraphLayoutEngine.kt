@@ -1063,6 +1063,13 @@ class ExplainableStubParagraphLayoutEngine(
                 ),
             )
         }
+        // Ink-edge insets so 行间线/着重号 hug the text, not the edge blanks: the leading
+        // autospace gap + consumed 开标点 leading glue (mirrors the renderer's glyph
+        // shift, SkiaTextBlobs.forEachPositionedCluster). The trailing justify stretch
+        // is already excluded at use; the LEADING side was being missed (CLREQ「两侧」).
+        val autoSpaceGapPx = 0.25f * fontSize
+        val leadingGapRanges = autoSpaceDecisions.filter { it.side == "leading" }.map { it.clusterRange }.toSet()
+        val leadingConsumedByRange = geometryDecisions.associate { it.range to it.leadingGlueConsumed }
         val decorationDecisions = computeDecorationDecisions(
             decorations = input.decorations,
             lineRanges = lineSolution.lines.map { it.clusterRange },
@@ -1070,6 +1077,7 @@ class ExplainableStubParagraphLayoutEngine(
             finalClusters = finalClusters,
             clusterRoles = clusterRoles,
             justifyDeltaByCluster = justifyDeltaByCluster,
+            rubySpreadByCluster = rubyAndZhuyinSpread,
             fontSize = fontSize,
         )
         val decorationSegments = computeDecorationSegments(
@@ -1078,6 +1086,9 @@ class ExplainableStubParagraphLayoutEngine(
             lineBoxes = lines,
             finalClusters = finalClusters,
             justifyDeltaByCluster = justifyDeltaByCluster,
+            leadingGapRanges = leadingGapRanges,
+            leadingConsumedByRange = leadingConsumedByRange,
+            autoSpaceGapPx = autoSpaceGapPx,
             fontSize = fontSize,
         )
         val rubyDecisions = computeRubyDecisions(
@@ -1264,6 +1275,7 @@ class ExplainableStubParagraphLayoutEngine(
         finalClusters: List<Cluster>,
         clusterRoles: List<FontRole>,
         justifyDeltaByCluster: Map<Int, Float>,
+        rubySpreadByCluster: Map<Int, Float>,
         fontSize: Float,
     ): List<DecorationDecisionInfo> {
         if (decorations.isEmpty()) return emptyList()
@@ -1280,7 +1292,10 @@ class ExplainableStubParagraphLayoutEngine(
                     if (coveredBySpan) {
                         val role = clusterRoles[idx]
                         val applied = role == FontRole.CjkText
-                        val glyphAdvance = cluster.advance - (justifyDeltaByCluster[idx] ?: 0f)
+                        // Centre on the base BODY: drop the trailing justify stretch AND
+                        // the 注音 column reservation (着重号 belongs under 基文, not 基文+注音).
+                        val glyphAdvance = cluster.advance -
+                            (justifyDeltaByCluster[idx] ?: 0f) - (rubySpreadByCluster[idx] ?: 0f)
                         decisions += DecorationDecisionInfo(
                             clusterRange = cluster.range,
                             sourceText = cluster.text,
@@ -1324,6 +1339,9 @@ class ExplainableStubParagraphLayoutEngine(
         lineBoxes: List<LineBox>,
         finalClusters: List<Cluster>,
         justifyDeltaByCluster: Map<Int, Float>,
+        leadingGapRanges: Set<TextRange>,
+        leadingConsumedByRange: Map<TextRange, Float>,
+        autoSpaceGapPx: Float,
         fontSize: Float,
     ): List<DecorationSegmentInfo> {
         val boxSpans = decorations.filter {
@@ -1348,7 +1366,11 @@ class ExplainableStubParagraphLayoutEngine(
                         cluster.range.end <= span.range.end
                     if (covered) {
                         if (left == null) {
-                            left = x
+                            // Start at the first covered cluster's INK left: skip the
+                            // leading autospace gap + consumed 开标点 glue (CLREQ 行间线
+                            // 避两侧空白), mirroring the renderer's glyph shift.
+                            val leadingGap = if (cluster.range in leadingGapRanges && idx != clusterRange.first) autoSpaceGapPx else 0f
+                            left = x + leadingGap - (leadingConsumedByRange[cluster.range] ?: 0f)
                             segStart = cluster.range.start
                         }
                         // The segment follows the justified glyph positions

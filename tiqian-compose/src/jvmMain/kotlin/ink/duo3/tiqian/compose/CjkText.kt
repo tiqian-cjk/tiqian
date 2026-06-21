@@ -79,8 +79,11 @@ fun CjkText(
                     val gutterDp = with(density) { gutterIc.toPx(coreStyle.fontSize).toDp() }
                     val markerStyle = listStyle.copy(lineLengthGrid = LineLengthGrid(enabled = false))
                     block.items.forEachIndexed { i, item ->
+                        // alignByBaseline: when a body's first line carries 拼音 ruby it
+                        // sits lower (its band is above), so line the marker up with the
+                        // body TEXT by first baseline, not by the box top.
                         Row(Modifier.fillMaxWidth()) {
-                            Box(Modifier.width(gutterDp)) {
+                            Box(Modifier.width(gutterDp).alignByBaseline()) {
                                 CjkParagraph(
                                     text = block.marker.format(block.start + i),
                                     textStyle = textStyle,
@@ -90,7 +93,7 @@ fun CjkText(
                             }
                             CjkParagraph(
                                 text = item,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).alignByBaseline(),
                                 textStyle = textStyle,
                                 paragraphStyle = listStyle,
                                 measurer = measurer,

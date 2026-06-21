@@ -5,6 +5,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.layout.AlignmentLine
+import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.Measurable
 import androidx.compose.ui.layout.MeasureResult
 import androidx.compose.ui.layout.MeasureScope
@@ -214,7 +216,10 @@ private class CjkParagraphNode(
         val placeable = measurable.measure(Constraints.fixed(0, 0))
         val w = ceil(laidOut.size.width).toInt().coerceIn(constraints.minWidth, constraints.maxWidth)
         val h = ceil(laidOut.size.height).toInt().coerceAtLeast(constraints.minHeight)
-        return layout(w, h) { placeable.place(0, 0) }
+        // Expose the first line's baseline so Row.alignByBaseline can line a 拼音 list
+        // body (first line pushed down by its ruby band) up with its marker.
+        val firstBaseline = laidOut.lines.firstOrNull()?.baseline?.let { ceil(it).toInt() } ?: AlignmentLine.Unspecified
+        return layout(w, h, alignmentLines = mapOf(FirstBaseline to firstBaseline)) { placeable.place(0, 0) }
     }
 
     override fun ContentDrawScope.draw() {
