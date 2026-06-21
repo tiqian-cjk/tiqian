@@ -244,7 +244,8 @@ internal inline fun LayoutResult.forEachPositionedCluster(
             val hasLeadingGap = debug.autoSpaceDecisions.any { it.clusterRange == cluster.range && it.side == "leading" }
             val leadingGap = if (hasLeadingGap && indexInLine != 0) autoSpaceGap else 0f
             if (cluster.displayText.isNotEmpty()) {
-                action(line, cluster, x + leadingGap - (leadingConsumed[cluster.range] ?: 0f), baselineY, font)
+                // baselineShift aligns mixed fonts/sizes by 字身框 centre, not baseline.
+                action(line, cluster, x + leadingGap - (leadingConsumed[cluster.range] ?: 0f), baselineY + cluster.baselineShift, font)
             }
             x += cluster.advance
         }

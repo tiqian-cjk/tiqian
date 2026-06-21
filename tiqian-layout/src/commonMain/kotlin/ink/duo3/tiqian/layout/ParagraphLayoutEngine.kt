@@ -126,6 +126,9 @@ class ExplainableStubParagraphLayoutEngine(
         // height is the注文 font's REAL ascent+descent stacked over the base 字身顶
         // (computed after metricDecisions below). advance handled by 避让.
         val rubyFontSize = fontSize * RUBY_FONT_EM
+        // 注文 (拼音/注音) is set 100 weight units heavier than the base text: at the
+        // small ruby size a step up in weight keeps it legible (clamped to 900).
+        val rubyFontWeight = (input.textStyle.fontWeight + 100).coerceIn(1, 900)
         // 拼音 (above-base) ruby only; 注音 (RubyKind.Zhuyin, right-side) is parsed +
         // carried but its geometry/advance is the next slice (ADR 0033) — inert here.
         val pinyinSpans = input.rubySpans.filter { it.kind == RubyKind.Pinyin }
@@ -426,7 +429,7 @@ class ExplainableStubParagraphLayoutEngine(
                 ShapingInput(
                     text = rubyText,
                     range = range,
-                    style = input.textStyle.copy(fontSize = rubyFontSize, fontFamilies = families),
+                    style = input.textStyle.copy(fontSize = rubyFontSize, fontFamilies = families, fontWeight = rubyFontWeight),
                     fontDecision = decision,
                     displayText = rubyText,
                 ),
@@ -608,6 +611,18 @@ class ExplainableStubParagraphLayoutEngine(
         // baseline by 基字 ascent + 注文 descent + gap.
         val baseAscent = metricDecisions.maxOfOrNull { it.layoutMetrics.ascent } ?: (fontSize * 0.88f)
         val baseDescent = metricDecisions.maxOfOrNull { it.layoutMetrics.descent } ?: (fontSize * 0.12f)
+        // 字身框 alignment reference (ADR 0030 follow-up): the 字身框 centre of the BASE
+        // CJK font at the base size (so base body text keeps its baseline, shift 0). Each
+        // cluster shifts so its 字身框 centre meets this line — mixed fonts/sizes align by
+        // the ideographic box, not the alphabetic baseline.
+        val baseRefMetrics = metricDecisions
+            .firstOrNull { it.request.role == FontRole.CjkText && it.request.fontSize == fontSize }
+            ?.layoutMetrics
+        val baseBoxHalf = if (baseRefMetrics != null) {
+            (baseRefMetrics.ascent - baseRefMetrics.descent) / 2f
+        } else {
+            (baseAscent - baseDescent) / 2f
+        }
         val rubyLayoutMetrics = if (pinyinSpans.isEmpty()) {
             null
         } else {
@@ -972,7 +987,15 @@ class ExplainableStubParagraphLayoutEngine(
                 .forEach { alloc -> merge(alloc.targetClusterIndex, alloc.delta) { a, b -> a + b } }
         }
         val finalGeometry = trimmedGeometry.addJustificationDeltas(justifyDeltaByCluster)
-        val finalClusters = finalGeometry.resolveClusters()
+        val finalClusters = finalGeometry.resolveClusters().map { c ->
+            // 字身框 centre alignment: shift so this cluster's ideographic box centre meets
+            // the base box centre (0 for base font/size — the common case).
+            val m = metricDecisions.firstOrNull {
+                c.range.start >= it.range.start && c.range.end <= it.range.end
+            }?.layoutMetrics ?: return@map c
+            val shift = (m.ascent - m.descent) / 2f - baseBoxHalf
+            if (shift > -0.01f && shift < 0.01f) c else c.copy(baselineShift = shift)
+        }
         val geometryDecisions = finalGeometry.toDecisionInfo()
 
         val glyphRuns = finalClusters.groupAdjacentBy { it.fontKey }.map { runClusters ->
@@ -1101,6 +1124,7 @@ class ExplainableStubParagraphLayoutEngine(
             naturalClusters = naturalClusters,
             rubyBaselineDrop = rubyBaselineDrop,
             rubyFontSize = rubyFontSize,
+            rubyFontWeight = rubyFontWeight,
         )
         val zhuyinDecisions = computeZhuyinDecisions(
             rubySpans = input.rubySpans.filter { it.kind == RubyKind.Zhuyin },
@@ -1111,6 +1135,7 @@ class ExplainableStubParagraphLayoutEngine(
             baseAscent = baseAscent,
             baseDescent = baseDescent,
             fontSize = fontSize,
+            rubyFontWeight = rubyFontWeight,
         )
 
         val widestLine = lines.maxOfOrNull { it.indent + it.visualWidth + it.hyphenAdvance } ?: 0f
@@ -1873,6 +1898,7 @@ class ExplainableStubParagraphLayoutEngine(
         naturalClusters: List<Cluster>,
         rubyBaselineDrop: Float,
         rubyFontSize: Float,
+        rubyFontWeight: Int,
     ): List<RubyDecisionInfo> {
         if (rubySpans.isEmpty()) return emptyList()
         val out = mutableListOf<RubyDecisionInfo>()
@@ -1902,6 +1928,7 @@ class ExplainableStubParagraphLayoutEngine(
                         fontSize = rubyFontSize,
                         overhang = ((estRubyWidth - contentWidth) / 2f).coerceAtLeast(0f),
                         fontFamilies = ruby.fontFamilies,
+                        fontWeight = rubyFontWeight,
                     )
                 }
             }
@@ -1923,6 +1950,7 @@ class ExplainableStubParagraphLayoutEngine(
         baseAscent: Float,
         baseDescent: Float,
         fontSize: Float,
+        rubyFontWeight: Int,
     ): List<ZhuyinDecisionInfo> {
         if (rubySpans.isEmpty()) return emptyList()
         val hUnit = fontSize / 30f
@@ -1985,7 +2013,7 @@ class ExplainableStubParagraphLayoutEngine(
                     }
                 }
                 if (placements.isNotEmpty()) {
-                    out += ZhuyinDecisionInfo(ruby.baseRange, lineIndex, placements, ruby.fontFamilies)
+                    out += ZhuyinDecisionInfo(ruby.baseRange, lineIndex, placements, ruby.fontFamilies, rubyFontWeight)
                 }
             }
         }

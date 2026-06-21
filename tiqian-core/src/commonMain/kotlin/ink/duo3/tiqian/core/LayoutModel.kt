@@ -6,6 +6,13 @@ data class Cluster(
     val displayText: String = text,
     val fontKey: String,
     val advance: Float,
+    /**
+     * Vertical offset (px, +down) added to the line baseline when drawing this cluster
+     * so mixed fonts/sizes align by their **字身框** (ideographic em box centre), not by
+     * the alphabetic baseline — a smaller/other-font glyph sits centred on the base box
+     * rather than dropping to the baseline. 0 = base font/size (the common case).
+     */
+    val baselineShift: Float = 0f,
 )
 
 data class GlyphRun(
@@ -177,6 +184,8 @@ data class RubyDecisionInfo(
     val overhang: Float,
     /** 注文专用字体（family 名优先列表）；空 = 渲染器默认。 */
     val fontFamilies: List<String> = emptyList(),
+    /** 注文字重：小字号下注文比基文重 100（OpenType weight），以保清晰。 */
+    val fontWeight: Int = 400,
 )
 
 /**
@@ -191,6 +200,8 @@ data class ZhuyinDecisionInfo(
     val placements: List<ZhuyinGlyphPlacement>,
     /** 注文 font (must carry ㄅㄆㄇ glyphs); empty = renderer's CJK default. */
     val fontFamilies: List<String> = emptyList(),
+    /** 注文字重：比基文重 100（OpenType weight），小字号下保清晰。 */
+    val fontWeight: Int = 400,
 )
 
 data class ZhuyinGlyphPlacement(
