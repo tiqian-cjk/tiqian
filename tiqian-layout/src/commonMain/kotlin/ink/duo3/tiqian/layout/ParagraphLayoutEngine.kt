@@ -624,7 +624,10 @@ class ExplainableStubParagraphLayoutEngine(
         } else {
             (baseAscent - baseDescent) / 2f
         }
-        val rubyLayoutMetrics = if (pinyinSpans.isEmpty()) {
+        // 注文 vertical extent: use the TYPOGRAPHIC box (sTypo — the visual letter box,
+        // accents + descenders), NOT the full hhea (RawFontBox adds line gap + generous
+        // ascent), so a 拼音 line is only as tall as the pinyin needs, not ~0.6em taller.
+        val rubyRaw = if (pinyinSpans.isEmpty()) {
             null
         } else {
             val rubyDecision = fallbackResolver.resolve(
@@ -638,11 +641,13 @@ class ExplainableStubParagraphLayoutEngine(
                 role = FontRole.LatinText,
                 locale = input.textStyle.locale,
             )
-            fontMetricsNormalizer.normalize(FontMetricsNormalizationInput(request = req, rawMetrics = fontMetricsResolver.resolve(req)))
+            fontMetricsResolver.resolve(req)
         }
+        val rubyAscent = rubyRaw?.let { it.typoAscent ?: it.ascent } ?: 0f
+        val rubyDescent = rubyRaw?.let { it.typoDescent ?: it.descent } ?: 0f
         val rubyStackGap = fontSize * RUBY_STACK_GAP_EM
-        val rubyBand = if (rubyLayoutMetrics == null) 0f else rubyLayoutMetrics.ascent + rubyLayoutMetrics.descent + rubyStackGap
-        val rubyBaselineDrop = baseAscent + (rubyLayoutMetrics?.descent ?: 0f) + rubyStackGap
+        val rubyExtent = if (rubyRaw == null) 0f else rubyAscent + rubyDescent + rubyStackGap
+        val rubyBaselineDrop = baseAscent + rubyDescent + rubyStackGap
 
         // InterlinearMarkLineSpacingFloor (CLREQ 5.6.1.1): with 行间标点
         // (着重号、示亡号 etc.) present, line spacing (height − 字身高) must not
@@ -659,6 +664,12 @@ class ExplainableStubParagraphLayoutEngine(
             defaultLineHeight = defaultBodyLineHeight,
             spacingFloor = interlinearSpacingFloor,
         )
+        // 行间注 band = only the 注文 that EXCEEDS the line's existing upper half-leading.
+        // The default 1.5em line already leaves ~0.25em above the 字身顶; the 拼音 sits in
+        // that gap first, so a 拼音 line grows by far less than the full 注文 height (it
+        // was being pushed ~0.6em taller for no reason).
+        val baseUpperLeading = ((baseLineMetrics.height - (baseAscent + baseDescent)) / 2f).coerceAtLeast(0f)
+        val rubyBand = (rubyExtent - baseUpperLeading).coerceAtLeast(0f)
         val lineSpacingDecision = if (baseLineMetrics.height <= 0f) {
             null
         } else {
