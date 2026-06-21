@@ -65,7 +65,9 @@ class CjkFontRoleClassifier : FontRoleClassifier {
     }
 
     private fun Int.isCjkCodePoint(): Boolean =
-        this in 0x3400..0x4DBF ||
+        this in 0x3105..0x312F || // Bopomofo ㄅㄆㄇ (full-width CJK letters; body text, not just ruby)
+            this in 0x31A0..0x31BF || // Bopomofo Extended
+            this in 0x3400..0x4DBF ||
             this in 0x4E00..0x9FFF ||
             this in 0xF900..0xFAFF ||
             this in 0x20000..0x2A6DF ||
