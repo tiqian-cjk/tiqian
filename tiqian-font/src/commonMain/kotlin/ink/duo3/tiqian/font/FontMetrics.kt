@@ -5,6 +5,12 @@ data class FontMetricsRequest(
     val fontSize: Float,
     val role: FontRole,
     val locale: String,
+    /**
+     * Per-span font family preference (rich text). The resolver measures THIS family's
+     * 字身框 so a serif/mono run aligns by its own ideographic box, not the base font's.
+     * Empty = the role default.
+     */
+    val fontFamilies: List<String> = emptyList(),
 )
 
 interface FontMetricsResolver {

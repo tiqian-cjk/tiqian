@@ -588,6 +588,7 @@ class ExplainableStubParagraphLayoutEngine(
                 fontSize = fontSizeAt(decision.range.start),
                 role = decision.role,
                 locale = input.textStyle.locale,
+                fontFamilies = styleAt(decision.range.start).fontFamilies,
             )
             val rawMetrics = fontMetricsResolver.resolve(request)
             val layoutMetrics = fontMetricsNormalizer.normalize(

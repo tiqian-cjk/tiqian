@@ -6,6 +6,7 @@ import ink.duo3.tiqian.font.FontMetricsResolver
 import ink.duo3.tiqian.font.FontRole
 import ink.duo3.tiqian.font.RawFontMetrics
 import org.jetbrains.skia.Font
+import org.jetbrains.skia.FontStyle
 import org.jetbrains.skia.Typeface
 
 /**
@@ -29,7 +30,13 @@ class SkiaFontMetricsResolver(
 ) : FontMetricsResolver {
 
     override fun resolve(request: FontMetricsRequest): RawFontMetrics {
-        val typeface = when (request.role) {
+        val isLatin = request.role == FontRole.LatinText
+        // Per-span family (rich text): measure the requested serif/mono face's OWN 字身框
+        // so mixed fonts align by their ideographic box. Empty → the role default below.
+        val familyTypeface = request.fontFamilies.firstOrNull()?.let {
+            SkiaSystemTypefaces.typeface(isLatin, it, FontStyle.NORMAL)
+        }
+        val typeface = familyTypeface ?: when (request.role) {
             FontRole.CjkText, FontRole.CjkPunctuation -> cjkTypeface
             FontRole.LatinText -> latinTypeface ?: cjkTypeface
             FontRole.Symbol, FontRole.Emoji, FontRole.Unknown -> cjkTypeface ?: latinTypeface
