@@ -69,7 +69,7 @@ punct 27-28 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=
 geom 11-12 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
 geom 27-28 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 27-28 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
 == lookahead ==
 size 192.0x72.0
 grid container=200.0 measure=192.0(12字) slack=8.0 body=Start@0.0
@@ -138,4 +138,4 @@ punct 27-28 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=
 geom 11-12 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
 geom 27-28 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 27-28 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

@@ -24,7 +24,7 @@ font 6-7 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGly
 punct 6-7 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
 geom 6-7 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 6-7 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
 == lookahead ==
 size 48.0x72.0
 kinsoku measure=3.0字 level=Basic hang=Disabled reason=Fixed:Basic
@@ -48,4 +48,4 @@ font 6-7 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGly
 punct 6-7 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
 geom 6-7 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 6-7 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

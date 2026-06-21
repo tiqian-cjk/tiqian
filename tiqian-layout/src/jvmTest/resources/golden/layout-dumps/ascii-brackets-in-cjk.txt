@@ -34,7 +34,7 @@ autospace 14-21 side=leading boundary=CjkText reduction=-4.0
 autospace 14-21 side=trailing boundary=CjkText reduction=-4.0
 edgetrim 23-24 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 14-21 side=leading trim=4.0 reason=TextAutoSpaceLineEdgeTrim
-linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
 == lookahead ==
 size 240.0x48.0
 kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
@@ -68,4 +68,4 @@ autospace 14-21 side=leading boundary=CjkText reduction=-4.0
 autospace 14-21 side=trailing boundary=CjkText reduction=-4.0
 edgetrim 23-24 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 14-21 side=leading trim=4.0 reason=TextAutoSpaceLineEdgeTrim
-linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

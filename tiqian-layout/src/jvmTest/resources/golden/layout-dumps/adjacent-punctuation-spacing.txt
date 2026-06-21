@@ -51,7 +51,7 @@ spacing 9-11 '。”' inner=8.0->0.0 target=9-10
 spacing 10-12 '”！' inner=8.0->0.0 target=10-11
 spacing 11-13 '！！' inner=8.0->0.0 target=11-12
 edgetrim 12-13 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
 == lookahead ==
 size 168.0x24.0
 grid container=220.0 measure=208.0(13字) slack=12.0 body=Start@0.0
@@ -102,4 +102,4 @@ spacing 9-11 '。”' inner=8.0->0.0 target=9-10
 spacing 10-12 '”！' inner=8.0->0.0 target=10-11
 spacing 11-13 '！！' inner=8.0->0.0 target=11-12
 edgetrim 12-13 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

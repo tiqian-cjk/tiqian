@@ -15,7 +15,7 @@ font 1-11 role=LatinText key=latin-primary display='PowerPoint' sub=CjkPunctuati
 font 11-12 role=CjkText key=cjk-primary display='做' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 autospace 1-6 side=leading boundary=CjkText reduction=-4.0
 autospace 6-11 side=trailing boundary=CjkText reduction=-4.0
-linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
 == lookahead ==
 size 104.0x48.0
 kinsoku measure=8.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:8字→Basic+Hang
@@ -30,4 +30,4 @@ font 1-11 role=LatinText key=latin-primary display='PowerPoint' sub=CjkPunctuati
 font 11-12 role=CjkText key=cjk-primary display='做' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 autospace 1-6 side=leading boundary=CjkText reduction=-4.0
 autospace 6-11 side=trailing boundary=CjkText reduction=-4.0
-linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

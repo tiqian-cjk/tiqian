@@ -82,7 +82,7 @@ geom 30-31 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 spacing 8-10 '。”' inner=8.0->0.0 target=8-9
 edgetrim 0-1 side=leading trim=4.0 reason=LineStartHalfWidthPunctuation
 edgetrim 30-31 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
 == lookahead ==
 size 192.0x72.0
 kinsoku measure=12.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:12字→Basic+Hang
@@ -164,4 +164,4 @@ geom 30-31 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 spacing 8-10 '。”' inner=8.0->0.0 target=8-9
 edgetrim 0-1 side=leading trim=4.0 reason=LineStartHalfWidthPunctuation
 edgetrim 30-31 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

@@ -32,7 +32,7 @@ punct 7-8 '）' class=Closing adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leadin
 geom 4-5 body=8.0 lead=8.0/8.0 trail=0.0/0.0 justify=2.0 resolved=10.0
 geom 7-8 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=2.0 resolved=18.0
 edgetrim 4-5 side=leading trim=8.0 reason=LineStartHalfWidthPunctuation
-linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
 == lookahead ==
 size 80.0x72.0
 kinsoku measure=5.0字 level=Basic hang=Disabled reason=Fixed:Basic
@@ -64,4 +64,4 @@ punct 7-8 '）' class=Closing adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leadin
 geom 4-5 body=8.0 lead=8.0/8.0 trail=0.0/0.0 justify=2.0 resolved=10.0
 geom 7-8 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=2.0 resolved=18.0
 edgetrim 4-5 side=leading trim=8.0 reason=LineStartHalfWidthPunctuation
-linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

@@ -54,7 +54,6 @@ import ink.duo3.tiqian.core.LineLengthGridDecisionInfo
 import ink.duo3.tiqian.core.FirstLineIndentDecisionInfo
 import kotlin.math.floor
 import ink.duo3.tiqian.core.LineSpacingDecisionInfo
-import ink.duo3.tiqian.core.PrintingSides
 import ink.duo3.tiqian.core.TextRange
 import ink.duo3.tiqian.font.CjkFontRoleClassifier
 import ink.duo3.tiqian.font.FallbackResolver
@@ -625,16 +624,11 @@ class ExplainableStubParagraphLayoutEngine(
         val rubyBaselineDrop = baseAscent + (rubyLayoutMetrics?.descent ?: 0f) + rubyStackGap
 
         // InterlinearMarkLineSpacingFloor (CLREQ 5.6.1.1): with 行间标点
-        // (着重号、示亡号 etc.) present, line spacing (height − 字面高)
-        // must not drop below 1/2 字号 (单面装) / 5/8 字号 (双面装).
-        val interlinearSpacingFloor = if (input.decorations.isEmpty()) {
-            0f
-        } else {
-            when (input.paragraphStyle.printingSides) {
-                PrintingSides.SingleSided -> 0.5f * fontSize
-                PrintingSides.DoubleSided -> 0.625f * fontSize
-            }
-        }
+        // (着重号、示亡号 etc.) present, line spacing (height − 字身高) must not
+        // drop below 1/2 字号 — a tight line height would collide the marks with
+        // the next line. (双面装 5/8 is print-only — show-through — deferred to a
+        // print backend, like 竖排.)
+        val interlinearSpacingFloor = if (input.decorations.isEmpty()) 0f else 0.5f * fontSize
         val defaultBodyLineHeight = fontSize * DEFAULT_BODY_LINE_HEIGHT_EM
         val lineMetrics = metricDecisions.lineMetrics(
             explicitLineHeight = input.paragraphStyle.lineHeight,
@@ -648,8 +642,8 @@ class ExplainableStubParagraphLayoutEngine(
             val natural = lineMetrics.height - lineMetrics.extraLeading
             val requested = input.paragraphStyle.lineHeight
             // Did the mark floor raise the line above what the explicit/default
-            // height alone would give? (Single-sided 0.5em is subsumed by the
-            // 1.5em body default; double-sided 0.625em still binds.)
+            // height alone would give? (The 0.5em floor is subsumed by the 1.5em
+            // body default, so it only binds against an explicit tight lineHeight.)
             val markFloorBinds = interlinearSpacingFloor > 0f &&
                 natural + interlinearSpacingFloor > (requested ?: defaultBodyLineHeight) + 0.001f
             LineSpacingDecisionInfo(
@@ -657,7 +651,6 @@ class ExplainableStubParagraphLayoutEngine(
                 requestedLineHeight = requested,
                 resolvedHeight = lineMetrics.height,
                 spacingFloor = interlinearSpacingFloor,
-                printingSides = input.paragraphStyle.printingSides.name,
                 floorApplied = markFloorBinds,
                 reason = when {
                     requested != null && !markFloorBinds -> "ExplicitLineHeight"

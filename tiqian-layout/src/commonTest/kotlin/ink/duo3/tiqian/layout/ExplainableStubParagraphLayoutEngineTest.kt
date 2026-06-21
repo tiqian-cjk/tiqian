@@ -1866,17 +1866,16 @@ class ExplainableStubParagraphLayoutEngineTest {
 
     @Test
     fun interlinearMarksRaiseAutoLineHeightToSpacingFloor() {
-        // InterlinearMarkLineSpacingFloor (CLREQ 5.6.1.1): with 着重号
-        // present and no explicit lineHeight, line spacing rises to 1/2
-        // 字号 (单面装) → height 1.5em = 24; 双面装 5/8 → 26. An explicit
-        // lineHeight below the floor is clamped, not honoured.
-        fun layoutWith(lineHeight: Float?, sides: ink.duo3.tiqian.core.PrintingSides) =
+        // InterlinearMarkLineSpacingFloor (CLREQ 5.6.1.1): with 着重号 present, the
+        // line spacing can't drop below 1/2 字号. The 0.5em floor (→24) coincides
+        // with the 1.5em body default (→24), so an auto/generous height already
+        // clears it; only an explicit lineHeight tighter than the floor is clamped.
+        fun layoutWith(lineHeight: Float?) =
             ExplainableStubParagraphLayoutEngine().layout(
                 LayoutInput(
                     paragraphStyle = ParagraphStyle(
                         firstLineIndent = Ic(0f),
                         lineHeight = lineHeight,
-                        printingSides = sides,
                     ),
                     content = TiqianTextContent("豆子新鲜"),
                     constraints = LayoutConstraints(maxWidth = 240f),
@@ -1889,23 +1888,17 @@ class ExplainableStubParagraphLayoutEngineTest {
                 ),
             )
 
-        // Single-sided 0.5em floor (→24) coincides with the 1.5em body default
-        // (→24), so the default already provides it — the mark floor doesn't bind.
-        val single = layoutWith(null, ink.duo3.tiqian.core.PrintingSides.SingleSided)
-        assertEquals(24f, single.lines.single().bottom)
-        assertEquals(false, single.debug.lineSpacingDecision?.floorApplied)
-
-        // Double-sided 0.625em floor (→26) exceeds the body default, so it binds.
-        val duplex = layoutWith(null, ink.duo3.tiqian.core.PrintingSides.DoubleSided)
-        assertEquals(26f, duplex.lines.single().bottom)
-        assertEquals(true, duplex.debug.lineSpacingDecision?.floorApplied)
+        // Auto height: the 1.5em body default (→24) already provides the floor.
+        val auto = layoutWith(null)
+        assertEquals(24f, auto.lines.single().bottom)
+        assertEquals(false, auto.debug.lineSpacingDecision?.floorApplied)
 
         // Explicit 20 < the no-overlap minimum (16+8) → clamped up by the floor.
-        val clamped = layoutWith(20f, ink.duo3.tiqian.core.PrintingSides.SingleSided)
+        val clamped = layoutWith(20f)
         assertEquals(24f, clamped.lines.single().bottom)
         assertEquals(true, clamped.debug.lineSpacingDecision?.floorApplied)
 
-        val generous = layoutWith(28f, ink.duo3.tiqian.core.PrintingSides.SingleSided)
+        val generous = layoutWith(28f)
         assertEquals(28f, generous.lines.single().bottom)
         assertEquals(false, generous.debug.lineSpacingDecision?.floorApplied)
 

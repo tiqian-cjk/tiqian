@@ -39,7 +39,7 @@ font 12-13 role=CjkText key=cjk-primary display='排' sub=CjkPunctuationGlyphPol
 font 13-14 role=CjkText key=cjk-primary display='版' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 font 14-15 role=CjkText key=cjk-primary display='引' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 font 15-16 role=CjkText key=cjk-primary display='擎' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
-linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
 == lookahead ==
 size 160.0x48.0
 firstindent 1.0字 measure=10.0字 threshold=14.0字 MeasureAdaptiveFirstLineIndent
@@ -78,4 +78,4 @@ font 12-13 role=CjkText key=cjk-primary display='排' sub=CjkPunctuationGlyphPol
 font 13-14 role=CjkText key=cjk-primary display='版' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 font 14-15 role=CjkText key=cjk-primary display='引' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 font 15-16 role=CjkText key=cjk-primary display='擎' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
-linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

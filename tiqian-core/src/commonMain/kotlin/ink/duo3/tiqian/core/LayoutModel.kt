@@ -143,16 +143,17 @@ data class KinsokuDecisionInfo(
 /**
  * `InterlinearMarkLineSpacingFloor` (CLREQ 5.6.1.1): with interlinear marks
  * (着重号、示亡号 etc.) present, line spacing must not drop below 1/2 of the
- * font size for single-sided printing, 5/8 for double-sided. Recorded
- * whenever the paragraph carries such marks; `floorApplied` tells whether
- * the floor actually raised (auto) or clamped (explicit) the line height.
+ * font size, so a tight line height can't collide the marks with the next line.
+ * Recorded whenever the paragraph carries such marks; `floorApplied` tells
+ * whether the floor actually raised (auto) or clamped (explicit) the line height.
+ * (CLREQ's 双面装 5/8 floor is print-only — show-through has no screen analogue —
+ * and returns with a print backend.)
  */
 data class LineSpacingDecisionInfo(
     val naturalHeight: Float,
     val requestedLineHeight: Float?,
     val resolvedHeight: Float,
     val spacingFloor: Float,
-    val printingSides: String,
     val floorApplied: Boolean,
     val reason: String,
 )

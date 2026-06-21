@@ -43,7 +43,7 @@ punct 15-16 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=
 geom 6-7 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
 geom 15-16 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 15-16 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-linespacing natural=16.0 requested=- resolved=24.0 floor=8.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=8.0 applied=false reason=CjkBodyLineHeightDefault
 decobox 0-2 kind=ProperNoun line=0 rect=0.0,21.0,32.0,21.0 open=-/- reason=InterlinearLinePerAnnotatedItem
 decobox 4-6 kind=BookTitle line=0 rect=64.0,21.0,96.0,21.0 open=-/- reason=InterlinearLinePerAnnotatedItem
 decobox 7-10 kind=ProperNoun line=0 rect=112.0,21.0,159.0,21.0 open=-/- reason=InterlinearLinePerAnnotatedItem;AdjacentInterlinearLineShortening
@@ -90,7 +90,7 @@ punct 15-16 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=
 geom 6-7 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
 geom 15-16 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 15-16 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-linespacing natural=16.0 requested=- resolved=24.0 floor=8.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=8.0 applied=false reason=CjkBodyLineHeightDefault
 decobox 0-2 kind=ProperNoun line=0 rect=0.0,21.0,32.0,21.0 open=-/- reason=InterlinearLinePerAnnotatedItem
 decobox 4-6 kind=BookTitle line=0 rect=64.0,21.0,96.0,21.0 open=-/- reason=InterlinearLinePerAnnotatedItem
 decobox 7-10 kind=ProperNoun line=0 rect=112.0,21.0,159.0,21.0 open=-/- reason=InterlinearLinePerAnnotatedItem;AdjacentInterlinearLineShortening

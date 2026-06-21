@@ -41,7 +41,7 @@ geom 10-11 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 spacing 2-4 '：“' inner=16.0->8.0 target=2-3
 spacing 9-11 '。”' inner=8.0->0.0 target=9-10
 edgetrim 10-11 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
 == lookahead ==
 size 152.0x24.0
 grid container=180.0 measure=176.0(11字) slack=4.0 body=Start@0.0
@@ -82,4 +82,4 @@ geom 10-11 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 spacing 2-4 '：“' inner=16.0->8.0 target=2-3
 spacing 9-11 '。”' inner=8.0->0.0 target=9-10
 edgetrim 10-11 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

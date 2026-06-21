@@ -66,7 +66,7 @@ edgetrim 57-58 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 11-12 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
 edgetrim 27-28 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
 edgetrim 42-43 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
-linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
 == lookahead ==
 size 240.0x96.0
 kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
@@ -132,4 +132,4 @@ edgetrim 57-58 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 edgetrim 11-12 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
 edgetrim 27-28 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
 edgetrim 42-43 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
-linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

@@ -11,7 +11,7 @@ cluster 4-7 'of-' adv=48.0
 cluster 7-11 'the-' adv=64.0
 cluster 11-14 'way' adv=48.0
 font 0-14 role=LatinText key=latin-primary display='out-of-the-way' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
-linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
 == lookahead ==
 size 112.0x48.0
 kinsoku measure=8.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:8字→Basic+Hang
@@ -22,4 +22,4 @@ cluster 4-7 'of-' adv=48.0
 cluster 7-11 'the-' adv=64.0
 cluster 11-14 'way' adv=48.0
 font 0-14 role=LatinText key=latin-primary display='out-of-the-way' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
-linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

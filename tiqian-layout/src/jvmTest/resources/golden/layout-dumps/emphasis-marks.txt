@@ -58,7 +58,7 @@ deco 12-13 '烘' kind=Emphasis applied=true anchor=64.0,49.9 reason=EmphasisDotO
 deco 13-14 '焙' kind=Emphasis applied=true anchor=80.0,49.9 reason=EmphasisDotOnHanText
 deco 14-15 '其' kind=Emphasis applied=true anchor=96.0,49.9 reason=EmphasisDotOnHanText
 deco 15-16 '次' kind=Emphasis applied=true anchor=112.0,49.9 reason=EmphasisDotOnHanText
-linespacing natural=16.0 requested=25.6 resolved=25.6 floor=8.0 sides=SingleSided applied=false reason=ExplicitLineHeight
+linespacing natural=16.0 requested=25.6 resolved=25.6 floor=8.0 applied=false reason=ExplicitLineHeight
 == lookahead ==
 size 128.0x51.2
 kinsoku measure=8.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:8字→Basic+Hang
@@ -116,4 +116,4 @@ deco 12-13 '烘' kind=Emphasis applied=true anchor=64.0,49.9 reason=EmphasisDotO
 deco 13-14 '焙' kind=Emphasis applied=true anchor=80.0,49.9 reason=EmphasisDotOnHanText
 deco 14-15 '其' kind=Emphasis applied=true anchor=96.0,49.9 reason=EmphasisDotOnHanText
 deco 15-16 '次' kind=Emphasis applied=true anchor=112.0,49.9 reason=EmphasisDotOnHanText
-linespacing natural=16.0 requested=25.6 resolved=25.6 floor=8.0 sides=SingleSided applied=false reason=ExplicitLineHeight
+linespacing natural=16.0 requested=25.6 resolved=25.6 floor=8.0 applied=false reason=ExplicitLineHeight

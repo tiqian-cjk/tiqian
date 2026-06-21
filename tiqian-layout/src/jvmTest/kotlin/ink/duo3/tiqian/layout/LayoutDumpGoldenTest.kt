@@ -205,7 +205,7 @@ class LayoutDumpGoldenTest {
             appendLine(
                 "linespacing natural=${d.naturalHeight.fmt()} requested=${d.requestedLineHeight?.fmt() ?: "-"} " +
                     "resolved=${d.resolvedHeight.fmt()} floor=${d.spacingFloor.fmt()} " +
-                    "sides=${d.printingSides} applied=${d.floorApplied} reason=${d.reason}",
+                    "applied=${d.floorApplied} reason=${d.reason}",
             )
         }
         debug.decorationSegments.forEach { seg ->

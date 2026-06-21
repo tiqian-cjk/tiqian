@@ -29,7 +29,7 @@ font 25-26 role=CjkText key=cjk-primary display='命' sub=CjkPunctuationGlyphPol
 font 26-27 role=CjkText key=cjk-primary display='令' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 autospace 3-4 side=gap boundary=CjkText reduction=4.0
 autospace 24-25 side=gap boundary=CjkText reduction=4.0
-linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
 == lookahead ==
 size 160.0x72.0
 kinsoku measure=10.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:10字→Basic+Hang
@@ -58,4 +58,4 @@ font 25-26 role=CjkText key=cjk-primary display='命' sub=CjkPunctuationGlyphPol
 font 26-27 role=CjkText key=cjk-primary display='令' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 autospace 3-4 side=gap boundary=CjkText reduction=4.0
 autospace 24-25 side=gap boundary=CjkText reduction=4.0
-linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

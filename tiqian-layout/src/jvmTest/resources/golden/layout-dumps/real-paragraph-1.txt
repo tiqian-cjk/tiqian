@@ -402,7 +402,7 @@ spacing 154-156 '：「' inner=16.0->8.0 target=154-155
 spacing 168-170 '」。' inner=8.0->0.0 target=168-169
 autospace 99-100 side=gap boundary=CjkText reduction=4.0
 edgetrim 184-185 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
 == lookahead ==
 size 320.0x240.0
 kinsoku measure=20.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:20字→Basic
@@ -804,4 +804,4 @@ spacing 154-156 '：「' inner=16.0->8.0 target=154-155
 spacing 168-170 '」。' inner=8.0->0.0 target=168-169
 autospace 99-100 side=gap boundary=CjkText reduction=4.0
 edgetrim 184-185 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
-linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 sides=SingleSided applied=false reason=CjkBodyLineHeightDefault
+linespacing natural=17.3 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
