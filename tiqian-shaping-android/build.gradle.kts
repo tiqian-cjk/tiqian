@@ -21,6 +21,7 @@ android {
 dependencies {
     api(project(":tiqian-shaping-api"))
 
+    androidTestImplementation(project(":tiqian-layout"))
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation(kotlin("test"))

@@ -5,6 +5,7 @@ import org.tiqian.font.FontMetricsRequest
 import org.tiqian.font.FontMetricsResolver
 import org.tiqian.font.FontRole
 import org.tiqian.font.RawFontMetrics
+import org.tiqian.font.usesLatinFace
 import org.jetbrains.skia.Font
 import org.jetbrains.skia.FontStyle
 import org.jetbrains.skia.Typeface
@@ -30,7 +31,7 @@ class SkiaFontMetricsResolver(
 ) : FontMetricsResolver {
 
     override fun resolve(request: FontMetricsRequest): RawFontMetrics {
-        val isLatin = request.role == FontRole.LatinText
+        val isLatin = request.role.usesLatinFace() // LatinVsCjkFaceSelection (shared rule)
         // Per-span family (rich text): measure the requested serif/mono face's OWN 字身框
         // so mixed fonts align by their ideographic box. Empty → the role default below.
         val familyTypeface = request.fontFamilies.firstOrNull()?.let {

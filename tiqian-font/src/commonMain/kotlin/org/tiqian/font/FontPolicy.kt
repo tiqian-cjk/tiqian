@@ -18,6 +18,22 @@ enum class FontRole {
     Unknown,
 }
 
+/**
+ * `LatinVsCjkFaceSelection` — the ONE rule shaping, metrics, and rendering must all
+ * share when picking the Latin vs CJK face. If they derive it independently they
+ * drift: a missing-glyph `.notdef` measured in the Latin face (≈0.65em box) but drawn
+ * in the CJK face (full-em box) overflows its slot and collides with the next cluster.
+ *
+ * Only real Latin text uses the Latin face. Symbol / Emoji / Unknown fall back to the
+ * CJK face, so e.g. a missing glyph renders as a full-em 字身框 豆腐 (consistent with
+ * CJK body) instead of a Latin half-width box — and measure == draw either way.
+ */
+fun FontRole.usesLatinFace(): Boolean = this == FontRole.LatinText
+
+/** Overload for callers that only hold the serialized role name (LayoutResult dumps). */
+fun fontRoleNameUsesLatinFace(roleName: String?): Boolean =
+    roleName?.let { name -> FontRole.entries.firstOrNull { it.name == name }?.usesLatinFace() } ?: false
+
 data class FontCandidate(
     val key: String,
     val family: String,

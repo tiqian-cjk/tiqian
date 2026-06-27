@@ -52,6 +52,7 @@ class ExplainableStubTextShaper : TextShaper {
                 id = glyphId.toUInt(),
                 clusterRange = input.range,
                 advance = glyphAdvance,
+                x = glyphAdvance * glyphId,
             )
         }
         val run = GlyphRun(

@@ -17,6 +17,7 @@ import org.tiqian.core.GlyphRun
 import org.tiqian.core.Rect
 import org.tiqian.core.ShapingDecisionInfo
 import org.tiqian.font.FontRole
+import org.tiqian.font.usesLatinFace
 import org.tiqian.shaping.ShapingInput
 import org.tiqian.shaping.ShapingResult
 import org.tiqian.shaping.ShapingSource
@@ -100,6 +101,7 @@ class SkiaTextShaper(
                 id = glyphIds[glyphIndex].toUShort().toUInt(),
                 clusterRange = input.range,
                 advance = max(0f, endX - startX),
+                x = startX,
                 bounds = inkBounds.getOrNull(glyphIndex)?.toGlyphLocalRectOrNull(),
                 haltAdvance = haltAdvance,
                 haltPlacementX = haltPlacementX,
@@ -203,12 +205,13 @@ class SystemSkiaFontResolver : SkiaFontResolver {
     override fun resolve(input: ShapingInput): Font {
         // Weight/italic/family (ADR 0030 B 档) select the styled typeface so the
         // SHAPED advances are the real bold/italic/serif ones; default
-        // (400, upright, role family) == before (golden-safe). Resolved through
-        // the SAME SkiaSystemTypefaces.typeface the renderer uses → no drift.
+        // (400, upright, role family) == before (golden-safe).
+        // `LatinVsCjkFaceSelection`: face picked by the SHARED FontRole rule so
+        // shaping, metrics, and the renderer never drift (a missing glyph shaped
+        // here in the Latin face but drawn in the CJK face used to overflow).
         val fontStyle = input.style.toSkiaFontStyle()
         val role = input.fontDecision.role
-        val isLatin = role == FontRole.LatinText || role == FontRole.Symbol ||
-            role == FontRole.Emoji || role == FontRole.Unknown
+        val isLatin = role.usesLatinFace()
         val requestedFamily = input.style.fontFamilies.firstOrNull()
             ?: input.fontDecision.candidate.family.takeUnless { it == input.fontDecision.candidate.key }
         val typeface = SkiaSystemTypefaces.typeface(isLatin, requestedFamily, fontStyle)

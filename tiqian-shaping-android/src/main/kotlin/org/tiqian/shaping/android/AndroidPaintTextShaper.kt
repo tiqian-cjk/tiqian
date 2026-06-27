@@ -9,6 +9,7 @@ import org.tiqian.core.Glyph
 import org.tiqian.core.GlyphRun
 import org.tiqian.core.Rect
 import org.tiqian.core.ShapingDecisionInfo
+import org.tiqian.font.usesLatinFace
 import org.tiqian.shaping.ShapingInput
 import org.tiqian.shaping.ShapingResult
 import org.tiqian.shaping.ShapingSource
@@ -83,6 +84,9 @@ class AndroidPaintTextShaper(
                 id = measured.glyphIds[glyphIndex].toUInt(),
                 clusterRange = input.range,
                 advance = max(0f, endX - startX),
+                x = startX,
+                y = measured.glyphYs[glyphIndex],
+                renderFontKey = measured.renderFontKeys[glyphIndex],
                 bounds = if (glyphCount == 1) singleGlyphBounds else null,
                 haltAdvance = haltMetrics?.first,
                 haltPlacementX = haltMetrics?.second,
@@ -125,6 +129,10 @@ class AndroidPaintTextShaper(
         val glyphIds: IntArray,
         /** Glyph x positions normalised to the cluster's pen origin. */
         val glyphXs: FloatArray,
+        /** Glyph y positions relative to the cluster baseline. */
+        val glyphYs: FloatArray,
+        /** Opaque Android Font keys for drawing these glyph ids later. */
+        val renderFontKeys: List<String?>,
     )
 
     /**
@@ -138,7 +146,7 @@ class AndroidPaintTextShaper(
         displayText: String,
         useHanContext: Boolean,
     ): MeasuredRun {
-        if (displayText.isEmpty()) return MeasuredRun(0f, IntArray(0), FloatArray(0))
+        if (displayText.isEmpty()) return MeasuredRun(0f, IntArray(0), FloatArray(0), FloatArray(0), emptyList())
 
         if (useHanContext) {
             val buffer = "中${displayText}中"
@@ -157,7 +165,11 @@ class AndroidPaintTextShaper(
                     paint.getRunAdvance(buffer, 0, buffer.length, 0, buffer.length, false, runEnd) - penOrigin
                 val ids = IntArray(displayText.length) { shaped.getGlyphId(runStart + it) }
                 val xs = FloatArray(displayText.length) { shaped.getGlyphX(runStart + it) - penOrigin }
-                return MeasuredRun(advance, ids, xs)
+                val ys = FloatArray(displayText.length) { shaped.getGlyphY(runStart + it) }
+                val fonts = List(displayText.length) { index ->
+                    AndroidPositionedGlyphFontRegistry.keyFor(shaped.getFont(runStart + index))
+                }
+                return MeasuredRun(advance, ids, xs, ys, fonts)
             }
         }
 
@@ -167,7 +179,11 @@ class AndroidPaintTextShaper(
             TextRunShaper.shapeTextRun(displayText, 0, displayText.length, 0, displayText.length, 0f, 0f, false, paint)
         val ids = IntArray(shaped.glyphCount()) { shaped.getGlyphId(it) }
         val xs = FloatArray(shaped.glyphCount()) { shaped.getGlyphX(it) }
-        return MeasuredRun(advance, ids, xs)
+        val ys = FloatArray(shaped.glyphCount()) { shaped.getGlyphY(it) }
+        val fonts = List(shaped.glyphCount()) { index ->
+            AndroidPositionedGlyphFontRegistry.keyFor(shaped.getFont(index))
+        }
+        return MeasuredRun(advance, ids, xs, ys, fonts)
     }
 
     /**
@@ -258,12 +274,13 @@ class SystemAndroidTypefaceResolver : AndroidTypefaceResolver {
         italic: Boolean,
     ): android.graphics.Typeface {
         val family = fontFamilies.firstOrNull()
-        val base = when (role) {
-            org.tiqian.font.FontRole.CjkText,
-            org.tiqian.font.FontRole.CjkPunctuation,
-            -> cjkTypefaceFor(family) ?: android.graphics.Typeface.DEFAULT
-
-            else -> latinTypefaceFor(family)
+        // LatinVsCjkFaceSelection (shared rule): only real Latin text uses the Latin
+        // face; Symbol/Emoji/Unknown fall back to CJK so a missing glyph is a full-em
+        // 字身框 豆腐 and measure==draw, matching the Skia/AWT resolvers.
+        val base = if (role.usesLatinFace()) {
+            latinTypefaceFor(family)
+        } else {
+            cjkTypefaceFor(family) ?: android.graphics.Typeface.DEFAULT
         }
         return Typeface.create(base, fontWeight.coerceIn(1, 1000), italic)
     }

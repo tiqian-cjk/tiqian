@@ -6,6 +6,7 @@ import org.tiqian.core.GlyphRun
 import org.tiqian.core.Rect
 import org.tiqian.core.ShapingDecisionInfo
 import org.tiqian.font.FontRole
+import org.tiqian.font.usesLatinFace
 import org.tiqian.shaping.ShapingInput
 import org.tiqian.shaping.ShapingResult
 import org.tiqian.shaping.ShapingSource
@@ -52,6 +53,8 @@ class AwtTextShaper(
                 id = glyphVector.getGlyphCode(glyphIndex).toUInt(),
                 clusterRange = input.range,
                 advance = max(0f, end.x.toFloat() - start.x.toFloat()),
+                x = start.x.toFloat(),
+                y = start.y.toFloat(),
                 bounds = glyphVector.getGlyphVisualBounds(glyphIndex).bounds2D.toGlyphLocalRectOrNull(
                     originX = start.x.toFloat(),
                 ),
@@ -118,18 +121,11 @@ class SystemAwtFontResolver : AwtFontResolver {
         return Font(family, Font.PLAIN, 1).deriveFont(input.style.fontSize)
     }
 
+    // LatinVsCjkFaceSelection (shared rule): only real Latin text uses the Latin
+    // family; Symbol/Emoji/Unknown fall back to CJK so measure==draw and a missing
+    // glyph is a full-em 字身框 豆腐, matching the Skia/Android resolvers.
     private fun FontRole.resolvedFamily(): String =
-        when (this) {
-            FontRole.CjkText,
-            FontRole.CjkPunctuation,
-            -> cjkFamily
-
-            FontRole.LatinText,
-            FontRole.Symbol,
-            FontRole.Emoji,
-            FontRole.Unknown,
-            -> latinFamily
-        }
+        if (usesLatinFace()) latinFamily else cjkFamily
 
     companion object {
         /** Ordered by preference; first match wins. */

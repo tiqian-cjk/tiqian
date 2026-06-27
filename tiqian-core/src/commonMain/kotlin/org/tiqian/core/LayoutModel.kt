@@ -26,7 +26,31 @@ data class GlyphRun(
 data class Glyph(
     val id: UInt,
     val clusterRange: TextRange,
+    /**
+     * The shaped glyph advance in font/shaper space. Layout-owned trailing
+     * space (autospace, justification, ruby/bopomofo avoidance, punctuation
+     * glue) lives on [Cluster.advance] and must not be folded back into glyph
+     * positions; exact glyph replay depends on preserving the shaper's own
+     * pair positioning.
+     */
     val advance: Float,
+    /**
+     * Glyph origin relative to its cluster's pen origin, in the same shaper
+     * space as [advance]. Frontends draw at `clusterDrawX + x`; they advance to
+     * the next cluster by [Cluster.advance], not by summing glyph advances.
+     */
+    val x: Float = 0f,
+    /**
+     * Glyph origin y relative to the cluster baseline. Horizontal text is
+     * normally 0; platform shapers may surface non-zero glyph placement.
+     */
+    val y: Float = 0f,
+    /**
+     * Opaque, process-local platform font key for backends that can draw by
+     * glyph id (for example Android Canvas.drawGlyphs). It is intentionally
+     * not interpreted by core/layout code.
+     */
+    val renderFontKey: String? = null,
     val bounds: Rect? = null,
     /**
      * The advance this glyph takes under OpenType `halt` (alternate
@@ -47,6 +71,12 @@ data class Glyph(
 
 data class LineBox(
     val range: TextRange,
+    /**
+     * Inclusive range of cluster indices owned by this line. Renderers must use this
+     * instead of re-deriving membership from [range]: repair passes such as PushIn,
+     * CarryPrevious, hanging punctuation, and hyphenation are cluster-level decisions.
+     */
+    val clusterRange: IntRange,
     val baseline: Float,
     val top: Float,
     val bottom: Float,

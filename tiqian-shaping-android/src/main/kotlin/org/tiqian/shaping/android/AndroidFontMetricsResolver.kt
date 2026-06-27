@@ -4,8 +4,8 @@ import android.text.TextPaint
 import org.tiqian.font.FontMetricSource
 import org.tiqian.font.FontMetricsRequest
 import org.tiqian.font.FontMetricsResolver
-import org.tiqian.font.FontRole
 import org.tiqian.font.RawFontMetrics
+import org.tiqian.font.usesLatinFace
 import java.util.Locale
 
 /**
@@ -33,17 +33,18 @@ class AndroidFontMetricsResolver(
             )
         }
         val metrics = paint.fontMetrics
+        // LatinVsCjkFaceSelection: anything drawn in the CJK face (incl. Symbol /
+        // Emoji / Unknown) gets the project's 字身框 fallback box, matching the Skia
+        // resolver — otherwise a missing-glyph line would inflate to hhea height.
+        val cjkBox = !request.role.usesLatinFace()
         val raw = RawFontMetrics(
             ascent = -metrics.ascent,
             descent = metrics.descent,
             leading = metrics.leading,
             source = FontMetricSource.GlyphSampling,
-            typoAscent = if (request.role.isCjkRole()) request.fontSize * 0.88f else null,
-            typoDescent = if (request.role.isCjkRole()) request.fontSize * 0.12f else null,
+            typoAscent = if (cjkBox) request.fontSize * 0.88f else null,
+            typoDescent = if (cjkBox) request.fontSize * 0.12f else null,
         )
         return raw
     }
-
-    private fun FontRole.isCjkRole(): Boolean =
-        this == FontRole.CjkText || this == FontRole.CjkPunctuation
 }
