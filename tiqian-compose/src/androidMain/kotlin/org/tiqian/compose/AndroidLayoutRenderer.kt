@@ -3,10 +3,12 @@ package org.tiqian.compose
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
+import android.os.Build
 import android.text.TextPaint
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import org.tiqian.core.Glyph
 import org.tiqian.core.Cluster
 import org.tiqian.core.ColorSpan
 import org.tiqian.core.DecorationKind
@@ -15,7 +17,9 @@ import org.tiqian.core.LineBox
 import org.tiqian.core.TextSpan
 import org.tiqian.core.TextStyle
 import org.tiqian.core.BopomofoGlyphRole
+import org.tiqian.core.positionedClusters
 import org.tiqian.font.FontRole
+import org.tiqian.shaping.android.AndroidPositionedGlyphFontRegistry
 import org.tiqian.shaping.android.AndroidTypefaceResolver
 import org.tiqian.shaping.android.SystemAndroidTypefaceResolver
 import java.util.Locale
@@ -50,11 +54,21 @@ private fun drawAndroidGlyphs(
         this.color = color
         textLocale = Locale.forLanguageTag(result.input.textStyle.locale)
     }
+    val glyphsByClusterRange = result.glyphRuns
+        .flatMap { it.glyphs }
+        .groupBy { it.clusterRange }
     result.forEachAndroidPositionedCluster(spans) { _, cluster, drawX, baselineY, run ->
         paint.color = colorSpans.lastOrNull { cluster.range.start >= it.start && cluster.range.start < it.end }?.argb ?: color
         paint.textSize = run.style.fontSize
         paint.typeface = typefaces.resolve(run.role, run.style.fontFamilies, run.style.fontWeight, run.style.italic)
         paint.fontFeatureSettings = null
+        val glyphs = glyphsByClusterRange[cluster.range].orEmpty()
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            drawPositionedGlyphs(canvas, glyphs, drawX, baselineY, paint)
+        ) {
+            return@forEachAndroidPositionedCluster
+        }
         drawContextShapedText(canvas, cluster.displayText, drawX, baselineY, run.role, paint)
     }
 
@@ -68,6 +82,38 @@ private fun drawAndroidGlyphs(
             drawContextShapedText(canvas, "-", line.indent + line.visualWidth, line.baseline, FontRole.LatinText, hyphenPaint)
         }
     }
+}
+
+private fun drawPositionedGlyphs(
+    canvas: android.graphics.Canvas,
+    glyphs: List<Glyph>,
+    originX: Float,
+    originY: Float,
+    paint: Paint,
+): Boolean {
+    if (glyphs.isEmpty()) return false
+    val fonts = glyphs.map { glyph ->
+        val key = glyph.renderFontKey ?: return false
+        AndroidPositionedGlyphFontRegistry.fontFor(key) ?: return false
+    }
+
+    var start = 0
+    while (start < glyphs.size) {
+        val font = fonts[start]
+        var end = start + 1
+        while (end < glyphs.size && fonts[end] === font) {
+            end += 1
+        }
+        val count = end - start
+        val ids = IntArray(count) { index -> glyphs[start + index].id.toInt() }
+        val positions = FloatArray(count * 2) { index ->
+            val glyph = glyphs[start + index / 2]
+            if (index % 2 == 0) originX + glyph.x else originY + glyph.y
+        }
+        canvas.drawGlyphs(ids, 0, positions, 0, count, font, paint)
+        start = end
+    }
+    return true
 }
 
 private fun drawAndroidDecorations(
@@ -194,19 +240,14 @@ private inline fun LayoutResult.forEachAndroidPositionedCluster(
     spans: List<TextSpan>,
     action: (line: LineBox, cluster: Cluster, drawX: Float, baselineY: Float, run: AndroidClusterRun) -> Unit,
 ) {
-    val autoSpaceGap = 0.25f * input.textStyle.fontSize
     val baseStyle = input.textStyle
     val emphasisRanges = input.decorations
         .filter { it.kind == DecorationKind.Emphasis }
         .map { it.range }
-    val leadingConsumed = debug.geometryDecisions
-        .filter { it.leadingGlueConsumed > 0f }
-        .associate { it.range to it.leadingGlueConsumed }
 
     for (line in lines) {
-        val lineClusters = clusters.filter { it.range.start >= line.range.start && it.range.end <= line.range.end }
-        var x = line.indent
-        for ((indexInLine, cluster) in lineClusters.withIndex()) {
+        for (positioned in positionedClusters(line)) {
+            val cluster = clusters[positioned.clusterIndex]
             val role = debug.fontDecisions.firstOrNull {
                 cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
             }?.role.toFontRole()
@@ -215,18 +256,15 @@ private inline fun LayoutResult.forEachAndroidPositionedCluster(
             val italic = (spanStyle?.italic ?: false) ||
                 (isLatin && emphasisRanges.any { cluster.range.start >= it.start && cluster.range.start < it.end })
             val style = (spanStyle ?: baseStyle).copy(italic = italic)
-            val hasLeadingGap = debug.autoSpaceDecisions.any { it.clusterRange == cluster.range && it.side == "leading" }
-            val leadingGap = if (hasLeadingGap && indexInLine != 0) autoSpaceGap else 0f
             if (cluster.displayText.isNotEmpty()) {
                 action(
                     line,
                     cluster,
-                    x + leadingGap - (leadingConsumed[cluster.range] ?: 0f),
+                    positioned.drawX,
                     line.baseline + cluster.baselineShift,
                     AndroidClusterRun(role, style),
                 )
             }
-            x += cluster.advance
         }
     }
 }

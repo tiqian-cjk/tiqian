@@ -1,5 +1,6 @@
 package org.tiqian.shaping.android
 
+import android.graphics.fonts.Font
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -9,8 +10,10 @@ import org.tiqian.font.FontCandidate
 import org.tiqian.font.FontDecision
 import org.tiqian.font.FontRole
 import org.tiqian.shaping.ShapingInput
+import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -86,6 +89,29 @@ class AndroidPaintTextShaperTest {
         assertTrue(decision.missingGlyphs > 0, "expected missing glyph report")
     }
 
+    @Test
+    fun positionedGlyphFontRegistryEvictsOldFontKeys() {
+        AndroidPositionedGlyphFontRegistry.clearForTesting()
+        try {
+            val fontSpec = testFontSpec()
+            val fonts = List(AndroidPositionedGlyphFontRegistry.maxRetainedFontCountForTesting + 2) {
+                fontSpec.buildFont()
+            }
+            val keys = fonts.map(AndroidPositionedGlyphFontRegistry::keyFor)
+
+            assertTrue(
+                AndroidPositionedGlyphFontRegistry.retainedFontCountForTesting() <=
+                    AndroidPositionedGlyphFontRegistry.maxRetainedFontCountForTesting,
+                "registry should stay bounded",
+            )
+            assertNull(AndroidPositionedGlyphFontRegistry.fontFor(keys.first()))
+            assertNotNull(AndroidPositionedGlyphFontRegistry.fontFor(keys.last()))
+            assertEquals(keys.last(), AndroidPositionedGlyphFontRegistry.keyFor(fonts.last()))
+        } finally {
+            AndroidPositionedGlyphFontRegistry.clearForTesting()
+        }
+    }
+
     private fun input(text: String, role: FontRole): ShapingInput =
         ShapingInput(
             text = text,
@@ -103,4 +129,20 @@ class AndroidPaintTextShaperTest {
             ),
             displayText = text,
         )
+
+    private data class FontSpec(val path: String, val ttcIndex: Int = 0) {
+        fun buildFont(): Font =
+            Font.Builder(File(path))
+                .setTtcIndex(ttcIndex)
+                .build()
+    }
+
+    private fun testFontSpec(): FontSpec =
+        listOf(
+            FontSpec("/system/fonts/Roboto-Regular.ttf"),
+            FontSpec("/system/fonts/NotoSans-Regular.ttf"),
+            FontSpec("/system/fonts/NotoSansCJK-Regular.ttc", ttcIndex = 2),
+            FontSpec("/system/fonts/NotoSansSC-Regular.otf"),
+        ).firstOrNull { File(it.path).exists() }
+            ?: error("No test font file found on this Android image.")
 }
