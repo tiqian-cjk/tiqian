@@ -12,9 +12,15 @@ import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.node.LayoutModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.SemanticsModifierNode
 import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.node.invalidateMeasurement
+import androidx.compose.ui.node.invalidateSemantics
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle as ComposeTextStyle
 import androidx.compose.ui.unit.Constraints
 import org.tiqian.clreq.ClreqProfile
 import org.tiqian.core.ColorSpan
@@ -55,12 +61,43 @@ fun CjkParagraph(
     val density = LocalDensity.current
     CjkParagraphImpl(
         text = text,
+        semanticsText = AnnotatedString(text),
         modifier = modifier,
         textStyle = textStyle.toCoreTextStyle(density),
         paragraphStyle = paragraphStyle.copy(
             lineHeight = textStyle.lineHeightPxOrNull(density) ?: paragraphStyle.lineHeight,
         ),
         color = textStyle.colorArgbOrNull() ?: DEFAULT_TEXT_COLOR,
+        measurer = measurer,
+        onTextLayout = onTextLayout,
+    )
+}
+
+/**
+ * Compose interop entry for migrating `Text(text, style = …)` call sites. The bridge lowers the
+ * subset Tiqian currently consumes; [AnnotatedString.cjkTextCompatibility] reports remaining
+ * semantic gaps for dogfood/tests. This composable never falls back to Compose Text internally.
+ */
+@Composable
+fun CjkParagraph(
+    text: String,
+    modifier: Modifier = Modifier,
+    style: ComposeTextStyle,
+    paragraphStyle: ParagraphStyle = ParagraphStyle(),
+    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
+    onTextLayout: (LayoutResult) -> Unit = {},
+) {
+    val density = LocalDensity.current
+    val cjkStyle = style.toCjkTextStyle()
+    CjkParagraphImpl(
+        text = text,
+        semanticsText = AnnotatedString(text),
+        modifier = modifier,
+        textStyle = cjkStyle.toCoreTextStyle(density),
+        paragraphStyle = paragraphStyle.copy(
+            lineHeight = cjkStyle.lineHeightPxOrNull(density) ?: paragraphStyle.lineHeight,
+        ),
+        color = cjkStyle.colorArgbOrNull() ?: DEFAULT_TEXT_COLOR,
         measurer = measurer,
         onTextLayout = onTextLayout,
     )
@@ -82,6 +119,7 @@ fun CjkParagraph(
 @Composable
 internal fun CjkParagraphImpl(
     text: String,
+    semanticsText: AnnotatedString = AnnotatedString(text),
     modifier: Modifier = Modifier,
     textStyle: TextStyle = TextStyle(),
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
@@ -101,7 +139,7 @@ internal fun CjkParagraphImpl(
     Box(
         modifier.then(
             CjkParagraphElement(
-                text, textStyle, paragraphStyle, color,
+                text, semanticsText, textStyle, paragraphStyle, color,
                 decorations, colorSpans, spans, rubySpans, measurer, onTextLayout,
             ),
         ),
@@ -111,6 +149,7 @@ internal fun CjkParagraphImpl(
 /** Backs [CjkParagraphImpl] — a measure+draw [Modifier.Node] that repaints on update. */
 private class CjkParagraphElement(
     private val text: String,
+    private val semanticsText: AnnotatedString,
     private val textStyle: TextStyle,
     private val paragraphStyle: ParagraphStyle,
     private val color: Int,
@@ -122,22 +161,25 @@ private class CjkParagraphElement(
     private val onTextLayout: (LayoutResult) -> Unit,
 ) : ModifierNodeElement<CjkParagraphNode>() {
     override fun create() = CjkParagraphNode(
-        text, textStyle, paragraphStyle, color, decorations, colorSpans, spans, rubySpans, measurer, onTextLayout,
+        text, semanticsText, textStyle, paragraphStyle, color,
+        decorations, colorSpans, spans, rubySpans, measurer, onTextLayout,
     )
 
     override fun update(node: CjkParagraphNode) = node.update(
-        text, textStyle, paragraphStyle, color, decorations, colorSpans, spans, rubySpans, measurer, onTextLayout,
+        text, semanticsText, textStyle, paragraphStyle, color,
+        decorations, colorSpans, spans, rubySpans, measurer, onTextLayout,
     )
 
     override fun equals(other: Any?): Boolean =
         other is CjkParagraphElement && text == other.text && textStyle == other.textStyle &&
-            paragraphStyle == other.paragraphStyle && color == other.color &&
+            semanticsText == other.semanticsText && paragraphStyle == other.paragraphStyle && color == other.color &&
             decorations == other.decorations && colorSpans == other.colorSpans &&
             spans == other.spans && rubySpans == other.rubySpans && measurer === other.measurer &&
             onTextLayout === other.onTextLayout
 
     override fun hashCode(): Int {
         var r = text.hashCode()
+        r = 31 * r + semanticsText.hashCode()
         r = 31 * r + textStyle.hashCode()
         r = 31 * r + paragraphStyle.hashCode()
         r = 31 * r + color
@@ -153,6 +195,7 @@ private class CjkParagraphElement(
 
 private class CjkParagraphNode(
     private var text: String,
+    private var semanticsText: AnnotatedString,
     private var textStyle: TextStyle,
     private var paragraphStyle: ParagraphStyle,
     private var color: Int,
@@ -162,12 +205,13 @@ private class CjkParagraphNode(
     private var rubySpans: List<RubySpan>,
     private var measurer: ParagraphMeasurer,
     private var onTextLayout: (LayoutResult) -> Unit,
-) : Modifier.Node(), LayoutModifierNode, DrawModifierNode {
+) : Modifier.Node(), LayoutModifierNode, DrawModifierNode, SemanticsModifierNode {
 
     private var result: LayoutResult? = null
 
     fun update(
         text: String,
+        semanticsText: AnnotatedString,
         textStyle: TextStyle,
         paragraphStyle: ParagraphStyle,
         color: Int,
@@ -179,6 +223,7 @@ private class CjkParagraphNode(
         onTextLayout: (LayoutResult) -> Unit,
     ) {
         this.text = text
+        this.semanticsText = semanticsText
         this.textStyle = textStyle
         this.paragraphStyle = paragraphStyle
         this.color = color
@@ -190,6 +235,11 @@ private class CjkParagraphNode(
         this.onTextLayout = onTextLayout
         invalidateMeasurement() // re-measure (size/result may change)
         invalidateDraw()        // AND repaint even when the new content is the same size
+        invalidateSemantics()   // expose the new source AnnotatedString to accessibility
+    }
+
+    override fun SemanticsPropertyReceiver.applySemantics() {
+        text = this@CjkParagraphNode.semanticsText
     }
 
     override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {

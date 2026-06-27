@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle as ComposeTextStyle
 import androidx.compose.ui.unit.dp
 import org.tiqian.core.Ic
 import org.tiqian.core.LayoutConstraints
@@ -108,6 +109,29 @@ fun CjkText(
 }
 
 /**
+ * Compose interop entry for document-style text. This keeps the CLREQ document model while letting
+ * existing `TextStyle` values cross the Tiqian boundary unchanged at call sites.
+ */
+@Composable
+fun CjkText(
+    blocks: List<CjkBlock>,
+    modifier: Modifier = Modifier,
+    style: ComposeTextStyle,
+    paragraphStyle: ParagraphStyle = ParagraphStyle(),
+    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
+    onParagraphLayout: (blockIndex: Int, itemIndex: Int?, result: LayoutResult) -> Unit = { _, _, _ -> },
+) {
+    CjkText(
+        blocks = blocks,
+        modifier = modifier,
+        textStyle = style.toCjkTextStyle(),
+        paragraphStyle = paragraphStyle,
+        measurer = measurer,
+        onParagraphLayout = onParagraphLayout,
+    )
+}
+
+/**
  * Convenience entry: `\n` separates paragraphs, a blank line becomes a 节
  * ([CjkBlock.Section]). [leadStyle] assigns the per-paragraph 段首缩排 style.
  * For mixed documents (dialogue 凸排, quote 段落缩排) build [CjkBlock]s directly.
@@ -124,6 +148,23 @@ fun CjkText(
 ) {
     val blocks = remember(text, leadStyle) { parseBlocks(text, leadStyle) }
     CjkText(blocks, modifier, textStyle, paragraphStyle, measurer, onParagraphLayout)
+}
+
+/**
+ * Compose interop counterpart to [CjkText] for plain source text.
+ */
+@Composable
+fun CjkText(
+    text: String,
+    modifier: Modifier = Modifier,
+    style: ComposeTextStyle,
+    paragraphStyle: ParagraphStyle = ParagraphStyle(),
+    leadStyle: ParagraphLeadStyle = ParagraphLeadStyle.AllIndent,
+    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
+    onParagraphLayout: (blockIndex: Int, itemIndex: Int?, result: LayoutResult) -> Unit = { _, _, _ -> },
+) {
+    val blocks = remember(text, leadStyle) { parseBlocks(text, leadStyle) }
+    CjkText(blocks, modifier, style, paragraphStyle, measurer, onParagraphLayout)
 }
 
 /** A block in a CJK document (CLREQ §6.2.1). */

@@ -5,6 +5,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle as ComposeTextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.GenericFontFamily
@@ -71,12 +72,50 @@ fun CjkParagraph(
     val coreStyle = textStyle.toCoreTextStyle(density)
     CjkParagraphImpl(
         text = text.text,
+        semanticsText = text,
         modifier = modifier,
         textStyle = coreStyle,
         paragraphStyle = paragraphStyle.copy(
             lineHeight = textStyle.lineHeightPxOrNull(density) ?: paragraphStyle.lineHeight,
         ),
         color = textStyle.colorArgbOrNull() ?: DEFAULT_TEXT_COLOR,
+        decorations = text.cjkDecorations(),
+        colorSpans = text.cjkColorSpans(),
+        spans = text.cjkStyleSpans(coreStyle, density),
+        rubySpans = text.cjkRubySpans(),
+        measurer = measurer,
+        onTextLayout = onTextLayout,
+    )
+}
+
+/**
+ * Compose interop entry for migrating from `Text(AnnotatedString, style = …)` without first
+ * projecting rich text into Tiqian's narrower style object. Pair with
+ * [AnnotatedString.cjkTextCompatibility] at renderer boundaries to expose Compose features Tiqian
+ * does not yet preserve. The input is still accepted; the report is a Tiqian work list, not a
+ * host-renderer switch.
+ */
+@Composable
+fun CjkParagraph(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    style: ComposeTextStyle,
+    paragraphStyle: ParagraphStyle = ParagraphStyle(),
+    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
+    onTextLayout: (LayoutResult) -> Unit = {},
+) {
+    val density = LocalDensity.current
+    val cjkStyle = style.toCjkTextStyle()
+    val coreStyle = cjkStyle.toCoreTextStyle(density)
+    CjkParagraphImpl(
+        text = text.text,
+        semanticsText = text,
+        modifier = modifier,
+        textStyle = coreStyle,
+        paragraphStyle = paragraphStyle.copy(
+            lineHeight = cjkStyle.lineHeightPxOrNull(density) ?: paragraphStyle.lineHeight,
+        ),
+        color = cjkStyle.colorArgbOrNull() ?: DEFAULT_TEXT_COLOR,
         decorations = text.cjkDecorations(),
         colorSpans = text.cjkColorSpans(),
         spans = text.cjkStyleSpans(coreStyle, density),
@@ -226,6 +265,31 @@ fun ParagraphMeasurer.measure(
         textStyle = core,
         paragraphStyle = paragraphStyle.copy(
             lineHeight = textStyle.lineHeightPxOrNull(density) ?: paragraphStyle.lineHeight,
+        ),
+        decorations = text.cjkDecorations(),
+        spans = text.cjkStyleSpans(core, density),
+        rubySpans = text.cjkRubySpans(),
+    )
+}
+
+/**
+ * Pre-layout counterpart to [CjkParagraph] with Compose [style].
+ */
+fun ParagraphMeasurer.measure(
+    text: AnnotatedString,
+    constraints: LayoutConstraints,
+    density: Density,
+    style: ComposeTextStyle,
+    paragraphStyle: ParagraphStyle = ParagraphStyle(),
+): LayoutResult {
+    val cjkStyle = style.toCjkTextStyle()
+    val core = cjkStyle.toCoreTextStyle(density)
+    return measure(
+        text = text.text,
+        constraints = constraints,
+        textStyle = core,
+        paragraphStyle = paragraphStyle.copy(
+            lineHeight = cjkStyle.lineHeightPxOrNull(density) ?: paragraphStyle.lineHeight,
         ),
         decorations = text.cjkDecorations(),
         spans = text.cjkStyleSpans(core, density),

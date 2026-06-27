@@ -108,7 +108,7 @@ private fun TiqianGalleryApp() {
         CjkText(
             blocks = listOf(
                 CjkBlock.Paragraph(
-                    "段落 gallery 使用 CjkText 的多段模型。首行缩进、整数行长、末行对齐和段内行距仍然来自同一个引擎；Android 只是给出真实字体测量与真实画布。",
+                    "段落 gallery 使用 CjkText 的多段模型。首行缩进、整数行长、末行对齐和段内行距仍然来自同一个引擎——Android 只是给出真实字体测量与真实画布。",
                 ),
                 CjkBlock.List.ofStrings(
                     items = listOf(
