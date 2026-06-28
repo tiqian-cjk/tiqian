@@ -206,6 +206,36 @@ object EarlyLayoutFixtures {
             firstLineIndentEm = null,
         ),
         LayoutFixture(
+            id = "mandatory-single-newline",
+            text = "第一行\n第二行",
+            constraints = LayoutConstraints(maxWidth = 160f),
+            notes = "ADR 0037: a single source newline is a mandatory break, zero-width and unshaped.",
+        ),
+        LayoutFixture(
+            id = "mandatory-blank-lines",
+            text = "甲\n\n乙\n",
+            constraints = LayoutConstraints(maxWidth = 160f),
+            notes = "ADR 0037: consecutive and trailing mandatory breaks preserve blank lines.",
+        ),
+        LayoutFixture(
+            id = "mandatory-leading-trailing-newline",
+            text = "\n开头和结尾\n",
+            constraints = LayoutConstraints(maxWidth = 160f),
+            notes = "ADR 0037: leading and trailing mandatory breaks produce visible empty lines.",
+        ),
+        LayoutFixture(
+            id = "mandatory-crlf",
+            text = "甲\r\n乙",
+            constraints = LayoutConstraints(maxWidth = 160f),
+            notes = "ADR 0037: CRLF is one mandatory break cluster, not two blank lines.",
+        ),
+        LayoutFixture(
+            id = "mandatory-wraps-long-line",
+            text = "中文中文中文中文中文\n尾行",
+            constraints = LayoutConstraints(maxWidth = 64f),
+            notes = "ADR 0037: long source lines still auto-wrap before the mandatory break; mandatory-break lines are not justified.",
+        ),
+        LayoutFixture(
             id = "indent-opening-quote",
             text = "“好咖啡要趁热喝。”他说完便把杯子推了过来，让大家依次尝一口。",
             constraints = LayoutConstraints(maxWidth = 192f),

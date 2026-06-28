@@ -39,9 +39,11 @@ import org.tiqian.core.LayoutResult
 import org.tiqian.core.LineBox
 import org.tiqian.core.LineDebugInfo
 import org.tiqian.core.LineDecisionInfo
+import org.tiqian.core.LineEndReason
 import org.tiqian.core.LineRepairAllocationInfo
 import org.tiqian.core.LineRepairCandidateInfo
 import org.tiqian.core.LineRepairDecisionInfo
+import org.tiqian.core.MandatoryBreakDecisionInfo
 import org.tiqian.core.MetricDecisionInfo
 import org.tiqian.core.PunctuationDecisionInfo
 import org.tiqian.core.Rect
@@ -74,6 +76,7 @@ import org.tiqian.font.RawFontMetrics
 import org.tiqian.font.ScriptAwareFontMetricsNormalizer
 import org.tiqian.font.StubFontMetricsResolver
 import org.tiqian.linebreak.Hyphenator
+import org.tiqian.linebreak.isMandatoryBreakCodePoint
 import org.tiqian.linebreak.NoHyphenator
 import org.tiqian.linebreak.LineWidthHyphenator
 import org.tiqian.shaping.ExplainableStubTextShaper
@@ -204,7 +207,8 @@ class ExplainableStubParagraphLayoutEngine(
         }
 
         val clusterRanges = clusterRoleRanges(text, effectiveClassifier, context, clreqProfile, spanBoundaries)
-        val fontDecisions = clusterRanges.map { resolvedRange ->
+        val shapeableRanges = clusterRanges.filterNot { it.mandatoryBreak }
+        val fontDecisions = shapeableRanges.map { resolvedRange ->
             fallbackResolver.resolve(
                 text = text,
                 range = resolvedRange.range,
@@ -214,6 +218,9 @@ class ExplainableStubParagraphLayoutEngine(
                     role = resolvedRange.role,
                 ),
             )
+        }
+        val fontDecisionByRange = shapeableRanges.zip(fontDecisions).associate { (resolved, decision) ->
+            resolved.range to decision
         }
 
         // SubstitutionRollbackOnMissingGlyph: a CLREQ display substitution
@@ -337,7 +344,11 @@ class ExplainableStubParagraphLayoutEngine(
                 h - bounds.last { it < h } >= 2 && bounds.first { it > h } - h >= 2
             }.map { wordRange.start + it }
         }
-        val shapingResults = fontDecisions.flatMap { decision ->
+        val shapingResults = clusterRanges.flatMap { resolvedRange ->
+            if (resolvedRange.mandatoryBreak) {
+                return@flatMap listOf(mandatoryBreakShapingResult(text, resolvedRange.range))
+            }
+            val decision = fontDecisionByRange.getValue(resolvedRange.range)
             decision.shapingSegments(text).flatMap { segmentRange ->
                 val shaped = shapeSegment(decision, segmentRange)
                 val word = shaped.clusters.singleOrNull()
@@ -404,7 +415,18 @@ class ExplainableStubParagraphLayoutEngine(
         val naturalClusters = autoSpaceResult.clusters
         val autoSpaceDecisions = autoSpaceResult.decisions
         val clusterRoles = naturalClusters.map { cluster ->
-            fontDecisions.first { cluster.range.isInside(it.range) }.role
+            fontDecisions.firstOrNull { cluster.range.isInside(it.range) }?.role ?: FontRole.Unknown
+        }
+        val mandatoryBreakClusters = naturalClusters.indices
+            .filterTo(mutableSetOf()) { idx -> naturalClusters[idx].isMandatoryBreakCluster() }
+        val mandatoryBreakDecisions = naturalClusters.mapIndexedNotNull { idx, cluster ->
+            if (!cluster.isMandatoryBreakCluster()) return@mapIndexedNotNull null
+            MandatoryBreakDecisionInfo(
+                range = cluster.range,
+                sourceText = cluster.text,
+                breakAfterClusterIndex = idx,
+                reason = "MandatoryBreakNoShape",
+            )
         }
 
         // Punctuation atoms are a CJK-text concern: a LatinText cluster's ASCII
@@ -824,6 +846,7 @@ class ExplainableStubParagraphLayoutEngine(
                     LineAdjustmentStrategy.PushOutFirst -> 0.5f
                     LineAdjustmentStrategy.PushOutOnly -> 0f
                 },
+                hardBreakAfterClusters = mandatoryBreakClusters,
             )
         }
         val pushInAllocations = lineSolution.lines
@@ -856,11 +879,14 @@ class ExplainableStubParagraphLayoutEngine(
         // the edge. Augments the PushIn consume maps so the geometry applies both.
         fun lineHyphenAdvanceAt(lineIndex: Int): Float {
             if (hyphenOffsets.isEmpty() || lineIndex >= lineSolution.lines.lastIndex) return 0f
-            val nextFirst = lineSolution.lines[lineIndex + 1].clusterRange.first
+            val next = lineSolution.lines[lineIndex + 1]
+            if (next.clusterRange.isEmptyClusterRange()) return 0f
+            val nextFirst = next.clusterRange.first
             return if (naturalClusters[nextFirst].range.start in hyphenOffsets) hyphenAdvance else 0f
         }
         if (hyphenOffsets.isNotEmpty()) {
             lineSolution.lines.forEachIndexed { lineIndex, line ->
+                if (line.clusterRange.isEmptyClusterRange()) return@forEachIndexed
                 val hyphen = lineHyphenAdvanceAt(lineIndex)
                 if (hyphen <= 0f) return@forEachIndexed
                 val lineLimit = if (line.clusterRange.first == 0) measure - firstLineIndent else measure - blockIndent
@@ -909,6 +935,7 @@ class ExplainableStubParagraphLayoutEngine(
         val autoSpaceEdgeTrims = HashMap<Int, Float>()
         val autoSpaceEdgeDecisions = mutableListOf<LineEdgeTrimDecisionInfo>()
         lineSolution.lines.forEach { line ->
+            if (line.clusterRange.isEmptyClusterRange()) return@forEach
             fun trimEdge(clusterIdx: Int, side: String) {
                 val decision = autoSpaceDecisions.firstOrNull {
                     it.clusterRange == naturalClusters[clusterIdx].range && it.side == side
@@ -982,7 +1009,7 @@ class ExplainableStubParagraphLayoutEngine(
         // is positioned by ParagraphStyle.lastLineAlignment instead.
         val justificationPlans: List<JustificationPlan?> = lineSolution.lines.mapIndexed { lineIndex, lineCandidate ->
             val isLast = lineIndex == lineSolution.lines.lastIndex
-            if (isLast) {
+            if (isLast || lineCandidate.clusterRange.isEmptyClusterRange() || lineCandidate.endReason != LineEndReason.AutoWrap) {
                 null
             } else {
                 // A hung mark sits beyond the measure: justify fills the
@@ -1027,7 +1054,7 @@ class ExplainableStubParagraphLayoutEngine(
         }
         val geometryDecisions = finalGeometry.toDecisionInfo()
 
-        val glyphRuns = finalClusters.groupAdjacentBy { it.fontKey }.map { runClusters ->
+        val glyphRuns = finalClusters.renderableGlyphRunClusters().map { runClusters ->
             GlyphRun(
                 range = TextRange(runClusters.first().range.start, runClusters.last().range.end),
                 fontKey = runClusters.first().fontKey,
@@ -1073,7 +1100,13 @@ class ExplainableStubParagraphLayoutEngine(
             val visualWidth = lineCandidate.clusterRange
                 .sumOf { finalClusters[it].advance.toDouble() }
                 .toFloat()
-            val baseIndent = if (lineCandidate.clusterRange.first == 0) firstLineIndent else blockIndent
+            val hasDrawableContent = !lineCandidate.clusterRange.isEmptyClusterRange() &&
+                lineCandidate.clusterRange.any { finalClusters[it].displayText.isNotEmpty() }
+            val baseIndent = when {
+                !hasDrawableContent -> 0f
+                lineCandidate.clusterRange.first == 0 -> firstLineIndent
+                else -> blockIndent
+            }
             // LastLineAlignment: the last line is the paragraph's only
             // alignment degree of freedom (CLREQ 双齐 baseline). Center/End
             // express as an extra start-edge inset within the line's usable
@@ -1085,7 +1118,7 @@ class ExplainableStubParagraphLayoutEngine(
             // measure above; renderers draw it at indent + visualWidth).
             val lineHyphenAdvance = lineHyphenAdvanceAt(lineIndex)
             val limit = measure - baseIndent
-            val alignmentInset = if (!isLast) {
+            val alignmentInset = if (!isLast || lineCandidate.endReason != LineEndReason.ParagraphEnd) {
                 0f
             } else {
                 when (input.paragraphStyle.lastLineAlignment) {
@@ -1106,11 +1139,17 @@ class ExplainableStubParagraphLayoutEngine(
                 // GridBodyAlignment: the whole body shifts by the container
                 // slack offset; per-line indent (段首缩进 + 末行对齐) stacks on top.
                 indent = gridBodyOffset + baseIndent + alignmentInset,
+                endReason = lineCandidate.endReason,
                 hyphenAdvance = lineHyphenAdvance,
                 debug = LineDebugInfo(
                     repair = lineCandidate.repair?.let { "${it::class.simpleName}:${it.reason}" },
                     notes = listOf(
-                        "line:${lineIndex}:clusters=${lineCandidate.clusterRange.first}-${lineCandidate.clusterRange.last}",
+                        if (lineCandidate.clusterRange.isEmptyClusterRange()) {
+                            "line:${lineIndex}:clusters=empty"
+                        } else {
+                            "line:${lineIndex}:clusters=${lineCandidate.clusterRange.first}-${lineCandidate.clusterRange.last}"
+                        },
+                        "end:${lineCandidate.endReason}",
                         "natural=${lineCandidate.naturalWidth},adjusted=${lineCandidate.adjustedWidth},visual=$visualWidth",
                     ),
                 ),
@@ -1169,7 +1208,7 @@ class ExplainableStubParagraphLayoutEngine(
         )
 
         val widestLine = lines.maxOfOrNull { it.indent + it.visualWidth + it.hyphenAdvance } ?: 0f
-        val totalHeight = lines.lastOrNull()?.bottom ?: baseLineMetrics.height
+        val totalHeight = lines.lastOrNull()?.bottom ?: if (text.isEmpty()) 0f else baseLineMetrics.height
         val resultWidth = widestLine.coerceAtMost(input.constraints.maxWidth)
 
         return LayoutResult(
@@ -1263,6 +1302,7 @@ class ExplainableStubParagraphLayoutEngine(
                         repairCandidates = candidate.repairCandidates.map { it.toDecisionInfo(clusters) },
                         notes = listOf(
                             "index:$lineIndex",
+                            "end:${line.endReason}",
                             "natural:${line.naturalWidth}",
                             "adjusted:${line.adjustedWidth}",
                             "visual:${line.visualWidth}",
@@ -1296,6 +1336,7 @@ class ExplainableStubParagraphLayoutEngine(
                 decorationSegments = decorationSegments,
                 rubyDecisions = rubyDecisions,
                 bopomofoDecisions = bopomofoDecisions,
+                mandatoryBreakDecisions = mandatoryBreakDecisions,
                 lineSpacingDecision = lineSpacingDecision,
                 kinsokuDecision = kinsokuDecision,
                 lineLengthGridDecision = lineLengthGridDecision,
@@ -1556,6 +1597,22 @@ class ExplainableStubParagraphLayoutEngine(
             val codePoint = text.codePointAtCompat(index)
             val charCount = codePoint.charCount()
             val start = index
+            if (codePoint.isMandatoryBreakCodePointAt(text, index)) {
+                val end = if (codePoint == 0x000D && index + 1 < text.length && text[index + 1] == '\n') {
+                    index + 2
+                } else {
+                    index + charCount
+                }
+                ranges.add(
+                    ResolvedClusterRange(
+                        range = TextRange(start, end),
+                        role = FontRole.Unknown,
+                        mandatoryBreak = true,
+                    ),
+                )
+                index = end
+                continue
+            }
             val firstRange = TextRange(start, start + charCount)
             val role = classifier.classify(text, firstRange, context)
 
@@ -1583,6 +1640,10 @@ class ExplainableStubParagraphLayoutEngine(
         return ranges
     }
 
+    private fun Int.isMandatoryBreakCodePointAt(text: String, index: Int): Boolean =
+        isMandatoryBreakCodePoint(this) &&
+            !(this == 0x000A && index > 0 && text[index - 1] == '\r')
+
     private fun String.codePointAtCompat(index: Int): Int {
         val high = this[index].code
         if (high !in 0xD800..0xDBFF || index + 1 >= length) return high
@@ -1595,6 +1656,25 @@ class ExplainableStubParagraphLayoutEngine(
 
     private fun Int.charCount(): Int =
         if (this > 0xFFFF) 2 else 1
+
+    private fun mandatoryBreakShapingResult(text: String, range: TextRange): ShapingResult {
+        val sourceText = text.substring(range.start, range.end)
+        val cluster = Cluster(
+            range = range,
+            text = sourceText,
+            displayText = "",
+            fontKey = MANDATORY_BREAK_FONT_KEY,
+            advance = 0f,
+        )
+        return ShapingResult(
+            clusters = listOf(cluster),
+            glyphRuns = emptyList(),
+            decisions = emptyList(),
+        )
+    }
+
+    private fun Cluster.isMandatoryBreakCluster(): Boolean =
+        fontKey == MANDATORY_BREAK_FONT_KEY && displayText.isEmpty()
 
     private fun Cluster.punctuationAtoms(
         em: Float,
@@ -2097,9 +2177,9 @@ class ExplainableStubParagraphLayoutEngine(
         rubyBand: Float = 0f,
     ): ResolvedLineMetrics {
         if (isEmpty()) {
-            val height = explicitLineHeight ?: 0f
+            val height = explicitLineHeight ?: defaultLineHeight
             return ResolvedLineMetrics(
-                baseline = 0f,
+                baseline = height * 0.75f,
                 height = height,
             )
         }
@@ -2131,20 +2211,22 @@ class ExplainableStubParagraphLayoutEngine(
         )
     }
 
-    private inline fun <T, K> List<T>.groupAdjacentBy(keySelector: (T) -> K): List<List<T>> {
+    private fun List<Cluster>.renderableGlyphRunClusters(): List<List<Cluster>> =
+        filter { it.displayText.isNotEmpty() }.groupAdjacentBy { previous, current ->
+            previous.fontKey == current.fontKey && previous.range.end == current.range.start
+        }
+
+    private inline fun <T> List<T>.groupAdjacentBy(sameGroup: (previous: T, current: T) -> Boolean): List<List<T>> {
         if (isEmpty()) return emptyList()
 
         val groups = mutableListOf<MutableList<T>>()
-        var currentKey = keySelector(first())
         var currentGroup = mutableListOf(first())
 
         for (item in drop(1)) {
-            val key = keySelector(item)
-            if (key == currentKey) {
+            if (sameGroup(currentGroup.last(), item)) {
                 currentGroup.add(item)
             } else {
                 groups.add(currentGroup)
-                currentKey = key
                 currentGroup = mutableListOf(item)
             }
         }
@@ -2298,6 +2380,7 @@ private data class PunctuationGeometryLedger(
         val leadingConsumptionByCluster = HashMap<Int, Float>()
         val trailingConsumptionByCluster = HashMap<Int, Float>()
         lines.forEach { line ->
+            if (line.clusterRange.isEmptyClusterRange()) return@forEach
             val lastIdx = line.clusterRange.last
             // 宽松风格 (AllowFullWidth): the unconditional line-end half-width
             // trim is skipped; the blank was only available as on-demand
@@ -2421,6 +2504,7 @@ private data class PunctuationClusterGeometry(
 private data class ResolvedClusterRange(
     val range: TextRange,
     val role: FontRole,
+    val mandatoryBreak: Boolean = false,
 )
 
 private data class GlueBudget(
@@ -2470,6 +2554,7 @@ private const val RUBY_FONT_EM = 0.5f
 private const val RUBY_FONT_WEIGHT_BOOST = 100
 /** `BopomofoLegibilityWeightBoost`: 注音 ㄅㄆㄇ 更小，默认比基文重 300. */
 private const val BOPOMOFO_FONT_WEIGHT_BOOST = 300
+private const val MANDATORY_BREAK_FONT_KEY = "mandatory-break"
 /**
  * 避让 最小间距 (CLREQ §罗马拼音「相邻注文的间距不应小于西文词间空格」): one 注文
  * word space ≈ 1/4 of the 注文 em. Measured in 注文 units, NOT base 字宽.

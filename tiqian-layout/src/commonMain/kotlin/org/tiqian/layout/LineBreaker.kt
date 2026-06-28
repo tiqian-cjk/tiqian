@@ -1,6 +1,7 @@
 package org.tiqian.layout
 
 import org.tiqian.core.Cluster
+import org.tiqian.core.LineEndReason
 import org.tiqian.core.TextRange
 
 interface LineBreaker {
@@ -80,6 +81,13 @@ interface LineBreaker {
         lineAdjustmentPushIn: Boolean = false,
         /** `Ws/Wc` — how much cheaper 压缩 is than 拉伸 (＞1 = 先挤压). See [applyFillPushIn]. */
         lineAdjustmentCompressBias: Float = 1f,
+        /**
+         * Cluster indices whose line must end immediately after that cluster
+         * (ADR 0037 mandatory breaks). These boundaries are source-authored:
+         * line breaking, kinsoku repair, fill PushIn, and justification must
+         * not cross them.
+         */
+        hardBreakAfterClusters: Set<Int> = emptySet(),
     ): LineSolution
 }
 
@@ -237,6 +245,7 @@ class GreedyLineBreaker(
         sinoWesternStretchCap: Float,
         lineAdjustmentPushIn: Boolean,
         lineAdjustmentCompressBias: Float,
+        hardBreakAfterClusters: Set<Int>,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -248,6 +257,7 @@ class GreedyLineBreaker(
             firstLineIndent, forbiddenLineEndClusters,
             hyphenBreakClusters, cjkInterCharBoundaries, maxCjkStretchPerGap,
             sinoWesternBoundaries, sinoWesternStretchCap,
+            hardBreakAfterClusters,
         )
         val repaired = applyKinsokuRepairs(
             initial = greedy,
@@ -283,6 +293,7 @@ class GreedyLineBreaker(
         maxCjkStretchPerGap: Float,
         sinoWesternBoundaries: Set<Int>,
         sinoWesternStretchCap: Float,
+        hardBreakAfterClusters: Set<Int>,
     ): List<LineCandidate> {
         val lines = mutableListOf<LineCandidate>()
         var lineStart = 0
@@ -312,15 +323,34 @@ class GreedyLineBreaker(
             } else {
                 adjustedAccum = nextAdjusted
                 naturalAccum += naturalClusters[i].advance
+                if (i in hardBreakAfterClusters) {
+                    lines += rebuildLine(
+                        clusterRange = lineStart..i,
+                        naturalClusters = naturalClusters,
+                        adjustedClusters = adjustedClusters,
+                        endReason = LineEndReason.MandatoryBreak,
+                    )
+                    lineStart = i + 1
+                    adjustedAccum = 0f
+                    naturalAccum = 0f
+                }
                 i += 1
             }
         }
 
-        lines += rebuildLine(
-            clusterRange = lineStart..adjustedClusters.lastIndex,
-            naturalClusters = naturalClusters,
-            adjustedClusters = adjustedClusters,
-        )
+        if (lineStart < adjustedClusters.size) {
+            lines += rebuildLine(
+                clusterRange = lineStart..adjustedClusters.lastIndex,
+                naturalClusters = naturalClusters,
+                adjustedClusters = adjustedClusters,
+                endReason = LineEndReason.ParagraphEnd,
+            )
+        } else if (adjustedClusters.lastIndex in hardBreakAfterClusters) {
+            lines += emptyLineCandidate(
+                sourceOffset = adjustedClusters.last().range.end,
+                endReason = LineEndReason.ParagraphEnd,
+            )
+        }
         return lines
     }
 
@@ -397,6 +427,7 @@ class LookaheadLineBreaker(
         sinoWesternStretchCap: Float,
         lineAdjustmentPushIn: Boolean,
         lineAdjustmentCompressBias: Float,
+        hardBreakAfterClusters: Set<Int>,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -408,6 +439,8 @@ class LookaheadLineBreaker(
         val committed = mutableListOf<LineCandidate>()
         var lineStart = 0
         while (lineStart < adjustedClusters.size) {
+            val mandatoryEnd = hardBreakAfterClusters.filter { it >= lineStart }.minOrNull()
+            val segmentEndExclusive = mandatoryEnd?.plus(1) ?: adjustedClusters.size
             // Line-end retreat is applied at commit (below), not here, so the
             // chosen break's pre-retreat position is known and CarryNext can
             // be labelled. decideHyphenBreak makes the greedy baseline obey the
@@ -419,6 +452,7 @@ class LookaheadLineBreaker(
                         adjustedClusters,
                         lineStart,
                         lineLimit(maxWidth, firstLineIndent, lineStart),
+                        endExclusive = segmentEndExclusive,
                     ),
                     adjustedClusters = adjustedClusters,
                     lineLimit = lineLimit(maxWidth, firstLineIndent, lineStart),
@@ -431,11 +465,28 @@ class LookaheadLineBreaker(
                 lineStart = lineStart,
                 unbreakableRanges = unbreakableRanges,
             )
-            if (greedyEnd >= adjustedClusters.size) {
+            if (greedyEnd >= segmentEndExclusive) {
+                if (mandatoryEnd != null) {
+                    committed += rebuildLine(
+                        lineStart..mandatoryEnd,
+                        naturalClusters,
+                        adjustedClusters,
+                        endReason = LineEndReason.MandatoryBreak,
+                    )
+                    lineStart = mandatoryEnd + 1
+                    if (lineStart == adjustedClusters.size) {
+                        committed += emptyLineCandidate(
+                            sourceOffset = adjustedClusters.last().range.end,
+                            endReason = LineEndReason.ParagraphEnd,
+                        )
+                    }
+                    continue
+                }
                 committed += rebuildLine(
                     lineStart..adjustedClusters.lastIndex,
                     naturalClusters,
                     adjustedClusters,
+                    endReason = LineEndReason.ParagraphEnd,
                 )
                 break
             }
@@ -446,6 +497,7 @@ class LookaheadLineBreaker(
             // Breaks inside an unbreakable span are never candidates.
             val candidates = ((greedyEnd - window)..greedyEnd)
                 .filter { it in (lineStart + 1)..adjustedClusters.size }
+                .filter { it <= segmentEndExclusive }
                 .filter { e -> unbreakableRanges.none { e > it.first && e <= it.last } }
                 .distinct()
                 .ifEmpty { listOf(greedyEnd) }
@@ -468,6 +520,7 @@ class LookaheadLineBreaker(
                     maxCjkStretchPerGap = maxCjkStretchPerGap,
                     sinoWesternBoundaries = sinoWesternBoundaries,
                     sinoWesternStretchCap = sinoWesternStretchCap,
+                    segmentEndExclusive = segmentEndExclusive,
                 )
                 if (score < bestScore) {
                     bestScore = score
@@ -520,6 +573,7 @@ class LookaheadLineBreaker(
         maxCjkStretchPerGap: Float,
         sinoWesternBoundaries: Set<Int>,
         sinoWesternStretchCap: Float,
+        segmentEndExclusive: Int = adjusted.size,
     ): Float {
         val firstLine = rebuildLine(s..(e - 1), natural, adjusted)
         val future = rawGreedyLinesFrom(
@@ -532,6 +586,7 @@ class LookaheadLineBreaker(
             maxCjkStretchPerGap = maxCjkStretchPerGap,
             sinoWesternBoundaries = sinoWesternBoundaries,
             sinoWesternStretchCap = sinoWesternStretchCap,
+            endExclusive = segmentEndExclusive,
         )
         // Apply kinsoku once across [firstLine] + future so both splice
         // conflicts and future-line conflicts are scored with the same PushIn
@@ -570,15 +625,16 @@ class LookaheadLineBreaker(
         maxCjkStretchPerGap: Float,
         sinoWesternBoundaries: Set<Int>,
         sinoWesternStretchCap: Float,
+        endExclusive: Int = adjusted.size,
     ): List<LineCandidate> {
-        if (start >= adjusted.size) return emptyList()
+        if (start >= endExclusive) return emptyList()
 
         val lines = mutableListOf<LineCandidate>()
         var lineStart = start
         var adjustedAccum = 0f
 
         var i = start
-        while (i < adjusted.size) {
+        while (i < endExclusive) {
             val nextAdjusted = adjustedAccum + adjusted[i].advance
             val overflows = nextAdjusted > maxWidth && i > lineStart
             if (overflows) {
@@ -602,9 +658,10 @@ class LookaheadLineBreaker(
         }
 
         lines += rebuildLine(
-            clusterRange = lineStart..adjusted.lastIndex,
+            clusterRange = lineStart..(endExclusive - 1),
             naturalClusters = natural,
             adjustedClusters = adjusted,
+            endReason = LineEndReason.ParagraphEnd,
         )
         return lines
     }
@@ -644,6 +701,11 @@ internal fun applyKinsokuRepairs(
     while (i < mutable.size) {
         val curr = mutable[i]
         val firstIndex = curr.clusterRange.first
+        val prev = mutable[i - 1]
+        if (prev.endReason == LineEndReason.MandatoryBreak || curr.clusterRange.isEmptyClusterRange()) {
+            i += 1
+            continue
+        }
         val firstCluster = adjustedClusters[firstIndex]
         // KinsokuLevel: the engine resolves the forbidden set from the
         // profile level; standalone breaker use falls back to the rule.
@@ -654,7 +716,6 @@ internal fun applyKinsokuRepairs(
             continue
         }
 
-        val prev = mutable[i - 1]
         val repairCandidates = mutableListOf<RepairCandidate>()
         val pushIn = tryPushIn(
             prev = prev,
@@ -712,6 +773,7 @@ internal fun applyKinsokuRepairs(
                 ),
                 repairCandidates = prev.repairCandidates + pushIn.candidate + hangCandidate,
                 hangingClusterIndex = offenderIndex,
+                endReason = if (offenderIndex == curr.clusterRange.last) curr.endReason else prev.endReason,
             )
             if (offenderIndex == curr.clusterRange.last) {
                 mutable.removeAt(i)
@@ -720,6 +782,7 @@ internal fun applyKinsokuRepairs(
                     (offenderIndex + 1)..curr.clusterRange.last,
                     naturalClusters,
                     adjustedClusters,
+                    endReason = curr.endReason,
                 )
                 continue
             }
@@ -792,7 +855,12 @@ internal fun applyKinsokuRepairs(
         }
         val newPrevRange = prev.clusterRange.first..(carriedIndex - 1)
         val newCurrRange = carriedIndex..curr.clusterRange.last
-        val carriedCurrent = rebuildLine(newCurrRange, naturalClusters, adjustedClusters)
+        val carriedCurrent = rebuildLine(
+            newCurrRange,
+            naturalClusters,
+            adjustedClusters,
+            endReason = curr.endReason,
+        )
         if (carriedCurrent.adjustedWidth > maxWidth) {
             // CLREQ 推出 may not overflow maxWidth — that would be effectively
             // hanging punctuation, which is opt-in per ADR 0006. When the
@@ -836,7 +904,12 @@ internal fun applyKinsokuRepairs(
             accepted = true,
             carriedClusterIndex = carriedIndex,
         )
-        mutable[i - 1] = rebuildLine(newPrevRange, naturalClusters, adjustedClusters)
+        mutable[i - 1] = rebuildLine(
+            newPrevRange,
+            naturalClusters,
+            adjustedClusters,
+            endReason = prev.endReason,
+        )
         mutable[i] = carriedCurrent.copy(
             repair = RepairOption.CarryPrevious(
                 penalty = carryPreviousPenalty,
@@ -953,6 +1026,7 @@ private fun tryPushIn(
     )
     val repairedPrevious = expanded.copy(
         adjustedWidth = expanded.adjustedWidth - shrink,
+        endReason = if (offenderIndex == curr.clusterRange.last) curr.endReason else prev.endReason,
         repair = RepairOption.PushIn(
             penalty = pushInPenalty,
             reason = if (shrink > 0f) {
@@ -973,7 +1047,12 @@ private fun tryPushIn(
     val repairedCurrent = if (offenderIndex == curr.clusterRange.last) {
         null
     } else {
-        rebuildLine((offenderIndex + 1)..curr.clusterRange.last, naturalClusters, adjustedClusters)
+        rebuildLine(
+            (offenderIndex + 1)..curr.clusterRange.last,
+            naturalClusters,
+            adjustedClusters,
+            endReason = curr.endReason,
+        )
     }
     return PushInResult(repairedPrevious, repairedCurrent, candidate)
 }
@@ -1015,7 +1094,7 @@ internal fun applyFillPushIn(
     while (i < out.size - 1) {
         val prev = out[i]
         val curr = out[i + 1]
-        if (prev.repair != null || prev.hangingClusterIndex != null) {
+        if (prev.repair != null || prev.hangingClusterIndex != null || prev.endReason != LineEndReason.AutoWrap) {
             i += 1
             continue
         }
@@ -1142,9 +1221,11 @@ internal fun rebuildLine(
     clusterRange: IntRange,
     naturalClusters: List<Cluster>,
     adjustedClusters: List<Cluster>,
+    endReason: LineEndReason = LineEndReason.AutoWrap,
     repair: RepairOption? = null,
     repairCandidates: List<RepairCandidate> = emptyList(),
 ): LineCandidate {
+    require(!clusterRange.isEmptyClusterRange()) { "Use emptyLineCandidate for an empty line." }
     var natural = 0f
     var adjusted = 0f
     for (idx in clusterRange) {
@@ -1159,23 +1240,41 @@ internal fun rebuildLine(
         ),
         naturalWidth = natural,
         adjustedWidth = adjusted,
+        endReason = endReason,
         repair = repair,
         repairCandidates = repairCandidates,
     )
 }
 
+internal fun emptyLineCandidate(
+    sourceOffset: Int,
+    endReason: LineEndReason = LineEndReason.ParagraphEnd,
+): LineCandidate =
+    LineCandidate(
+        clusterRange = EMPTY_CLUSTER_RANGE,
+        sourceRange = TextRange(sourceOffset, sourceOffset),
+        naturalWidth = 0f,
+        adjustedWidth = 0f,
+        endReason = endReason,
+    )
+
+internal fun IntRange.isEmptyClusterRange(): Boolean = first > last
+
+private val EMPTY_CLUSTER_RANGE: IntRange = 1..0
+
 internal fun findGreedyEnd(
     adjustedClusters: List<Cluster>,
     start: Int,
     maxWidth: Float,
+    endExclusive: Int = adjustedClusters.size,
 ): Int {
     var accum = 0f
     var i = start
-    while (i < adjustedClusters.size) {
+    while (i < endExclusive) {
         val next = accum + adjustedClusters[i].advance
         if (next > maxWidth && i > start) return i
         accum = next
         i += 1
     }
-    return adjustedClusters.size
+    return endExclusive
 }

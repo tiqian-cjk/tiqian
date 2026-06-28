@@ -37,7 +37,7 @@ class LayoutDumpGoldenTest {
         for (fixture in EarlyLayoutFixtures.all) {
             val dump = buildString {
                 appendLine("fixture: ${fixture.id}")
-                appendLine("text: ${fixture.text}")
+                appendLine("text: ${fixture.text.escapeDumpText()}")
                 appendLine("maxWidth: ${fixture.constraints.maxWidth.fmt()}")
                 for ((label, breaker) in listOf(
                     "greedy" to GreedyLineBreaker(),
@@ -189,6 +189,12 @@ class LayoutDumpGoldenTest {
                     "boundary=${a.boundaryRole} reduction=${a.totalReduction.fmt()}",
             )
         }
+        debug.mandatoryBreakDecisions.forEach { b ->
+            appendLine(
+                "mandatorybreak ${b.range.start}-${b.range.end} afterCluster=${b.breakAfterClusterIndex} " +
+                    "reason=${b.reason}",
+            )
+        }
         debug.lineEdgeTrimDecisions.forEach { t ->
             appendLine(
                 "edgetrim ${t.clusterRange.start}-${t.clusterRange.end} side=${t.side} " +
@@ -250,4 +256,19 @@ class LayoutDumpGoldenTest {
     }
 
     private fun Float.fmt(): String = "%.1f".format(this)
+
+    private fun String.escapeDumpText(): String = buildString {
+        for (ch in this@escapeDumpText) {
+            when (ch) {
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\u000B' -> append("\\v")
+                '\u000C' -> append("\\f")
+                '\u0085' -> append("\\u0085")
+                '\u2028' -> append("\\u2028")
+                '\u2029' -> append("\\u2029")
+                else -> append(ch)
+            }
+        }
+    }
 }

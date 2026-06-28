@@ -11,10 +11,12 @@ import org.tiqian.core.Glyph
 import org.tiqian.core.GlyphRun
 import org.tiqian.core.LayoutConstraints
 import org.tiqian.core.LineLengthGrid
+import org.tiqian.core.LineEndReason
 import org.tiqian.linebreak.NoHyphenator
 import org.tiqian.core.LayoutInput
 import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.Rect
+import org.tiqian.core.TextRange
 import org.tiqian.core.TiqianTextContent
 import org.tiqian.font.FontRole
 import org.tiqian.shaping.ExplainableStubTextShaper
@@ -75,6 +77,87 @@ class ExplainableStubParagraphLayoutEngineTest {
         )
 
         assertEquals("lookahead", result.debug.lineDecisions.single().kind)
+    }
+
+    @Test
+    fun mandatoryLineBreakClustersAreZeroWidthAndNotShaped() {
+        val result = ExplainableStubParagraphLayoutEngine(
+            lineBreaker = LookaheadLineBreaker(),
+        ).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("第一行\n第二行"),
+                constraints = LayoutConstraints(maxWidth = 240f),
+            ),
+        )
+
+        assertEquals(2, result.lines.size)
+        assertEquals(LineEndReason.MandatoryBreak, result.lines[0].endReason)
+        assertEquals(LineEndReason.ParagraphEnd, result.lines[1].endReason)
+        val breakCluster = result.clusters.single { it.text == "\n" }
+        assertEquals("", breakCluster.displayText)
+        assertEquals(0f, breakCluster.advance)
+        assertTrue(result.glyphRuns.flatMap { it.glyphs }.none { it.clusterRange == breakCluster.range })
+        assertEquals(listOf(TextRange(0, 3), TextRange(4, 7)), result.glyphRuns.map { it.range })
+        assertEquals(breakCluster.range, result.debug.mandatoryBreakDecisions.single().range)
+    }
+
+    @Test
+    fun crlfIsOneMandatoryBreakCluster() {
+        val result = ExplainableStubParagraphLayoutEngine(
+            lineBreaker = LookaheadLineBreaker(),
+        ).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("甲\r\n乙"),
+                constraints = LayoutConstraints(maxWidth = 240f),
+            ),
+        )
+
+        assertEquals(2, result.lines.size)
+        val breakCluster = result.clusters.single { it.text == "\r\n" }
+        assertEquals(1, result.debug.mandatoryBreakDecisions.size)
+        assertEquals(1, breakCluster.range.start)
+        assertEquals(3, breakCluster.range.end)
+    }
+
+    @Test
+    fun consecutiveAndTrailingMandatoryBreaksPreserveBlankLines() {
+        val result = ExplainableStubParagraphLayoutEngine(
+            lineBreaker = LookaheadLineBreaker(),
+        ).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("甲\n\n乙\n"),
+                constraints = LayoutConstraints(maxWidth = 240f),
+            ),
+        )
+
+        assertEquals(4, result.lines.size)
+        assertEquals(LineEndReason.MandatoryBreak, result.lines[0].endReason)
+        assertEquals(LineEndReason.MandatoryBreak, result.lines[1].endReason)
+        assertEquals(LineEndReason.MandatoryBreak, result.lines[2].endReason)
+        assertEquals(LineEndReason.ParagraphEnd, result.lines[3].endReason)
+        assertEquals(0f, result.lines[1].visualWidth)
+        assertEquals(TextRange(5, 5), result.lines[3].range)
+    }
+
+    @Test
+    fun mandatoryBreakLineIsNotJustified() {
+        val result = ExplainableStubParagraphLayoutEngine(
+            lineBreaker = LookaheadLineBreaker(),
+        ).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("短\n中文中文中文中文中文"),
+                constraints = LayoutConstraints(maxWidth = 96f),
+            ),
+        )
+
+        val mandatoryLine = result.lines.first()
+        assertEquals(LineEndReason.MandatoryBreak, mandatoryLine.endReason)
+        assertEquals(mandatoryLine.naturalWidth, mandatoryLine.adjustedWidth)
+        assertTrue(result.debug.justificationDecisions.none { it.lineRange == mandatoryLine.range })
     }
 
     @Test

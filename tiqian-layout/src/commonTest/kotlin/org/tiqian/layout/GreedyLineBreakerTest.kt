@@ -1,6 +1,7 @@
 package org.tiqian.layout
 
 import org.tiqian.core.Cluster
+import org.tiqian.core.LineEndReason
 import org.tiqian.core.TextRange
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -363,10 +364,57 @@ class GreedyLineBreakerTest {
         assertEquals(null, solution.lines[0].repair)
     }
 
-    private fun cluster(start: Int, end: Int, text: String, advance: Float): Cluster =
+    @Test
+    fun mandatoryBreakClosesLineAndPreservesTrailingEmptyLine() {
+        val clusters = listOf(
+            cluster(0, 1, "中", 16f),
+            cluster(1, 2, "\n", 0f, displayText = ""),
+        )
+        val solution = breaker.breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 160f,
+            hardBreakAfterClusters = setOf(1),
+        )
+
+        assertEquals(2, solution.lines.size)
+        assertEquals(0..1, solution.lines[0].clusterRange)
+        assertEquals(LineEndReason.MandatoryBreak, solution.lines[0].endReason)
+        assertEquals(TextRange(2, 2), solution.lines[1].sourceRange)
+        assertEquals(LineEndReason.ParagraphEnd, solution.lines[1].endReason)
+    }
+
+    @Test
+    fun mandatoryBreakBlocksKinsokuRepairAcrossBoundary() {
+        val clusters = listOf(
+            cluster(0, 1, "中", 16f),
+            cluster(1, 2, "\n", 0f, displayText = ""),
+            cluster(2, 3, "。", 16f),
+        )
+        val solution = breaker.breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 160f,
+            hardBreakAfterClusters = setOf(1),
+        )
+
+        assertEquals(2, solution.lines.size)
+        assertEquals(0..1, solution.lines[0].clusterRange)
+        assertEquals(2..2, solution.lines[1].clusterRange)
+        assertEquals(null, solution.lines[1].repair)
+    }
+
+    private fun cluster(
+        start: Int,
+        end: Int,
+        text: String,
+        advance: Float,
+        displayText: String = text,
+    ): Cluster =
         Cluster(
             range = TextRange(start, end),
             text = text,
+            displayText = displayText,
             fontKey = "test",
             advance = advance,
         )

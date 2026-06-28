@@ -90,6 +90,12 @@ data class LineBox(
      */
     val indent: Float = 0f,
     /**
+     * Why this line ended. Automatic wraps are the only lines eligible for
+     * paragraph justification; mandatory breaks and paragraph endings keep
+     * their natural width (ADR 0037).
+     */
+    val endReason: LineEndReason = LineEndReason.ParagraphEnd,
+    /**
      * Width of a hyphen hanging at this line's end (`LineEndHangingHyphen`,
      * ADR 0029): non-zero when the line ends mid-word at a Western hyphenation
      * point. The hyphen sits just past [visualWidth] (it is NOT included in the
@@ -99,6 +105,12 @@ data class LineBox(
     val hyphenAdvance: Float = 0f,
     val debug: LineDebugInfo = LineDebugInfo(),
 )
+
+enum class LineEndReason {
+    AutoWrap,
+    MandatoryBreak,
+    ParagraphEnd,
+}
 
 data class LineDebugInfo(
     val repair: String? = null,
@@ -130,10 +142,18 @@ data class LayoutDebugInfo(
     val decorationSegments: List<DecorationSegmentInfo> = emptyList(),
     val rubyDecisions: List<RubyDecisionInfo> = emptyList(),
     val bopomofoDecisions: List<BopomofoDecisionInfo> = emptyList(),
+    val mandatoryBreakDecisions: List<MandatoryBreakDecisionInfo> = emptyList(),
     val lineSpacingDecision: LineSpacingDecisionInfo? = null,
     val kinsokuDecision: KinsokuDecisionInfo? = null,
     val lineLengthGridDecision: LineLengthGridDecisionInfo? = null,
     val firstLineIndentDecision: FirstLineIndentDecisionInfo? = null,
+)
+
+data class MandatoryBreakDecisionInfo(
+    val range: TextRange,
+    val sourceText: String,
+    val breakAfterClusterIndex: Int,
+    val reason: String,
 )
 
 /**

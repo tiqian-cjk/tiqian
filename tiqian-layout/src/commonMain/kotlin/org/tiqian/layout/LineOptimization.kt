@@ -1,6 +1,7 @@
 package org.tiqian.layout
 
 import org.tiqian.core.TextRange
+import org.tiqian.core.LineEndReason
 import org.tiqian.linebreak.BreakKind
 
 data class BreakCandidate(
@@ -78,6 +79,7 @@ data class LineCandidate(
     val sourceRange: TextRange,
     val naturalWidth: Float,
     val adjustedWidth: Float,
+    val endReason: LineEndReason = LineEndReason.AutoWrap,
     val repair: RepairOption? = null,
     val repairCandidates: List<RepairCandidate> = emptyList(),
     /**
