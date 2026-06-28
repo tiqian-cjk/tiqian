@@ -8,11 +8,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle as ComposeTextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import org.tiqian.core.Ic
 import org.tiqian.core.LayoutConstraints
@@ -28,8 +35,178 @@ import kotlin.math.max
 private const val BODY_LINE_HEIGHT_EM = 1.5f
 
 /**
+ * Compose Text replacement entry for a single paragraph. This is the low-friction migration
+ * surface: replace `Text(...)` with `CjkText(...)` without moving rich-text construction to a
+ * Markdown/HTML layer. Layout-affecting CJK decisions still happen inside the engine; this facade
+ * only lowers Compose style and text-control parameters into the existing paragraph contract.
+ */
+@Composable
+fun CjkText(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    fontSize: TextUnit = TextUnit.Unspecified,
+    fontStyle: FontStyle? = null,
+    fontWeight: FontWeight? = null,
+    fontFamily: FontFamily? = null,
+    textDecoration: TextDecoration? = null,
+    textAlign: TextAlign? = null,
+    lineHeight: TextUnit = TextUnit.Unspecified,
+    overflow: TextOverflow = TextOverflow.Clip,
+    softWrap: Boolean = true,
+    maxLines: Int = Int.MAX_VALUE,
+    minLines: Int = 1,
+    style: ComposeTextStyle = ComposeTextStyle.Default,
+    paragraphStyle: ParagraphStyle = ComposeTextParagraphStyle,
+    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
+    onTextLayout: (LayoutResult) -> Unit = {},
+) {
+    CjkText(
+        text = AnnotatedString(text),
+        modifier = modifier,
+        color = color,
+        fontSize = fontSize,
+        fontStyle = fontStyle,
+        fontWeight = fontWeight,
+        fontFamily = fontFamily,
+        textDecoration = textDecoration,
+        textAlign = textAlign,
+        lineHeight = lineHeight,
+        overflow = overflow,
+        softWrap = softWrap,
+        maxLines = maxLines,
+        minLines = minLines,
+        style = style,
+        paragraphStyle = paragraphStyle,
+        measurer = measurer,
+        onTextLayout = onTextLayout,
+    )
+}
+
+/**
+ * Tiqian-native single-paragraph counterpart to the Compose Text replacement facade.
+ */
+@Composable
+fun CjkText(
+    text: String,
+    modifier: Modifier = Modifier,
+    textStyle: CjkTextStyle,
+    paragraphStyle: ParagraphStyle = ComposeTextParagraphStyle,
+    overflow: TextOverflow = TextOverflow.Clip,
+    softWrap: Boolean = true,
+    maxLines: Int = Int.MAX_VALUE,
+    minLines: Int = 1,
+    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
+    onTextLayout: (LayoutResult) -> Unit = {},
+) {
+    CjkText(
+        text = AnnotatedString(text),
+        modifier = modifier,
+        textStyle = textStyle,
+        paragraphStyle = paragraphStyle,
+        softWrap = softWrap,
+        overflow = overflow,
+        maxLines = maxLines,
+        minLines = minLines,
+        measurer = measurer,
+        onTextLayout = onTextLayout,
+    )
+}
+
+/**
+ * Compose Text replacement entry for an existing rich [AnnotatedString]. Renderer-owned spans stay
+ * in the source [AnnotatedString]; paragraph-level text decoration is added as an outer span so the
+ * same rich-text extraction path handles it.
+ */
+@Composable
+fun CjkText(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    fontSize: TextUnit = TextUnit.Unspecified,
+    fontStyle: FontStyle? = null,
+    fontWeight: FontWeight? = null,
+    fontFamily: FontFamily? = null,
+    textDecoration: TextDecoration? = null,
+    textAlign: TextAlign? = null,
+    lineHeight: TextUnit = TextUnit.Unspecified,
+    overflow: TextOverflow = TextOverflow.Clip,
+    softWrap: Boolean = true,
+    maxLines: Int = Int.MAX_VALUE,
+    minLines: Int = 1,
+    style: ComposeTextStyle = ComposeTextStyle.Default,
+    paragraphStyle: ParagraphStyle = ComposeTextParagraphStyle,
+    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
+    onTextLayout: (LayoutResult) -> Unit = {},
+) {
+    val resolvedStyle = resolveComposeTextStyle(
+        style = style,
+        color = color,
+        fontSize = fontSize,
+        fontStyle = fontStyle,
+        fontWeight = fontWeight,
+        fontFamily = fontFamily,
+        textDecoration = textDecoration,
+        textAlign = textAlign,
+        lineHeight = lineHeight,
+    )
+    val lowered = lowerComposeText(text, resolvedStyle, paragraphStyle)
+    CjkText(
+        text = lowered.text,
+        modifier = modifier,
+        textStyle = lowered.textStyle,
+        paragraphStyle = lowered.paragraphStyle,
+        softWrap = softWrap,
+        overflow = overflow,
+        maxLines = maxLines,
+        minLines = minLines,
+        measurer = measurer,
+        onTextLayout = onTextLayout,
+    )
+}
+
+/**
+ * Tiqian-native single-paragraph rich text entry with the same no-indent default as Compose Text.
+ */
+@Composable
+fun CjkText(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    textStyle: CjkTextStyle,
+    paragraphStyle: ParagraphStyle = ComposeTextParagraphStyle,
+    overflow: TextOverflow = TextOverflow.Clip,
+    softWrap: Boolean = true,
+    maxLines: Int = Int.MAX_VALUE,
+    minLines: Int = 1,
+    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
+    onTextLayout: (LayoutResult) -> Unit = {},
+) {
+    val density = LocalDensity.current
+    val coreStyle = textStyle.toCoreTextStyle(density)
+    CjkTextLayout(
+        text = text.text,
+        semanticsText = text,
+        modifier = modifier,
+        textStyle = coreStyle,
+        paragraphStyle = paragraphStyle.withCjkTextStyleLineHeight(textStyle, density),
+        color = textStyle.colorArgbOrNull() ?: DEFAULT_TEXT_COLOR,
+        decorations = text.cjkDecorations(),
+        colorSpans = text.cjkColorSpans(),
+        richTextSpans = text.cjkRichTextSpans(),
+        spans = text.cjkStyleSpans(coreStyle, density),
+        rubySpans = text.cjkRubySpans(),
+        softWrap = softWrap,
+        overflow = overflow,
+        maxLines = maxLines,
+        minLines = minLines,
+        measurer = measurer,
+        onTextLayout = onTextLayout,
+    )
+}
+
+/**
  * Lays out MULTIPLE paragraphs and sections (CLREQ §6.2.1 段落调整). Each
- * paragraph runs the engine via [CjkParagraph]; `CjkText` only splits the
+ * paragraph runs the same internal layout node as the Compose Text facade; `CjkText` only splits the
  * source into blocks, maps each block's 段首缩排 style to the engine's
  * `blockIndent`/`firstLineIndent`, and stacks them.
  *
@@ -60,10 +237,11 @@ fun CjkText(
                 is CjkBlock.Section -> Spacer(Modifier.height(sectionDp))
                 is CjkBlock.Paragraph -> {
                     val (blockIc, firstIc) = block.indent.resolve(paragraphStyle.firstLineIndent)
-                    CjkParagraph(
+                    CjkText(
                         text = block.text,
                         textStyle = textStyle,
                         paragraphStyle = paragraphStyle.copy(blockIndent = blockIc, firstLineIndent = firstIc),
+                        overflow = TextOverflow.Visible,
                         measurer = measurer,
                         onTextLayout = { onParagraphLayout(blockIndex, null, it) },
                     )
@@ -85,18 +263,20 @@ fun CjkText(
                         // body TEXT by first baseline, not by the box top.
                         Row(Modifier.fillMaxWidth()) {
                             Box(Modifier.width(gutterDp).alignByBaseline()) {
-                                CjkParagraph(
+                                CjkText(
                                     text = block.marker.format(block.start + i),
                                     textStyle = textStyle,
                                     paragraphStyle = markerStyle,
+                                    overflow = TextOverflow.Visible,
                                     measurer = measurer,
                                 )
                             }
-                            CjkParagraph(
+                            CjkText(
                                 text = item,
                                 modifier = Modifier.weight(1f).alignByBaseline(),
                                 textStyle = textStyle,
                                 paragraphStyle = listStyle,
+                                overflow = TextOverflow.Visible,
                                 measurer = measurer,
                                 onTextLayout = { onParagraphLayout(blockIndex, i, it) },
                             )
@@ -125,46 +305,10 @@ fun CjkText(
         blocks = blocks,
         modifier = modifier,
         textStyle = style.toCjkTextStyle(),
-        paragraphStyle = paragraphStyle,
+        paragraphStyle = lowerComposeParagraphStyle(style, paragraphStyle),
         measurer = measurer,
         onParagraphLayout = onParagraphLayout,
     )
-}
-
-/**
- * Convenience entry: `\n` separates paragraphs, a blank line becomes a 节
- * ([CjkBlock.Section]). [leadStyle] assigns the per-paragraph 段首缩排 style.
- * For mixed documents (dialogue 凸排, quote 段落缩排) build [CjkBlock]s directly.
- */
-@Composable
-fun CjkText(
-    text: String,
-    modifier: Modifier = Modifier,
-    textStyle: CjkTextStyle = CjkTextStyle(),
-    paragraphStyle: ParagraphStyle = ParagraphStyle(),
-    leadStyle: ParagraphLeadStyle = ParagraphLeadStyle.AllIndent,
-    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
-    onParagraphLayout: (blockIndex: Int, itemIndex: Int?, result: LayoutResult) -> Unit = { _, _, _ -> },
-) {
-    val blocks = remember(text, leadStyle) { parseBlocks(text, leadStyle) }
-    CjkText(blocks, modifier, textStyle, paragraphStyle, measurer, onParagraphLayout)
-}
-
-/**
- * Compose interop counterpart to [CjkText] for plain source text.
- */
-@Composable
-fun CjkText(
-    text: String,
-    modifier: Modifier = Modifier,
-    style: ComposeTextStyle,
-    paragraphStyle: ParagraphStyle = ParagraphStyle(),
-    leadStyle: ParagraphLeadStyle = ParagraphLeadStyle.AllIndent,
-    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
-    onParagraphLayout: (blockIndex: Int, itemIndex: Int?, result: LayoutResult) -> Unit = { _, _, _ -> },
-) {
-    val blocks = remember(text, leadStyle) { parseBlocks(text, leadStyle) }
-    CjkText(blocks, modifier, style, paragraphStyle, measurer, onParagraphLayout)
 }
 
 /** A block in a CJK document (CLREQ §6.2.1). */
@@ -297,48 +441,4 @@ sealed interface ParagraphIndent {
         is Hanging -> indent to -indent
         is Block -> indent to firstLine
     }
-}
-
-/** CLREQ §6.2.1.1 段首缩排 的跨段风格（用于 [CjkText] 的纯文本入口）。 */
-enum class ParagraphLeadStyle {
-    /** ① 全段首行缩进（书刊默认）。 */
-    AllIndent,
-
-    /** ② 首段不缩、其余段缩进（西文书习惯）。 */
-    FirstParagraphFlush,
-
-    /** ③ 全不缩进、段间以 节 留白区分。 */
-    NoIndentSpaced,
-}
-
-/**
- * `\n` → 段落，空行 → 节。前导/尾随空行与连续空行折叠为单个 节。NoIndentSpaced
- * 在相邻段落间插入 节（无缩进时靠留白区分段）。
- */
-private fun parseBlocks(text: String, leadStyle: ParagraphLeadStyle): List<CjkBlock> {
-    val lines = text.split('\n').map { it.trim('\r') }
-    val blocks = mutableListOf<CjkBlock>()
-    var paragraphIndex = 0
-    var pendingSection = false
-    for (line in lines) {
-        if (line.isBlank()) {
-            if (blocks.isNotEmpty()) pendingSection = true
-            continue
-        }
-        if (pendingSection) {
-            blocks += CjkBlock.Section
-            pendingSection = false
-        } else if (leadStyle == ParagraphLeadStyle.NoIndentSpaced && paragraphIndex > 0) {
-            blocks += CjkBlock.Section
-        }
-        val indent = when (leadStyle) {
-            ParagraphLeadStyle.AllIndent -> ParagraphIndent.FirstLine
-            ParagraphLeadStyle.FirstParagraphFlush ->
-                if (paragraphIndex == 0) ParagraphIndent.Flush else ParagraphIndent.FirstLine
-            ParagraphLeadStyle.NoIndentSpaced -> ParagraphIndent.Flush
-        }
-        blocks += CjkBlock.Paragraph(line, indent)
-        paragraphIndex++
-    }
-    return blocks
 }

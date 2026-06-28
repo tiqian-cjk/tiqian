@@ -4,8 +4,11 @@ import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import org.tiqian.core.LayoutResult
+import org.tiqian.core.RichTextRole
+import org.tiqian.core.RichTextSpan
 import org.tiqian.core.TextSpan
 import org.tiqian.core.ColorSpan
+import org.tiqian.core.positionedRichTextSegments
 import org.tiqian.shaping.skia.SkiaSystemTypefaces
 import org.tiqian.shaping.skia.drawTiqianGlyphs
 import org.tiqian.shaping.skia.lineInkSkipIntervals
@@ -13,6 +16,8 @@ import org.tiqian.shaping.skia.shapeTextBlob
 import org.tiqian.shaping.skia.vertGlyphIds
 import org.jetbrains.skia.Font
 import org.jetbrains.skia.Paint
+import org.jetbrains.skia.PaintMode
+import org.jetbrains.skia.Rect
 import org.jetbrains.skia.shaper.Shaper
 
 /**
@@ -26,6 +31,7 @@ internal actual fun ContentDrawScope.drawParagraph(
     result: LayoutResult,
     color: Int,
     colorSpans: List<ColorSpan>,
+    richTextSpans: List<RichTextSpan>,
     spans: List<TextSpan>,
 ) {
     val fontSize = result.input.textStyle.fontSize
@@ -36,10 +42,13 @@ internal actual fun ContentDrawScope.drawParagraph(
 
     drawIntoCanvas { canvas ->
         val skCanvas = canvas.nativeCanvas
+        drawSkiaRichTextBackgrounds(skCanvas, result, richTextSpans)
+
         // Shared cluster-walk (tiqian-shaping-skia) — same path the playground
         // raster uses, so the role-containment / leading-shift handling can't
         // drift between the two.
         drawTiqianGlyphs(skCanvas, result, cjkFont, latinFont, paint, shaper, colorSpans = colorSpans, spans = spans)
+        drawSkiaRichTextLines(skCanvas, result, color, colorSpans, richTextSpans, spans, cjkFont, latinFont, shaper)
 
         // Emphasis dots (ADR 0018): a filled circle of the engine-decided
         // diameter centred on the anchor — smaller than the `•` glyph so it
@@ -68,7 +77,13 @@ internal actual fun ContentDrawScope.drawParagraph(
                 when (seg.kind) {
                     "ProperNoun" -> {
                         val skips = result.lineInkSkipIntervals(
-                            result.lines[seg.lineIndex], cjkFont, latinFont, shaper, seg.top - skipPad, seg.top + skipPad,
+                            result.lines[seg.lineIndex],
+                            cjkFont,
+                            latinFont,
+                            shaper,
+                            seg.top - skipPad,
+                            seg.top + skipPad,
+                            spans,
                         )
                         keptIntervals(seg.left, seg.right, skips, skipPad) { x0, x1 ->
                             skCanvas.drawLine(x0, seg.top, x1, seg.top, framePaint)
@@ -76,7 +91,13 @@ internal actual fun ContentDrawScope.drawParagraph(
                     }
                     "BookTitle" -> {
                         val skips = result.lineInkSkipIntervals(
-                            result.lines[seg.lineIndex], cjkFont, latinFont, shaper, seg.top - skipPad, seg.top + skipPad,
+                            result.lines[seg.lineIndex],
+                            cjkFont,
+                            latinFont,
+                            shaper,
+                            seg.top - skipPad,
+                            seg.top + skipPad,
+                            spans,
                         )
                         keptIntervals(seg.left, seg.right, skips, skipPad) { x0, x1 ->
                             skCanvas.drawPath(org.tiqian.shaping.skia.wavyLinePath(x0, x1, seg.top, fontSize), framePaint)
@@ -169,6 +190,75 @@ internal actual fun ContentDrawScope.drawParagraph(
     }
 }
 
+private fun drawSkiaRichTextBackgrounds(
+    canvas: org.jetbrains.skia.Canvas,
+    result: LayoutResult,
+    richTextSpans: List<RichTextSpan>,
+) {
+    val paint = Paint()
+    for (seg in result.positionedRichTextSegments(richTextSpans)) {
+        val argb = when (seg.span.role) {
+            RichTextRole.Background -> seg.span.paint.argb
+            RichTextRole.InlineCode -> seg.span.paint.argb ?: INLINE_CODE_BACKGROUND_COLOR
+            else -> null
+        } ?: continue
+        paint.color = argb
+        paint.mode = PaintMode.FILL
+        canvas.drawRect(Rect.makeLTRB(seg.left, seg.top, seg.right, seg.bottom), paint)
+    }
+}
+
+private fun drawSkiaRichTextLines(
+    canvas: org.jetbrains.skia.Canvas,
+    result: LayoutResult,
+    color: Int,
+    colorSpans: List<ColorSpan>,
+    richTextSpans: List<RichTextSpan>,
+    spans: List<TextSpan>,
+    cjkFont: Font,
+    latinFont: Font,
+    shaper: Shaper,
+) {
+    val paint = Paint().apply {
+        mode = PaintMode.STROKE
+        strokeWidth = (result.input.textStyle.fontSize / 16f).coerceAtLeast(1f)
+    }
+    val skipPad = paint.strokeWidth.coerceAtLeast(1f)
+    for (seg in result.positionedRichTextSegments(richTextSpans)) {
+        val role = seg.span.role
+        if (role != RichTextRole.Underline && role != RichTextRole.LineThrough) continue
+        val style = spans.lastOrNull { seg.range.start >= it.range.start && seg.range.start < it.range.end }?.style
+            ?: result.input.textStyle
+        val rawLineY = if (role == RichTextRole.Underline) {
+            seg.baseline + style.fontSize * GENERIC_UNDERLINE_OFFSET_EM
+        } else {
+            seg.baseline - style.fontSize * GENERIC_LINE_THROUGH_OFFSET_EM
+        }
+        val lineY = rawLineY.coerceIn(seg.top + paint.strokeWidth / 2f, seg.bottom - paint.strokeWidth / 2f)
+        paint.color = seg.span.paint.argb ?: colorAt(seg.range.start, color, colorSpans)
+        if (role == RichTextRole.Underline) {
+            val line = result.lines.getOrNull(seg.lineIndex) ?: continue
+            val skips = result.lineInkSkipIntervals(
+                line,
+                cjkFont,
+                latinFont,
+                shaper,
+                lineY - skipPad,
+                lineY + skipPad,
+                spans,
+            )
+            keptIntervals(seg.left, seg.right, skips, skipPad) { x0, x1 ->
+                canvas.drawLine(x0, lineY, x1, lineY, paint)
+            }
+        } else {
+            canvas.drawLine(seg.left, lineY, seg.right, lineY, paint)
+        }
+    }
+}
+
+private fun colorAt(offset: Int, color: Int, colorSpans: List<ColorSpan>): Int =
+    colorSpans.lastOrNull { offset >= it.start && offset < it.end }?.argb ?: color
+
 /**
  * Draws the KEPT runs of `[left, right]` — i.e. the whole span minus the [skips]
  * intervals (flat `[s0,e0,…]`, each padded by [gap] and merged) — invoking
@@ -197,3 +287,7 @@ private inline fun keptIntervals(
     }
     if (cursor < right - 0.5f) draw(cursor, right)
 }
+
+private const val INLINE_CODE_BACKGROUND_COLOR: Int = 0x1A000000
+private const val GENERIC_UNDERLINE_OFFSET_EM = 0.12f
+private const val GENERIC_LINE_THROUGH_OFFSET_EM = 0.30f

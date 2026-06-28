@@ -146,6 +146,25 @@ class LayoutQueriesTest {
     }
 
     @Test
+    fun richTextSegmentsReusePositionedClusterGeometryAndSplitLines() {
+        val result = sampleResult()
+        val span = RichTextSpan(
+            TextRange(1, 4),
+            RichTextRole.Background,
+            RichTextPaint(0x33FF0000),
+        )
+
+        val segments = result.positionedRichTextSegments(listOf(span))
+
+        assertEquals(2, segments.size)
+        assertEquals(TextRange(1, 3), segments[0].range)
+        assertEquals(Rect(14f, 0f, 34f, 20f), segments[0].rect)
+        assertEquals(TextRange(3, 4), segments[1].range)
+        assertEquals(Rect(0f, 20f, 10f, 40f), segments[1].rect)
+        assertEquals(span, segments[0].span)
+    }
+
+    @Test
     fun hitTestingChoosesOffsetFromTiqianClusterAdvances() {
         val result = sampleResult()
 

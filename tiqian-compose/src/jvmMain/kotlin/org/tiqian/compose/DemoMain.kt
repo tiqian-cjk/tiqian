@@ -44,7 +44,7 @@ fun main() = singleWindowApplication(title = "Tiqian Compose Demo") {
             modifier = Modifier.fillMaxWidth(),
             onValueChange = { draft = it },
         )
-        CjkParagraph(text = draft, modifier = Modifier.fillMaxWidth(), textStyle = textStyle)
+        CjkText(text = draft, modifier = Modifier.fillMaxWidth(), textStyle = textStyle)
 
         // 小品文：把目前的排版能力一次用全。
         CjkText(

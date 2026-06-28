@@ -259,10 +259,11 @@ fun LayoutResult.lineInkSkipIntervals(
     shaper: Shaper,
     bandTop: Float,
     bandBottom: Float,
+    spans: List<TextSpan> = emptyList(),
 ): FloatArray {
     val language = input.textStyle.locale
     val out = mutableListOf<Float>()
-    forEachPositionedCluster(cjkFont, latinFont, 0f) { l, cluster, drawX, baselineY, font ->
+    forEachPositionedCluster(cjkFont, latinFont, 0f, spans) { l, cluster, drawX, baselineY, font ->
         if (l !== line) return@forEachPositionedCluster
         val blob = shapeTextBlob(shaper, cluster.displayText, font, language) ?: return@forEachPositionedCluster
         // getIntercepts wants the band in the blob's baseline-relative y; the

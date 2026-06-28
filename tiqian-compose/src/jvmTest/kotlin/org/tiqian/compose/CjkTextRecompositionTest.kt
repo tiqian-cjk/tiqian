@@ -26,7 +26,7 @@ import kotlin.test.assertTrue
  * width/height, so only a real draw-invalidation makes the pixels differ.
  */
 @OptIn(ExperimentalComposeUiApi::class)
-class CjkParagraphRecompositionTest {
+class CjkTextRecompositionTest {
 
     @Test
     fun editingTextStateRepaints() {
@@ -34,7 +34,7 @@ class CjkParagraphRecompositionTest {
         val measured = mutableListOf<String>()
         ImageComposeScene(width = 160, height = 120) {
             Box(Modifier.fillMaxSize().background(Color.White)) {
-                CjkParagraph(
+                CjkText(
                     text = text,
                     textStyle = CjkTextStyle(fontSize = 80.sp),
                     onTextLayout = { measured += it.input.content.text },

@@ -1,30 +1,35 @@
 package org.tiqian.compose
 
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle as ComposeTextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.GenericFontFamily
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withAnnotation
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
+import org.tiqian.core.ColorSpan
 import org.tiqian.core.DecorationKind
 import org.tiqian.core.DecorationSpan
 import org.tiqian.core.LayoutConstraints
 import org.tiqian.core.LayoutResult
 import org.tiqian.core.ParagraphStyle
+import org.tiqian.core.RichTextPaint
+import org.tiqian.core.RichTextRole
+import org.tiqian.core.RichTextSpan
 import org.tiqian.core.RubyKind
 import org.tiqian.core.RubySpan
 import org.tiqian.core.TextRange
 import org.tiqian.core.TextSpan
 import org.tiqian.core.TextStyle
-import org.tiqian.core.ColorSpan
 
 // Annotation tags + extractors are the AnnotatedString WIRE PROTOCOL between the
 // public builders (emphasis/ruby/bopomofo/…) and the engine. INTERNAL on purpose —
@@ -39,91 +44,13 @@ internal const val CjkRubyTag = "org.tiqian.ruby"
 /** Annotation tag carrying 注音 (right-side ㄅㄆㄇ ruby) text over its base range. */
 internal const val CjkBopomofoTag = "org.tiqian.bopomofo"
 
+/** Annotation tag carrying Tiqian rich-text roles such as inline code. */
+internal const val CjkRichTextTag = "org.tiqian.richtext"
+
 /** Separates an optional ruby font family from the reading inside the annotation item. */
 private const val RubyFontSeparator = "\u001F"
 
-/**
- * Authors decorations as attributed text. Instead of counting source offsets
- * into a [DecorationSpan] (`TextRange(4, 16)`), wrap the span in [emphasis] /
- * [properNoun] / [mourning] / [bookTitle] inside `buildAnnotatedString { … }`:
- *
- * ```
- * CjkParagraph(buildAnnotatedString {
- *     append("他强调：")
- *     emphasis { append("豆子新鲜最要紧") }
- *     append("，烘焙其次。")
- * })
- * ```
- *
- * [AnnotatedString.text] is the unchanged source (复制/搜索保真). `SpanStyle.color`
- * (render-only) and `SpanStyle.fontSize` (layout-affecting, ADR 0030 B 档) map to
- * the engine; weight/style/family are not consumed yet.
- */
-@Composable
-fun CjkParagraph(
-    text: AnnotatedString,
-    modifier: Modifier = Modifier,
-    textStyle: CjkTextStyle = CjkTextStyle(),
-    paragraphStyle: ParagraphStyle = ParagraphStyle(),
-    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
-    onTextLayout: (LayoutResult) -> Unit = {},
-) {
-    val density = LocalDensity.current
-    val coreStyle = textStyle.toCoreTextStyle(density)
-    CjkParagraphImpl(
-        text = text.text,
-        semanticsText = text,
-        modifier = modifier,
-        textStyle = coreStyle,
-        paragraphStyle = paragraphStyle.copy(
-            lineHeight = textStyle.lineHeightPxOrNull(density) ?: paragraphStyle.lineHeight,
-        ),
-        color = textStyle.colorArgbOrNull() ?: DEFAULT_TEXT_COLOR,
-        decorations = text.cjkDecorations(),
-        colorSpans = text.cjkColorSpans(),
-        spans = text.cjkStyleSpans(coreStyle, density),
-        rubySpans = text.cjkRubySpans(),
-        measurer = measurer,
-        onTextLayout = onTextLayout,
-    )
-}
-
-/**
- * Compose interop entry for migrating from `Text(AnnotatedString, style = …)` without first
- * projecting rich text into Tiqian's narrower style object. Pair with
- * [AnnotatedString.cjkTextCompatibility] at renderer boundaries to expose Compose features Tiqian
- * does not yet preserve. The input is still accepted; the report is a Tiqian work list, not a
- * host-renderer switch.
- */
-@Composable
-fun CjkParagraph(
-    text: AnnotatedString,
-    modifier: Modifier = Modifier,
-    style: ComposeTextStyle,
-    paragraphStyle: ParagraphStyle = ParagraphStyle(),
-    measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
-    onTextLayout: (LayoutResult) -> Unit = {},
-) {
-    val density = LocalDensity.current
-    val cjkStyle = style.toCjkTextStyle()
-    val coreStyle = cjkStyle.toCoreTextStyle(density)
-    CjkParagraphImpl(
-        text = text.text,
-        semanticsText = text,
-        modifier = modifier,
-        textStyle = coreStyle,
-        paragraphStyle = paragraphStyle.copy(
-            lineHeight = cjkStyle.lineHeightPxOrNull(density) ?: paragraphStyle.lineHeight,
-        ),
-        color = cjkStyle.colorArgbOrNull() ?: DEFAULT_TEXT_COLOR,
-        decorations = text.cjkDecorations(),
-        colorSpans = text.cjkColorSpans(),
-        spans = text.cjkStyleSpans(coreStyle, density),
-        rubySpans = text.cjkRubySpans(),
-        measurer = measurer,
-        onTextLayout = onTextLayout,
-    )
-}
+private const val InlineCodeRoleItem = "InlineCode"
 
 /**
  * 行间注 (拼音/ruby, ADR 0032): appends [base] and annotates it with the [ruby]
@@ -131,7 +58,7 @@ fun CjkParagraph(
  * (复制/搜索 保真 — only [base] is appended):
  *
  * ```
- * CjkParagraph(buildAnnotatedString {
+ * CjkText(buildAnnotatedString {
  *     append("我爱")
  *     ruby("北京", "Běijīng")                               // 默认注文字体
  *     bopomofo("中", "ㄓㄨㄥ", fontFamily = "BpmfGenYoMin")  // 注音用 ㄅㄆㄇ 字体
@@ -192,6 +119,50 @@ internal fun AnnotatedString.cjkColorSpans(): List<ColorSpan> =
         .map { ColorSpan(it.start, it.end, it.item.color.toArgb()) }
 
 /**
+ * Extracts render/semantic rich-text roles that do not affect shaping or breaking. These spans are
+ * drawn from [LayoutResult] geometry after layout, so they preserve source ranges while avoiding a
+ * renderer-side text layout fork.
+ */
+internal fun AnnotatedString.cjkRichTextSpans(): List<RichTextSpan> {
+    val out = mutableListOf<RichTextSpan>()
+    for (span in spanStyles) {
+        val range = TextRange(span.start, span.end)
+        val style = span.item
+        if (style.background != Color.Unspecified) {
+            out += RichTextSpan(
+                range = range,
+                role = RichTextRole.Background,
+                paint = RichTextPaint(style.background.toArgb()),
+            )
+        }
+        val decoration = style.textDecoration
+        if (decoration != null && decoration != TextDecoration.None) {
+            val linePaint = RichTextPaint(style.color.takeIf { it != Color.Unspecified }?.toArgb())
+            if (TextDecoration.Underline in decoration) {
+                out += RichTextSpan(range, RichTextRole.Underline, linePaint)
+            }
+            if (TextDecoration.LineThrough in decoration) {
+                out += RichTextSpan(range, RichTextRole.LineThrough, linePaint)
+            }
+        }
+    }
+    for (link in getLinkAnnotations(0, length)) {
+        val target = when (val item = link.item) {
+            is LinkAnnotation.Url -> item.url
+            is LinkAnnotation.Clickable -> item.tag
+            else -> continue
+        }
+        out += RichTextSpan(TextRange(link.start, link.end), RichTextRole.Link(target))
+    }
+    for (role in getStringAnnotations(CjkRichTextTag, 0, length)) {
+        if (role.item == InlineCodeRoleItem) {
+            out += RichTextSpan(TextRange(role.start, role.end), RichTextRole.InlineCode)
+        }
+    }
+    return out
+}
+
+/**
  * Flattens the layout-affecting `SpanStyle`s (`fontSize` / `fontWeight` /
  * `fontStyle`) into non-overlapping, fully-resolved [TextSpan]s for the engine +
  * renderer (rich-text 字号/字重/斜体, ADR 0030 B 档). Each segment's style is
@@ -247,7 +218,7 @@ internal fun AnnotatedString.cjkStyleSpans(base: TextStyle, density: Density): L
 
 /**
  * Pre-layout a rich-text [text] without rendering — the measure-side counterpart to
- * `CjkParagraph(AnnotatedString)` (Codex #5). Extracts the same layout-affecting
+ * `CjkText(AnnotatedString)` (Codex #5). Extracts the same layout-affecting
  * spans (装饰/样式/ruby; color is render-only, not a measure input) and lowers
  * [textStyle] via [density]. Use for hit-testing / size queries before drawing.
  */
@@ -256,16 +227,14 @@ fun ParagraphMeasurer.measure(
     constraints: LayoutConstraints,
     density: Density,
     textStyle: CjkTextStyle = CjkTextStyle(),
-    paragraphStyle: ParagraphStyle = ParagraphStyle(),
+    paragraphStyle: ParagraphStyle = ComposeTextParagraphStyle,
 ): LayoutResult {
     val core = textStyle.toCoreTextStyle(density)
     return measure(
         text = text.text,
         constraints = constraints,
         textStyle = core,
-        paragraphStyle = paragraphStyle.copy(
-            lineHeight = textStyle.lineHeightPxOrNull(density) ?: paragraphStyle.lineHeight,
-        ),
+        paragraphStyle = paragraphStyle.withCjkTextStyleLineHeight(textStyle, density),
         decorations = text.cjkDecorations(),
         spans = text.cjkStyleSpans(core, density),
         rubySpans = text.cjkRubySpans(),
@@ -273,27 +242,25 @@ fun ParagraphMeasurer.measure(
 }
 
 /**
- * Pre-layout counterpart to [CjkParagraph] with Compose [style].
+ * Pre-layout counterpart to `CjkText(AnnotatedString, style = ...)`.
  */
 fun ParagraphMeasurer.measure(
     text: AnnotatedString,
     constraints: LayoutConstraints,
     density: Density,
     style: ComposeTextStyle,
-    paragraphStyle: ParagraphStyle = ParagraphStyle(),
+    paragraphStyle: ParagraphStyle = ComposeTextParagraphStyle,
 ): LayoutResult {
-    val cjkStyle = style.toCjkTextStyle()
-    val core = cjkStyle.toCoreTextStyle(density)
+    val lowered = lowerComposeText(text, style, paragraphStyle)
+    val core = lowered.textStyle.toCoreTextStyle(density)
     return measure(
-        text = text.text,
+        text = lowered.text.text,
         constraints = constraints,
         textStyle = core,
-        paragraphStyle = paragraphStyle.copy(
-            lineHeight = cjkStyle.lineHeightPxOrNull(density) ?: paragraphStyle.lineHeight,
-        ),
-        decorations = text.cjkDecorations(),
-        spans = text.cjkStyleSpans(core, density),
-        rubySpans = text.cjkRubySpans(),
+        paragraphStyle = lowered.paragraphStyle.withCjkTextStyleLineHeight(lowered.textStyle, density),
+        decorations = lowered.text.cjkDecorations(),
+        spans = lowered.text.cjkStyleSpans(core, density),
+        rubySpans = lowered.text.cjkRubySpans(),
     )
 }
 
@@ -317,4 +284,11 @@ fun AnnotatedString.Builder.mourning(block: AnnotatedString.Builder.() -> Unit) 
 /** 书名号甲式（wavy underline）over [block]'s text. */
 fun AnnotatedString.Builder.bookTitle(block: AnnotatedString.Builder.() -> Unit) {
     withAnnotation(CjkDecorationTag, DecorationKind.BookTitle.name) { block() }
+}
+
+/** Inline code over [block]'s source text: monospace shaping plus Tiqian-owned code background. */
+fun AnnotatedString.Builder.inlineCode(block: AnnotatedString.Builder.() -> Unit) {
+    withAnnotation(CjkRichTextTag, InlineCodeRoleItem) {
+        withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { block() }
+    }
 }

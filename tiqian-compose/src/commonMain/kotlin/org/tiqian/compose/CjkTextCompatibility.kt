@@ -1,6 +1,5 @@
 package org.tiqian.compose
 
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.text.AnnotatedString
@@ -12,9 +11,9 @@ import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextGeometricTransform
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 
 /** U+FFFC OBJECT REPLACEMENT CHARACTER, used by Compose inline content placeholders. */
@@ -53,13 +52,16 @@ data class CjkTextCompatibility(
  */
 enum class CjkTextCapabilityIssue {
     ParagraphStyleRanges,
+    /** Link ranges are preserved as `RichTextSpan`; clickable/a11y actions are not implemented. */
     LinkAnnotations,
     UrlAnnotations,
     TtsAnnotations,
     InlinePlaceholders,
     UnknownStringAnnotations,
     BrushForeground,
+    /** Kept for old reports; `SpanStyle.background` is now lowered to `RichTextSpan`. */
     BackgroundColor,
+    /** Kept for old reports; underline/line-through are now lowered to `RichTextSpan`. */
     TextDecoration,
     Shadow,
     DrawStyle,
@@ -78,6 +80,7 @@ enum class CjkTextCapabilityIssue {
     LineBreak,
     Hyphens,
     TextMotion,
+    OverflowEllipsis,
 }
 
 @Deprecated(
@@ -91,15 +94,16 @@ typealias CjkTextUnsupportedReason = CjkTextCapabilityIssue
  * faithfully. This is a diagnostic boundary, not a host-renderer switch:
  *
  * ```
- * val compatibility = annotated.cjkTextCompatibility(style)
+ * val compatibility = annotated.cjkTextCompatibility(style, overflow = overflow)
  * check(compatibility.canPreserveAllKnownSemantics) { compatibility.issues }
- * CjkParagraph(annotated, style = style)
+ * CjkText(annotated, style = style, overflow = overflow)
  * ```
  */
 @OptIn(ExperimentalTextApi::class)
 @Suppress("DEPRECATION")
 fun AnnotatedString.cjkTextCompatibility(
     style: ComposeTextStyle = ComposeTextStyle.Default,
+    overflow: TextOverflow = TextOverflow.Clip,
 ): CjkTextCompatibility {
     val issues = linkedSetOf<CjkTextCapabilityIssue>()
 
@@ -109,12 +113,15 @@ fun AnnotatedString.cjkTextCompatibility(
     if (getTtsAnnotations(0, length).isNotEmpty()) issues += CjkTextCapabilityIssue.TtsAnnotations
     if (text.any { it == InlinePlaceholderChar }) issues += CjkTextCapabilityIssue.InlinePlaceholders
 
-    val supportedStringTags = setOf(CjkDecorationTag, CjkRubyTag, CjkBopomofoTag)
+    val supportedStringTags = setOf(CjkDecorationTag, CjkRubyTag, CjkBopomofoTag, CjkRichTextTag)
     if (getStringAnnotations(0, length).any { it.tag !in supportedStringTags }) {
         issues += CjkTextCapabilityIssue.UnknownStringAnnotations
     }
 
     style.collectCapabilityIssues(issues)
+    if (overflow != TextOverflow.Clip && overflow != TextOverflow.Visible) {
+        issues += CjkTextCapabilityIssue.OverflowEllipsis
+    }
     spanStyles.forEach { it.item.collectCapabilityIssues(issues) }
 
     return CjkTextCompatibility(issues)
@@ -134,10 +141,6 @@ private fun ComposeTextStyle.collectCapabilityIssues(issues: MutableSet<CjkTextC
 
 private fun SpanStyle.collectCapabilityIssues(issues: MutableSet<CjkTextCapabilityIssue>) {
     if (brush != null) issues += CjkTextCapabilityIssue.BrushForeground
-    if (background != Color.Unspecified) issues += CjkTextCapabilityIssue.BackgroundColor
-    if (textDecoration != null && textDecoration != TextDecoration.None) {
-        issues += CjkTextCapabilityIssue.TextDecoration
-    }
     if (shadow != null && shadow != Shadow.None) issues += CjkTextCapabilityIssue.Shadow
     if (drawStyle != null && drawStyle != Fill) issues += CjkTextCapabilityIssue.DrawStyle
     if (baselineShift != null && baselineShift != BaselineShift.None) issues += CjkTextCapabilityIssue.BaselineShift

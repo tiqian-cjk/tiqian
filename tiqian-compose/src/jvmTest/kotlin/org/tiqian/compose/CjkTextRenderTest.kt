@@ -11,13 +11,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.use
 import androidx.compose.ui.unit.sp
+import org.tiqian.core.LineEndReason
+import org.tiqian.core.LayoutResult
 import org.tiqian.core.ic
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -53,18 +60,16 @@ class CjkTextRenderTest {
     }
 
     @Test
-    fun eachLeadStyleRendersAllParagraphs() {
-        for (style in ParagraphLeadStyle.entries) {
-            val ink = render(style.name) {
-                CjkText(
-                    text = article.joinToString("\n"),
-                    modifier = Modifier.width(320.dp),
-                    textStyle = CjkTextStyle(fontSize = 30.sp),
-                    leadStyle = style,
-                )
-            }
-            assertTrue(ink > 2_000, "Expected substantial ink for $style, got $ink")
+    fun documentBlocksRenderAllParagraphs() {
+        val blocks = article.map { CjkBlock.Paragraph(it, ParagraphIndent.FirstLine) }
+        val ink = render("document-blocks") {
+            CjkText(
+                blocks = blocks,
+                modifier = Modifier.width(320.dp),
+                textStyle = CjkTextStyle(fontSize = 30.sp),
+            )
         }
+        assertTrue(ink > 2_000, "Expected substantial ink for document blocks, got $ink")
     }
 
     @Test
@@ -88,5 +93,166 @@ class CjkTextRenderTest {
             CjkText(blocks = blocks, modifier = Modifier.width(320.dp), textStyle = CjkTextStyle(fontSize = 30.sp))
         }
         assertTrue(ink > 2_000, "Expected substantial ink for mixed blocks, got $ink")
+    }
+
+    @Test
+    fun composeTextReplacementRendersSingleUnindentedParagraph() {
+        var layout: LayoutResult? = null
+        val ink = render("compose-replacement") {
+            CjkText(
+                text = "替代 Compose Text 的正文 English typography。",
+                modifier = Modifier.width(320.dp),
+                style = TextStyle(fontSize = 30.sp),
+                fontWeight = FontWeight.Bold,
+                textDecoration = TextDecoration.Underline,
+                onTextLayout = { layout = it },
+            )
+        }
+
+        assertTrue(ink > 1_000, "Expected substantial ink for Compose Text replacement, got $ink")
+        assertEquals(0f, layout?.lines?.firstOrNull()?.indent)
+    }
+
+    @Test
+    fun composeTextReplacementHonorsLineControls() {
+        var limited: LayoutResult? = null
+        val text = "中文 English typography 混排会自然换行，第二行不应该在 maxLines=1 的结果里出现。"
+
+        render("compose-line-controls") {
+            CjkText(
+                text = text,
+                modifier = Modifier.width(180.dp),
+                style = TextStyle(fontSize = 24.sp),
+                maxLines = 1,
+                minLines = 1,
+                overflow = TextOverflow.Clip,
+                onTextLayout = { limited = it },
+            )
+        }
+
+        assertEquals(1, limited?.lines?.size)
+    }
+
+    @Test
+    fun composeTextReplacementMaxLinesReturnsVisibleLayoutResult() {
+        var layout: LayoutResult? = null
+
+        render("compose-maxlines-visible-result") {
+            CjkText(
+                text = "甲\n中文中文中文中文中文中文",
+                modifier = Modifier.width(320.dp),
+                style = TextStyle(fontSize = 24.sp),
+                maxLines = 1,
+                overflow = TextOverflow.Visible,
+                onTextLayout = { layout = it },
+            )
+        }
+
+        val result = layout ?: error("onTextLayout was not called")
+        val line = result.lines.single()
+        val visibleEnd = line.range.end
+        assertEquals(LineEndReason.MandatoryBreak, line.endReason)
+        assertEquals(line.indent + line.visualWidth + line.hyphenAdvance, result.size.width)
+        assertTrue(result.clusters.all { it.range.end <= visibleEnd })
+        assertTrue(result.glyphRuns.all { it.range.end <= visibleEnd })
+        assertEquals(1, result.debug.lineDecisions.size)
+        assertTrue(result.debug.geometryDecisions.all { it.range.end <= visibleEnd })
+    }
+
+    @Test
+    fun maxLinesKeepsFontDecisionForVisibleSplitLatinCluster() {
+        var layout: LayoutResult? = null
+        val text = "internationalization 中文"
+
+        render("compose-maxlines-latin-role") {
+            CjkText(
+                text = text,
+                modifier = Modifier.width(120.dp),
+                style = TextStyle(fontSize = 24.sp),
+                maxLines = 1,
+                overflow = TextOverflow.Visible,
+                onTextLayout = { layout = it },
+            )
+        }
+
+        val result = layout ?: error("onTextLayout was not called")
+        val visibleLatin = result.clusters.firstOrNull { cluster ->
+            cluster.text.any { it in 'A'..'Z' || it in 'a'..'z' }
+        } ?: error("expected first visible line to include a Latin cluster: ${result.clusters}")
+        assertTrue(
+            result.debug.fontDecisions.any {
+                it.role == "LatinText" &&
+                    visibleLatin.range.start >= it.range.start &&
+                    visibleLatin.range.end <= it.range.end
+            },
+            "visible Latin cluster lost its font decision: cluster=$visibleLatin font=${result.debug.fontDecisions}",
+        )
+    }
+
+    @Test
+    fun composeTextReplacementCanDisableSoftWrapAndReserveMinLines() {
+        var wrapped: LayoutResult? = null
+        var unwrapped: LayoutResult? = null
+        var reserved: LayoutResult? = null
+        val text = "中文中文中文中文中文 EnglishTypography"
+
+        render("compose-softwrap") {
+            CjkText(
+                text = text,
+                modifier = Modifier.width(150.dp),
+                style = TextStyle(fontSize = 24.sp),
+                onTextLayout = { wrapped = it },
+            )
+        }
+        render("compose-no-softwrap") {
+            CjkText(
+                text = text,
+                modifier = Modifier.width(150.dp),
+                style = TextStyle(fontSize = 24.sp),
+                softWrap = false,
+                overflow = TextOverflow.Visible,
+                onTextLayout = { unwrapped = it },
+            )
+        }
+        render("compose-min-lines") {
+            CjkText(
+                text = "短句。",
+                modifier = Modifier.width(150.dp),
+                style = TextStyle(fontSize = 24.sp),
+                minLines = 3,
+                onTextLayout = { reserved = it },
+            )
+        }
+
+        assertTrue((wrapped?.lines?.size ?: 0) > 1, "expected wrapped text to use multiple lines")
+        assertEquals(1, unwrapped?.lines?.size)
+        assertTrue((reserved?.size?.height ?: 0f) > ((reserved?.lines?.firstOrNull()?.bottom ?: 0f) * 2f))
+    }
+
+    @Test
+    fun composeTextReplacementPreservesSourceMandatoryBreaks() {
+        var layout: LayoutResult? = null
+
+        render("compose-mandatory-breaks") {
+            CjkText(
+                text = "甲\n\n乙\n",
+                modifier = Modifier.width(180.dp),
+                style = TextStyle(fontSize = 24.sp),
+                onTextLayout = { layout = it },
+            )
+        }
+
+        val lines = layout?.lines.orEmpty()
+        assertEquals(4, lines.size)
+        assertEquals(
+            listOf(
+                LineEndReason.MandatoryBreak,
+                LineEndReason.MandatoryBreak,
+                LineEndReason.MandatoryBreak,
+                LineEndReason.ParagraphEnd,
+            ),
+            lines.map { it.endReason },
+        )
+        assertEquals(0f, lines[1].visualWidth)
     }
 }

@@ -1,6 +1,7 @@
 package org.tiqian.compose
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle as ComposeTextStyle
@@ -10,6 +11,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Density
@@ -65,14 +67,17 @@ class CjkTextCompatibilityTest {
             withStyle(
                 SpanStyle(
                     color = Color.Red,
+                    background = Color.Yellow,
                     fontSize = 1.2.em,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Serif,
+                    textDecoration = TextDecoration.Underline,
                 ),
             ) {
                 append("强调")
             }
             ruby("字", "zi")
+            inlineCode { append("code") }
         }
 
         val compatibility = text.cjkTextCompatibility(
@@ -109,7 +114,7 @@ class CjkTextCompatibilityTest {
     }
 
     @Test
-    fun linkStyledTextReportsLinkAndDecorationGaps() {
+    fun linkStyledTextReportsOnlyLinkActionGap() {
         val text = buildAnnotatedString {
             withLink(LinkAnnotation.Url("https://example.com")) {
                 withStyle(SpanStyle(color = Color.Blue, textDecoration = TextDecoration.Underline)) {
@@ -121,13 +126,13 @@ class CjkTextCompatibilityTest {
         val issues = text.cjkTextCompatibility().issues
 
         assertTrue(CjkTextCapabilityIssue.LinkAnnotations in issues)
-        assertTrue(CjkTextCapabilityIssue.TextDecoration in issues)
+        assertFalse(CjkTextCapabilityIssue.TextDecoration in issues)
         assertFalse(CjkTextCapabilityIssue.BrushForeground in issues)
         assertFalse(CjkTextCapabilityIssue.BackgroundColor in issues)
     }
 
     @Test
-    fun composeStyleCapabilityIssuesAreReported() {
+    fun remainingComposeStyleCapabilityIssuesAreReported() {
         val text = buildAnnotatedString {
             withStyle(SpanStyle(background = Color.Yellow, letterSpacing = 0.1.em)) {
                 append("高亮")
@@ -138,8 +143,17 @@ class CjkTextCompatibilityTest {
             ComposeTextStyle(textAlign = TextAlign.Center),
         ).issues
 
-        assertTrue(CjkTextCapabilityIssue.BackgroundColor in issues)
+        assertFalse(CjkTextCapabilityIssue.BackgroundColor in issues)
         assertTrue(CjkTextCapabilityIssue.LetterSpacing in issues)
         assertTrue(CjkTextCapabilityIssue.TextAlign in issues)
+    }
+
+    @Test
+    fun overflowEllipsisIsReportedAsAMissingOverflowMarkerModel() {
+        val issues = AnnotatedString("正文").cjkTextCompatibility(
+            overflow = TextOverflow.Ellipsis,
+        ).issues
+
+        assertTrue(CjkTextCapabilityIssue.OverflowEllipsis in issues)
     }
 }

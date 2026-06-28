@@ -28,7 +28,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.tiqian.compose.CjkBlock
-import org.tiqian.compose.CjkParagraph
 import org.tiqian.compose.CjkText
 import org.tiqian.compose.CjkTextStyle
 import org.tiqian.compose.ListMarker
@@ -59,19 +58,18 @@ private fun TiqianGalleryApp() {
             .padding(horizontal = 22.dp, vertical = 28.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        CjkParagraph(
+        CjkText(
             text = "提椠 Android Compose Gallery",
             modifier = Modifier.fillMaxWidth(),
             textStyle = CjkTextStyle(
                 fontSize = 24.sp,
-                lineHeight = 34.sp,
                 color = Color(0xFF15130D),
                 fontWeight = FontWeight.SemiBold,
             ),
             paragraphStyle = ParagraphStyle(firstLineIndent = 0.ic),
         )
 
-        CjkParagraph(
+        CjkText(
             text = buildAnnotatedString {
                 append("这不是桌面截图：这段文字正在 Android Compose 里走 ")
                 withStyle(SpanStyle(color = Color(0xFFB33A2B), fontWeight = FontWeight.Bold)) {
@@ -85,7 +83,13 @@ private fun TiqianGalleryApp() {
             textStyle = bodyStyle(),
         )
 
-        CjkParagraph(
+        CjkText(
+            text = "ASCII 符号归西文：50%、3.14、C++、a/b、x = y 全走 Latin 字体，不再误判成全宽。",
+            modifier = Modifier.fillMaxWidth(),
+            textStyle = bodyStyle(),
+        )
+
+        CjkText(
             text = buildAnnotatedString {
                 append("行间注验证：")
                 ruby("北京", "Běijīng")
@@ -135,7 +139,6 @@ private fun TiqianGalleryApp() {
 private fun bodyStyle(): CjkTextStyle =
     CjkTextStyle(
         fontSize = 17.sp,
-        lineHeight = 29.sp,
         color = Color(0xFF242018),
         locale = "zh-Hans",
     )

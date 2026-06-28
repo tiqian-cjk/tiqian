@@ -31,6 +31,25 @@ data class PositionedCluster(
 }
 
 /**
+ * A per-line occupied geometry segment covered by a [RichTextSpan]. Segments are derived from the
+ * same positioned clusters used for selection/hit testing, not from renderer-side text shaping.
+ */
+data class RichTextLineSegment(
+    val span: RichTextSpan,
+    val lineIndex: Int,
+    val range: TextRange,
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+    val baseline: Float,
+) {
+    val width: Float get() = right - left
+    val height: Float get() = bottom - top
+    val rect: Rect get() = Rect(left, top, right, bottom)
+}
+
+/**
  * Returns each cluster's occupied rectangle using the same line/cluster advances consumed by
  * renderers. This is the geometry bridge for links, selection, and accessibility.
  */
@@ -90,6 +109,64 @@ fun LayoutResult.getBoundingBoxes(range: TextRange): List<Rect> {
 
 fun LayoutResult.getBoundingBoxes(start: Int, end: Int): List<Rect> =
     getBoundingBoxes(TextRange(start, end))
+
+/**
+ * Returns continuous line-local geometry for rich-text spans. A span crossing lines is split at
+ * line boundaries; a span cutting through a multi-code-unit display cluster uses the same
+ * proportional source split as [getBoundingBoxes].
+ */
+fun LayoutResult.positionedRichTextSegments(spans: List<RichTextSpan>): List<RichTextLineSegment> {
+    if (spans.isEmpty() || lines.isEmpty()) return emptyList()
+    val clusters = positionedClusters()
+    val textLength = input.content.text.length
+    val out = mutableListOf<RichTextLineSegment>()
+    for (span in spans) {
+        val start = span.range.start.coerceIn(0, textLength)
+        val end = span.range.end.coerceIn(start, textLength)
+        if (start == end) continue
+        var pending: RichTextLineSegment? = null
+        fun flushPending() {
+            pending?.let(out::add)
+            pending = null
+        }
+        for (cluster in clusters) {
+            val sliceStart = max(start, cluster.range.start)
+            val sliceEnd = minOf(end, cluster.range.end)
+            if (sliceStart >= sliceEnd) continue
+            val rect = cluster.sliceRect(sliceStart, sliceEnd)
+            val next = RichTextLineSegment(
+                span = span.copy(range = TextRange(start, end)),
+                lineIndex = cluster.lineIndex,
+                range = TextRange(sliceStart, sliceEnd),
+                left = rect.left,
+                top = rect.top,
+                right = rect.right,
+                bottom = rect.bottom,
+                baseline = cluster.baseline,
+            )
+            val current = pending
+            if (
+                current != null &&
+                current.lineIndex == next.lineIndex &&
+                current.span == next.span &&
+                current.range.end == next.range.start &&
+                abs(current.right - next.left) <= 0.5f
+            ) {
+                pending = current.copy(
+                    range = TextRange(current.range.start, next.range.end),
+                    right = next.right,
+                    top = minOf(current.top, next.top),
+                    bottom = max(current.bottom, next.bottom),
+                )
+            } else {
+                flushPending()
+                pending = next
+            }
+        }
+        flushPending()
+    }
+    return out
+}
 
 /**
  * Returns a caret rectangle for [offset]. The x position is derived from Tiqian's cluster advances;

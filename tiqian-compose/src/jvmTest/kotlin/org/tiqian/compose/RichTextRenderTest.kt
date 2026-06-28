@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -23,25 +24,28 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Rich-text 颜色 (ADR 0030 A 档, render-only): a `SpanStyle.color` span paints
- * its clusters in that color, the rest stay default — layout is unchanged.
+ * Rich-text paint roles are rendered from Tiqian layout geometry, not by routing back to Compose
+ * Text. The pixel assertions only guard wiring; glyph shapes stay covered by shaping goldens.
  */
 @OptIn(ExperimentalComposeUiApi::class)
-class RichColorRenderTest {
+class RichTextRenderTest {
 
     @Test
-    fun spanColorsPaintTheirClusters() {
-        var red = 0
+    fun backgroundAndTextDecorationPaintFromRichTextSpans() {
+        var yellow = 0
         var blue = 0
-        ImageComposeScene(width = 520, height = 170) {
+        ImageComposeScene(width = 520, height = 180) {
             Box(Modifier.fillMaxSize().background(Color.White).padding(16.dp)) {
                 CjkText(
                     buildAnnotatedString {
-                        append("普通的黑字，")
-                        withStyle(SpanStyle(color = Color.Red)) { append("红色强调") }
-                        append("，再来")
-                        withStyle(SpanStyle(color = Color(0xFF0066FF))) { append("蓝色") }
-                        append("。")
+                        append("普通")
+                        withStyle(SpanStyle(background = Color(0xFFFFEA00))) { append("高亮背景") }
+                        append("，")
+                        withStyle(SpanStyle(color = Color.Blue, textDecoration = TextDecoration.Underline)) {
+                            append("蓝色下划线")
+                        }
+                        append("，")
+                        inlineCode { append("code") }
                     },
                     modifier = Modifier.width(480.dp),
                     textStyle = CjkTextStyle(fontSize = 40.sp),
@@ -51,16 +55,16 @@ class RichColorRenderTest {
             val image = scene.render()
             File("build/reports/tiqian-compose").mkdirs()
             image.encodeToData(EncodedImageFormat.PNG)?.bytes?.let {
-                File("build/reports/tiqian-compose/rich-color.png").writeBytes(it)
+                File("build/reports/tiqian-compose/rich-text.png").writeBytes(it)
             }
             val px = image.toComposeImageBitmap().toPixelMap()
             for (y in 0 until px.height) for (x in 0 until px.width) {
                 val c = px[x, y]
-                if (c.red > 0.6f && c.green < 0.3f && c.blue < 0.3f) red++
-                if (c.blue > 0.6f && c.red < 0.3f && c.green < 0.5f) blue++
+                if (c.red > 0.85f && c.green > 0.75f && c.blue < 0.25f) yellow++
+                if (c.blue > 0.65f && c.red < 0.35f && c.green < 0.45f) blue++
             }
         }
-        assertTrue(red > 200, "expected red ink from the 红色 span, got $red")
-        assertTrue(blue > 200, "expected blue ink from the 蓝色 span, got $blue")
+        assertTrue(yellow > 600, "expected yellow background pixels, got $yellow")
+        assertTrue(blue > 200, "expected blue text/underline pixels, got $blue")
     }
 }

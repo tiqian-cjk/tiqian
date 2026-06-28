@@ -3,7 +3,6 @@ package org.tiqian.compose
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
-import android.os.Build
 import android.text.TextPaint
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -14,10 +13,13 @@ import org.tiqian.core.ColorSpan
 import org.tiqian.core.DecorationKind
 import org.tiqian.core.LayoutResult
 import org.tiqian.core.LineBox
+import org.tiqian.core.RichTextRole
+import org.tiqian.core.RichTextSpan
 import org.tiqian.core.TextSpan
 import org.tiqian.core.TextStyle
 import org.tiqian.core.BopomofoGlyphRole
 import org.tiqian.core.positionedClusters
+import org.tiqian.core.positionedRichTextSegments
 import org.tiqian.font.FontRole
 import org.tiqian.shaping.android.AndroidPositionedGlyphFontRegistry
 import org.tiqian.shaping.android.AndroidTypefaceResolver
@@ -31,11 +33,14 @@ internal actual fun ContentDrawScope.drawParagraph(
     result: LayoutResult,
     color: Int,
     colorSpans: List<ColorSpan>,
+    richTextSpans: List<RichTextSpan>,
     spans: List<TextSpan>,
 ) {
     drawIntoCanvas { canvas ->
         val native = canvas.nativeCanvas
+        drawAndroidRichTextBackgrounds(native, result, richTextSpans)
         drawAndroidGlyphs(native, result, color, colorSpans, spans, AndroidRendererTypefaces)
+        drawAndroidRichTextLines(native, result, color, colorSpans, richTextSpans, spans, AndroidRendererTypefaces)
         drawAndroidDecorations(native, result, color, spans, AndroidRendererTypefaces)
         drawAndroidRuby(native, result, color, AndroidRendererTypefaces)
         drawAndroidBopomofo(native, result, color, AndroidRendererTypefaces)
@@ -63,10 +68,10 @@ private fun drawAndroidGlyphs(
         paint.typeface = typefaces.resolve(run.role, run.style.fontFamilies, run.style.fontWeight, run.style.italic)
         paint.fontFeatureSettings = null
         val glyphs = glyphsByClusterRange[cluster.range].orEmpty()
-        if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            drawPositionedGlyphs(canvas, glyphs, drawX, baselineY, paint)
-        ) {
+        // minSdk 31 == Android S, so Canvas.drawGlyphs is always available; per-glyph
+        // replay falls back to contextual string drawing only when a glyph's shaped
+        // Font key is missing/evicted (drawPositionedGlyphs returns false).
+        if (drawPositionedGlyphs(canvas, glyphs, drawX, baselineY, paint)) {
             return@forEachAndroidPositionedCluster
         }
         drawContextShapedText(canvas, cluster.displayText, drawX, baselineY, run.role, paint)
@@ -169,6 +174,66 @@ private fun drawAndroidDecorations(
     }
 }
 
+private fun drawAndroidRichTextBackgrounds(
+    canvas: android.graphics.Canvas,
+    result: LayoutResult,
+    richTextSpans: List<RichTextSpan>,
+) {
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+    for (seg in result.positionedRichTextSegments(richTextSpans)) {
+        val argb = when (seg.span.role) {
+            RichTextRole.Background -> seg.span.paint.argb
+            RichTextRole.InlineCode -> seg.span.paint.argb ?: INLINE_CODE_BACKGROUND_COLOR
+            else -> null
+        } ?: continue
+        paint.color = argb
+        canvas.drawRect(seg.left, seg.top, seg.right, seg.bottom, paint)
+    }
+}
+
+private fun drawAndroidRichTextLines(
+    canvas: android.graphics.Canvas,
+    result: LayoutResult,
+    color: Int,
+    colorSpans: List<ColorSpan>,
+    richTextSpans: List<RichTextSpan>,
+    spans: List<TextSpan>,
+    typefaces: AndroidTypefaceResolver,
+) {
+    val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = (result.input.textStyle.fontSize / 16f).coerceAtLeast(1f)
+    }
+    val skipPad = strokePaint.strokeWidth.coerceAtLeast(1f)
+    for (seg in result.positionedRichTextSegments(richTextSpans)) {
+        val role = seg.span.role
+        if (role != RichTextRole.Underline && role != RichTextRole.LineThrough) continue
+        val style = spans.lastOrNull { seg.range.start >= it.range.start && seg.range.start < it.range.end }?.style
+            ?: result.input.textStyle
+        val rawLineY = if (role == RichTextRole.Underline) {
+            seg.baseline + style.fontSize * GENERIC_UNDERLINE_OFFSET_EM
+        } else {
+            seg.baseline - style.fontSize * GENERIC_LINE_THROUGH_OFFSET_EM
+        }
+        val lineY = rawLineY.coerceIn(seg.top + strokePaint.strokeWidth / 2f, seg.bottom - strokePaint.strokeWidth / 2f)
+        strokePaint.color = seg.span.paint.argb ?: colorAt(seg.range.start, color, colorSpans)
+        if (role == RichTextRole.Underline) {
+            val line = result.lines.getOrNull(seg.lineIndex) ?: continue
+            val skips = result.androidLineInkSkipIntervals(line, lineY - skipPad, lineY + skipPad, spans, typefaces)
+            keptIntervals(seg.left, seg.right, skips, skipPad) { x0, x1 ->
+                canvas.drawLine(x0, lineY, x1, lineY, strokePaint)
+            }
+        } else {
+            canvas.drawLine(seg.left, lineY, seg.right, lineY, strokePaint)
+        }
+    }
+}
+
+private fun colorAt(offset: Int, color: Int, colorSpans: List<ColorSpan>): Int =
+    colorSpans.lastOrNull { offset >= it.start && offset < it.end }?.argb ?: color
+
 private fun drawAndroidRuby(
     canvas: android.graphics.Canvas,
     result: LayoutResult,
@@ -205,8 +270,9 @@ private fun drawAndroidBopomofo(
         for (p in z.placements) {
             when (p.role) {
                 BopomofoGlyphRole.Symbol -> {
+                    // ㄅㄆㄇ are full-em CJK glyphs → sit on the 字身框 baseline (0.88),
+                    // like body CJK; 轻声/声调 below ink-center because they are small marks.
                     paint.textSize = p.height
-                    paint.getTextBounds(p.text, 0, p.text.length, bounds)
                     val drawX = p.left + (p.width - paint.measureText(p.text)) / 2f
                     canvas.drawTextRun(p.text, 0, p.text.length, 0, p.text.length, drawX, p.top + p.height * 0.88f, false, paint)
                 }
@@ -357,3 +423,7 @@ private fun wavyLinePath(left: Float, right: Float, y: Float, fontSize: Float): 
     }
     return path
 }
+
+private const val INLINE_CODE_BACKGROUND_COLOR: Int = 0x1A000000
+private const val GENERIC_UNDERLINE_OFFSET_EM = 0.12f
+private const val GENERIC_LINE_THROUGH_OFFSET_EM = 0.30f

@@ -40,6 +40,45 @@ data class DecorationSpan(
 data class ColorSpan(val start: Int, val end: Int, val argb: Int)
 
 /**
+ * Render/semantic rich-text roles over a SOURCE range. These spans do not affect shaping,
+ * breaking or justification: they reuse [LayoutResult] geometry after layout, so the source text
+ * and CJK paragraph decisions stay owned by the core pipeline.
+ */
+data class RichTextSpan(
+    val range: TextRange,
+    val role: RichTextRole,
+    val paint: RichTextPaint = RichTextPaint(),
+)
+
+data class RichTextPaint(
+    /** Optional ARGB paint. Null means "inherit the current text color/default role paint". */
+    val argb: Int? = null,
+)
+
+sealed interface RichTextRole {
+    /** Compose `SpanStyle.background`, painted behind the occupied text boxes. */
+    data object Background : RichTextRole
+
+    /** Compose `TextDecoration.Underline`, painted with Tiqian line geometry + skip-ink. */
+    data object Underline : RichTextRole
+
+    /** Compose `TextDecoration.LineThrough`, painted with Tiqian line geometry. */
+    data object LineThrough : RichTextRole
+
+    /**
+     * Link source range. The URL/click tag is preserved in the model; link actions remain a
+     * frontend/accessibility slice, so this role does not imply visual fallback or navigation.
+     */
+    data class Link(val target: String) : RichTextRole
+
+    /**
+     * Inline code role authored through Tiqian's builder. Its source is unchanged; the Compose
+     * bridge also lowers its generic monospace font family via [TextSpan].
+     */
+    data object InlineCode : RichTextRole
+}
+
+/**
  * 行间注 (ruby, ADR 0032): small-size annotation [text] over a base SOURCE
  * [baseRange] — 拼音 above the base (this slice). Unlike [DecorationSpan], ruby
  * DOES affect layout: it reserves line height and keeps the base unbreakable.
@@ -220,4 +259,3 @@ data class LayoutInput(
     val decorations: List<DecorationSpan> = emptyList(),
     val rubySpans: List<RubySpan> = emptyList(),
 )
-

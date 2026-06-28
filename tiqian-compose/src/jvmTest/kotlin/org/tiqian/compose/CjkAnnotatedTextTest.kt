@@ -2,14 +2,18 @@ package org.tiqian.compose
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.em
 import org.tiqian.core.DecorationKind
+import org.tiqian.core.RichTextRole
 import org.tiqian.core.RubyKind
 import org.tiqian.core.TextRange
 import org.tiqian.core.TextStyle
@@ -80,6 +84,55 @@ class CjkAnnotatedTextTest {
         assertEquals(1, spans[0].start)
         assertEquals(3, spans[0].end)
         assertEquals(Color.Red.toArgb(), spans[0].argb)
+    }
+
+    @Test
+    fun richTextSpansExtractBackgroundAndTextDecorations() {
+        val text = buildAnnotatedString {
+            append("前")
+            withStyle(
+                SpanStyle(
+                    color = Color.Blue,
+                    background = Color.Yellow,
+                    textDecoration = TextDecoration.Underline + TextDecoration.LineThrough,
+                ),
+            ) {
+                append("样式")
+            }
+            append("后")
+        }
+
+        val spans = text.cjkRichTextSpans()
+
+        assertEquals(
+            RichTextRole.Background,
+            spans.first { it.role == RichTextRole.Background }.role,
+        )
+        assertEquals(Color.Yellow.toArgb(), spans.first { it.role == RichTextRole.Background }.paint.argb)
+        assertEquals(Color.Blue.toArgb(), spans.first { it.role == RichTextRole.Underline }.paint.argb)
+        assertEquals(Color.Blue.toArgb(), spans.first { it.role == RichTextRole.LineThrough }.paint.argb)
+        assertEquals(TextRange(1, 3), spans.first { it.role == RichTextRole.Underline }.range)
+    }
+
+    @Test
+    fun linkAndInlineCodeRolesKeepSourceRanges() {
+        val text = buildAnnotatedString {
+            append("读")
+            withLink(LinkAnnotation.Url("https://example.com")) { append("链接") }
+            append("与")
+            inlineCode { append("code") }
+        }
+
+        val rich = text.cjkRichTextSpans()
+        val link = rich.first { it.role is RichTextRole.Link }
+        val code = rich.first { it.role == RichTextRole.InlineCode }
+        val style = text.cjkStyleSpans(TextStyle(), Density(1f)).first { it.range == code.range }
+
+        assertEquals("读链接与code", text.text)
+        assertEquals(TextRange(1, 3), link.range)
+        assertEquals(RichTextRole.Link("https://example.com"), link.role)
+        assertEquals(TextRange(4, 8), code.range)
+        assertEquals(listOf("monospace"), style.style.fontFamilies)
     }
 
     @Test

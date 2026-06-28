@@ -19,14 +19,14 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Slice 7 acceptance: CjkParagraph rendered offscreen must produce real
+ * Slice 7 acceptance: CjkText rendered offscreen must produce real
  * ink. The PNG is written to build/reports for eyeballing; the assertion
  * only checks a sane amount of non-background pixels (glyph forms are
  * already covered by the shaping goldens — this guards the compose wiring:
  * measure pass, canvas interop, blob drawing).
  */
 @OptIn(ExperimentalComposeUiApi::class)
-class CjkParagraphRenderTest {
+class CjkTextLayoutRenderTest {
 
     private val paragraph =
         "咖啡（coffee）在十七世纪经威尼斯传入欧洲。最初它被当作药物出售，价格高得吓人，" +
@@ -37,7 +37,7 @@ class CjkParagraphRenderTest {
     fun offscreenRenderProducesInk() {
         ImageComposeScene(width = 380, height = 320) {
             Box(Modifier.fillMaxSize().background(Color.White).padding(16.dp)) {
-                CjkParagraph(
+                CjkText(
                     text = paragraph,
                     modifier = Modifier.width(320.dp),
                 )
