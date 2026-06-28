@@ -63,3 +63,23 @@ CLREQ 行首行尾禁则分四档（`KinsokuLevel`，命名对齐第六节原文
 - 竖排时破折号、省略号、连接号顺时针旋转 90 度。
 - 简体横排常用弯引号，繁体和竖排常用角引号；这属于 writing mode 与 region policy，不应作为当前横排默认替换。
 
+## 字体面归属（中西共用码点）
+
+字体**面**（Latin vs CJK）是码点问题，不是字形问题。中西真·共用码点只有
+弯引号 U+2018–201D，按上下文判定（两侧 Latin → Latin 面，否则 CJK 面）；其余各归各：
+所有可打印 ASCII（U+0020–007E，含 `% . , : ; - / ~ | \` 等）是 typed Western intent →
+**Latin 面**；CJK 专有码点（`—` U+2014、`…` U+2026、`、`、全宽 `FF**`、`·`、`•`）→
+**CJK 面**。判定在 `CjkFontRoleClassifier`。
+
+历史 drift（已收回）：曾把 ASCII `- / ~` 误塞 `isCjkPunctuationCodePoint` 并给它们加
+`isLatinTechnicalPunctuation` 上下文补丁，其余 ASCII 标点漏到 `Unknown` → CJK 面，
+导致 `%` 等用中文字体渲染（全宽）。
+
+### 已知限制：ASCII 符号紧贴 CJK 的竖向对齐
+
+Latin 字形按小写基线设计，`/ \ | ~` 等竖向延展符号**无空格**直接夹在汉字之间时会
+**靠下**，不像 CJK 标点那样字身框居中。正文里这种紧贴罕见（多见于表格/路径/代码），
+且最常见的带空格分隔 `中文 | 英文` 两侧本就是 Latin、不会被「两侧 Latin 才用 Latin」
+之类的上下文规则纠正，故**暂不做**符号级上下文感知/居中（评估后认为得不偿失）。归
+CLREQ 中西基线对齐范畴，与竖排/JLREQ 一并搁置，待真实正文语料触发再议。
+

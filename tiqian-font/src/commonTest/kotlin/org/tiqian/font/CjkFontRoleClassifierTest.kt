@@ -22,8 +22,6 @@ class CjkFontRoleClassifierTest {
         assertEquals(FontRole.CjkPunctuation, classifier.classify("・", TextRange(0, 1)))
         assertEquals(FontRole.CjkPunctuation, classifier.classify("‧", TextRange(0, 1)))
         assertEquals(FontRole.CjkPunctuation, classifier.classify("～", TextRange(0, 1)))
-        assertEquals(FontRole.CjkPunctuation, classifier.classify("-", TextRange(0, 1)))
-        assertEquals(FontRole.CjkPunctuation, classifier.classify("/", TextRange(0, 1)))
         assertEquals(FontRole.CjkPunctuation, classifier.classify("／", TextRange(0, 1)))
     }
 
@@ -33,12 +31,27 @@ class CjkFontRoleClassifierTest {
     }
 
     @Test
-    fun keepsAsciiPunctuationInsideLatinTechnicalRuns() {
+    fun classifiesAsciiSymbolsAndPunctuationAsLatin() {
+        // The percent-sign bug: typed ASCII punctuation/symbols are Western → Latin face,
+        // not the CJK fallback. Covers Po punctuation and S* symbols alike.
+        val samples = listOf('%', '.', ',', ':', ';', '!', '?', '#', '@', '&', '*', '+', '=', '<', '>', '|', '^', '_', '$', '\'', '"')
+        for (ch in samples) {
+            assertEquals(FontRole.LatinText, classifier.classify(ch.toString(), TextRange(0, 1)), "char=$ch")
+        }
+        // Even between CJK, an ASCII '%' stays Latin (50%, not a full-width CJK ％).
+        assertEquals(FontRole.LatinText, classifier.classify("中%文", TextRange(1, 2)))
+    }
+
+    @Test
+    fun classifiesAsciiHyphenSlashTildeAsLatinRegardlessOfContext() {
         assertEquals(FontRole.LatinText, classifier.classify("well-known", TextRange(4, 5)))
         assertEquals(FontRole.LatinText, classifier.classify("https://example", TextRange(6, 7)))
         assertEquals(FontRole.LatinText, classifier.classify("https://example", TextRange(7, 8)))
         assertEquals(FontRole.LatinText, classifier.classify("中文/TERFism", TextRange(2, 3)))
-        assertEquals(FontRole.CjkPunctuation, classifier.classify("\u4E2D\u6587/\u4E2D\u6587", TextRange(2, 3)))
+        // ASCII '/' '-' '~' are typed Western (English slash/hyphen), not CJK \u8FDE\u63A5\u53F7 (those are
+        // distinct code points U+FF0F/U+2014/U+FF5E) \u2014 so Latin even between CJK.
+        assertEquals(FontRole.LatinText, classifier.classify("\u4E2D\u6587/\u4E2D\u6587", TextRange(2, 3)))
+        assertEquals(FontRole.LatinText, classifier.classify("\u4E2D\u6587-\u4E2D\u6587", TextRange(2, 3)))
     }
 
     @Test

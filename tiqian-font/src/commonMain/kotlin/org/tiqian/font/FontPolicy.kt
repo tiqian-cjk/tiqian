@@ -69,11 +69,12 @@ class CjkFontRoleClassifier : FontRoleClassifier {
         val firstCodePoint = text.codePointAtCompat(range.start)
         return when {
             firstCodePoint.isCjkCodePoint() -> FontRole.CjkText
-            firstCodePoint.isLatinTechnicalPunctuation(text, range) -> FontRole.LatinText
+            // The ONLY shared CJK/Western code points are the curly quotes — resolved by
+            // context. Everything else is native: typed ASCII → Latin, CJK code points → CJK.
             firstCodePoint.isLatinCurlyQuote(text, range) -> FontRole.LatinText
             firstCodePoint.isCjkPunctuationCodePoint() -> FontRole.CjkPunctuation
+            firstCodePoint.isTypedAsciiLatin() -> FontRole.LatinText
             firstCodePoint.isLatinCodePoint() -> FontRole.LatinText
-            firstCodePoint.isAsciiLatinPunctuation() -> FontRole.LatinText
             firstCodePoint.isEmojiCodePoint() -> FontRole.Emoji
             firstCodePoint.isSymbolCodePoint() -> FontRole.Symbol
             else -> FontRole.Unknown
@@ -105,9 +106,6 @@ class CjkFontRoleClassifier : FontRoleClassifier {
             this == 0x30FB ||
             this == 0x2E3A ||
             this == 0x00B7 ||
-            this == 0x002D ||
-            this == 0x002F ||
-            this == 0x007E ||
             this == 0x2022 ||
             this == 0xFF01 ||
             this == 0xFF1F ||
@@ -120,13 +118,6 @@ class CjkFontRoleClassifier : FontRoleClassifier {
             this == 0xFF09 ||
             this == 0xFF5E
 
-    private fun Int.isLatinTechnicalPunctuation(text: String, range: TextRange): Boolean =
-        isAmbiguousAsciiPunctuation() &&
-            (
-                text.previousCodePointBefore(range.start)?.isLatinTechnicalRunCodePoint() == true ||
-                    text.nextCodePointAfter(range.end)?.isLatinTechnicalRunCodePoint() == true
-                )
-
     private fun Int.isLatinCurlyQuote(text: String, range: TextRange): Boolean =
         isAmbiguousCurlyQuote() &&
             text.previousCodePointBefore(range.start)?.isLatinRunCodePoint() == true &&
@@ -135,14 +126,8 @@ class CjkFontRoleClassifier : FontRoleClassifier {
     private fun Int.isAmbiguousCurlyQuote(): Boolean =
         this == 0x2018 || this == 0x2019 || this == 0x201C || this == 0x201D
 
-    private fun Int.isAmbiguousAsciiPunctuation(): Boolean =
-        this == 0x002D || this == 0x002F || this == 0x007E
-
     private fun Int.isLatinRunCodePoint(): Boolean =
-        isLatinCodePoint() || isAmbiguousAsciiPunctuation() || isAmbiguousCurlyQuote() || this == 0x0020
-
-    private fun Int.isLatinTechnicalRunCodePoint(): Boolean =
-        isLatinCodePoint() || isAmbiguousAsciiPunctuation() || this == 0x002E || this == 0x003A || this == 0x005F
+        isTypedAsciiLatin() || isLatinCodePoint() || isAmbiguousCurlyQuote()
 
     private fun Int.isLatinCodePoint(): Boolean =
         this in 0x0041..0x005A ||
@@ -151,29 +136,15 @@ class CjkFontRoleClassifier : FontRoleClassifier {
             this in 0x00C0..0x024F
 
     /**
-     * ASCII punctuation that does NOT share a code point with CJK fullwidth
-     * forms. These are always Latin by typed intent — if the author wanted
-     * fullwidth they would have typed U+FF08 / U+FF09 / etc. Listed here so
-     * they classify as [FontRole.LatinText] (and aggregate with adjacent
-     * Latin runs) instead of falling through to [FontRole.Unknown] and
-     * landing on the symbol fallback font.
-     *
-     * U+0020 SPACE is also included: per ADR 0009 it joins the Latin run for
-     * cluster aggregation and its advance is later adjusted by
-     * `ClreqProfile.autoSpace` when it sits at a CJK ↔ Latin boundary
-     * (typed-space-as-autospace).
-     *
-     * Pair-aware analyzers ([QuotePairAnalyzer]) are reserved for genuinely
-     * shared code points (U+2018–201D curly quotes), not for these.
+     * All printable ASCII (U+0020..U+007E) is typed-Latin intent → [FontRole.LatinText].
+     * The ONLY CJK/Western shared code points are the curly quotes (U+2018–201D), resolved
+     * by context in [isLatinCurlyQuote]; genuinely-CJK code points (—, …, 、, fullwidth FF**)
+     * are caught by [isCjkPunctuationCodePoint] before this. So an ASCII `%` / `.` / `-` / `/`
+     * renders Western and aggregates with adjacent Latin instead of landing on the CJK face
+     * (ADR 0029: ASCII `-`/`/` is an English hyphen, not a CJK 连接号). U+0020 SPACE joins the
+     * Latin run per ADR 0009 (advance later adjusted by `ClreqProfile.autoSpace` at boundaries).
      */
-    private fun Int.isAsciiLatinPunctuation(): Boolean =
-        this == 0x0020 || // SPACE
-            this == 0x0028 || // (
-            this == 0x0029 || // )
-            this == 0x005B || // [
-            this == 0x005D || // ]
-            this == 0x007B || // {
-            this == 0x007D // }
+    private fun Int.isTypedAsciiLatin(): Boolean = this in 0x0020..0x007E
 
     private fun Int.isEmojiCodePoint(): Boolean =
         this in 0x1F300..0x1FAFF
