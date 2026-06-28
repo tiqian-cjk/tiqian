@@ -40,7 +40,8 @@
 4. 默认 `firstLineIndent = 0`（纯文本路径）。
 5. golden + 新 fixture：单 `\n`、多空行、首尾空行、`CRLF`、长行回绕齐头。
 
-Compose 入口（`CjkText`）接线 + 改名在 compose 模块这一轮 WIP 落地后单独做。
+Compose 入口用 `CjkText` 直接接线；public `CjkParagraph` 不保留兼容别名。Compose
+模块内部可以保留一个私有/`internal` layout node，但它不是作者 API。
 
 ## Alternatives considered
 

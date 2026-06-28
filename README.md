@@ -13,10 +13,18 @@
 - - - [ ] 行间注（拼音 / 注音） 
 - - [x] 段落调整
 - - - [ ] 富文本
+- - - - [x] 颜色 / 字号 / 字重 / 斜体 / generic 字体族
+- - - - [x] 背景 / 普通下划线 / 删除线 / inline code role
+- - - - [x] `softWrap` / `maxLines` / `minLines` / `TextOverflow.Clip|Visible`
+- - - - [ ] link 点击与无障碍 action / inline placeholder / ellipsis overflow marker / letterSpacing
 - [ ] 繁体中文横排
 - [ ] 简 / 繁直排
 - [ ] 日文排版（JLREQ）
 - [ ] 韩文排版（KLREQ）
+
+Compose 入口目前分两层：`CjkText(String | AnnotatedString, ...)` 是替代 Compose
+`Text` 的源忠实纯文本入口，源码里的 `\n` / CRLF / Unicode mandatory break 会作为强制断行保留，
+不会被当字形 shape；结构化正文、节与列表使用显式 `CjkText(blocks = ...)`。
 
 ## 模块
 

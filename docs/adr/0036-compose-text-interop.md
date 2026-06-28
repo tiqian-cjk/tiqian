@@ -23,18 +23,29 @@ Keep the explicit Tiqian-native API, and add a Compose interop API beside it:
   paragraph-level `.sp` font sizes pass through, and paragraph-level `.em` font
   sizes resolve against the bridge's explicit default `CjkTextStyle.fontSize`
   before entering the engine;
-- `CjkParagraph` / `CjkText` overloads that accept Compose `style: TextStyle`;
+- `CjkText` overloads that accept Compose `style: TextStyle`;
+- `CjkText(text: String | AnnotatedString, ...)` as the source-faithful Compose Text replacement
+  facade (see ADR 0037). It accepts the Compose Text call-site shape Tiqian can own without routing
+  back to host text (`modifier`, `color`, `fontSize`, `fontStyle`, `fontWeight`, `fontFamily`,
+  `textDecoration`, `textAlign`, `lineHeight`, `overflow`, `softWrap`, `maxLines`, `minLines`,
+  `style`, `onTextLayout`). Source `\n`, CRLF, and Unicode mandatory breaks are hard breaks inside
+  this plain-text flow, not a request to enter the structured block/list API. The implemented
+  overflow modes are `TextOverflow.Clip` and `TextOverflow.Visible`; `Ellipsis` is reported as a
+  capability gap until Tiqian has an explicit overflow-marker model instead of a renderer-side text
+  rewrite;
+- `CjkText(blocks = ...)` remains the explicit block/list document API. It is not the migration path
+  for renderer-produced Compose rich text;
 - `ParagraphMeasurer.measure(AnnotatedString, ..., style: TextStyle)` for pre-layout;
 - `AnnotatedString.cjkTextCompatibility(style)` returning structured
   `CjkTextCapabilityIssue`s.
 
 The compatibility report is the renderer boundary, but it is not a host-renderer switch.
 Tiqian accepts the input shape; the report returns `canPreserveAllKnownSemantics = true` only when
-the current Compose frontend can preserve every detected feature. Links, URL/TTS annotations, inline
-placeholders, unknown string annotations, brush foregrounds, backgrounds, text decorations, shadows,
-draw styles, baseline shifts, geometric transforms, locale lists, synthesis, font-feature settings,
-letter spacing, non-generic font families, platform styles, paragraph style ranges, and Compose
-paragraph controls are reported as Tiqian capability issues.
+the current Compose frontend can preserve every detected feature. Link actions, URL/TTS annotations,
+inline placeholders, unknown string annotations, brush foregrounds, shadows, draw styles, baseline
+shifts, geometric transforms, locale lists, synthesis, font-feature settings, letter spacing,
+non-generic font families, platform styles, paragraph style ranges, and Compose paragraph controls
+are reported as Tiqian capability issues.
 
 Supported Compose rich text remains the subset already wired through the real pipeline:
 
@@ -44,6 +55,25 @@ Supported Compose rich text remains the subset already wired through the real pi
 - `SpanStyle.color` as render-only `ColorSpan`;
 - `SpanStyle.fontSize` / `fontWeight` / `fontStyle` / generic `fontFamily` as layout-affecting
   `TextSpan`s; span-level `.em` font size remains relative to the resolved paragraph font size;
+- `SpanStyle.background`, `TextDecoration.Underline`, and `TextDecoration.LineThrough` as
+  render-only `RichTextSpan`s painted from `LayoutResult` geometry; underline reuses Tiqian's
+  skip-ink primitive instead of drawing a raw line through glyph ink;
+- `LinkAnnotation` ranges as `RichTextRole.Link` source ranges. The range is preserved for geometry
+  and future actions, but clickable navigation and accessibility actions remain a separate frontend
+  slice and still appear in the capability report;
+- paragraph-level `TextStyle.textDecoration` / background reach the same rich-text render-role path
+  by wrapping the source `AnnotatedString` in an outer span; source text and existing annotations are
+  preserved;
+- `TextAlign.Start/Left/Justify/Center/End/Right` lowers only to Tiqian's existing
+  `ParagraphStyle.lastLineAlignment` degree of freedom. Non-last lines remain CLREQ justified;
+- `softWrap=false` measures with an unbounded line width; `maxLines` trims the visible line boxes;
+  `minLines` reserves extra measured height without inventing hidden clusters; `TextOverflow.Clip`
+  clips to the measured visible box and `TextOverflow.Visible` leaves overhang visible;
+- source mandatory breaks (`\n`, coalesced CRLF, UAX#14 mandatory controls) create zero-advance,
+  unshaped break clusters; consecutive and trailing breaks preserve blank lines, while long source
+  lines still auto-wrap before the hard break;
+- Tiqian `inlineCode { ... }` builder as `RichTextRole.InlineCode` plus generic monospace
+  `TextSpan`; source text stays unchanged;
 - Tiqian builders for emphasis, proper noun, mourning, book title, ruby, and bopomofo.
 
 ## Integration rule
@@ -54,15 +84,17 @@ style it would hand to Compose text, then use `cjkTextCompatibility` to expose w
 needs to implement:
 
 ```kotlin
-val compatibility = annotated.cjkTextCompatibility(style)
+val compatibility = annotated.cjkTextCompatibility(style, overflow = overflow)
 check(compatibility.canPreserveAllKnownSemantics) { compatibility.issues }
-CjkParagraph(annotated, style = style)
+CjkText(annotated, style = style, overflow = overflow)
 ```
 
 Inline widgets need a future explicit Tiqian inline-object contract; until then, paragraphs carrying
 object replacement characters or renderer-owned placeholder annotations are accepted but reported as
-model gaps. A Markdown AST or HTML wrapper may still provide application-owned emergency containment,
-but Tiqian itself must not route around its own renderer during dogfooding.
+model gaps. Letter spacing needs to enter shaping/layout as a real advance-affecting text style,
+not as renderer-side glyph spreading. A Markdown AST or HTML wrapper may still provide
+application-owned emergency containment, but Tiqian itself must not route around its own renderer
+during dogfooding.
 
 ## Consequences
 
@@ -72,7 +104,7 @@ but Tiqian itself must not route around its own renderer during dogfooding.
 - Capability gaps become explainable and testable instead of being hidden by a host-renderer detour.
 - Frontend modules still do not make CLREQ/font-fallback/glue/kinsoku/justification decisions; they only
   lower style values and expose capability reports.
-- `CjkParagraph` exposes the source `AnnotatedString` to Compose semantics for baseline screen-reader
+- `CjkText` exposes the source `AnnotatedString` to Compose semantics for baseline screen-reader
   text. Geometry-sensitive actions (links, selection, TalkBack character boxes) must be backed by
   Tiqian `LayoutResult` queries such as offset/line/box/range hit testing, not by a hidden Compose
   Text layout.
@@ -83,4 +115,5 @@ but Tiqian itself must not route around its own renderer during dogfooding.
 
 ```shell
 ./gradlew :tiqian-compose:jvmTest --tests 'org.tiqian.compose.CjkTextCompatibilityTest'
+./gradlew :tiqian-compose:jvmTest --tests 'org.tiqian.compose.CjkTextRenderTest'
 ```
