@@ -125,10 +125,8 @@ class CjkTextCompatibilityTest {
 
         val issues = text.cjkTextCompatibility().issues
 
-        assertTrue(CjkTextCapabilityIssue.LinkAnnotations in issues)
-        assertFalse(CjkTextCapabilityIssue.TextDecoration in issues)
-        assertFalse(CjkTextCapabilityIssue.BrushForeground in issues)
-        assertFalse(CjkTextCapabilityIssue.BackgroundColor in issues)
+        // Underline/color are preserved (RichTextSpan/ColorSpan); the only gap is the click action.
+        assertEquals(setOf(CjkTextCapabilityIssue.LinkAnnotations), issues)
     }
 
     @Test
@@ -143,9 +141,8 @@ class CjkTextCompatibilityTest {
             ComposeTextStyle(textAlign = TextAlign.Center),
         ).issues
 
-        assertFalse(CjkTextCapabilityIssue.BackgroundColor in issues)
-        assertTrue(CjkTextCapabilityIssue.LetterSpacing in issues)
-        assertTrue(CjkTextCapabilityIssue.TextAlign in issues)
+        // background is preserved (RichTextSpan.Background); letterSpacing/textAlign remain gaps.
+        assertEquals(setOf(CjkTextCapabilityIssue.LetterSpacing, CjkTextCapabilityIssue.TextAlign), issues)
     }
 
     @Test

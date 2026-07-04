@@ -29,20 +29,6 @@ data class CjkTextCompatibility(
 ) {
     val canPreserveAllKnownSemantics: Boolean
         get() = issues.isEmpty()
-
-    @Deprecated(
-        "Use canPreserveAllKnownSemantics. Tiqian does not use this report to route to Compose Text.",
-        ReplaceWith("canPreserveAllKnownSemantics"),
-    )
-    val canRenderWithTiqian: Boolean
-        get() = canPreserveAllKnownSemantics
-
-    @Deprecated(
-        "Use issues. The report records Tiqian capability gaps; it is not a host-renderer route.",
-        ReplaceWith("issues"),
-    )
-    val unsupportedReasons: Set<CjkTextCapabilityIssue>
-        get() = issues
 }
 
 /**
@@ -59,10 +45,6 @@ enum class CjkTextCapabilityIssue {
     InlinePlaceholders,
     UnknownStringAnnotations,
     BrushForeground,
-    /** Kept for old reports; `SpanStyle.background` is now lowered to `RichTextSpan`. */
-    BackgroundColor,
-    /** Kept for old reports; underline/line-through are now lowered to `RichTextSpan`. */
-    TextDecoration,
     Shadow,
     DrawStyle,
     BaselineShift,
@@ -82,12 +64,6 @@ enum class CjkTextCapabilityIssue {
     TextMotion,
     OverflowEllipsis,
 }
-
-@Deprecated(
-    "Use CjkTextCapabilityIssue. Tiqian reports capability gaps instead of host-renderer reasons.",
-    ReplaceWith("CjkTextCapabilityIssue"),
-)
-typealias CjkTextUnsupportedReason = CjkTextCapabilityIssue
 
 /**
  * Reports which parts of [this] and [style] the current Tiqian Compose frontend cannot yet preserve

@@ -33,7 +33,7 @@ import org.tiqian.core.TextStyle
 
 // Annotation tags + extractors are the AnnotatedString WIRE PROTOCOL between the
 // public builders (emphasis/ruby/bopomofo/…) and the engine. INTERNAL on purpose —
-// not a versioned public contract (Codex #4); third parties author via the builders.
+// not a versioned public contract; third parties author via the builders.
 
 /** Annotation tag carrying a [DecorationKind] name over an AnnotatedString range. */
 internal const val CjkDecorationTag = "org.tiqian.decoration"
@@ -218,7 +218,7 @@ internal fun AnnotatedString.cjkStyleSpans(base: TextStyle, density: Density): L
 
 /**
  * Pre-layout a rich-text [text] without rendering — the measure-side counterpart to
- * `CjkText(AnnotatedString)` (Codex #5). Extracts the same layout-affecting
+ * `CjkText(AnnotatedString)`. Extracts the same layout-affecting
  * spans (装饰/样式/ruby; color is render-only, not a measure input) and lowers
  * [textStyle] via [density]. Use for hit-testing / size queries before drawing.
  */
@@ -264,7 +264,7 @@ fun ParagraphMeasurer.measure(
     )
 }
 
-// NOT inline: the tag is internal (Codex #4) and a public inline fun can't reference it.
+// NOT inline: the tag is internal and a public inline fun can't reference it.
 
 /** 着重号 over [block]'s text. */
 fun AnnotatedString.Builder.emphasis(block: AnnotatedString.Builder.() -> Unit) {

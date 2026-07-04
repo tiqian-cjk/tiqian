@@ -221,8 +221,8 @@ fun CjkText(
     textStyle: CjkTextStyle = CjkTextStyle(),
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
     measurer: ParagraphMeasurer = rememberParagraphMeasurer(),
-    // Per-block layout出口 (Codex #6): (blockIndex, itemIndex|null for a Paragraph,
-    // result). List markers don't fire; the item BODY does, with its item index.
+    // Per-block layout出口: (blockIndex, itemIndex|null for a Paragraph, result).
+    // List markers don't fire; the item BODY does, with its item index.
     onParagraphLayout: (blockIndex: Int, itemIndex: Int?, result: LayoutResult) -> Unit = { _, _, _ -> },
 ) {
     val density = LocalDensity.current
