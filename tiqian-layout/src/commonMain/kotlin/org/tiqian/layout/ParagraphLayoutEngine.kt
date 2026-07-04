@@ -44,6 +44,7 @@ import org.tiqian.core.LineRepairAllocationInfo
 import org.tiqian.core.LineRepairCandidateInfo
 import org.tiqian.core.LineRepairDecisionInfo
 import org.tiqian.core.MandatoryBreakDecisionInfo
+import org.tiqian.core.MaxLinesDecisionInfo
 import org.tiqian.core.MetricDecisionInfo
 import org.tiqian.core.PunctuationDecisionInfo
 import org.tiqian.core.Rect
@@ -1085,7 +1086,7 @@ class ExplainableStubParagraphLayoutEngine(
         val lineTop = FloatArray(lineSolution.lines.size)
         run { var acc = 0f; for (i in lineExtra.indices) { lineTop[i] = acc; acc += baseLineMetrics.height + lineExtra[i] } }
 
-        val lines = lineSolution.lines.mapIndexed { lineIndex, lineCandidate ->
+        val laidOutLines = lineSolution.lines.mapIndexed { lineIndex, lineCandidate ->
             // LineEndHangingPunctuation: the hung mark is excluded from the
             // measure-fill width (adjustedWidth) but kept in visualWidth —
             // it overflows the measure (突出版心).
@@ -1107,18 +1108,19 @@ class ExplainableStubParagraphLayoutEngine(
                 lineCandidate.clusterRange.first == 0 -> firstLineIndent
                 else -> blockIndent
             }
-            // LastLineAlignment: the last line is the paragraph's only
-            // alignment degree of freedom (CLREQ 双齐 baseline). Center/End
-            // express as an extra start-edge inset within the line's usable
-            // measure — renderers and decoration geometry consume
+            // LastLineAlignment: every line that ends its visual paragraph —
+            // the true last line AND every MandatoryBreak-ended line (it is the
+            // last line of ITS 段, ADR 0037) — is an alignment degree of freedom
+            // (CLREQ 双齐 baseline). AutoWrap lines are justified instead.
+            // Center/End express as an extra start-edge inset within the line's
+            // usable measure — renderers and decoration geometry consume
             // LineBox.indent unchanged.
-            val isLast = lineIndex == lineSolution.lines.lastIndex
             // LineEndHangingHyphen: this line ends mid-word when the NEXT line
             // begins at a hyphenation source offset (reserved in the justify
             // measure above; renderers draw it at indent + visualWidth).
             val lineHyphenAdvance = lineHyphenAdvanceAt(lineIndex)
             val limit = measure - baseIndent
-            val alignmentInset = if (!isLast || lineCandidate.endReason != LineEndReason.ParagraphEnd) {
+            val alignmentInset = if (lineCandidate.endReason == LineEndReason.AutoWrap) {
                 0f
             } else {
                 when (input.paragraphStyle.lastLineAlignment) {
@@ -1155,6 +1157,22 @@ class ExplainableStubParagraphLayoutEngine(
                 ),
             )
         }
+        // MaxLinesLineTruncation: layout ran on the FULL text above (a truncated
+        // middle line keeps its justification); only the emitted line boxes are
+        // capped. `lineDecisions` below still records every laid-out line so the
+        // dump stays complete. Ruby/注音/decoration geometry below is computed
+        // over the VISIBLE lines only — renderers consume those lists directly.
+        val lines = if (laidOutLines.size > input.constraints.maxLines) {
+            laidOutLines.take(input.constraints.maxLines)
+        } else {
+            laidOutLines
+        }
+        val maxLinesDecision = if (lines.size < laidOutLines.size) {
+            MaxLinesDecisionInfo(laidOutLines = laidOutLines.size, visibleLines = lines.size)
+        } else {
+            null
+        }
+        val visibleLineRanges = lineSolution.lines.take(lines.size).map { it.clusterRange }
         // Ink-edge insets so 行间线/着重号 hug the text, not the edge blanks: the leading
         // autospace gap + consumed 开标点 leading glue (mirrors the renderer's glyph
         // shift, SkiaTextBlobs.forEachPositionedCluster). The trailing justify stretch
@@ -1165,7 +1183,7 @@ class ExplainableStubParagraphLayoutEngine(
         val trailingGapRanges = autoSpaceDecisions.filter { it.side == "trailing" }.map { it.clusterRange }.toSet()
         val decorationDecisions = computeDecorationDecisions(
             decorations = input.decorations,
-            lineRanges = lineSolution.lines.map { it.clusterRange },
+            lineRanges = visibleLineRanges,
             lineBoxes = lines,
             finalClusters = finalClusters,
             clusterRoles = clusterRoles,
@@ -1175,7 +1193,7 @@ class ExplainableStubParagraphLayoutEngine(
         )
         val decorationSegments = computeDecorationSegments(
             decorations = input.decorations,
-            lineRanges = lineSolution.lines.map { it.clusterRange },
+            lineRanges = visibleLineRanges,
             lineBoxes = lines,
             finalClusters = finalClusters,
             justifyDeltaByCluster = justifyDeltaByCluster,
@@ -1187,7 +1205,7 @@ class ExplainableStubParagraphLayoutEngine(
         )
         val rubyDecisions = computeRubyDecisions(
             rubySpans = pinyinSpans,
-            lineRanges = lineSolution.lines.map { it.clusterRange },
+            lineRanges = visibleLineRanges,
             lineBoxes = lines,
             finalClusters = finalClusters,
             naturalClusters = naturalClusters,
@@ -1197,7 +1215,7 @@ class ExplainableStubParagraphLayoutEngine(
         )
         val bopomofoDecisions = computeBopomofoDecisions(
             rubySpans = input.rubySpans.filter { it.kind == RubyKind.Bopomofo },
-            lineRanges = lineSolution.lines.map { it.clusterRange },
+            lineRanges = visibleLineRanges,
             lineBoxes = lines,
             finalClusters = finalClusters,
             naturalClusters = naturalClusters,
@@ -1292,7 +1310,9 @@ class ExplainableStubParagraphLayoutEngine(
                     )
                 },
                 roleOverrides = roleOverrideInfos,
-                lineDecisions = lines.zip(lineSolution.lines).mapIndexed { lineIndex, (line, candidate) ->
+                // Zip over ALL laid-out lines (not the maxLines-truncated boxes): the
+                // dump records every committed line, the truncation names the cut.
+                lineDecisions = laidOutLines.zip(lineSolution.lines).mapIndexed { lineIndex, (line, candidate) ->
                     LineDecisionInfo(
                         range = line.range,
                         kind = lineBreaker.strategyName,
@@ -1337,6 +1357,7 @@ class ExplainableStubParagraphLayoutEngine(
                 rubyDecisions = rubyDecisions,
                 bopomofoDecisions = bopomofoDecisions,
                 mandatoryBreakDecisions = mandatoryBreakDecisions,
+                maxLinesDecision = maxLinesDecision,
                 lineSpacingDecision = lineSpacingDecision,
                 kinsokuDecision = kinsokuDecision,
                 lineLengthGridDecision = lineLengthGridDecision,
@@ -2177,9 +2198,14 @@ class ExplainableStubParagraphLayoutEngine(
         rubyBand: Float = 0f,
     ): ResolvedLineMetrics {
         if (isEmpty()) {
+            // EmptyParagraphBaselineFallback: a paragraph with no shapeable
+            // content (pure mandatory breaks, e.g. "\n\n") still needs a caret
+            // baseline but has no font metrics to consult. 0.75 × line height
+            // is where the CJK baseline would sit on the default line: half
+            // leading 0.25em + 字身框 ascent 0.88em over a 1.5em line ≈ 0.753.
             val height = explicitLineHeight ?: defaultLineHeight
             return ResolvedLineMetrics(
-                baseline = height * 0.75f,
+                baseline = height * EMPTY_PARAGRAPH_BASELINE_RATIO,
                 height = height,
             )
         }
@@ -2555,6 +2581,8 @@ private const val RUBY_FONT_WEIGHT_BOOST = 100
 /** `BopomofoLegibilityWeightBoost`: 注音 ㄅㄆㄇ 更小，默认比基文重 300. */
 private const val BOPOMOFO_FONT_WEIGHT_BOOST = 300
 private const val MANDATORY_BREAK_FONT_KEY = "mandatory-break"
+/** `EmptyParagraphBaselineFallback`: see [lineMetrics]'s empty branch. */
+private const val EMPTY_PARAGRAPH_BASELINE_RATIO = 0.75f
 /**
  * 避让 最小间距 (CLREQ §罗马拼音「相邻注文的间距不应小于西文词间空格」): one 注文
  * word space ≈ 1/4 of the 注文 em. Measured in 注文 units, NOT base 字宽.

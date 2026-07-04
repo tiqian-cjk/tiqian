@@ -10,6 +10,7 @@ import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -153,10 +154,14 @@ class CjkTextRenderTest {
         val visibleEnd = line.range.end
         assertEquals(LineEndReason.MandatoryBreak, line.endReason)
         assertEquals(line.indent + line.visualWidth + line.hyphenAdvance, result.size.width)
-        assertTrue(result.clusters.all { it.range.end <= visibleEnd })
-        assertTrue(result.glyphRuns.all { it.range.end <= visibleEnd })
-        assertEquals(1, result.debug.lineDecisions.size)
-        assertTrue(result.debug.geometryDecisions.all { it.range.end <= visibleEnd })
+        // MaxLinesLineTruncation is an ENGINE decision: only the emitted line boxes
+        // are capped; the result stays source-faithful (full clusters + full line
+        // dump) and the cut itself is recorded instead of silently applied.
+        val decision = result.debug.maxLinesDecision ?: error("expected maxLinesDecision")
+        assertEquals(2, decision.laidOutLines)
+        assertEquals(1, decision.visibleLines)
+        assertEquals(2, result.debug.lineDecisions.size)
+        assertTrue(result.clusters.any { it.range.start >= visibleEnd })
     }
 
     @Test
@@ -214,10 +219,11 @@ class CjkTextRenderTest {
                 onTextLayout = { unwrapped = it },
             )
         }
+        var reservedBoxHeight = 0
         render("compose-min-lines") {
             CjkText(
                 text = "短句。",
-                modifier = Modifier.width(150.dp),
+                modifier = Modifier.width(150.dp).onSizeChanged { reservedBoxHeight = it.height },
                 style = TextStyle(fontSize = 24.sp),
                 minLines = 3,
                 onTextLayout = { reserved = it },
@@ -226,7 +232,15 @@ class CjkTextRenderTest {
 
         assertTrue((wrapped?.lines?.size ?: 0) > 1, "expected wrapped text to use multiple lines")
         assertEquals(1, unwrapped?.lines?.size)
-        assertTrue((reserved?.size?.height ?: 0f) > ((reserved?.lines?.firstOrNull()?.bottom ?: 0f) * 2f))
+        // MinLinesHeightReservation is a NODE sizing concern: the LayoutResult stays
+        // the natural single line; the composable box reserves 3 line heights.
+        val reservedResult = reserved ?: error("onTextLayout was not called")
+        assertEquals(1, reservedResult.lines.size)
+        val lineHeight = reservedResult.lines.single().let { it.bottom - it.top }
+        assertTrue(
+            reservedBoxHeight >= (lineHeight * 3f).toInt(),
+            "minLines must reserve 3 line heights, got $reservedBoxHeight for lineHeight=$lineHeight",
+        )
     }
 
     @Test

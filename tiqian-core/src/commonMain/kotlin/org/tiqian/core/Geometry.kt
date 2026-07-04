@@ -31,10 +31,18 @@ data class Rect(
 data class LayoutConstraints(
     val maxWidth: Float,
     val maxHeight: Float = Float.POSITIVE_INFINITY,
+    /**
+     * Maximum number of line boxes the result may carry (`MaxLinesLineTruncation`).
+     * Layout runs on the FULL text (breaking/justification are unaffected — a
+     * truncated middle line stays justified); only the emitted lines are capped,
+     * and the truncation is recorded in `LayoutDebugInfo.maxLinesDecision`.
+     */
+    val maxLines: Int = Int.MAX_VALUE,
 ) {
     init {
         require(maxWidth > 0f) { "maxWidth must be positive." }
         require(maxHeight > 0f) { "maxHeight must be positive." }
+        require(maxLines > 0) { "maxLines must be positive." }
     }
 }
 

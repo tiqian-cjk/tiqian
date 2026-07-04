@@ -438,8 +438,14 @@ class LookaheadLineBreaker(
 
         val committed = mutableListOf<LineCandidate>()
         var lineStart = 0
+        // Sorted once; `lineStart` only advances, so a monotonic cursor finds
+        // the next mandatory break in amortized O(1) — newline-heavy text has
+        // lines ≈ breaks, so a per-line set scan would be quadratic.
+        val sortedBreaks = hardBreakAfterClusters.toIntArray().also { it.sort() }
+        var breakCursor = 0
         while (lineStart < adjustedClusters.size) {
-            val mandatoryEnd = hardBreakAfterClusters.filter { it >= lineStart }.minOrNull()
+            while (breakCursor < sortedBreaks.size && sortedBreaks[breakCursor] < lineStart) breakCursor += 1
+            val mandatoryEnd = if (breakCursor < sortedBreaks.size) sortedBreaks[breakCursor] else null
             val segmentEndExclusive = mandatoryEnd?.plus(1) ?: adjustedClusters.size
             // Line-end retreat is applied at commit (below), not here, so the
             // chosen break's pre-retreat position is known and CarryNext can

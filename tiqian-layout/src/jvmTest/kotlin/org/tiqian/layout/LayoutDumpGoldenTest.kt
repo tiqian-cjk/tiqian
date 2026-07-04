@@ -214,6 +214,9 @@ class LayoutDumpGoldenTest {
                     "applied=${d.floorApplied} reason=${d.reason}",
             )
         }
+        debug.maxLinesDecision?.let { d ->
+            appendLine("maxlines laidOut=${d.laidOutLines} visible=${d.visibleLines} reason=${d.reason}")
+        }
         debug.decorationSegments.forEach { seg ->
             appendLine(
                 "decobox ${seg.sourceRange.start}-${seg.sourceRange.end} kind=${seg.kind} line=${seg.lineIndex} " +

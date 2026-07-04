@@ -26,13 +26,10 @@ import org.tiqian.clreq.ClreqProfile
 import org.tiqian.core.ColorSpan
 import org.tiqian.core.DecorationSpan
 import org.tiqian.core.LayoutConstraints
-import org.tiqian.core.LayoutDebugInfo
 import org.tiqian.core.LayoutResult
 import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.RichTextSpan
-import org.tiqian.core.Size
 import org.tiqian.core.RubySpan
-import org.tiqian.core.TextRange
 import org.tiqian.core.TextSpan
 import org.tiqian.core.TextStyle
 import kotlin.math.ceil
@@ -190,6 +187,18 @@ private class CjkTextLayoutNode(
         onTextLayout: (LayoutResult) -> Unit,
     ) {
         validateTextControls(maxLines, minLines, overflow)
+        // Split invalidation like BasicText: layout-affecting params re-measure
+        // (and must ALSO repaint — same-size relayout does not imply redraw);
+        // render-only params (color/colorSpans/richTextSpans, clip mode) repaint
+        // without re-running the paragraph engine.
+        val layoutChanged = text != this.text || textStyle != this.textStyle ||
+            paragraphStyle != this.paragraphStyle || decorations != this.decorations ||
+            spans != this.spans || rubySpans != this.rubySpans ||
+            softWrap != this.softWrap || maxLines != this.maxLines ||
+            minLines != this.minLines || measurer !== this.measurer
+        val drawChanged = color != this.color || colorSpans != this.colorSpans ||
+            richTextSpans != this.richTextSpans || overflow != this.overflow
+        val semanticsChanged = semanticsText != this.semanticsText
         this.text = text
         this.semanticsText = semanticsText
         this.textStyle = textStyle
@@ -205,10 +214,15 @@ private class CjkTextLayoutNode(
         this.maxLines = maxLines
         this.minLines = minLines
         this.measurer = measurer
+        // A new callback instance alone needs no invalidation — it fires on the next layout.
         this.onTextLayout = onTextLayout
-        invalidateMeasurement() // re-measure (size/result may change)
-        invalidateDraw()        // AND repaint even when the new content is the same size
-        invalidateSemantics()   // expose the new source AnnotatedString to accessibility
+        if (layoutChanged) {
+            invalidateMeasurement()
+            invalidateDraw()
+        } else if (drawChanged) {
+            invalidateDraw()
+        }
+        if (semanticsChanged) invalidateSemantics()
     }
 
     override fun SemanticsPropertyReceiver.applySemantics() {
@@ -218,30 +232,36 @@ private class CjkTextLayoutNode(
     override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
         val maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth.toFloat() else DEFAULT_UNBOUNDED_WIDTH
         val layoutWidth = if (softWrap) maxWidth else DEFAULT_UNBOUNDED_WIDTH
+        // softWrap changes the measurement width; maxLines is an ENGINE constraint
+        // (`MaxLinesLineTruncation`, recorded in debug) so [onTextLayout] receives the
+        // engine's own explainable result, not a frontend-doctored copy.
         val laidOut = measurer.measure(
             text = text,
-            constraints = LayoutConstraints(maxWidth = layoutWidth),
+            constraints = LayoutConstraints(maxWidth = layoutWidth, maxLines = maxLines),
             textStyle = textStyle,
             paragraphStyle = paragraphStyle,
             decorations = decorations,
             spans = spans,
             rubySpans = rubySpans,
         )
-        val visible = laidOut.visibleTextResult(maxLines, minLines)
-        result = visible
-        onTextLayout(visible)
+        result = laidOut
+        onTextLayout(laidOut)
         // The drawn content (incl. 行间装饰 overhang) paints from draw(); the empty inner
-        // content is placed at 0. Compose Text migration controls are applied here:
-        // softWrap changes the measurement width; maxLines trims visible line boxes;
-        // minLines reserves extra height without inventing hidden layout decisions.
+        // content is placed at 0. MinLinesHeightReservation: minLines only reserves
+        // vertical space (one resolved line height per missing line) — no hidden
+        // layout state is invented.
+        val lineHeight = laidOut.debug.lineSpacingDecision?.resolvedHeight
+            ?: laidOut.lines.firstOrNull()?.let { it.bottom - it.top }
+            ?: textStyle.fontSize * 1.5f
         val placeable = measurable.measure(Constraints.fixed(0, 0))
-        val w = ceil(visible.size.width).toInt().coerceIn(constraints.minWidth, constraints.maxWidth)
-        val h = ceil(visible.size.height).toInt().coerceIn(constraints.minHeight, constraints.maxHeight)
+        val w = ceil(laidOut.size.width).toInt().coerceIn(constraints.minWidth, constraints.maxWidth)
+        val h = ceil(maxOf(laidOut.size.height, lineHeight * minLines))
+            .toInt().coerceIn(constraints.minHeight, constraints.maxHeight)
         drawClipWidth = w.toFloat()
         drawClipHeight = h.toFloat()
         // Expose the first line's baseline so Row.alignByBaseline can line a 拼音 list
         // body (first line pushed down by its ruby band) up with its marker.
-        val firstBaseline = visible.lines.firstOrNull()?.baseline?.let { ceil(it).toInt() } ?: AlignmentLine.Unspecified
+        val firstBaseline = laidOut.lines.firstOrNull()?.baseline?.let { ceil(it).toInt() } ?: AlignmentLine.Unspecified
         return layout(w, h, alignmentLines = mapOf(FirstBaseline to firstBaseline)) { placeable.place(0, 0) }
     }
 
@@ -269,95 +289,6 @@ private fun validateTextControls(maxLines: Int, minLines: Int, overflow: TextOve
     }
 }
 
-private fun LayoutResult.visibleTextResult(maxLines: Int, minLines: Int): LayoutResult {
-    val visibleLines = if (lines.size > maxLines) lines.take(maxLines) else lines
-    val visibleSourceRange = visibleLines.visibleSourceRange()
-    val visibleClusterEnd = visibleLines
-        .filterNot { it.clusterRange.isEmptyClusterRange() }
-        .maxOfOrNull { it.clusterRange.last + 1 }
-        ?: 0
-    val lineHeight = debug.lineSpacingDecision?.resolvedHeight
-        ?: lines.firstOrNull()?.let { it.bottom - it.top }
-        ?: input.textStyle.fontSize * 1.5f
-    val naturalHeight = visibleLines.lastOrNull()?.bottom ?: 0f
-    val minHeight = lineHeight * minLines
-    val height = maxOf(naturalHeight, minHeight)
-    val width = visibleLines.maxOfOrNull { it.indent + it.visualWidth + it.hyphenAdvance } ?: 0f
-    return copy(
-        size = Size(width, height),
-        clusters = clusters.take(visibleClusterEnd),
-        glyphRuns = glyphRuns.mapNotNull { run ->
-            val glyphs = run.glyphs.filter { it.clusterRange.isContainedIn(visibleSourceRange) }
-            if (glyphs.isEmpty()) {
-                null
-            } else {
-                run.copy(
-                    range = TextRange(glyphs.first().clusterRange.start, glyphs.last().clusterRange.end),
-                    glyphs = glyphs,
-                    advance = glyphs.sumOf { it.advance.toDouble() }.toFloat(),
-                )
-            }
-        },
-        lines = visibleLines,
-        debug = debug.visibleTo(visibleSourceRange, visibleLines.size),
-    )
-}
-
-private fun List<org.tiqian.core.LineBox>.visibleSourceRange(): TextRange {
-    if (isEmpty()) return TextRange(0, 0)
-    return TextRange(first().range.start, last().range.end)
-}
-
-private fun LayoutDebugInfo.visibleTo(sourceRange: TextRange, lineCount: Int): LayoutDebugInfo =
-    copy(
-        fontDecisions = fontDecisions.mapNotNull { it.clipTo(sourceRange) },
-        shapingDecisions = shapingDecisions.filter { it.range.isContainedIn(sourceRange) },
-        metricDecisions = metricDecisions.filter { it.range.isContainedIn(sourceRange) },
-        punctuationDecisions = punctuationDecisions.filter { it.range.isContainedIn(sourceRange) },
-        geometryDecisions = geometryDecisions.filter { it.range.isContainedIn(sourceRange) },
-        spacingDecisions = spacingDecisions.filter {
-            it.range.isContainedIn(sourceRange) && it.reductionTargetRange.isContainedIn(sourceRange)
-        },
-        roleOverrides = roleOverrides.filter { it.range.isContainedIn(sourceRange) },
-        lineDecisions = lineDecisions.take(lineCount),
-        justificationDecisions = justificationDecisions.filter { it.lineRange.isContainedIn(sourceRange) },
-        autoSpaceDecisions = autoSpaceDecisions.filter { it.clusterRange.isContainedIn(sourceRange) },
-        lineEdgeTrimDecisions = lineEdgeTrimDecisions.filter {
-            it.lineRange.isContainedIn(sourceRange) && it.clusterRange.isContainedIn(sourceRange)
-        },
-        decorationDecisions = decorationDecisions.filter { it.clusterRange.isContainedIn(sourceRange) },
-        decorationSegments = decorationSegments.filter {
-            it.lineIndex < lineCount && it.sourceRange.isContainedIn(sourceRange)
-        },
-        rubyDecisions = rubyDecisions.filter { it.lineIndex < lineCount && it.baseRange.isContainedIn(sourceRange) },
-        bopomofoDecisions = bopomofoDecisions.filter { it.lineIndex < lineCount && it.baseRange.isContainedIn(sourceRange) },
-        mandatoryBreakDecisions = mandatoryBreakDecisions.filter { it.range.isContainedIn(sourceRange) },
-    )
-
-private fun org.tiqian.core.FontDecisionInfo.clipTo(sourceRange: TextRange): org.tiqian.core.FontDecisionInfo? {
-    val start = maxOf(range.start, sourceRange.start)
-    val end = minOf(range.end, sourceRange.end)
-    if (start >= end) return null
-    if (start == range.start && end == range.end) return this
-    val localStart = start - range.start
-    val localEnd = end - range.start
-    val clippedSource = sourceText.substring(localStart, localEnd)
-    val clippedDisplay = if (displayText.length == sourceText.length) {
-        displayText.substring(localStart, localEnd)
-    } else {
-        clippedSource
-    }
-    return copy(
-        range = TextRange(start, end),
-        sourceText = clippedSource,
-        displayText = clippedDisplay,
-    )
-}
-
-private fun TextRange.isContainedIn(container: TextRange): Boolean =
-    start >= container.start && end <= container.end
-
-private fun IntRange.isEmptyClusterRange(): Boolean = first > last
 
 /**
  * Default measurer: Skia shaper (real advances + halt/locl) + lookahead breaker,

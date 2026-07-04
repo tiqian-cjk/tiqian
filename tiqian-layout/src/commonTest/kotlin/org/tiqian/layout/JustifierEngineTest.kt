@@ -128,6 +128,31 @@ class JustifierEngineTest {
     }
 
     @Test
+    fun mandatoryBreakLinesTakeLastLineAlignment() {
+        // A MandatoryBreak-ended line is the last line of ITS 段 (ADR 0037): it is
+        // ragged like a last line, so it must ALSO take lastLineAlignment. Only
+        // AutoWrap lines stay pinned (they are justified instead).
+        val result = engine.layout(
+            LayoutInput(
+                content = TiqianTextContent("中文中\n中文中文中文中"),
+                constraints = LayoutConstraints(maxWidth = 100f),
+                paragraphStyle = ParagraphStyle(
+                    firstLineIndent = Ic(0f),
+                    lastLineAlignment = org.tiqian.core.LastLineAlignment.Center,
+                    lineLengthGrid = LineLengthGrid(enabled = false),
+                ),
+            ),
+        )
+        assertEquals(3, result.lines.size)
+        // line 0 "中文中\n" (48px visual): MandatoryBreak → centered like a last line.
+        assertEquals(26f, result.lines[0].indent)
+        // line 1 (AutoWrap, justified to the measure): never inset.
+        assertEquals(0f, result.lines[1].indent)
+        // line 2 (ParagraphEnd, 16px): centered.
+        assertEquals(42f, result.lines[2].indent)
+    }
+
+    @Test
     fun lastLineIsNeverJustified() {
         val result = engine.layout(
             LayoutInput(

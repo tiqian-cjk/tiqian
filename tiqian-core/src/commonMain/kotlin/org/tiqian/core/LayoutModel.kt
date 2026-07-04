@@ -143,6 +143,7 @@ data class LayoutDebugInfo(
     val rubyDecisions: List<RubyDecisionInfo> = emptyList(),
     val bopomofoDecisions: List<BopomofoDecisionInfo> = emptyList(),
     val mandatoryBreakDecisions: List<MandatoryBreakDecisionInfo> = emptyList(),
+    val maxLinesDecision: MaxLinesDecisionInfo? = null,
     val lineSpacingDecision: LineSpacingDecisionInfo? = null,
     val kinsokuDecision: KinsokuDecisionInfo? = null,
     val lineLengthGridDecision: LineLengthGridDecisionInfo? = null,
@@ -154,6 +155,17 @@ data class MandatoryBreakDecisionInfo(
     val sourceText: String,
     val breakAfterClusterIndex: Int,
     val reason: String,
+)
+
+/**
+ * `MaxLinesLineTruncation`: layout ran on the full text ([laidOutLines] committed
+ * lines, still visible in `lineDecisions`), but the result emits only the first
+ * [visibleLines] line boxes per `LayoutConstraints.maxLines`.
+ */
+data class MaxLinesDecisionInfo(
+    val laidOutLines: Int,
+    val visibleLines: Int,
+    val reason: String = "MaxLinesLineTruncation",
 )
 
 /**
