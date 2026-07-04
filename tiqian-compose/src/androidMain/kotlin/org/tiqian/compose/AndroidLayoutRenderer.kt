@@ -13,6 +13,7 @@ import org.tiqian.core.ColorSpan
 import org.tiqian.core.DecorationKind
 import org.tiqian.core.LayoutResult
 import org.tiqian.core.LineBox
+import org.tiqian.core.RichTextLineSegment
 import org.tiqian.core.RichTextRole
 import org.tiqian.core.RichTextSpan
 import org.tiqian.core.TextSpan
@@ -38,9 +39,11 @@ internal actual fun ContentDrawScope.drawParagraph(
 ) {
     drawIntoCanvas { canvas ->
         val native = canvas.nativeCanvas
-        drawAndroidRichTextBackgrounds(native, result, richTextSpans)
+        // Segment geometry once per draw: both backgrounds and lines consume it.
+        val richTextSegments = result.positionedRichTextSegments(richTextSpans)
+        drawAndroidRichTextBackgrounds(native, richTextSegments)
         drawAndroidGlyphs(native, result, color, colorSpans, spans, AndroidRendererTypefaces)
-        drawAndroidRichTextLines(native, result, color, colorSpans, richTextSpans, spans, AndroidRendererTypefaces)
+        drawAndroidRichTextLines(native, result, color, colorSpans, richTextSegments, spans, AndroidRendererTypefaces)
         drawAndroidDecorations(native, result, color, spans, AndroidRendererTypefaces)
         drawAndroidRuby(native, result, color, AndroidRendererTypefaces)
         drawAndroidBopomofo(native, result, color, AndroidRendererTypefaces)
@@ -176,13 +179,12 @@ private fun drawAndroidDecorations(
 
 private fun drawAndroidRichTextBackgrounds(
     canvas: android.graphics.Canvas,
-    result: LayoutResult,
-    richTextSpans: List<RichTextSpan>,
+    segments: List<RichTextLineSegment>,
 ) {
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
     }
-    for (seg in result.positionedRichTextSegments(richTextSpans)) {
+    for (seg in segments) {
         val argb = when (seg.span.role) {
             RichTextRole.Background -> seg.span.paint.argb
             RichTextRole.InlineCode -> seg.span.paint.argb ?: INLINE_CODE_BACKGROUND_COLOR
@@ -198,7 +200,7 @@ private fun drawAndroidRichTextLines(
     result: LayoutResult,
     color: Int,
     colorSpans: List<ColorSpan>,
-    richTextSpans: List<RichTextSpan>,
+    segments: List<RichTextLineSegment>,
     spans: List<TextSpan>,
     typefaces: AndroidTypefaceResolver,
 ) {
@@ -207,7 +209,10 @@ private fun drawAndroidRichTextLines(
         strokeWidth = (result.input.textStyle.fontSize / 16f).coerceAtLeast(1f)
     }
     val skipPad = strokePaint.strokeWidth.coerceAtLeast(1f)
-    for (seg in result.positionedRichTextSegments(richTextSpans)) {
+    // Skip-ink intervals re-measure the line's clusters — memoize per (line, band)
+    // so several underline segments on one line pay for the walk once per draw.
+    val skipCache = HashMap<Long, FloatArray>()
+    for (seg in segments) {
         val role = seg.span.role
         if (role != RichTextRole.Underline && role != RichTextRole.LineThrough) continue
         val style = spans.lastOrNull { seg.range.start >= it.range.start && seg.range.start < it.range.end }?.style
@@ -221,7 +226,10 @@ private fun drawAndroidRichTextLines(
         strokePaint.color = seg.span.paint.argb ?: colorAt(seg.range.start, color, colorSpans)
         if (role == RichTextRole.Underline) {
             val line = result.lines.getOrNull(seg.lineIndex) ?: continue
-            val skips = result.androidLineInkSkipIntervals(line, lineY - skipPad, lineY + skipPad, spans, typefaces)
+            val cacheKey = (seg.lineIndex.toLong() shl 32) or (lineY.toRawBits().toLong() and 0xFFFFFFFFL)
+            val skips = skipCache.getOrPut(cacheKey) {
+                result.androidLineInkSkipIntervals(line, lineY - skipPad, lineY + skipPad, spans, typefaces)
+            }
             keptIntervals(seg.left, seg.right, skips, skipPad) { x0, x1 ->
                 canvas.drawLine(x0, lineY, x1, lineY, strokePaint)
             }

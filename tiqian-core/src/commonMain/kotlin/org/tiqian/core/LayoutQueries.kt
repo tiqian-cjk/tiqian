@@ -124,18 +124,31 @@ fun LayoutResult.positionedRichTextSegments(spans: List<RichTextSpan>): List<Ric
         val start = span.range.start.coerceIn(0, textLength)
         val end = span.range.end.coerceIn(start, textLength)
         if (start == end) continue
+        // One normalized span instance for ALL of this span's slices — allocated once
+        // (not per overlapping cluster) so the merge check compares by identity.
+        val normalized = span.copy(range = TextRange(start, end))
         var pending: RichTextLineSegment? = null
         fun flushPending() {
             pending?.let(out::add)
             pending = null
         }
-        for (cluster in clusters) {
+        // Clusters are source-ordered: binary-search the first cluster that reaches
+        // the span, and stop past its end — each span scans only its own window.
+        var lo = 0
+        var hi = clusters.size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (clusters[mid].range.end <= start) lo = mid + 1 else hi = mid
+        }
+        for (i in lo until clusters.size) {
+            val cluster = clusters[i]
+            if (cluster.range.start >= end) break
             val sliceStart = max(start, cluster.range.start)
             val sliceEnd = minOf(end, cluster.range.end)
             if (sliceStart >= sliceEnd) continue
             val rect = cluster.sliceRect(sliceStart, sliceEnd)
             val next = RichTextLineSegment(
-                span = span.copy(range = TextRange(start, end)),
+                span = normalized,
                 lineIndex = cluster.lineIndex,
                 range = TextRange(sliceStart, sliceEnd),
                 left = rect.left,
@@ -148,7 +161,7 @@ fun LayoutResult.positionedRichTextSegments(spans: List<RichTextSpan>): List<Ric
             if (
                 current != null &&
                 current.lineIndex == next.lineIndex &&
-                current.span == next.span &&
+                current.span === next.span &&
                 current.range.end == next.range.start &&
                 abs(current.right - next.left) <= 0.5f
             ) {

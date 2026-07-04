@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import org.tiqian.core.LayoutResult
 import org.tiqian.core.RichTextRole
+import org.tiqian.core.RichTextLineSegment
 import org.tiqian.core.RichTextSpan
 import org.tiqian.core.TextSpan
 import org.tiqian.core.ColorSpan
@@ -42,13 +43,15 @@ internal actual fun ContentDrawScope.drawParagraph(
 
     drawIntoCanvas { canvas ->
         val skCanvas = canvas.nativeCanvas
-        drawSkiaRichTextBackgrounds(skCanvas, result, richTextSpans)
+        // Segment geometry once per draw: both backgrounds and lines consume it.
+        val richTextSegments = result.positionedRichTextSegments(richTextSpans)
+        drawSkiaRichTextBackgrounds(skCanvas, richTextSegments)
 
         // Shared cluster-walk (tiqian-shaping-skia) — same path the playground
         // raster uses, so the role-containment / leading-shift handling can't
         // drift between the two.
         drawTiqianGlyphs(skCanvas, result, cjkFont, latinFont, paint, shaper, colorSpans = colorSpans, spans = spans)
-        drawSkiaRichTextLines(skCanvas, result, color, colorSpans, richTextSpans, spans, cjkFont, latinFont, shaper)
+        drawSkiaRichTextLines(skCanvas, result, color, colorSpans, richTextSegments, spans, cjkFont, latinFont, shaper)
 
         // Emphasis dots (ADR 0018): a filled circle of the engine-decided
         // diameter centred on the anchor — smaller than the `•` glyph so it
@@ -192,11 +195,10 @@ internal actual fun ContentDrawScope.drawParagraph(
 
 private fun drawSkiaRichTextBackgrounds(
     canvas: org.jetbrains.skia.Canvas,
-    result: LayoutResult,
-    richTextSpans: List<RichTextSpan>,
+    segments: List<RichTextLineSegment>,
 ) {
     val paint = Paint()
-    for (seg in result.positionedRichTextSegments(richTextSpans)) {
+    for (seg in segments) {
         val argb = when (seg.span.role) {
             RichTextRole.Background -> seg.span.paint.argb
             RichTextRole.InlineCode -> seg.span.paint.argb ?: INLINE_CODE_BACKGROUND_COLOR
@@ -213,7 +215,7 @@ private fun drawSkiaRichTextLines(
     result: LayoutResult,
     color: Int,
     colorSpans: List<ColorSpan>,
-    richTextSpans: List<RichTextSpan>,
+    segments: List<RichTextLineSegment>,
     spans: List<TextSpan>,
     cjkFont: Font,
     latinFont: Font,
@@ -224,7 +226,10 @@ private fun drawSkiaRichTextLines(
         strokeWidth = (result.input.textStyle.fontSize / 16f).coerceAtLeast(1f)
     }
     val skipPad = paint.strokeWidth.coerceAtLeast(1f)
-    for (seg in result.positionedRichTextSegments(richTextSpans)) {
+    // Skip-ink intervals re-shape the line's clusters — memoize per (line, band)
+    // so several underline segments on one line pay for shaping once per draw.
+    val skipCache = HashMap<Long, FloatArray>()
+    for (seg in segments) {
         val role = seg.span.role
         if (role != RichTextRole.Underline && role != RichTextRole.LineThrough) continue
         val style = spans.lastOrNull { seg.range.start >= it.range.start && seg.range.start < it.range.end }?.style
@@ -238,15 +243,18 @@ private fun drawSkiaRichTextLines(
         paint.color = seg.span.paint.argb ?: colorAt(seg.range.start, color, colorSpans)
         if (role == RichTextRole.Underline) {
             val line = result.lines.getOrNull(seg.lineIndex) ?: continue
-            val skips = result.lineInkSkipIntervals(
-                line,
-                cjkFont,
-                latinFont,
-                shaper,
-                lineY - skipPad,
-                lineY + skipPad,
-                spans,
-            )
+            val cacheKey = (seg.lineIndex.toLong() shl 32) or (lineY.toRawBits().toLong() and 0xFFFFFFFFL)
+            val skips = skipCache.getOrPut(cacheKey) {
+                result.lineInkSkipIntervals(
+                    line,
+                    cjkFont,
+                    latinFont,
+                    shaper,
+                    lineY - skipPad,
+                    lineY + skipPad,
+                    spans,
+                )
+            }
             keptIntervals(seg.left, seg.right, skips, skipPad) { x0, x1 ->
                 canvas.drawLine(x0, lineY, x1, lineY, paint)
             }
