@@ -2248,6 +2248,66 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun rolledBackDashStillKeepsItsBoundariesClosedUnderJustification() {
+        // Regression (device): after DashSubstitutionInkCoverageRollback the dash
+        // displays as TWO chars, whose atoms are PER-CHAR ranges — the coalesced
+        // cluster-range lookup missed, dropping the dash out of
+        // NoStretchBoundaryClusters, and justify opened a gap right after it.
+        val engine = ExplainableStubParagraphLayoutEngine(
+            lineBreaker = LookaheadLineBreaker(),
+            textShaper = object : TextShaper {
+                val delegate = ExplainableStubTextShaper()
+                override fun shape(input: ShapingInput): ShapingResult {
+                    val result = delegate.shape(input)
+                    return if (input.displayText.contains('⸺')) {
+                        result.copy(
+                            glyphRuns = result.glyphRuns.map { run ->
+                                run.copy(
+                                    glyphs = run.glyphs.map { g ->
+                                        // 78% coverage → rollback to source `——`.
+                                        g.copy(advance = 32f, bounds = Rect(1f, -10f, 26f, -8f))
+                                    },
+                                )
+                            },
+                        )
+                    } else {
+                        result
+                    }
+                }
+            },
+        )
+
+        // Find a width where the dash sits on a JUSTIFIED (non-last) line.
+        val text = "在所谓中文语境下——不如说中文中文中文中文"
+        val hit = (13..30).firstNotNullOfOrNull { cells ->
+            val result = engine.layout(
+                LayoutInput(
+                    paragraphStyle = ParagraphStyle(
+                        firstLineIndent = Ic(0f),
+                        lineLengthGrid = LineLengthGrid(enabled = false),
+                    ),
+                    content = TiqianTextContent(text),
+                    // +7px so lines never fill exactly — every non-last line
+                    // carries a deficit and justification actually allocates.
+                    constraints = LayoutConstraints(maxWidth = cells * 16f + 7f),
+                ),
+            )
+            val dash = result.clusters.single { it.text == "——" }
+            val decision = result.debug.justificationDecisions.firstOrNull {
+                dash.range.start >= it.lineRange.start && dash.range.end <= it.lineRange.end
+            }
+            if (decision != null && decision.allocations.isNotEmpty()) Pair(dash, decision) else null
+        } ?: error("no width produced a justified line containing the dash")
+
+        val (dash, decision) = hit
+        assertEquals("——", dash.displayText)
+        assertTrue(
+            decision.allocations.none { it.kind == "CjkInterChar" && it.clusterRange == dash.range },
+            "boundary after a rolled-back dash must stay closed: ${'$'}{decision.allocations}",
+        )
+    }
+
+    @Test
     fun dashInkCentersWithinTheTwoEmBodyWhenTheFontRuleUnderfills() {
         // DashInkCentering: ink 0.5..28 (width 27.5 = 86% ≥ 85% → substitution
         // kept) in a 32px body → inset = (32 − 27.5) / 2 − 0.5 = 1.75px, the

@@ -552,7 +552,16 @@ class ExplainableStubParagraphLayoutEngine(
             .filter { it.side == "gap" }
             .map { it.clusterRange }
             .toSet()
-        val atomClassByRange = punctuationAtoms.associate { it.range to it.punctuationClass }
+        // Keyed by the CLUSTER's range. An atom's own range is per DISPLAY char —
+        // for a rolled-back `——` (two display chars, ADR 0003) that is two per-char
+        // ranges, and a lookup by the coalesced cluster range would silently miss
+        // (device bug: the dash dropped out of noStretch/centering after rollback).
+        val atomClassByRange: Map<TextRange, PunctuationClass> = buildMap {
+            for (cluster in naturalClusters) {
+                val cls = punctuationAtoms.firstOrNull { it.range.isInside(cluster.range) }?.punctuationClass
+                if (cls != null) put(cluster.range, cls)
+            }
+        }
         val shrinkOpportunities = buildList {
             naturalClusters.forEachIndexed { idx, cluster ->
                 val caps = glueCaps[idx]
