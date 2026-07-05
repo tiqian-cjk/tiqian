@@ -838,11 +838,11 @@ class ExplainableStubParagraphLayoutEngine(
                 maxCjkStretchPerGap = HYPHEN_LAST_RESORT_CJK_STRETCH_EM * fontSize,
                 sinoWesternBoundaries = sinoWesternBoundaries,
                 sinoWesternStretchCap = HYPHEN_SINO_WESTERN_STRETCH_CAP_EM * fontSize,
-                // LineAdjustmentStrategy (ADR 0031): 推入/推出 方向取舍。仅 PushOutOnly
-                // 不推入（= 旧行为）；其余以 bias = Ws/Wc 表达「先挤压」力度。
+                // LineAdjustmentStrategy (ADR 0031 修订): 推入/推出 是固定顺序,
+                // 不再有「偏差最小化」折中。PushInFirst = 能压就压(bias→∞),
+                // PushOutFirst = 先断行拉伸, PushOutOnly = 从不推入(旧行为)。
                 lineAdjustmentPushIn = adjustmentStyle.lineAdjustment != LineAdjustmentStrategy.PushOutOnly,
                 lineAdjustmentCompressBias = when (adjustmentStyle.lineAdjustment) {
-                    LineAdjustmentStrategy.Auto -> adjustmentStyle.lineAdjustmentCompressBias
                     LineAdjustmentStrategy.PushInFirst -> 1_000_000f
                     LineAdjustmentStrategy.PushOutFirst -> 0.5f
                     LineAdjustmentStrategy.PushOutOnly -> 0f

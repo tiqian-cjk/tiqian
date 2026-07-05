@@ -202,16 +202,10 @@ data class AdjustmentStylePolicy(
     val sinoWesternStretchMaxEm: Float = 0.5f,
     /**
      * 行尾越界字的「推入/推出」取舍（CLREQ §6.2.2「先挤进、后推出」+ 行内
-     * 「先挤压、后拉伸」）。[LineAdjustmentStrategy.Auto] 默认：按离自然密排的
-     * 偏差最小化、且压缩比拉伸优先（[lineAdjustmentCompressBias]）。
+     * 「先挤压、后拉伸」）。默认 [LineAdjustmentStrategy.PushInFirst]——固定
+     * 顺序；曾有过「偏差最小化」的 Auto 档，实际观感差，已删（ADR 0031 修订）。
      */
-    val lineAdjustment: LineAdjustmentStrategy = LineAdjustmentStrategy.Auto,
-    /**
-     * [LineAdjustmentStrategy.Auto] 的「先挤压」力度 = 拉伸单位代价 ÷ 压缩单位
-     * 代价（`Ws/Wc`）。`1` = 纯对称（取偏差更小一侧），`→∞` = 能压就压。默认
-     * `2`：压缩可比拉伸多吃一倍偏差才让位给推出。
-     */
-    val lineAdjustmentCompressBias: Float = 2f,
+    val lineAdjustment: LineAdjustmentStrategy = LineAdjustmentStrategy.PushInFirst,
 )
 
 /**
@@ -219,10 +213,7 @@ data class AdjustmentStylePolicy(
  * 压缩/拉伸的「档内分配」始终按 §6.2.2.3/§6.2.2.4 的 tier 顺序，本枚举只决定**方向**。
  */
 enum class LineAdjustmentStrategy {
-    /** 偏差最小化 + 压缩优先（`Ws/Wc` = [AdjustmentStylePolicy.lineAdjustmentCompressBias]）。默认。 */
-    Auto,
-
-    /** 先推入：压得动就把越界字挤进来（CLREQ「先挤进」的字面顺序），压不动才推出。 */
+    /** 先推入：压得动就把越界字挤进来（CLREQ「先挤进」的字面顺序），压不动才推出。默认。 */
     PushInFirst,
 
     /** 先推出：能断就把越界字推到下一行拉伸本行，只有推出会触发均排兜底时才回头推入。 */

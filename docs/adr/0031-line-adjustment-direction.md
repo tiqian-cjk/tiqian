@@ -84,3 +84,19 @@ greedy/lookahead + 避头尾修复**之后**跑，复用现成的 `tryPushIn`/`d
 
 - **floor 填行（能压尽压）**：即 [ADR 0022]，已否决——压缩成常态、版面偏紧。
 - **纯对称偏差（bias=1）**：可作 `compressBias=1`，但用户要「先挤压」优先，默认 2。
+
+## Amendment (2026-07): 删除 Auto,默认 PushInFirst
+
+外部的字体排印评审意见指出主要问题在**行长调整的顺序**;用户复核同意:
+「偏差最小化」(`Auto`)的实际效果差——bias 折中让推入/推出的选择在相近代价处摇摆,
+版面观感不稳定,不如 CLREQ §6.2.2 字面的固定顺序。
+
+决定(预发布,不留包袱):
+
+- **删除 `LineAdjustmentStrategy.Auto`** 与只服务它的 `lineAdjustmentCompressBias`;
+- **默认 = `PushInFirst`**(先挤进、后推出:压得动就压,压不动才断行拉伸);
+- `PushOutFirst` / `PushOutOnly` 保留(对照与回退);
+- ADR 0022 的「不过度压缩」哨兵测试保留,改为钉 `PushInFirst`:推入仍受
+  `tryPushIn` 的 glue 容量约束,只发生在「挤一挤放得下」的行,不是 floor 填行。
+
+> 上文 Decision/机制不变,只有方向选择的判据从「加权偏差最小」收敛为「固定顺序」。

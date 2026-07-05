@@ -11,10 +11,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * `LineAdjustmentPushIn` (ADR 0031): Auto pulls an over-the-edge cluster in and
- * COMPRESSES where 仅推出 would STRETCH — but only where 压缩 is the smaller
- * (bias-weighted) deviation, never on every line (the [ADR 0022] over-compression
- * trap). `PushOutOnly` reproduces the historical greedy-then-stretch behavior.
+ * `LineAdjustmentPushIn` (ADR 0031 修订): the default PushInFirst pulls an
+ * over-the-edge cluster in and COMPRESSES whenever the line's glue capacity
+ * allows — but ONLY there, never as floor-filling on every line (the [ADR 0022]
+ * over-compression trap). `PushOutOnly` reproduces greedy-then-stretch.
  */
 class LineAdjustmentPushInTest {
 
@@ -40,24 +40,24 @@ class LineAdjustmentPushInTest {
         debug.justificationDecisions.count { it.deficitBefore > 0.001f }
 
     @Test
-    fun autoCompressesSomeBoundariesPushOutOnlyNone() {
-        val auto = layout(LineAdjustmentStrategy.Auto)
+    fun pushInFirstCompressesSomeBoundariesPushOutOnlyNone() {
+        val auto = layout(LineAdjustmentStrategy.PushInFirst)
         val pushOut = layout(LineAdjustmentStrategy.PushOutOnly)
 
         // 仅推出 = 旧行为：从不为容纳越界字而压缩。
         assertEquals(0, pushOut.fillPushInCount(), "PushOutOnly must never fill-push-in")
-        // Auto 在「挤一挤放得下」处推入压缩。
-        assertTrue(auto.fillPushInCount() > 0, "Auto should compress at least one boundary")
+        // PushInFirst 在「挤一挤放得下」处推入压缩。
+        assertTrue(auto.fillPushInCount() > 0, "PushInFirst should compress at least one boundary")
         // 节约版面：Auto 行数 ≤ 仅推出。
         assertTrue(
             auto.lines.size <= pushOut.lines.size,
-            "Auto (${auto.lines.size}) should not need more lines than PushOutOnly (${pushOut.lines.size})",
+            "PushInFirst (${auto.lines.size}) should not need more lines than PushOutOnly (${pushOut.lines.size})",
         )
     }
 
     @Test
-    fun autoDoesNotCompressEveryLine() {
-        val auto = layout(LineAdjustmentStrategy.Auto)
+    fun pushInFirstDoesNotCompressEveryLine() {
+        val auto = layout(LineAdjustmentStrategy.PushInFirst)
         // ADR 0022 guard: 压缩不是常规填充——仍应有自然/拉伸态的行，不能整段塞满。
         assertTrue(
             auto.fillPushInCount() < auto.lines.size,
