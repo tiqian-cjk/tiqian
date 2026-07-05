@@ -68,13 +68,26 @@ class AndroidPaintTextShaper(
 
         val haltMetrics = measureHalt(input, displayText, advance, measured.glyphIds.size)
 
-        val singleGlyphBounds = if (measured.glyphIds.size == 1) {
+        // ContextConsistentGlyphCapture: getTextBounds (and the ligature fallback
+        // shape) run WITHOUT the Han context, so on some fonts they describe a
+        // DIFFERENT glyph than the context-shaped one (Pixel: `⸺` context-free is
+        // a 1.68em rule, in Han context a full 2em one). Attributing that ink or
+        // replaying those glyph ids would mix two worlds — compare advances and
+        // degrade honestly instead.
+        val contextFreeAdvance =
+            paint.getRunAdvance(displayText, 0, displayText.length, 0, displayText.length, false, displayText.length)
+        val advanceConsistent = kotlin.math.abs(contextFreeAdvance - advance) <= 1f
+        val singleGlyphBounds = if (measured.glyphIds.size == 1 && advanceConsistent) {
             val bounds = AndroidRect()
             paint.getTextBounds(displayText, 0, displayText.length, bounds)
             bounds.toGlyphLocalRectOrNull()
         } else {
             null
         }
+        // Ligature fallback glyphs that do not add up to the context advance must
+        // not be replayed glyph-by-glyph — dropping the render keys makes the
+        // renderer fall back to context-shaped STRING drawing (correct ink).
+        val replayable = measured.contextSliced || advanceConsistent
 
         val glyphCount = measured.glyphIds.size
         val glyphs = (0 until glyphCount).map { glyphIndex ->
@@ -86,7 +99,7 @@ class AndroidPaintTextShaper(
                 advance = max(0f, endX - startX),
                 x = startX,
                 y = measured.glyphYs[glyphIndex],
-                renderFontKey = measured.renderFontKeys[glyphIndex],
+                renderFontKey = if (replayable) measured.renderFontKeys[glyphIndex] else null,
                 bounds = if (glyphCount == 1) singleGlyphBounds else null,
                 haltAdvance = haltMetrics?.first,
                 haltPlacementX = haltMetrics?.second,
@@ -133,6 +146,8 @@ class AndroidPaintTextShaper(
         val glyphYs: FloatArray,
         /** Opaque Android Font keys for drawing these glyph ids later. */
         val renderFontKeys: List<String?>,
+        /** True when the glyphs were sliced out of the Han-context shape (same world as [advance]). */
+        val contextSliced: Boolean = false,
     )
 
     /**
@@ -146,7 +161,7 @@ class AndroidPaintTextShaper(
         displayText: String,
         useHanContext: Boolean,
     ): MeasuredRun {
-        if (displayText.isEmpty()) return MeasuredRun(0f, IntArray(0), FloatArray(0), FloatArray(0), emptyList())
+        if (displayText.isEmpty()) return MeasuredRun(0f, IntArray(0), FloatArray(0), FloatArray(0), emptyList(), contextSliced = true)
 
         if (useHanContext) {
             val buffer = "中${displayText}中"
@@ -169,7 +184,7 @@ class AndroidPaintTextShaper(
                 val fonts = List(displayText.length) { index ->
                     AndroidPositionedGlyphFontRegistry.keyFor(shaped.getFont(runStart + index))
                 }
-                return MeasuredRun(advance, ids, xs, ys, fonts)
+                return MeasuredRun(advance, ids, xs, ys, fonts, contextSliced = true)
             }
         }
 

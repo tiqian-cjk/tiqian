@@ -176,6 +176,12 @@ class AndroidDashPunctuationReproTest {
             assertEquals(0f, glyph.x, 0.5f)
         }
         assertEquals(0f, glyph.y, 0.5f)
+        // ContextConsistentGlyphCapture: a kept single-glyph substitution must be
+        // the Han-context glyph — its advance matches the cluster (no mixing a
+        // context-free narrow glyph into a full-width body).
+        if (dash.displayText == "⸺") {
+            assertEquals(dash.advance, glyph.advance, 0.5f)
+        }
         assertTrue(fontKey != null, "Android glyph must keep the shaper Font key: $glyph")
         assertTrue(
             AndroidPositionedGlyphFontRegistry.fontFor(fontKey) != null,
