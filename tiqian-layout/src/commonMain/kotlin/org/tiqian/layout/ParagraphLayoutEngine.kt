@@ -224,13 +224,24 @@ class ExplainableStubParagraphLayoutEngine(
             resolved.range to decision
         }
 
-        // SubstitutionRollbackOnMissingGlyph: a CLREQ display substitution
-        // (ADR 0003, e.g. `——` → `⸺`) is only an improvement if the resolved
-        // font actually covers the substituted codepoint — `⸺` U+2E3A is
-        // absent from PingFang SC / Hiragino / Heiti and would render tofu.
-        // When the shaper reports .notdef glyphs for a substituted cluster,
-        // re-shape with the source text and record the rollback.
-        val substitutionRollbackRanges = mutableSetOf<TextRange>()
+        // A CLREQ display substitution (ADR 0003, e.g. `——` → `⸺`) is only an
+        // improvement if the resolved font can actually DRAW it well; otherwise
+        // re-shape with the source text and record the rollback + its cause:
+        // - SubstitutionRollbackOnMissingGlyph: the font lacks the codepoint —
+        //   `⸺` U+2E3A is absent from PingFang SC / Hiragino / Heiti (tofu).
+        // - DashSubstitutionInkCoverageRollback: the font HAS `⸺` but its ink
+        //   does not fill the two-em advance (Pixel's Noto CJK carries a
+        //   ~1.6em-ink glyph left-aligned in a 2em advance → a ~0.35em hole
+        //   against the next character). The source `——` tiles two full-width
+        //   em dashes instead. Only judged when the shaper reports ink bounds;
+        //   stub/AWT (no ink) keep the substitution.
+        val substitutionRollbacks = mutableMapOf<TextRange, String>()
+        fun ShapingResult.dashInkCoverageDeficient(displayText: String): Boolean {
+            if (!displayText.contains('\u2E3A')) return false
+            val glyph = glyphRuns.flatMap { it.glyphs }.singleOrNull() ?: return false
+            val ink = glyph.bounds ?: return false
+            return (ink.right - ink.left) < glyph.advance * DASH_SUBSTITUTION_MIN_INK_COVERAGE
+        }
         fun shapeSegment(decision: FontDecision, segmentRange: TextRange): ShapingResult {
             val sourceText = text.substring(segmentRange.start, segmentRange.end)
             val substitution = punctuationGlyphSubstitutor.substitute(sourceText)
@@ -249,10 +260,16 @@ class ExplainableStubParagraphLayoutEngine(
                     displayText = substitution.displayText,
                 ),
             )
-            return if (substitution.displayText == sourceText || shaped.decisions.none { it.missingGlyphs > 0 }) {
+            val rollbackCause = when {
+                substitution.displayText == sourceText -> null
+                shaped.decisions.any { it.missingGlyphs > 0 } -> "SubstitutionRollbackOnMissingGlyph"
+                shaped.dashInkCoverageDeficient(substitution.displayText) -> "DashSubstitutionInkCoverageRollback"
+                else -> null
+            }
+            return if (rollbackCause == null) {
                 shaped
             } else {
-                substitutionRollbackRanges += segmentRange
+                substitutionRollbacks[segmentRange] = rollbackCause
                 textShaper.shape(
                     ShapingInput(
                         text = text,
@@ -1056,6 +1073,19 @@ class ExplainableStubParagraphLayoutEngine(
         }
         val geometryDecisions = finalGeometry.toDecisionInfo()
 
+        // DashInkCentering: a 破折号 body is TWO EM by model (grid), but some
+        // platform fonts draw their dash rule ≈1.6em of ink left-aligned in the
+        // box (Pixel's Noto CJK — both its `⸺` and its `——` ligature share that
+        // narrow rule). Centering the ink turns a one-sided ~0.35em hole into
+        // symmetric side bearings. Only when the shaper reported ink bounds.
+        fun List<Glyph>.centerDashInk(cluster: Cluster): List<Glyph> {
+            if (atomClassByRange[cluster.range] != PunctuationClass.Dash) return this
+            val glyph = singleOrNull() ?: return this
+            val ink = glyph.bounds ?: return this
+            val inset = (cluster.advance - (ink.right - ink.left)) / 2f - ink.left
+            if (inset <= 0.5f) return this
+            return listOf(glyph.copy(x = glyph.x + inset))
+        }
         val glyphRuns = finalClusters.renderableGlyphRunClusters().map { runClusters ->
             GlyphRun(
                 range = TextRange(runClusters.first().range.start, runClusters.last().range.end),
@@ -1063,6 +1093,7 @@ class ExplainableStubParagraphLayoutEngine(
                 glyphs = runClusters.flatMapIndexed { fallbackGlyphId, cluster ->
                     shapedGlyphsByClusterRange[cluster.range]
                         ?.mapToClusterRange(cluster)
+                        ?.centerDashInk(cluster)
                         ?: listOf(
                             Glyph(
                                 id = fallbackGlyphId.toUInt(),
@@ -1243,16 +1274,16 @@ class ExplainableStubParagraphLayoutEngine(
                 fontDecisions = fontDecisions.map { decision ->
                     val clusterText = text.substring(decision.range.start, decision.range.end)
                     val substitution = punctuationGlyphSubstitutor.substitute(clusterText)
-                    val rolledBack = substitutionRollbackRanges.any { it.isInside(decision.range) }
+                    val rollbackCause = substitutionRollbacks.entries.firstOrNull { it.key.isInside(decision.range) }?.value
                     FontDecisionInfo(
                         range = decision.range,
                         sourceText = clusterText,
-                        displayText = if (rolledBack) clusterText else substitution.displayText,
+                        displayText = if (rollbackCause != null) clusterText else substitution.displayText,
                         role = decision.role.name,
                         fontKey = decision.candidate.key,
                         reason = decision.reason,
-                        substitutionReason = if (rolledBack) {
-                            "${substitution.reason}:SubstitutionRollbackOnMissingGlyph"
+                        substitutionReason = if (rollbackCause != null) {
+                            "${substitution.reason}:$rollbackCause"
                         } else {
                             substitution.reason
                         },
@@ -2582,6 +2613,8 @@ private const val RUBY_FONT_WEIGHT_BOOST = 100
 /** `BopomofoLegibilityWeightBoost`: 注音 ㄅㄆㄇ 更小，默认比基文重 300. */
 private const val BOPOMOFO_FONT_WEIGHT_BOOST = 300
 private const val MANDATORY_BREAK_FONT_KEY = "mandatory-break"
+/** `DashSubstitutionInkCoverageRollback`: keep `⸺` only if its ink fills ≥85% of the 2em advance (Pixel Noto ≈80% rolls back; Source Han ≈94% keeps). */
+private const val DASH_SUBSTITUTION_MIN_INK_COVERAGE = 0.85f
 /** `EmptyParagraphBaselineFallback`: see [lineMetrics]'s empty branch. */
 private const val EMPTY_PARAGRAPH_BASELINE_RATIO = 0.75f
 /**

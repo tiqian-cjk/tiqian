@@ -2205,6 +2205,127 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun dashSubstitutionRollsBackWhenInkDoesNotFillTheTwoEmAdvance() {
+        // DashSubstitutionInkCoverageRollback: the font HAS `⸺` but draws it as
+        // a ~1.6em rule left-aligned in the 2em advance (Pixel's Noto CJK) — the
+        // substitution would leave a ~0.35em hole against the next character, so
+        // the engine re-shapes with the source `——` (two full-width em dashes).
+        val engine = ExplainableStubParagraphLayoutEngine(
+            textShaper = object : TextShaper {
+                val delegate = ExplainableStubTextShaper()
+                override fun shape(input: ShapingInput): ShapingResult {
+                    val result = delegate.shape(input)
+                    return if (input.displayText.contains('⸺')) {
+                        result.copy(
+                            glyphRuns = result.glyphRuns.map { run ->
+                                run.copy(
+                                    glyphs = run.glyphs.map { g ->
+                                        // 32px advance, ink 1..26 → 25/32 ≈ 78% < 85%.
+                                        g.copy(advance = 32f, bounds = Rect(1f, -10f, 26f, -8f))
+                                    },
+                                )
+                            },
+                        )
+                    } else {
+                        result
+                    }
+                }
+            },
+        )
+
+        val result = engine.layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("中——文"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val dashCluster = result.clusters.single { it.text == "——" }
+        assertEquals("——", dashCluster.displayText)
+        val dashDecision = result.debug.fontDecisions.single { it.sourceText == "——" }
+        assertTrue(dashDecision.substitutionReason.endsWith("DashSubstitutionInkCoverageRollback"))
+    }
+
+    @Test
+    fun dashInkCentersWithinTheTwoEmBodyWhenTheFontRuleUnderfills() {
+        // DashInkCentering: ink 0.5..28 (width 27.5 = 86% ≥ 85% → substitution
+        // kept) in a 32px body → inset = (32 − 27.5) / 2 − 0.5 = 1.75px, the
+        // glyph draw origin shifts so the rule sits centred.
+        val engine = ExplainableStubParagraphLayoutEngine(
+            textShaper = object : TextShaper {
+                val delegate = ExplainableStubTextShaper()
+                override fun shape(input: ShapingInput): ShapingResult {
+                    val result = delegate.shape(input)
+                    return if (input.displayText.contains('⸺')) {
+                        result.copy(
+                            glyphRuns = result.glyphRuns.map { run ->
+                                run.copy(
+                                    glyphs = run.glyphs.map { g ->
+                                        g.copy(advance = 32f, bounds = Rect(0.5f, -10f, 28f, -8f))
+                                    },
+                                )
+                            },
+                        )
+                    } else {
+                        result
+                    }
+                }
+            },
+        )
+
+        val result = engine.layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("中——文"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val dash = result.clusters.single { it.text == "——" }
+        assertEquals("⸺", dash.displayText)
+        val glyph = result.glyphRuns.flatMap { it.glyphs }.single { it.clusterRange == dash.range }
+        assertEquals(1.75f, glyph.x, 0.01f)
+    }
+
+    @Test
+    fun dashSubstitutionIsKeptWhenInkFillsTheTwoEmAdvance() {
+        // Counterpart: a proper two-em rule (Source Han: ink ≈94% of advance)
+        // keeps the `——` → `⸺` substitution.
+        val engine = ExplainableStubParagraphLayoutEngine(
+            textShaper = object : TextShaper {
+                val delegate = ExplainableStubTextShaper()
+                override fun shape(input: ShapingInput): ShapingResult {
+                    val result = delegate.shape(input)
+                    return if (input.displayText.contains('⸺')) {
+                        result.copy(
+                            glyphRuns = result.glyphRuns.map { run ->
+                                run.copy(
+                                    glyphs = run.glyphs.map { g ->
+                                        g.copy(advance = 32f, bounds = Rect(1f, -10f, 31f, -8f))
+                                    },
+                                )
+                            },
+                        )
+                    } else {
+                        result
+                    }
+                }
+            },
+        )
+
+        val result = engine.layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("中——文"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        assertEquals("⸺", result.clusters.single { it.text == "——" }.displayText)
+    }
+
+    @Test
     fun substitutionIsKeptWhenFontCoversTheGlyph() {
         // Counterpart: the default stub shaper reports no missing glyphs, so
         // the `——` → `⸺` substitution stays in effect.

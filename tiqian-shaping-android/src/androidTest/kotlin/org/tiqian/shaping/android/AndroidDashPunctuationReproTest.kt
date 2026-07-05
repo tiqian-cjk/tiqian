@@ -52,15 +52,20 @@ class AndroidDashPunctuationReproTest {
         val dash = result.clusters.single { it.text == "——" }
         val dashDecision = result.debug.fontDecisions.single { it.sourceText == "——" }
         val dashGeometry = result.debug.geometryDecisions.single { it.sourceText == "——" }
-        assertEquals(
-            "⸺",
-            dash.displayText,
-            "hasGlyph(⸺)=${paint.hasGlyph("⸺")} font=${
-                paint.typeface
-            } decision=$dashDecision geometry=$dashGeometry clusters=${result.clusters}",
+        // Font-agnostic contract: the display form is either the kept `⸺`
+        // (full-ink fonts) or the rolled-back source `——` (deficient-ink fonts
+        // like Pixel's Noto CJK — DashSubstitutionInkCoverageRollback). Either
+        // way the geometry stays a closed two-em body with no generated blanks.
+        assertTrue(
+            dash.displayText == "⸺" || dash.displayText == "——",
+            "hasGlyph(⸺)=${paint.hasGlyph("⸺")} decision=$dashDecision geometry=$dashGeometry",
         )
-        assertEquals("⸺", dashDecision.displayText)
-        assertFalse(dashDecision.substitutionReason.contains("SubstitutionRollbackOnMissingGlyph"))
+        if (dash.displayText == "——") {
+            assertTrue(
+                dashDecision.substitutionReason.contains("Rollback"),
+                "rolled-back dash must record its cause: $dashDecision",
+            )
+        }
         assertEquals(0f, dashGeometry.trailingGlueNatural, 0.5f)
         assertEquals(0f, dashGeometry.leadingGlueNatural, 0.5f)
         assertTrue(result.clusters.none { it.text == " " }, "source has no spaces: ${result.clusters}")
@@ -126,7 +131,7 @@ class AndroidDashPunctuationReproTest {
         assertEquals(2, dashClusters.size)
         assertTrue(result.clusters.none { it.text == " " }, "source has no spaces: ${result.clusters}")
         dashClusters.forEach { dash ->
-            assertEquals("⸺", dash.displayText)
+            assertTrue(dash.displayText == "⸺" || dash.displayText == "——", "display=$dash")
             assertEquals(fontSize * 2f, dash.advance, 0.5f)
         }
         val dashGeometry = result.debug.geometryDecisions.filter { it.sourceText == "——" }
@@ -154,10 +159,22 @@ class AndroidDashPunctuationReproTest {
         val dash = result.clusters.single { it.text == "——" }
         val glyph = result.glyphRuns.flatMap { it.glyphs }.single { it.clusterRange == dash.range }
         val fontKey = glyph.renderFontKey
-        assertEquals("⸺", dash.displayText)
+        assertTrue(dash.displayText == "⸺" || dash.displayText == "——", "display=$dash")
         assertEquals(fontSize * 2f, dash.advance, 0.5f)
-        assertEquals(fontSize * 2f, glyph.advance, 0.5f)
-        assertEquals(0f, glyph.x, 0.5f)
+        // DashInkCentering: when the font's rule ink underfills the two-em body,
+        // the glyph draw origin shifts so the ink sits centred — left and right
+        // side gaps must match (within 1px). x==0 only for full-ink fonts.
+        val ink = glyph.bounds
+        if (ink != null) {
+            val leftGap = glyph.x + ink.left
+            val rightGap = dash.advance - (glyph.x + ink.right)
+            assertTrue(
+                kotlin.math.abs(leftGap - rightGap) <= 1f,
+                "dash ink must be centred: leftGap=$leftGap rightGap=$rightGap glyph=$glyph",
+            )
+        } else {
+            assertEquals(0f, glyph.x, 0.5f)
+        }
         assertEquals(0f, glyph.y, 0.5f)
         assertTrue(fontKey != null, "Android glyph must keep the shaper Font key: $glyph")
         assertTrue(
