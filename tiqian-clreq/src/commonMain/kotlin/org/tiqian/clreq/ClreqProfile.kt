@@ -150,19 +150,27 @@ fun PunctuationGluePlacement.glueSideFor(punctuationClass: PunctuationClass): Gl
  *    round-trip through copy/paste. Reserved; not implemented in current
  *    slice (requires virtual cluster injection).
  *
- * [gapEm] is the autospace gap width in em, applied uniformly across both
- * boundary types unless overridden. CSS default `text-autospace: normal`
- * lands around 0.125–0.25 em depending on font; we pick `0.25` to match the
- * existing `Justifier.cjkLatinSpaceEm` so the same number governs typed-
- * space replacement and justification stretch capacity.
+ * [gapEm] + [stretchMaxEm] are ONE pair: the gap's base width and its justify
+ * stretch ceiling (final width), both in em (ADR 0009 amendment). CLREQ asks
+ * 1/4–1/2; mainstream practice (iOS, Chrome `text-autospace`) converged on a
+ * 1/8 base, and CLREQ's own 注② records styles capping stretch at 1/3 — so
+ * [Default] is 1/8–1/3 and the literal reading lives in [Clreq]. The engine
+ * threads this pair into the Justifier; nothing else re-declares the numbers.
  */
 data class AutoSpacePolicy(
     val cjkLatin: AutoSpaceMode = AutoSpaceMode.Insert,
     val cjkDigit: AutoSpaceMode = AutoSpaceMode.Insert,
-    val gapEm: Float = 0.25f,
+    val gapEm: Float = 0.125f,
+    /** justify 拉伸上限（final width，em）——间距对 [gapEm..stretchMaxEm]。 */
+    val stretchMaxEm: Float = 1f / 3f,
 ) {
     companion object {
+        /** 实践收敛值：1/8 基准、1/3 上限（iOS / Chrome `text-autospace`）。默认。 */
         val Default = AutoSpacePolicy()
+
+        /** CLREQ 字面：1/4 基准、1/2 上限。 */
+        val Clreq = AutoSpacePolicy(gapEm = 0.25f, stretchMaxEm = 0.5f)
+
         val Disabled = AutoSpacePolicy(
             cjkLatin = AutoSpaceMode.Disabled,
             cjkDigit = AutoSpaceMode.Disabled,
@@ -193,13 +201,6 @@ data class AdjustmentStylePolicy(
      * 也不参与 justify 的 CjkLatinSpace 拉伸档。
      */
     val allowSinoWesternGapAdjustment: Boolean = true,
-    /**
-     * CLREQ 拉伸第②档中西间距的拉伸上限（final width，单位 em）。原文上限是半个
-     * 汉字宽（`0.5`），注②记「很多排版风格在实际处理上，只允许最大拉伸到三分之
-     * 一汉字宽」→ 设 `1f / 3f`。仅影响 justify 的 CjkLatinSpace 档上限，不改默认
-     * 间距（`autoSpace.gapEm`）。
-     */
-    val sinoWesternStretchMaxEm: Float = 0.5f,
     /**
      * 行尾越界字的「推入/推出」取舍（CLREQ §6.2.2「先挤进、后推出」+ 行内
      * 「先挤压、后拉伸」）。默认 [LineAdjustmentStrategy.PushInFirst]——固定

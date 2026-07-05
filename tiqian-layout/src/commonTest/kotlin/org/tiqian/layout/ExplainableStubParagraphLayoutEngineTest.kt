@@ -36,6 +36,7 @@ class ExplainableStubParagraphLayoutEngineTest {
      */
     private fun fixedBasicEngine(
         adjustment: org.tiqian.clreq.AdjustmentStylePolicy = org.tiqian.clreq.AdjustmentStylePolicy(),
+        autoSpace: org.tiqian.clreq.AutoSpacePolicy = org.tiqian.clreq.AutoSpacePolicy.Default,
     ) = ExplainableStubParagraphLayoutEngine(
         clreqProfileResolver = ClreqProfileResolver {
             ClreqProfile.MainlandHorizontal.copy(
@@ -43,6 +44,7 @@ class ExplainableStubParagraphLayoutEngineTest {
                     org.tiqian.clreq.KinsokuLevel.Basic,
                 ),
                 adjustment = adjustment,
+                autoSpace = autoSpace,
             )
         },
         // Repair/kinsoku fixtures stay deterministic: no default hyphenation.
@@ -385,7 +387,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     fun autoSpaceReplacesTypedSpaceAtCjkLatinBoundary() {
         // " CJK " becomes one Latin cluster (5 chars * 16 = 80px nominal).
         // At maxWidth large enough, default AutoSpacePolicy.Replace shrinks
-        // each boundary space from 二分空 0.5em (8) to 0.25em (4).
+        // each boundary space from 二分空 0.5em (8) to gapEm 0.125em (2).
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
@@ -398,11 +400,11 @@ class ExplainableStubParagraphLayoutEngineTest {
         // cluster IS the gap and normalises from 二分空 0.5em to 0.25em.
         val spaces = result.clusters.filter { it.text == " " }
         assertEquals(2, spaces.size)
-        assertTrue(spaces.all { it.advance == 4f })
+        assertTrue(spaces.all { it.advance == 2f })
         assertEquals(2, result.debug.autoSpaceDecisions.size)
         assertTrue(
             result.debug.autoSpaceDecisions.all {
-                it.mode == "Replace" && it.side == "gap" && it.totalReduction == 4f
+                it.mode == "Replace" && it.side == "gap" && it.totalReduction == 6f
             },
         )
     }
@@ -1151,10 +1153,10 @@ class ExplainableStubParagraphLayoutEngineTest {
     @Test
     fun autoSpaceGapAtLineEndIsTrimmedLikeAnyLineEdgeBlank() {
         // text = "中文 AB 中文中文中文" segments to 中 文 [ ] [AB] [ ] 中….
-        // Both spaces are CJK-adjacent gaps (advance 4). maxWidth=80 →
-        // greedy line 0 = [中 文 ' ' AB ' '] (16+16+4+32+4=72); the trailing
+        // Both spaces are CJK-adjacent gaps (advance 2). maxWidth=80 →
+        // greedy line 0 = [中 文 ' ' AB ' '] (16+16+2+32+2=68); the trailing
         // space cluster sits at the line END and collapses entirely:
-        // line adjusted width 72 → 68.
+        // line adjusted width 68 → 66.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
@@ -1163,12 +1165,12 @@ class ExplainableStubParagraphLayoutEngineTest {
             ),
         )
 
-        assertEquals(68f, result.lines.first().adjustedWidth)
+        assertEquals(66f, result.lines.first().adjustedWidth)
 
         val collapse = result.debug.lineEdgeTrimDecisions
             .single { it.reason == "LineEdgeWordSpaceCollapse" }
         assertEquals("trailing", collapse.side)
-        assertEquals(4f, collapse.trimAmount)
+        assertEquals(2f, collapse.trimAmount)
         assertEquals(5, collapse.clusterRange.start)
         assertEquals(6, collapse.clusterRange.end)
     }
@@ -2040,10 +2042,11 @@ class ExplainableStubParagraphLayoutEngineTest {
 
     @Test
     fun sinoWesternGapShrinkFloorsAtEighthEm() {
-        // CLREQ 挤压⑥：中西间距最小挤为 1/8 汉字宽，不是 0。两个 gap
-        // (advance 4) 各只有 2px 容量：。 推入需要 16，可用 8+2+2=12 →
-        // PushIn 拒绝，CarryPrevious 兜底。（floor 为 0 的旧行为会接受。）
-        val result = fixedBasicEngine().layout(
+        // CLREQ 挤压⑥：中西间距最小挤为 1/8 汉字宽，不是 0。用 Clreq 预设
+        // (base 1/4)：两个 gap (advance 4) 各只有 2px 容量：。 推入需要 16，
+        // 可用 8+2+2=12 → PushIn 拒绝，CarryPrevious 兜底。（floor 为 0 的旧
+        // 行为会接受。Default 预设 base=floor=1/8，间距本就不可压。）
+        val result = fixedBasicEngine(autoSpace = org.tiqian.clreq.AutoSpacePolicy.Clreq).layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(
                     firstLineIndent = Ic(0f),

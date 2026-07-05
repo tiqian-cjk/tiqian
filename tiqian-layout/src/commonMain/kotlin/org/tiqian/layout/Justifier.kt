@@ -41,8 +41,6 @@ import org.tiqian.font.FontRole
  * and violates the source-preserving long-mark model.
  */
 class Justifier(
-    /** 中西间距的默认（autospace）宽度，拉伸从此起步. */
-    private val cjkLatinSpaceBaseEm: Float = 0.25f,
     /**
      * CLREQ 拉伸第①档：「每个西文词距最大可以拉伸到半个汉字字宽」——the
      * word space's FINAL width is capped at this (absolute). Headroom is
@@ -64,12 +62,16 @@ class Justifier(
          */
         allowSinoWesternGapStretch: Boolean = true,
         /**
-         * CLREQ 拉伸第②档：中西间距的拉伸上限（final width）。原文上限是半个
-         * 汉字宽（0.5em），但注②记「很多排版风格实践上只允许拉到三分之一汉字
-         * 宽」——由 `AdjustmentStylePolicy.sinoWesternStretchMaxEm` 提供，默认
-         * 0.5em（CLREQ 上限），可设 1/3em。
+         * 中西间距的基准（autospace）宽度，拉伸从此起步。与 [cjkLatinSpaceMaxEm]
+         * 是一对（`AutoSpacePolicy.gapEm..stretchMaxEm`，ADR 0009 修订），由调用方
+         * 从 profile 传入——REQUIRED，避免同一数字在两处各存一份漂移。
          */
-        cjkLatinSpaceMaxEm: Float = 0.5f,
+        cjkLatinSpaceBaseEm: Float,
+        /**
+         * CLREQ 拉伸第②档：中西间距的拉伸上限（final width）。CLREQ 字面 0.5em，
+         * 注② 实践 1/3em——`AutoSpacePolicy.stretchMaxEm` 提供。
+         */
+        cjkLatinSpaceMaxEm: Float,
         /**
          * `NoStretchBoundaryClusters` — cluster indices whose adjacent
          * boundaries stay closed in CjkInterChar. Covers CLREQ's explicit

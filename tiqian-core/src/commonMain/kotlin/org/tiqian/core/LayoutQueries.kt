@@ -229,19 +229,20 @@ fun LayoutResult.getOffsetForPosition(x: Float, y: Float): Int {
 }
 
 private fun LayoutResult.positionedClusters(lineIndex: Int, line: LineBox): List<PositionedCluster> {
-    val autoSpaceGap = 0.25f * input.textStyle.fontSize
     val leadingConsumed = debug.geometryDecisions
         .filter { it.leadingGlueConsumed > 0f }
         .associate { it.range to it.leadingGlueConsumed }
-    val leadingAutoSpaceRanges = debug.autoSpaceDecisions
+    // The applied autospace width is recorded on the decision (an Insert gap is a
+    // negative reduction, `AutoSpacePolicy.gapEm` at apply time) — geometry reads
+    // the recorded value instead of re-deriving a constant (ADR 0009 amendment).
+    val leadingAutoSpaceGaps = debug.autoSpaceDecisions
         .filter { it.side == "leading" }
-        .map { it.clusterRange }
-        .toSet()
+        .associate { it.clusterRange to -it.totalReduction }
 
     var x = line.indent
     return line.clusterRange.mapIndexed { indexInLine, clusterIndex ->
         val cluster = clusters[clusterIndex]
-        val leadingGap = if (indexInLine != 0 && cluster.range in leadingAutoSpaceRanges) autoSpaceGap else 0f
+        val leadingGap = if (indexInLine != 0) leadingAutoSpaceGaps[cluster.range] ?: 0f else 0f
         val drawX = x + leadingGap - (leadingConsumed[cluster.range] ?: 0f)
         val positioned = PositionedCluster(
             lineIndex = lineIndex,

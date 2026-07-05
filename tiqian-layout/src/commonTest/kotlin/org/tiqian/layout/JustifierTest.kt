@@ -35,6 +35,8 @@ class JustifierTest {
             maxWidth = natural + 0.2f * em, // small deficit, within the gap's headroom
             fontSize = em,
             skip = false,
+            cjkLatinSpaceBaseEm = 0.25f,
+            cjkLatinSpaceMaxEm = 0.5f,
         )
 
         assertEquals(0f, plan.unfilledDeficit)
@@ -63,6 +65,8 @@ class JustifierTest {
             maxWidth = natural + 2f * em,
             fontSize = em,
             skip = false,
+            cjkLatinSpaceBaseEm = 0.25f,
+            cjkLatinSpaceMaxEm = 0.5f,
         )
 
         // Two 中西间距 share tier ②: the typed space (idx 1) and the virtual
@@ -90,6 +94,8 @@ class JustifierTest {
             maxWidth = natural + 0.2f * em,
             fontSize = em,
             skip = false,
+            cjkLatinSpaceBaseEm = 0.25f,
+            cjkLatinSpaceMaxEm = 0.5f,
         )
 
         val sino = plan.allocations.filter { it.kind == GlueKind.CjkLatinSpace }
@@ -111,6 +117,8 @@ class JustifierTest {
             maxWidth = natural + 0.2f * em,
             fontSize = em,
             skip = false,
+            cjkLatinSpaceBaseEm = 0.25f,
+            cjkLatinSpaceMaxEm = 0.5f,
         )
 
         assertTrue(plan.allocations.none { it.kind == GlueKind.CjkLatinSpace })
@@ -129,6 +137,7 @@ class JustifierTest {
             maxWidth = natural + 1f * em, // big deficit, beyond the gap's headroom
             fontSize = em,
             skip = false,
+            cjkLatinSpaceBaseEm = 0.25f,
             cjkLatinSpaceMaxEm = 1f / 3f,
         )
 

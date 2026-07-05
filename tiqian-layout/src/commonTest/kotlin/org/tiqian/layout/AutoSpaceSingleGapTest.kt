@@ -25,7 +25,7 @@ class AutoSpaceSingleGapTest {
     fun oneTypedSpaceBecomesOneAutospaceGap() {
         // `中文 CJK 段落` — LatinWordSegmentation makes each space its own
         // cluster. CJK-adjacent space clusters ARE the sino-western gap:
-        // their advance normalises from 1em (stub) to 0.25em.
+        // their advance normalises from 1em (stub) to gapEm (default 0.125em).
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
@@ -35,7 +35,7 @@ class AutoSpaceSingleGapTest {
         )
         val spaces = result.clusters.filter { it.text == " " }
         assertEquals(2, spaces.size)
-        assertTrue(spaces.all { it.advance == 4f })
+        assertTrue(spaces.all { it.advance == 2f })
         val word = result.clusters.single { it.text == "CJK" }
         assertEquals(48f, word.advance)
     }
@@ -43,7 +43,7 @@ class AutoSpaceSingleGapTest {
     @Test
     fun twoTypedSpacesAtBoundaryStillCollapseToOneGap() {
         // `中文  CJK 段落` — the 2-space run is ONE cluster and still
-        // normalises to a single 0.25em gap, same as one typed space.
+        // normalises to a single gapEm gap, same as one typed space.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
@@ -52,16 +52,16 @@ class AutoSpaceSingleGapTest {
             ),
         )
         val doubleSpace = result.clusters.single { it.text == "  " }
-        assertEquals(4f, doubleSpace.advance)
+        assertEquals(2f, doubleSpace.advance)
         val singleSpace = result.clusters.single { it.text == " " }
-        assertEquals(4f, singleSpace.advance)
+        assertEquals(2f, singleSpace.advance)
     }
 
     @Test
     fun threeTypedSpacesStillOneGap() {
         // 3 leading spaces, 0 trailing — the 3-space run normalises to one
-        // 4 px gap, and the space-less trailing boundary CJK→段 gains an
-        // Insert gap inside the word cluster (48 + 4 = 52).
+        // 2 px gap, and the space-less trailing boundary CJK→段 gains an
+        // Insert gap inside the word cluster (48 + 2 = 50).
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
@@ -70,16 +70,16 @@ class AutoSpaceSingleGapTest {
             ),
         )
         val tripleSpace = result.clusters.single { it.text == "   " }
-        assertEquals(4f, tripleSpace.advance)
+        assertEquals(2f, tripleSpace.advance)
         val word = result.clusters.single { it.text == "CJK" }
-        assertEquals(52f, word.advance)
+        assertEquals(50f, word.advance)
     }
 
     @Test
-    fun zeroSpacesGetInsertedQuarterEmGaps() {
+    fun zeroSpacesGetInsertedGaps() {
         // TextAutoSpaceInsert (CLREQ:「汉字与西文字母、数字间使用不多于四分
-        // 之一个汉字宽的字距或空白」): boundaries WITHOUT typed spaces gain
-        // a 0.25em gap on each side. "CJK" nominal 48 → 48 + 4 + 4 = 56.
+        // 之一个汉字宽的字距或空白」——1/8 合规): boundaries WITHOUT typed
+        // spaces gain a gapEm gap per side. "CJK" nominal 48 → 48 + 2 + 2 = 52.
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
@@ -88,12 +88,12 @@ class AutoSpaceSingleGapTest {
             ),
         )
         val cluster = result.clusters.single { it.text == "CJK" }
-        assertEquals(56f, cluster.advance)
+        assertEquals(52f, cluster.advance)
 
         val decisions = result.debug.autoSpaceDecisions
         assertEquals(2, decisions.size)
         assertTrue(decisions.all { it.mode == "Insert" && it.charactersAffected == 0 })
-        assertTrue(decisions.all { it.totalReduction == -4f })
+        assertTrue(decisions.all { it.totalReduction == -2f })
         assertTrue(decisions.all { it.reason.startsWith("TextAutoSpaceInsert") })
     }
 

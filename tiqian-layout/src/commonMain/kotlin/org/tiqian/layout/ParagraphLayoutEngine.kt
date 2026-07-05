@@ -1032,7 +1032,8 @@ class ExplainableStubParagraphLayoutEngine(
                     fontSize = fontSize,
                     skip = false,
                     allowSinoWesternGapStretch = adjustmentStyle.allowSinoWesternGapAdjustment,
-                    cjkLatinSpaceMaxEm = adjustmentStyle.sinoWesternStretchMaxEm,
+                    cjkLatinSpaceBaseEm = clreqProfile.autoSpace.gapEm,
+                    cjkLatinSpaceMaxEm = clreqProfile.autoSpace.stretchMaxEm,
                     noStretchBoundaryClusters = noStretchBoundaryClusters,
                 )
             }
@@ -1177,7 +1178,7 @@ class ExplainableStubParagraphLayoutEngine(
         // autospace gap + consumed 开标点 leading glue (mirrors the renderer's glyph
         // shift, SkiaTextBlobs.forEachPositionedCluster). The trailing justify stretch
         // is already excluded at use; the LEADING side was being missed (CLREQ「两侧」).
-        val autoSpaceGapPx = 0.25f * fontSize
+        val autoSpaceGapPx = clreqProfile.autoSpace.gapEm * fontSize
         val geometryByRange = geometryDecisions.associateBy { it.range }
         val leadingGapRanges = autoSpaceDecisions.filter { it.side == "leading" }.map { it.clusterRange }.toSet()
         val trailingGapRanges = autoSpaceDecisions.filter { it.side == "trailing" }.map { it.clusterRange }.toSet()
@@ -1930,7 +1931,7 @@ class ExplainableStubParagraphLayoutEngine(
                         charactersAffected = 0,
                         reductionPerChar = 0f,
                         totalReduction = -gap,
-                        reason = "TextAutoSpaceInsert:ideograph-alpha:quarter-em",
+                        reason = "TextAutoSpaceInsert:ideograph-alpha",
                     )
                 }
                 if (nextRole == FontRole.CjkText &&
@@ -1945,7 +1946,7 @@ class ExplainableStubParagraphLayoutEngine(
                         charactersAffected = 0,
                         reductionPerChar = 0f,
                         totalReduction = -gap,
-                        reason = "TextAutoSpaceInsert:ideograph-alpha:quarter-em",
+                        reason = "TextAutoSpaceInsert:ideograph-alpha",
                     )
                 }
                 if (added == 0f) cluster else cluster.copy(advance = cluster.advance + added)
