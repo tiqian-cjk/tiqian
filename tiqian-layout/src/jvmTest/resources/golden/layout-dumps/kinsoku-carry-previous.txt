@@ -32,15 +32,15 @@ linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reaso
 == lookahead ==
 size 64.0x72.0
 kinsoku measure=4.0字 level=Basic hang=Disabled reason=Fixed:Basic
-line[0] 0-4 natural=64.0 adjusted=64.0 visual=64.0 repair=PushIn(LineAdjustmentPushIn shrink=0.0) candidates=PushIn+ justify=-
-line[1] 4-7 natural=48.0 adjusted=48.0 visual=64.0 repair=- candidates=- justify=deficit=16.0->0.0 CjkInterChar@4+8.0,CjkInterChar@5+8.0
+line[0] 0-3 natural=48.0 adjusted=48.0 visual=64.0 repair=PushIn(LineAdjustmentPushIn shrink=0.0) candidates=PushIn+ justify=deficit=16.0->0.0 CjkInterChar@0+8.0,CjkInterChar@1+8.0
+line[1] 3-7 natural=64.0 adjusted=64.0 visual=64.0 repair=PushIn(LineAdjustmentPushIn shrink=0.0) candidates=PushIn+ justify=-
 line[2] 7-9 natural=32.0 adjusted=24.0 visual=24.0 repair=- candidates=- justify=-
-cluster 0-1 '提' adv=16.0
-cluster 1-2 '椠' adv=16.0
+cluster 0-1 '提' adv=24.0
+cluster 1-2 '椠' adv=24.0
 cluster 2-3 '中' adv=16.0
 cluster 3-4 '文' adv=16.0
-cluster 4-5 '中' adv=24.0
-cluster 5-6 '文' adv=24.0
+cluster 4-5 '中' adv=16.0
+cluster 5-6 '文' adv=16.0
 cluster 6-7 '中' adv=16.0
 cluster 7-8 '文' adv=16.0
 cluster 8-9 '。' adv=8.0
