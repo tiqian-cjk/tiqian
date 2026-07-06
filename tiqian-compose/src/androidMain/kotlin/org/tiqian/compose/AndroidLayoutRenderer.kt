@@ -77,7 +77,10 @@ private fun drawAndroidGlyphs(
         if (drawPositionedGlyphs(canvas, glyphs, drawX, baselineY, paint)) {
             return@forEachAndroidPositionedCluster
         }
-        drawContextShapedText(canvas, cluster.displayText, drawX, baselineY, run.role, paint)
+        // CjkPunctuation clusters need the full-buffer clipped draw (context GSUB);
+        // plain 汉字 are context-independent and keep the cheaper sub-range draw.
+        val clipToContext = run.role == FontRole.CjkPunctuation
+        drawContextShapedText(canvas, cluster.displayText, drawX, baselineY, run.role, paint, clipToContext)
     }
 
     val hyphenPaint = TextPaint(paint).apply {
@@ -353,10 +356,29 @@ private fun drawContextShapedText(
     y: Float,
     role: FontRole,
     paint: TextPaint,
+    clipToContext: Boolean = false,
 ) {
     if (text.isEmpty()) return
     val useHanContext = role == FontRole.CjkText || role == FontRole.CjkPunctuation
-    if (useHanContext) {
+    if (useHanContext && clipToContext) {
+        // FullBufferClippedPunctuationDraw: drawTextRun keeps context-driven GSUB
+        // (locl 2em dash, zh quote forms…) only for glyphs INSIDE the drawn range —
+        // a sub-range draw of `中<cluster>中` renders the context-free narrow form
+        // (measured on Pixel: 1.55em vs 1.84em for `⸺`). Draw the WHOLE buffer with
+        // the pen shifted so the cluster lands at [x], and clip to the cluster's
+        // NATURAL pen span inside the buffer — the context 中s sit exactly outside
+        // that span. The RESOLVED cluster advance must NOT be the clip: justify can
+        // stretch it past the trailing 中 (its left stroke bled in as a phantom
+        // vertical bar), and glue compression can shrink it into the glyph's own
+        // ink (opening quotes got their face cut off).
+        val buffer = "中${text}中"
+        val penOrigin = paint.getRunAdvance(buffer, 0, buffer.length, 0, buffer.length, false, 1)
+        val penEnd = paint.getRunAdvance(buffer, 0, buffer.length, 0, buffer.length, false, 1 + text.length)
+        canvas.save()
+        canvas.clipRect(x, y - paint.textSize * 2f, x + (penEnd - penOrigin), y + paint.textSize)
+        canvas.drawTextRun(buffer, 0, buffer.length, 0, buffer.length, x - penOrigin, y, false, paint)
+        canvas.restore()
+    } else if (useHanContext) {
         val buffer = "中${text}中"
         canvas.drawTextRun(buffer, 1, 1 + text.length, 0, buffer.length, x, y, false, paint)
     } else {
