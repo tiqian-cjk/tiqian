@@ -2,8 +2,10 @@ package org.tiqian.layout
 
 import org.tiqian.clreq.ClreqProfile
 import org.tiqian.clreq.LineAdjustmentStrategy
+import org.tiqian.core.Cluster
 import org.tiqian.core.LayoutInput
 import org.tiqian.core.LayoutResult
+import org.tiqian.core.TextRange
 import org.tiqian.core.TiqianTextContent
 import org.tiqian.test.EarlyLayoutFixtures
 import kotlin.test.Test
@@ -36,9 +38,6 @@ class LineAdjustmentPushInTest {
     private fun LayoutResult.fillPushInCount(): Int =
         debug.lineDecisions.count { it.repairDecision?.reasonCode == "LineAdjustmentPushIn" }
 
-    private fun LayoutResult.stretchedLineCount(): Int =
-        debug.justificationDecisions.count { it.deficitBefore > 0.001f }
-
     @Test
     fun pushInFirstCompressesSomeBoundariesPushOutOnlyNone() {
         val auto = layout(LineAdjustmentStrategy.PushInFirst)
@@ -64,4 +63,86 @@ class LineAdjustmentPushInTest {
             "not every line should be a fill-push-in (${auto.fillPushInCount()}/${auto.lines.size})",
         )
     }
+
+    @Test
+    fun noShrinkFillPushInCanContinueUntilTheLineIsNoLongerLoose() {
+        val clusters = listOf(
+            cluster(0, "甲", 30f),
+            cluster(1, "乙", 30f),
+            cluster(2, "丙", 20f),
+            cluster(3, "丁", 20f),
+            cluster(4, "戊", 20f),
+            cluster(5, "己", 20f),
+        )
+        val lines = listOf(
+            rebuildLine(0..1, clusters, clusters),
+            rebuildLine(2..5, clusters, clusters),
+        )
+
+        val filled = applyFillPushIn(
+            lines = lines,
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 100f,
+            shrinkOpportunities = emptyList(),
+            firstLineIndent = 0f,
+            compressBias = 1_000_000f,
+            forbiddenLineStartClusters = emptySet(),
+            forbiddenLineEndClusters = emptySet(),
+            unbreakableRanges = emptyList(),
+            pushInPenalty = 2,
+            gapBoundaries = setOf(0, 1, 2, 3, 4),
+        )
+
+        assertEquals(0..3, filled[0].clusterRange)
+        assertEquals(100f, filled[0].adjustedWidth)
+        assertEquals(4..5, filled[1].clusterRange)
+        val repair = filled[0].repair as RepairOption.PushIn
+        assertEquals(0f, repair.totalShrink)
+    }
+
+    @Test
+    fun fillPushInPullsMinimalGroupToAvoidForbiddenNextHead() {
+        val clusters = listOf(
+            cluster(0, "甲", 30f),
+            cluster(1, "乙", 30f),
+            cluster(2, "势", 20f),
+            cluster(3, "。", 10f),
+            cluster(4, "后", 50f),
+        )
+        val lines = listOf(
+            rebuildLine(0..1, clusters, clusters),
+            rebuildLine(2..4, clusters, clusters),
+        )
+
+        val filled = applyFillPushIn(
+            lines = lines,
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 100f,
+            shrinkOpportunities = emptyList(),
+            firstLineIndent = 0f,
+            compressBias = 1_000_000f,
+            forbiddenLineStartClusters = setOf(3),
+            forbiddenLineEndClusters = emptySet(),
+            unbreakableRanges = emptyList(),
+            pushInPenalty = 2,
+            gapBoundaries = setOf(0, 1, 2, 3),
+        )
+
+        assertEquals(0..3, filled[0].clusterRange)
+        assertEquals(90f, filled[0].adjustedWidth)
+        assertEquals(4..4, filled[1].clusterRange)
+        val repair = filled[0].repair as RepairOption.PushIn
+        assertEquals(3, repair.offenderClusterIndex)
+        assertEquals(0f, repair.totalShrink)
+    }
+
+    private fun cluster(index: Int, text: String, advance: Float): Cluster =
+        Cluster(
+            range = TextRange(index, index + 1),
+            text = text,
+            fontKey = "test",
+            advance = advance,
+        )
 }
