@@ -182,10 +182,9 @@ class AndroidDashPunctuationReproTest {
         if (dash.displayText == "⸺") {
             assertEquals(dash.advance, glyph.advance, 0.5f)
         }
-        assertTrue(fontKey != null, "Android glyph must keep the shaper Font key: $glyph")
-        assertTrue(
-            AndroidPositionedGlyphFontRegistry.fontFor(fontKey) != null,
-            "Android glyph Font key must resolve during rendering: $glyph",
-        )
+        // NoGlyphReplayInHanContext: CJK clusters carry NO render key — the renderer
+        // must draw them as Han-context strings (drawTextRun), because TextRunShaper's
+        // reported glyph ids are not locl-consistent with what drawTextRun renders.
+        assertTrue(fontKey == null, "Han-context clusters must not advertise glyph replay: $glyph")
     }
 }

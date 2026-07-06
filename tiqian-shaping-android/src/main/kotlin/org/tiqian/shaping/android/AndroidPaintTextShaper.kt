@@ -181,9 +181,13 @@ class AndroidPaintTextShaper(
                 val ids = IntArray(displayText.length) { shaped.getGlyphId(runStart + it) }
                 val xs = FloatArray(displayText.length) { shaped.getGlyphX(runStart + it) - penOrigin }
                 val ys = FloatArray(displayText.length) { shaped.getGlyphY(runStart + it) }
-                val fonts = List(displayText.length) { index ->
-                    AndroidPositionedGlyphFontRegistry.keyFor(shaped.getFont(runStart + index))
-                }
+                // NoGlyphReplayInHanContext: TextRunShaper's glyph ids are NOT what
+                // drawTextRun renders for context-sensitive CJK (measured on Pixel:
+                // `⸺` drawTextRun ink = 1.84em, drawGlyphs of the reported id =
+                // 1.58em — locl applies to the advance but not the reported id).
+                // No render keys → the renderer draws these clusters as Han-context
+                // STRINGS, which is pixel-faithful; ids stay for debug/tests only.
+                val fonts = List<String?>(displayText.length) { null }
                 return MeasuredRun(advance, ids, xs, ys, fonts, contextSliced = true)
             }
         }
