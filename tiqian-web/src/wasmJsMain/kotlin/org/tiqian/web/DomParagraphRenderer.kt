@@ -8,50 +8,53 @@ import org.w3c.dom.HTMLElement
 
 /**
  * `PreBrokenLineDom` (ADR 0039): the engine owns the whole line layout; this
- * renderer only PAINTS its result into the DOM. Each engine line becomes one
- * block; every cluster is placed at the engine's own `drawX` (so half-width
- * punctuation / 中西 autospace / justify / 推入推出 all come from the engine,
- * not the browser). The engine's line-end hyphen (`EngineOwnedHyphenation`) is
- * drawn explicitly — the browser never word-breaks. Text stays real DOM text
- * (selectable, copyable), unlike a canvas raster.
+ * renderer only PAINTS its result into the DOM. Half-width punctuation, 中西
+ * autospace, justify, 推入推出 and the line-end hyphen all come from the engine,
+ * not the browser — the browser never re-wraps or word-breaks.
+ *
+ * `CopyTransparentSpacingSpans`: every cluster (spaces included) is a span in
+ * SOURCE ORDER inside ONE positioned container — no per-line block boundaries.
+ * So `Selection.toString()` concatenates source text with real spaces and no
+ * injected newlines from soft wraps (ADR 0037 source-faithful copy). Residual
+ * gap: codepoint-SUBSTITUTED clusters (`——`→`⸺`) still copy as the display
+ * form; mapping those back to source needs a `copy` handler — a named follow-up.
  */
 object DomParagraphRenderer {
 
     fun render(host: HTMLElement, result: LayoutResult) {
         while (host.firstChild != null) host.removeChild(host.firstChild!!)
         val fontSize = result.input.textStyle.fontSize
+        val height = result.lines.lastOrNull()?.bottom ?: 0f
+
+        host.style.setProperty("position", "relative")
+        host.style.setProperty("height", "${height}px")
 
         for (line in result.lines) {
             val h = line.bottom - line.top
-            val lineDiv = document.createElement("div") as HTMLElement
-            lineDiv.style.setProperty("position", "relative")
-            lineDiv.style.setProperty("height", "${h}px")
-
             for (pc in result.positionedClusters(line)) {
                 val cluster = result.clusters[pc.clusterIndex]
-                if (cluster.displayText.isBlank()) continue
+                if (cluster.displayText.isEmpty()) continue // zero-width mandatory-break clusters
                 val roleName = result.debug.fontDecisions.firstOrNull {
                     cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
                 }?.role
-                lineDiv.appendChild(
-                    glyphSpan(cluster.displayText, pc.drawX, h, fontSize, WebFonts.forRoleName(roleName)),
+                host.appendChild(
+                    glyphSpan(cluster.displayText, pc.drawX, line.top, h, fontSize, WebFonts.forRoleName(roleName)),
                 )
             }
-
-            // EngineOwnedHyphenation: the engine already reserved the hyphen inside
-            // the measure; draw it at indent+visualWidth. The browser never hyphenates.
+            // EngineOwnedHyphenation: the engine reserved the hyphen inside the
+            // measure; draw it at indent+visualWidth. The browser never hyphenates.
             if (line.hyphenAdvance > 0f) {
-                lineDiv.appendChild(
-                    glyphSpan("-", line.indent + line.visualWidth, h, fontSize, WebFonts.LATIN),
+                host.appendChild(
+                    glyphSpan("-", line.indent + line.visualWidth, line.top, h, fontSize, WebFonts.LATIN),
                 )
             }
-            host.appendChild(lineDiv)
         }
     }
 
     private fun glyphSpan(
         text: String,
         left: Float,
+        top: Float,
         lineHeight: Float,
         fontSize: Float,
         fontFamily: String,
@@ -61,7 +64,8 @@ object DomParagraphRenderer {
         span.style.apply {
             setProperty("position", "absolute")
             setProperty("left", "${left}px")
-            setProperty("top", "0")
+            setProperty("top", "${top}px")
+            setProperty("height", "${lineHeight}px")
             setProperty("line-height", "${lineHeight}px")
             setProperty("font-size", "${fontSize}px")
             setProperty("font-family", fontFamily)
