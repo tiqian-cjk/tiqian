@@ -97,6 +97,11 @@ Slice 0–22 全部 `done`，第一阶段（CLREQ 简体横排）覆盖收口—
 
 这些可以预留接口（写 ADR 记录预留点），但不应该有「半完成」实现。
 
+Web 渲染路径的边界已由 [ADR 0039](adr/0039-web-rendering-path.md) 记录（预留点，不是开工）：
+web = 第四个 shaping adapter（离屏 `measureText` 度量）+ 引擎完整行布局（推入推出 / 邻行均摊
+照跑）+ DOM 画预断行的文本节点，resize 只重跑折行趟；CSS Text 4 / `halt` / `locl` 一律
+「有则精修、无则降级」，绝不碰断行；canvas 与「把断行交给浏览器」均已否决。
+
 ## 怎么用这张表
 
 - 接到任务先确认它属于哪一行；如果不属于任何一行，先开一条新 slice 或写 ADR。
