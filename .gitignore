@@ -11,3 +11,4 @@ local.properties
 # Experiment corpora (Wikipedia CC-BY-SA derived; fetched/generated locally, not vendored)
 tiqian-layout/src/jvmTest/resources/wiki-zh-corpus.txt
 tiqian-layout/src/jvmTest/resources/lit-zh-corpus.txt
+.claude/launch.json

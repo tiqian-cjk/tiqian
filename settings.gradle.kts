@@ -10,10 +10,35 @@ plugins {
 }
 
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
         google()
         mavenCentral()
+        // Kotlin/Wasm (ADR 0039) downloads a Node toolchain for webpack; under
+        // FAIL_ON_PROJECT_REPOS the download source must be declared here. These
+        // exclusive-content ivy repos serve ONLY org.nodejs:node / com.yarnpkg:yarn.
+        exclusiveContent {
+            forRepository {
+                ivy("https://nodejs.org/dist/") {
+                    name = "Node Distributions"
+                    patternLayout { artifact("v[revision]/[artifact](-v[revision]-[classifier]).[ext]") }
+                    metadataSources { artifact() }
+                    content { includeModule("org.nodejs", "node") }
+                }
+            }
+            filter { includeGroup("org.nodejs") }
+        }
+        exclusiveContent {
+            forRepository {
+                ivy("https://github.com/yarnpkg/yarn/releases/download") {
+                    name = "Yarn Distributions"
+                    patternLayout { artifact("v[revision]/[artifact](-v[revision]).[ext]") }
+                    metadataSources { artifact() }
+                    content { includeModule("com.yarnpkg", "yarn") }
+                }
+            }
+            filter { includeGroup("com.yarnpkg") }
+        }
     }
 }
 
@@ -26,6 +51,8 @@ include(
     ":tiqian-shaping-jvm",
     ":tiqian-shaping-skia",
     ":tiqian-shaping-android",
+    ":tiqian-shaping-web",
+    ":tiqian-web",
     ":tiqian-linebreak",
     ":tiqian-clreq",
     ":tiqian-layout",
