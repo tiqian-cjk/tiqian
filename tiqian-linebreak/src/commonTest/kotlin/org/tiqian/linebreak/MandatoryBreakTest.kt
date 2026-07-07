@@ -11,12 +11,15 @@ class MandatoryBreakTest {
     @Test
     fun recognizesMandatoryBreakCodePoints() {
         for (cp in listOf(0x000A, 0x000B, 0x000C, 0x000D, 0x0085, 0x2028, 0x2029)) {
-            assertTrue(isMandatoryBreakCodePoint(cp), "U+%04X".format(cp))
+            assertTrue(isMandatoryBreakCodePoint(cp), u(cp))
         }
         for (cp in listOf('a'.code, '中'.code, ' '.code, '\t'.code, 0x3000)) {
-            assertFalse(isMandatoryBreakCodePoint(cp), "U+%04X".format(cp))
+            assertFalse(isMandatoryBreakCodePoint(cp), u(cp))
         }
     }
+
+    // Common-stdlib codepoint label (no JVM String.format, so this test compiles on wasmJs too).
+    private fun u(cp: Int): String = "U+" + cp.toString(16).uppercase().padStart(4, '0')
 
     @Test
     fun marksRequiredAfterLineFeed() {
