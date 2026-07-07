@@ -31,25 +31,15 @@ object DomParagraphRenderer {
 
         for (line in result.lines) {
             val h = line.bottom - line.top
-            // ContiguousSelectionBoxes: each span fills its OCCUPIED cell — from its
-            // own drawX to the next cluster's drawX — so the selection highlight
-            // tiles the whole line instead of leaving gaps at every justify /
-            // autospace / half-width-punctuation space (which belong to no glyph).
-            // The glyph still paints at drawX (box left); a narrower punctuation
-            // glyph just underfills its cell, a wider one overflows it — both fine.
-            val cells = result.positionedClusters(line)
-                .filter { result.clusters[it.clusterIndex].displayText.isNotEmpty() }
-            for (i in cells.indices) {
-                val pc = cells[i]
+            for (pc in result.positionedClusters(line)) {
                 val cluster = result.clusters[pc.clusterIndex]
-                val cellRight = if (i + 1 < cells.size) cells[i + 1].drawX else pc.right
+                if (cluster.displayText.isEmpty()) continue // zero-width mandatory-break clusters
                 val roleName = result.debug.fontDecisions.firstOrNull {
                     cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
                 }?.role
                 host.appendChild(
                     glyphSpan(
-                        cluster.displayText, cluster.text, pc.drawX, line.top,
-                        (cellRight - pc.drawX).coerceAtLeast(0f), h, fontSize,
+                        cluster.displayText, cluster.text, pc.drawX, line.top, h, fontSize,
                         fonts.forRoleName(roleName),
                     ),
                 )
@@ -58,7 +48,7 @@ object DomParagraphRenderer {
             // measure; draw it at indent+visualWidth. The browser never hyphenates.
             if (line.hyphenAdvance > 0f) {
                 host.appendChild(
-                    glyphSpan("-", "-", line.indent + line.visualWidth, line.top, 0f, h, fontSize, fonts.latin),
+                    glyphSpan("-", "-", line.indent + line.visualWidth, line.top, h, fontSize, fonts.latin),
                 )
             }
         }
@@ -69,7 +59,6 @@ object DomParagraphRenderer {
         source: String,
         left: Float,
         top: Float,
-        cellWidth: Float,
         lineHeight: Float,
         fontSize: Float,
         fontFamily: String,
@@ -88,13 +77,6 @@ object DomParagraphRenderer {
             setProperty("font-size", "${fontSize}px")
             setProperty("font-family", fontFamily)
             setProperty("white-space", "pre")
-            // Fill the occupied cell so selection highlights tile (cellWidth 0 = the
-            // line-end hyphen, which keeps its natural glyph width).
-            if (cellWidth > 0f) {
-                setProperty("display", "inline-block")
-                setProperty("box-sizing", "border-box")
-                setProperty("width", "${cellWidth}px")
-            }
         }
         return span
     }
