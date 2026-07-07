@@ -1,5 +1,7 @@
 package org.tiqian.core
 
+import kotlin.jvm.JvmInline
+
 /**
  * `ic` —— 提椠的 CJK 原生长度单位（ADR 0034）：N 个**字身框**进格。直接采用 W3C CSS
  * Values L4 的 `ic` 单位（「表意字身的 advance」），即字身框宽。CSS 用探测 '水'(U+6C34)

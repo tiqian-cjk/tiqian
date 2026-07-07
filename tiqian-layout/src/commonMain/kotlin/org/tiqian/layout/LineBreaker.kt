@@ -1380,7 +1380,9 @@ private fun distributePushInShrink(
 
     val allocations = mutableListOf<PushInAllocation>()
     var remaining = totalShrink
-    for ((_, tierOpps) in opportunities.groupBy { it.tier }.toSortedMap()) {
+    val byTier = opportunities.groupBy { it.tier }
+    for (tier in byTier.keys.sorted()) {
+        val tierOpps = byTier.getValue(tier)
         if (remaining <= 0f) break
         val tierCapacity = tierOpps.sumOf { it.capacity.toDouble() }.toFloat()
         if (tierCapacity <= 0f) continue

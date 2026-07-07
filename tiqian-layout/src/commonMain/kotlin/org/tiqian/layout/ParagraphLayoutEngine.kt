@@ -337,7 +337,7 @@ class ExplainableStubParagraphLayoutEngine(
             wordRange: TextRange,
             syllable: List<Int>,
         ): List<Int> {
-            val cuts = sortedSetOf<Int>()
+            val cuts = mutableSetOf<Int>()
             cuts += syllable.map { wordRange.start + it }
             val relBounds = (listOf(0) + syllable + listOf(wordRange.length)).distinct()
             for (i in 0 until relBounds.size - 1) {
@@ -351,7 +351,7 @@ class ExplainableStubParagraphLayoutEngine(
                 val range = if (lo <= hi) lo..hi else (a + 1) until b
                 for (off in range) cuts += wordRange.start + off
             }
-            return cuts.toList()
+            return cuts.sorted()
         }
         // ExistingHyphenBreak (CY/T 154-2017 §9.3): a hyphenated compound breaks
         // AT its existing hyphens — no NEW hyphen added, the existing one sits at
@@ -422,7 +422,7 @@ class ExplainableStubParagraphLayoutEngine(
             val relBounds = (listOf(0) + cleanCuts.map { it - tokenRange.start } + listOf(tokenRange.length))
                 .distinct()
                 .sorted()
-            val cuts = sortedSetOf<Int>()
+            val cuts = mutableSetOf<Int>()
             for (i in 0 until relBounds.size - 1) {
                 val a = relBounds[i]
                 val b = relBounds[i + 1]
@@ -434,7 +434,7 @@ class ExplainableStubParagraphLayoutEngine(
                 }
                 for (off in (a + 1) until b) cuts += tokenRange.start + off
             }
-            return cuts.toList()
+            return cuts.sorted()
         }
         val shapingResults = clusterRanges.flatMap { resolvedRange ->
             if (resolvedRange.mandatoryBreak) {
@@ -615,7 +615,8 @@ class ExplainableStubParagraphLayoutEngine(
                 var center = centerNatural + shift
                 val needed = prevRight + wordSpace - (center - rw / 2f)
                 if (needed > 0f && firstCluster > 0) {
-                    spread.merge(firstCluster - 1, needed) { a, b -> a + b }
+                    val key = firstCluster - 1
+                    spread[key] = (spread[key] ?: 0f) + needed
                     shift += needed
                     center += needed
                 }
@@ -2965,3 +2966,13 @@ private fun Map<Int, GlueBudget>.consumeByRange(
 
 private fun TextRange.isInside(other: TextRange): Boolean =
     start >= other.start && end <= other.end
+
+/**
+ * Common-stdlib port of `java.util.Map.merge` (absent from the Wasm/JS common
+ * stdlib): absent key → [value]; present → `remap(old, value)`. On JVM the
+ * `java.util.Map.merge` member wins over this extension, so behavior — and the
+ * goldens — are unchanged there; on Wasm this is the resolved implementation.
+ */
+private fun <K, V : Any> MutableMap<K, V>.merge(key: K, value: V, remap: (V, V) -> V) {
+    this[key] = this[key]?.let { remap(it, value) } ?: value
+}
