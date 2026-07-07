@@ -58,12 +58,22 @@ class AndroidPaintTextShaperTest {
         // Noto Sans CJK registers the `locl` dash rule under hani/latn but
         // NOT under DFLT; a context-free lone `—` resolves to DFLT and keeps
         // the 0.89em Western form (14.3px). HanContextShaping must recover
-        // the full-width CJK form. (Ink bounds for the dash still measure
-        // the context-free glyph — Paint.getTextBounds has no context
-        // parameters — which is a documented diagnostic limitation.)
+        // the full-width CJK form.
         val dash = shaper.shape(input("—", FontRole.CjkPunctuation))
             .glyphRuns.single().glyphs.single()
         assertEquals(16f, dash.advance, 0.51f)
+    }
+
+    @Test
+    fun latinWordGlyphsExposePerGlyphInkBounds() {
+        val glyphs = shaper.shape(input("Page", FontRole.LatinText))
+            .glyphRuns.single().glyphs
+
+        assertTrue(glyphs.size > 1, "expected a multi-glyph Latin word")
+        assertTrue(
+            glyphs.all { it.bounds != null },
+            "skip-ink must get glyph-level bounds for Latin words, not a word-level fallback",
+        )
     }
 
     @Test

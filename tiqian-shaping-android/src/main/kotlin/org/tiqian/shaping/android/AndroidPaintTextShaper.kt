@@ -1,7 +1,8 @@
 package org.tiqian.shaping.android
 
-import android.graphics.Rect as AndroidRect
+import android.graphics.RectF as AndroidRectF
 import android.graphics.Typeface
+import android.graphics.text.PositionedGlyphs
 import android.graphics.text.TextRunShaper
 import android.text.TextPaint
 import org.tiqian.core.Cluster
@@ -36,9 +37,9 @@ import kotlin.math.max
  *   chain that cannot be disabled; the adapter therefore measures "the
  *   platform text stack with this locale", not a single physical font file.
  *   Cross-adapter goldens must tolerate that (see ADR 0016).
- * - Per-glyph ink bounds come from [TextPaint.getTextBounds] and are only
- *   attributed for single-glyph clusters; multi-glyph clusters report null
- *   bounds and surface as `MissingInkBoundsFallback` downstream.
+ * - Per-glyph ink bounds come from `Font.getGlyphBounds`, using the same
+ *   [PositionedGlyphs] glyph ids/fonts as drawing. This keeps skip-ink at
+ *   glyph granularity instead of collapsing a whole Latin word to one bounds box.
  */
 class AndroidPaintTextShaper(
     private val typefaceResolver: AndroidTypefaceResolver = SystemAndroidTypefaceResolver(),
@@ -68,25 +69,13 @@ class AndroidPaintTextShaper(
 
         val haltMetrics = measureHalt(input, displayText, advance, measured.glyphIds.size)
 
-        // ContextConsistentGlyphCapture: getTextBounds (and the ligature fallback
-        // shape) run WITHOUT the Han context, so on some fonts they describe a
-        // DIFFERENT glyph than the context-shaped one (Pixel: `⸺` context-free is
-        // a 1.68em rule, in Han context a full 2em one). Attributing that ink or
-        // replaying those glyph ids would mix two worlds — compare advances and
-        // degrade honestly instead.
+        // ContextConsistentGlyphCapture: ligature fallback glyphs that do not add
+        // up to the context advance must not be replayed glyph-by-glyph — dropping
+        // the render keys makes the renderer fall back to context-shaped STRING
+        // drawing (correct ink).
         val contextFreeAdvance =
             paint.getRunAdvance(displayText, 0, displayText.length, 0, displayText.length, false, displayText.length)
         val advanceConsistent = kotlin.math.abs(contextFreeAdvance - advance) <= 1f
-        val singleGlyphBounds = if (measured.glyphIds.size == 1 && advanceConsistent) {
-            val bounds = AndroidRect()
-            paint.getTextBounds(displayText, 0, displayText.length, bounds)
-            bounds.toGlyphLocalRectOrNull()
-        } else {
-            null
-        }
-        // Ligature fallback glyphs that do not add up to the context advance must
-        // not be replayed glyph-by-glyph — dropping the render keys makes the
-        // renderer fall back to context-shaped STRING drawing (correct ink).
         val replayable = measured.contextSliced || advanceConsistent
 
         val glyphCount = measured.glyphIds.size
@@ -100,7 +89,7 @@ class AndroidPaintTextShaper(
                 x = startX,
                 y = measured.glyphYs[glyphIndex],
                 renderFontKey = if (replayable) measured.renderFontKeys[glyphIndex] else null,
-                bounds = if (glyphCount == 1) singleGlyphBounds else null,
+                bounds = measured.glyphBounds[glyphIndex],
                 haltAdvance = haltMetrics?.first,
                 haltPlacementX = haltMetrics?.second,
             )
@@ -146,6 +135,8 @@ class AndroidPaintTextShaper(
         val glyphYs: FloatArray,
         /** Opaque Android Font keys for drawing these glyph ids later. */
         val renderFontKeys: List<String?>,
+        /** Glyph-local ink bounds from the shaped Android font, one per glyph. */
+        val glyphBounds: List<Rect?>,
         /** True when the glyphs were sliced out of the Han-context shape (same world as [advance]). */
         val contextSliced: Boolean = false,
     )
@@ -161,7 +152,9 @@ class AndroidPaintTextShaper(
         displayText: String,
         useHanContext: Boolean,
     ): MeasuredRun {
-        if (displayText.isEmpty()) return MeasuredRun(0f, IntArray(0), FloatArray(0), FloatArray(0), emptyList(), contextSliced = true)
+        if (displayText.isEmpty()) {
+            return MeasuredRun(0f, IntArray(0), FloatArray(0), FloatArray(0), emptyList(), emptyList(), contextSliced = true)
+        }
 
         if (useHanContext) {
             val buffer = "中${displayText}中"
@@ -181,6 +174,7 @@ class AndroidPaintTextShaper(
                 val ids = IntArray(displayText.length) { shaped.getGlyphId(runStart + it) }
                 val xs = FloatArray(displayText.length) { shaped.getGlyphX(runStart + it) - penOrigin }
                 val ys = FloatArray(displayText.length) { shaped.getGlyphY(runStart + it) }
+                val bounds = List(displayText.length) { shaped.glyphBounds(runStart + it, paint) }
                 // NoGlyphReplayInHanContext: TextRunShaper's glyph ids are NOT what
                 // drawTextRun renders for context-sensitive CJK (measured on Pixel:
                 // `⸺` drawTextRun ink = 1.84em, drawGlyphs of the reported id =
@@ -188,7 +182,7 @@ class AndroidPaintTextShaper(
                 // No render keys → the renderer draws these clusters as Han-context
                 // STRINGS, which is pixel-faithful; ids stay for debug/tests only.
                 val fonts = List<String?>(displayText.length) { null }
-                return MeasuredRun(advance, ids, xs, ys, fonts, contextSliced = true)
+                return MeasuredRun(advance, ids, xs, ys, fonts, bounds, contextSliced = true)
             }
         }
 
@@ -199,10 +193,17 @@ class AndroidPaintTextShaper(
         val ids = IntArray(shaped.glyphCount()) { shaped.getGlyphId(it) }
         val xs = FloatArray(shaped.glyphCount()) { shaped.getGlyphX(it) }
         val ys = FloatArray(shaped.glyphCount()) { shaped.getGlyphY(it) }
+        val bounds = List(shaped.glyphCount()) { shaped.glyphBounds(it, paint) }
         val fonts = List(shaped.glyphCount()) { index ->
             AndroidPositionedGlyphFontRegistry.keyFor(shaped.getFont(index))
         }
-        return MeasuredRun(advance, ids, xs, ys, fonts)
+        return MeasuredRun(advance, ids, xs, ys, fonts, bounds)
+    }
+
+    private fun PositionedGlyphs.glyphBounds(index: Int, paint: TextPaint): Rect? {
+        val bounds = AndroidRectF()
+        getFont(index).getGlyphBounds(getGlyphId(index), paint, bounds)
+        return bounds.toGlyphLocalRectOrNull()
     }
 
     /**
@@ -236,13 +237,13 @@ class AndroidPaintTextShaper(
             paintConfigurator(this, input)
         }
 
-    private fun AndroidRect.toGlyphLocalRectOrNull(): Rect? {
+    private fun AndroidRectF.toGlyphLocalRectOrNull(): Rect? {
         if (isEmpty) return null
         return Rect(
-            left = left.toFloat(),
-            top = top.toFloat(),
-            right = right.toFloat(),
-            bottom = bottom.toFloat(),
+            left = left,
+            top = top,
+            right = right,
+            bottom = bottom,
         )
     }
 }
