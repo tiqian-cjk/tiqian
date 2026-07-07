@@ -48,6 +48,24 @@ web 的 shaping adapter(ADR 0008 的第四个实现)用**离屏 canvas** `measur
 `white-space: nowrap` 禁止浏览器二次折行;推入的压缩、推出留下的空、autospace、justify 落成
 行内 `letter-spacing` / `margin`。节点数 ≈ 行数 + 稀疏 span,不是每字一个 span。
 
+### `EngineOwnedHyphenation` —— 断词也归引擎,不甩给浏览器
+
+拉丁词的断词(ADR 0029:`LineEndHangingHyphen` / `LatinForcedHyphenBreak` /
+`ExistingHyphenBreak`)与 CJK 断行同理,**必须由引擎决定,DOM 一律不用 `hyphens: auto`,
+也不得把未断的整词交给浏览器去折**。委托浏览器断词会丢两样东西:
+
+1. **连字符拿不到**:引擎的行尾连字符是受控几何——`LineEndHangingHyphen` 把连字符
+   预留进版心、放不下才把残余悬挂(ADR 0029)。浏览器 `hyphens: auto` 用自己的词典和
+   自己的连字符,不是 CLREQ / 引擎那一个,也不进 justify 计量。
+2. **断点两端的字偶间距(kerning)被扔掉**:引擎是把**整词**连同字偶间距一起度量、再在
+   词内选断点的;一旦交给浏览器重折,两段被独立重排,断点两侧的 kerning 与两行各自的
+   advance 都跟引擎算的对不上,justify 也就错位。
+
+所以 DOM 侧:引擎断的词,行尾连字符由渲染层**显式画出**(引擎已把它算进版心 / 悬挂量),
+两行的拉丁 run 用**引擎的 per-cluster advance**(含 kerning),不让浏览器重新 shape。
+CSS `hyphens` 恒为 `manual`(即不自动断词)。断词开不开、用哪套词典,是引擎默认
+(ADR 0029,当前默认开)的事,与 web 后端无关——web 只负责忠实画出引擎的断词结果。
+
 ### `ReflowByRebreak` + `WidthIndependentAnnotationCache` —— resize 只重跑折行
 
 放弃「浏览器免费 reflow」,换成 resize 时重跑引擎。但**只重跑折行那一趟**:cluster advance、
@@ -84,6 +102,8 @@ span / thin-space 兜底。引擎标注是**跨浏览器真相来源 + 通用兜
   SSR。对正文是错的取舍。否。
 - **DOM + CSS Text 4 一把梭(浏览器折行)**:最省事,但排版模型退化成「Chromium 当前版本怎么
   解释 CLREQ」,丢推入推出、跨浏览器不一致、违背「模型必须真」。否。
+- **断词交给浏览器(`hyphens: auto`)**:连字符不受控(不是引擎/CLREQ 那一个、不进 justify),
+  且断点两端 kerning 与两行 advance 与引擎度量对不上。见 `EngineOwnedHyphenation`。否。
 - **DOM 冻结引擎算好的断点 + x 坐标**:resize 后几何全部失效需整体重发,并未保住原生 reflow,
   反而更脆。被 `ReflowByRebreak`(只重跑折行 + 缓存宽度无关量)取代。否。
 - **Houdini CSS Layout API**:理论最优——把断行器注册进浏览器布局树,推入推出跑在**原生 reflow
