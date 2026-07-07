@@ -8,28 +8,12 @@ package org.tiqian.linebreak
  *
  * This is the CLREQ「可使用连字符处」for mixed Western (§换行与断词连字): the
  * general rule permits splitting a Western word only at these points. Real
- * hyphenation is a platform/data capability — see [NoHyphenator] (the data-free
- * default) and the JVM `EnglishHyphenation` (bundled TeX patterns). Each
- * instance is bound to one language.
+ * hyphenation is a platform/data capability — see [NoHyphenator] (data-free)
+ * and [EnglishHyphenation] (bundled TeX patterns). Each instance is bound to
+ * one language.
  */
 interface Hyphenator {
     fun hyphenate(word: String): List<Int>
-}
-
-/**
- * Optional platform capability: given a concrete line width, ask the native
- * text engine which single hyphenation break it would choose for [word].
- *
- * [availableWidth] and [measuredWordWidth] are in the caller's layout units.
- * Implementations may scale them into native paint units. Returning null means
- * the platform either finds no hyphenated first line or cannot answer.
- */
-interface LineWidthHyphenator : Hyphenator {
-    fun hyphenateAtWidth(
-        word: String,
-        availableWidth: Float,
-        measuredWordWidth: Float,
-    ): Int?
 }
 
 /**

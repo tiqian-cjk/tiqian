@@ -51,19 +51,14 @@ Desktop keeps the existing Skia backend. Android uses:
 - Android `Paint`/`Path` drawing for emphasis dots, frames, interlinear lines,
   ruby, and Bopomofo placements.
 
-Android default western hyphenation is `AndroidLineBreakerHyphenator`: Android
-does expose paragraph-level hyphenation controls through `LineBreaker`, but not a
-public word-level dictionary API that returns every deterministic hyphenation
-opportunity. The Android actual therefore treats `LineBreaker` as a platform
-oracle in two modes:
-
-- `hyphenate(word)` probes realistic word widths and records offsets where
-  Android actually chooses an end-hyphen edit;
-- `LineWidthHyphenator.hyphenateAtWidth(...)` lets layout pass a concrete
-  available width and receive Android's preferred single hyphenation break.
-
-This gives Android gallery real platform hyphenation without pretending the
-result is TeX-compatible or exhaustive.
+Android default western hyphenation uses the same bundled
+`EnglishHyphenation.enUs` TeX/Liang pattern source as JVM. Android's public
+`LineBreaker` can report a platform-chosen hyphen edit for a concrete width
+when `MeasuredText.Builder.setComputeHyphenation(...)` is enabled, but it does
+not enumerate all dictionary opportunities. Tiqian pre-splits Latin words into
+candidate clusters before its own line breaker scores lines, so the default
+hyphenator must return enumerable opportunities rather than a single
+width-specific platform choice.
 
 ## Consequences
 
@@ -75,13 +70,11 @@ result is TeX-compatible or exhaustive.
 - CJK Android metrics remain honest about public API limits: raw metrics come
   from `TextPaint`; the ideographic box fallback is explicit until a table-backed
   Android resolver is justified.
-- Android western hyphenation is platform-derived and may vary with Android
-  version, locale, paint, and installed fonts. Tests that need stable layout
-  should continue to inject `NoHyphenator` or another deterministic hyphenator.
-- The current paragraph pipeline still pre-seeds break clusters before the
-  general line breaker scores lines. `LineWidthHyphenator` is the platform
-  capability boundary for remaining-width-aware refinement; it does not mean every
-  possible dictionary break is exposed or stable.
+- Android western hyphenation is deterministic en-US bundled data, matching JVM
+  behaviour and enumerable for Tiqian's pre-split pipeline. Tests that need no
+  hyphenation should continue to inject `NoHyphenator`.
+- Android platform hyphenation remains a possible future comparison oracle, but
+  it is not part of the default layout pipeline.
 
 ## Verification
 

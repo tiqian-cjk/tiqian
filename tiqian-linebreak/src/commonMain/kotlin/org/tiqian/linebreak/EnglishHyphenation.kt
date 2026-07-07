@@ -6,17 +6,15 @@ package org.tiqian.linebreak
  * header preserved in the vendored resource). `leftMin`/`rightMin` follow the
  * file's `hyphenmins` (2/3).
  *
- * This is the JVM realisation of the bundled-patterns choice; Android can wire
- * its native hyphenator behind the same [Hyphenator] interface later.
+ * This is the shared bundled-patterns hyphenator for platforms where Tiqian
+ * needs deterministic, enumerable English hyphenation opportunities.
  */
 object EnglishHyphenation {
-    private const val RESOURCE = "/hyphenation/hyph-en-us.tex"
-
     val enUs: Hyphenator by lazy {
-        val tex = EnglishHyphenation::class.java.getResourceAsStream(RESOURCE)
-            ?.bufferedReader()?.use { it.readText() }
-            ?: error("Missing bundled hyphenation pattern resource: $RESOURCE")
+        val tex = loadBundledEnglishHyphenationPatterns()
         val (patterns, exceptions) = parseTexHyphenationPatterns(tex)
         LiangHyphenator(patterns, exceptions, leftMin = 2, rightMin = 3)
     }
 }
+
+internal expect fun loadBundledEnglishHyphenationPatterns(): String
