@@ -61,7 +61,8 @@ greedy/lookahead + 避头尾修复**之后**跑，复用现成的 `tryPushIn`/`d
 2. **守则**（避免重蹈 0022 / 不破坏既有不变量）：① 跳过已带 repair 的行（避头尾
    PushIn/Hang/CarryNext），不重复消耗 glue；② 不拆 `unbreakableRanges`（数字符号粘连、
    示亡号）——只拉 curr0 会把整组拆散；③ 不把 forbidden-at-line-end（开引号/括号）拖到
-   行尾，也不让 curr 新行首落在 forbidden-at-line-start。
+   行尾——若下一行以这类 cluster 开头，fill group 继续扩展到能合法收尾的最小组；也不让
+   curr 新行首落在 forbidden-at-line-start。
 3. `LineAdjustmentStrategy` → `(是否推入, bias)`：`PushOutOnly`→(false,–)；`Auto`→(true,
    `compressBias`=2)；`PushInFirst`→(true,1e6)；`PushOutFirst`→(true,0.5)。
 4. 引擎 per-line 不变：推入行带 `RepairOption.PushIn`（reason `LineAdjustmentPushIn`），

@@ -135,6 +135,74 @@ class LookaheadLineBreakerTest {
     }
 
     @Test
+    fun lookaheadAvoidsConsecutiveSyntheticHyphenBreaks() {
+        val clusters = (0 until 8).map { i -> cluster(i, i + 1, "x", 10f) }
+
+        val noPenalty = LookaheadLineBreaker(
+            consecutiveSyntheticHyphenPenalty = 0f,
+        ).breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 30f,
+            hyphenBreakClusters = setOf(3, 6),
+        )
+        val withPenalty = LookaheadLineBreaker().breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 30f,
+            hyphenBreakClusters = setOf(3, 6),
+        )
+
+        // With no demerit, two perfectly full synthetic-hyphen lines win:
+        // 0..2- / 3..5- / 6..7.
+        assertEquals(0..2, noPenalty.lines[0].clusterRange)
+        assertEquals(3..5, noPenalty.lines[1].clusterRange)
+        assertEquals(6..7, noPenalty.lines[2].clusterRange)
+
+        // AvoidConsecutiveSyntheticHyphenBreaks pays a soft penalty on the
+        // second generated hyphen, so one ragged line is cheaper here:
+        // 0..1 / 2..4 / 5..7.
+        assertEquals(0..1, withPenalty.lines[0].clusterRange)
+        assertEquals(2..4, withPenalty.lines[1].clusterRange)
+        assertEquals(5..7, withPenalty.lines[2].clusterRange)
+    }
+
+    @Test
+    fun lookaheadScoresKinsokuRepairsWithUnbreakableRanges() {
+        val clusters = listOf(
+            cluster(0, 1, "甲", 16f),
+            cluster(1, 2, "乙", 16f),
+            cluster(2, 3, "丙", 16f),
+            cluster(3, 4, "丁", 16f),
+            cluster(4, 5, "戊", 16f),
+            cluster(5, 6, "己", 16f),
+            cluster(6, 7, "庚", 16f),
+            cluster(7, 8, "辛", 16f),
+            cluster(8, 9, "。", 16f),
+        )
+
+        val solution = LookaheadLineBreaker(
+            window = 2,
+        ).breakLines(
+            naturalClusters = clusters,
+            adjustedClusters = clusters,
+            maxWidth = 64f,
+            unbreakableRanges = listOf(6..7),
+            forbiddenLineStartClusters = setOf(8),
+            lineAdjustmentPushIn = false,
+        )
+
+        assertEquals(3, solution.lines.size)
+        assertEquals(0..1, solution.lines[0].clusterRange)
+        assertEquals(2..5, solution.lines[1].clusterRange)
+        assertEquals(6..8, solution.lines[2].clusterRange)
+        assertEquals(null, solution.lines[0].repair)
+        assertEquals(null, solution.lines[1].repair)
+        assertEquals(null, solution.lines[2].repair)
+        assertEquals(0f, solution.totalBadness)
+    }
+
+    @Test
     fun windowZeroReducesLookaheadToGreedy() {
         // window=0 means only the greedy break is considered.
         val clusters = listOf(

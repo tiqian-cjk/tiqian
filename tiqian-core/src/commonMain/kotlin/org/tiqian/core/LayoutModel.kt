@@ -84,6 +84,13 @@ data class LineBox(
     val adjustedWidth: Float,
     val visualWidth: Float,
     /**
+     * Legal end-edge overhang from `LineEndHangingPunctuation` (CLREQ 行尾点号悬挂).
+     * It is part of the emitted line's paint, not overflow text: frontends that clip
+     * `TextOverflow.Clip` must still leave this much room beyond the measure edge.
+     * 0 when no punctuation hangs at this line end.
+     */
+    val hangingPunctuationAdvance: Float = 0f,
+    /**
      * Start-edge inset of this line along the inline axis (段首缩进 on a
      * paragraph's first line; 0 elsewhere). Renderers must begin the pen at
      * this offset; width fields above exclude it.

@@ -27,11 +27,11 @@ class KinsokuLevelTest {
     @Test
     fun basicForbidsPauseStopsClosingConnectorsAtStartAndOpeningAtEnd() {
         // 点号、结束引号/括号、连接号、间隔号、分隔号 不得居行首.
-        for (c in listOf('。', '，', '、', '：', '；', '！', '？', '”', '）', '·', '～', '／')) {
+        for (c in listOf('。', '，', '、', '：', '；', '！', '？', '”', '）', '】', '·', '～', '／')) {
             assertTrue(start(c, KinsokuLevel.Basic), "$c start@Basic")
         }
         // 开始引号/括号 不得居行尾.
-        for (c in listOf('“', '（', '《', '「')) {
+        for (c in listOf('“', '（', '《', '「', '【')) {
             assertTrue(end(c, KinsokuLevel.Basic), "$c end@Basic")
         }
         // 破折号、省略号 在基本处理下可居行首；分隔号 可居行尾.
@@ -64,6 +64,16 @@ class KinsokuLevelTest {
     @Test
     fun profileDefaultsToMeasureAdaptive() {
         assertTrue(ClreqProfile.MainlandHorizontal.kinsokuMode is KinsokuMode.MeasureAdaptive)
+    }
+
+    @Test
+    fun cjkBracketVariantsClassifyAsOpeningAndClosing() {
+        for (c in listOf('【', '〔', '〖', '〘', '〚')) {
+            assertEquals(PunctuationClass.Opening, ClreqPunctuationPolicies.classify(c), "$c")
+        }
+        for (c in listOf('】', '〕', '〗', '〙', '〛')) {
+            assertEquals(PunctuationClass.Closing, ClreqPunctuationPolicies.classify(c), "$c")
+        }
     }
 
     @Test

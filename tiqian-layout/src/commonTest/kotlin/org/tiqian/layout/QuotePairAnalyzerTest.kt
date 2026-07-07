@@ -106,6 +106,27 @@ class QuotePairAnalyzerTest {
     }
 
     @Test
+    fun numberedCjkQuotePrefixUsesQuotedContent() {
+        val text = "1.\u201C\u4F60\u77E5\u9053\u674E\u767D\u662F\u600E\u4E48\u6B7B\u7684\u5417\uFF1F\u201D"
+        val pairs = analyzer.analyze(text)
+        val decisions = analyzer.classifyQuoteRoles(text, pairs, classifier)
+
+        assertEquals(FontRole.CjkPunctuation, decisions.single { it.index == 2 }.role)
+        assertEquals(FontRole.CjkPunctuation, decisions.single { it.index == text.lastIndex }.role)
+        assertEquals("NumberedCjkQuotePrefix", decisions.single { it.index == 2 }.source)
+    }
+
+    @Test
+    fun numberedLatinQuotePrefixStillUsesLatinContent() {
+        val text = "1.\u201CHello\u201D"
+        val pairs = analyzer.analyze(text)
+        val roles = analyzer.classifyPairs(text, pairs, classifier)
+
+        assertEquals(FontRole.LatinText, roles[2])
+        assertEquals(FontRole.LatinText, roles[8])
+    }
+
+    @Test
     fun classifiesNestedPairsByOutermostContext() {
         // 他说："她说'你好'。"
         val text = "\u4ED6\u8BF4\uFF1A\u201C\u5979\u8BF4\u2018\u4F60\u597D\u2019\u3002\u201D"

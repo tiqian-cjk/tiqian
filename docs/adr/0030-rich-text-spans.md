@@ -4,6 +4,8 @@
 - Date: 2026-06-17
 - Amendment 2026-06-21：`ColorSpan(start, end, argb)` 移入 `tiqian-core`（与 `DecorationSpan`
   并列的 render-only span），不再住 `tiqian-shaping-skia`——前端公开签名遂不泄漏 Skia 类型。
+- Amendment 2026-07-07：`TextStyle.baselineShift` 成为 B 档 layout-affecting span
+  样式，用于 Compose `SpanStyle.baselineShift` / 参考文献角标等显式上标/下标位移。
 
 ## Context
 
@@ -51,6 +53,11 @@ Compose 侧作者面用 `AnnotatedString`（ADR 0030 的 `CjkParagraph(Annotated
   （advance）与 renderer（glyph）走同一解析器 → 不漂。**限制**：自定义 `FontListFontFamily`
   （加载字体文件，无可移植族名）暂不接；per-cluster **度量**仍用默认字（行高基本不随族变），
   与字重/斜体同一档的取舍。
+- **显式 baseline shift**（✅ 已落地 2026-07-07，`ExplicitBaselineShiftSpan`）：`TextStyle`
+  增加 `baselineShift`（px，+down），Compose `SpanStyle.baselineShift` 的 multiplier
+  按 span 最终字号解析并翻转成 Tiqian 坐标。它不改变字体 fallback、标点 glue、禁则或
+  Roman/CJK baseline 分类，只在最终 cluster baseline 上**叠加**作者样式位移；因此参考文献
+  `[1]` 这类西文/数字角标仍保持共享 Roman baseline，只是被显式上移。
 - **混排 em 决策的字号基准 = 该空白的「归属 cluster」的字号**（加性 glue 模型每条空白都有
   归属者）。CLREQ 已为关键决策指定了归属，不是「小的/前一个/段落」的全局选择：
   - **中西间距** = 1/4 **汉字宽**（CLREQ 原文）→ 归属那个**汉字**的字号（西文字号不进式子）；

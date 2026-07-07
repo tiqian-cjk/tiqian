@@ -13,16 +13,25 @@ data class QuotePair(
 
 enum class QuoteType { Double, Single }
 
+data class QuoteRoleDecision(
+    val index: Int,
+    val role: FontRole,
+    val source: String,
+    val reason: String,
+)
+
 /**
  * Analyzes curly quote pairs in text and classifies each pair as CJK or Latin
- * based on the outer context of the opening quote.
+ * from paragraph context.
  *
  * Curly quotes (U+201C/201D, U+2018/2019) share code points between CJK and
  * Western typography. Per-character heuristics cannot reliably classify them
  * because the closing quote's meaningful context is on the opposite side from
  * its content. Pair-based analysis solves this by classifying both quotes in a
- * pair together based on the opening quote's outer (left) context. If there is
- * no meaningful outer context, the quoted content is used as a fallback.
+ * pair together. Real prose uses the opening quote's outer (left) context, but
+ * structural numbered prefixes such as `1.` are ignored so the quoted content
+ * can choose the face. If there is no meaningful outer context, the quoted
+ * content is used as a fallback.
  *
  * Unmatched quotes (e.g. apostrophes in "it's") are not included in the result
  * and fall back to the delegate classifier's per-character heuristic.
@@ -60,12 +69,34 @@ class QuotePairAnalyzer {
         pairs: List<QuotePair>,
         fontRoleClassifier: FontRoleClassifier,
         context: FontRoleContext = FontRoleContext(),
-    ): Map<Int, FontRole> {
-        val result = mutableMapOf<Int, FontRole>()
+    ): Map<Int, FontRole> =
+        classifyQuoteRoles(text, pairs, fontRoleClassifier, context).associate { it.index to it.role }
+
+    fun classifyQuoteRoles(
+        text: String,
+        pairs: List<QuotePair>,
+        fontRoleClassifier: FontRoleClassifier,
+        context: FontRoleContext = FontRoleContext(),
+    ): List<QuoteRoleDecision> {
+        val result = mutableListOf<QuoteRoleDecision>()
         for (pair in pairs) {
-            val role = resolvePairContext(text, pair, fontRoleClassifier, context)
-            result[pair.openIndex] = role
-            result[pair.closeIndex] = role
+            val decision = resolvePairContext(text, pair, fontRoleClassifier, context)
+            result.add(
+                QuoteRoleDecision(
+                    index = pair.openIndex,
+                    role = decision.role,
+                    source = decision.source,
+                    reason = decision.reason,
+                ),
+            )
+            result.add(
+                QuoteRoleDecision(
+                    index = pair.closeIndex,
+                    role = decision.role,
+                    source = decision.source,
+                    reason = decision.reason,
+                ),
+            )
         }
         return result
     }
@@ -73,37 +104,83 @@ class QuotePairAnalyzer {
     /**
      * Resolves whether the quote pair belongs to a CJK or Latin context.
      *
-     * The opening quote's left context wins. At text start, the quoted content
-     * becomes the fallback context, so English-leading text keeps Latin quotes
-     * while Chinese-leading text keeps CJK punctuation behavior.
+     * The opening quote's left context wins for prose. At text start or after a
+     * structural numbered prefix, the quoted content becomes the fallback
+     * context, so English-leading text keeps Latin quotes while Chinese-leading
+     * text keeps CJK punctuation behavior.
      */
     private fun resolvePairContext(
         text: String,
         pair: QuotePair,
         classifier: FontRoleClassifier,
         context: FontRoleContext,
-    ): FontRole =
-        scanLeftForMeaningfulRole(
+    ): ResolvedQuotePairContext {
+        val leftRole = scanLeftForMeaningfulRole(
             text = text,
             startIndex = pair.openIndex - 1,
             classifier = classifier,
             context = context,
         )
-            ?: scanRightForMeaningfulRole(
-                text = text,
-                startIndex = pair.openIndex + 1,
-                endIndex = pair.closeIndex,
-                classifier = classifier,
-                context = context,
+        val quotedRole = scanRightForMeaningfulRole(
+            text = text,
+            startIndex = pair.openIndex + 1,
+            endIndex = pair.closeIndex,
+            classifier = classifier,
+            context = context,
+        )
+
+        // `NumberedCjkQuotePrefix`: a paragraph/list ordinal such as `1.` is
+        // structure, not Latin prose. Let the quoted text decide the quote face
+        // so `1.“中文”` keeps CJK quote geometry while `1.“Hello”` remains Latin.
+        if (
+            leftRole == FontRole.LatinText &&
+            quotedRole == FontRole.CjkPunctuation &&
+            hasNumberedQuotePrefix(text, pair.openIndex)
+        ) {
+            return ResolvedQuotePairContext(
+                role = FontRole.CjkPunctuation,
+                source = "NumberedCjkQuotePrefix",
+                reason = "numbered-prefix-uses-quoted-cjk-context",
             )
-            ?: scanRightForMeaningfulRole(
-                text = text,
-                startIndex = pair.closeIndex + 1,
-                endIndex = text.length,
-                classifier = classifier,
-                context = context,
+        }
+
+        if (leftRole != null) {
+            return ResolvedQuotePairContext(
+                role = leftRole,
+                source = "QuotePairOuterContext",
+                reason = "quote-pair-opening-left-context",
             )
-            ?: FontRole.CjkPunctuation
+        }
+
+        if (quotedRole != null) {
+            return ResolvedQuotePairContext(
+                role = quotedRole,
+                source = "QuotePairQuotedContentContext",
+                reason = "quote-pair-quoted-content-context",
+            )
+        }
+
+        val followingRole = scanRightForMeaningfulRole(
+            text = text,
+            startIndex = pair.closeIndex + 1,
+            endIndex = text.length,
+            classifier = classifier,
+            context = context,
+        )
+        if (followingRole != null) {
+            return ResolvedQuotePairContext(
+                role = followingRole,
+                source = "QuotePairFollowingContext",
+                reason = "quote-pair-following-context",
+            )
+        }
+
+        return ResolvedQuotePairContext(
+            role = FontRole.CjkPunctuation,
+            source = "QuotePairDefaultCjkContext",
+            reason = "quote-pair-default-cjk-context",
+        )
+    }
 
     /**
      * Scans left for the first character that clearly belongs to a CJK or Latin
@@ -203,6 +280,44 @@ class QuotePairAnalyzer {
             this == 0x2019 ||
             this == 0x201C ||
             this == 0x201D
+
+    private fun hasNumberedQuotePrefix(text: String, quoteIndex: Int): Boolean {
+        var i = quoteIndex - 1
+        while (i >= 0 && text[i].isAsciiSpaceOrTab()) i--
+
+        if (i >= 0 && text[i].isNumberedPrefixSuffix()) i--
+
+        var sawDigit = false
+        while (i >= 0 && text[i] in '0'..'9') {
+            sawDigit = true
+            i--
+        }
+        if (!sawDigit) return false
+
+        if (i >= 0 && text[i].isNumberedPrefixOpeningBracket()) i--
+        while (i >= 0 && text[i].isAsciiSpaceOrTab()) i--
+        return i < 0 || text[i] == '\n' || text[i] == '\r'
+    }
+
+    private fun Char.isAsciiSpaceOrTab(): Boolean =
+        this == ' ' || this == '\t'
+
+    private fun Char.isNumberedPrefixSuffix(): Boolean =
+        this == '.' ||
+            this == ')' ||
+            this == ']' ||
+            this == '\u3001' ||
+            this == '\uFF0E' ||
+            this == '\uFF09'
+
+    private fun Char.isNumberedPrefixOpeningBracket(): Boolean =
+        this == '(' || this == '[' || this == '\uFF08'
+
+    private data class ResolvedQuotePairContext(
+        val role: FontRole,
+        val source: String,
+        val reason: String,
+    )
 }
 
 /**

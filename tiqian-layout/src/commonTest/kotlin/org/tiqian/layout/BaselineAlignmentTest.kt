@@ -28,6 +28,41 @@ class BaselineAlignmentTest {
     }
 
     @Test
+    fun explicitBaselineShiftAppliesToRomanClusters() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent(
+                    text = "中A文",
+                    spans = listOf(TextSpan(TextRange(1, 2), TextStyle(baselineShift = -6f))),
+                ),
+                constraints = LayoutConstraints(maxWidth = 400f),
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+            ),
+        )
+
+        val latin = result.clusters.single { it.text == "A" }
+        assertEquals(-6f, latin.baselineShift, 0.001f)
+    }
+
+    @Test
+    fun cjkPunctuationProvidesIdeographicReferenceWithoutHanBody() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                content = TiqianTextContent("MacBook。"),
+                constraints = LayoutConstraints(maxWidth = 400f),
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+            ),
+        )
+
+        val punctuation = result.clusters.single { it.text == "。" }
+        assertEquals(
+            0f,
+            punctuation.baselineShift,
+            "CJK punctuation carries an IdeographicEmBox and must not be aligned to Latin raw descent",
+        )
+    }
+
+    @Test
     fun cjkMixedSizesAlignByIdeographicBoxBottom() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(

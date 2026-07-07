@@ -10,14 +10,18 @@ import org.tiqian.core.Cluster
 import org.tiqian.core.Glyph
 import org.tiqian.core.GlyphRun
 import org.tiqian.core.LayoutConstraints
+import org.tiqian.core.LayoutResult
 import org.tiqian.core.LineLengthGrid
 import org.tiqian.core.LineEndReason
+import org.tiqian.linebreak.Hyphenator
 import org.tiqian.linebreak.NoHyphenator
 import org.tiqian.core.LayoutInput
 import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.Rect
 import org.tiqian.core.TextRange
+import org.tiqian.core.TextStyle
 import org.tiqian.core.TiqianTextContent
+import org.tiqian.core.positionedClusters
 import org.tiqian.font.FontRole
 import org.tiqian.shaping.ExplainableStubTextShaper
 import org.tiqian.shaping.ShapingInput
@@ -105,6 +109,63 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun consecutiveMandatoryLineBreaksCreateOneEmptyLineBox() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("第一行\n\n第二行"),
+                constraints = LayoutConstraints(maxWidth = 240f),
+            ),
+        )
+
+        assertEquals(3, result.lines.size)
+        assertEquals(LineEndReason.MandatoryBreak, result.lines[0].endReason)
+        assertEquals(LineEndReason.MandatoryBreak, result.lines[1].endReason)
+        assertEquals(LineEndReason.ParagraphEnd, result.lines[2].endReason)
+        val emptyLineCluster = result.clusters[result.lines[1].clusterRange.single()]
+        assertEquals("\n", emptyLineCluster.text)
+        assertEquals("", emptyLineCluster.displayText)
+        assertEquals(0f, emptyLineCluster.advance)
+        val lineHeight = result.debug.lineSpacingDecision?.resolvedHeight ?: error("line height missing")
+        assertEquals(lineHeight, result.lines[1].bottom - result.lines[1].top, 0.001f)
+        assertEquals(lineHeight, result.lines[1].baseline - result.lines[0].baseline, 0.001f)
+        assertEquals(lineHeight, result.lines[2].baseline - result.lines[1].baseline, 0.001f)
+    }
+
+    @Test
+    fun singleMandatoryBreakAfterWrappedLineDoesNotCreateEmptyLine() {
+        val text = "很久以前，曾经有一个名叫小红帽的孩子，生活在大森林的边上，" +
+            "大森林里充满了濒临灭绝的猫头鹰和珍稀植物，如果有人愿意花时间研究它们，" +
+            "就会发现癌症的治疗方法。\n小红帽和一位称为母亲的养育者一起生活"
+        val result = ExplainableStubParagraphLayoutEngine(
+            lineBreaker = LookaheadLineBreaker(),
+        ).layout(
+            LayoutInput(
+                textStyle = TextStyle(fontSize = 48f),
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent(text),
+                constraints = LayoutConstraints(maxWidth = 1200f),
+            ),
+        )
+
+        val debugLines = result.lines.joinToString(separator = "\n") { line ->
+            val source = text.substring(line.range.start, line.range.end).replace("\n", "\\n")
+            "${line.clusterRange} ${line.range} ${line.endReason} \"$source\""
+        }
+        assertTrue(result.lines.size >= 4)
+        assertTrue(
+            result.lines.none { line -> text.substring(line.range.start, line.range.end) == "\n" },
+            debugLines,
+        )
+        assertEquals(LineEndReason.MandatoryBreak, result.lines.first { it.range.end == text.indexOf('\n') + 1 }.endReason)
+        val lineHeight = result.debug.lineSpacingDecision?.resolvedHeight ?: error("line height missing")
+        val gaps = result.lines.zipWithNext { a, b -> b.baseline - a.baseline }
+        gaps.forEach { gap ->
+            assertEquals(lineHeight, gap, 0.001f)
+        }
+    }
+
+    @Test
     fun crlfIsOneMandatoryBreakCluster() {
         val result = ExplainableStubParagraphLayoutEngine(
             lineBreaker = LookaheadLineBreaker(),
@@ -152,7 +213,7 @@ class ExplainableStubParagraphLayoutEngineTest {
             LayoutInput(
                 paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
                 content = TiqianTextContent("短\n中文中文中文中文中文"),
-                constraints = LayoutConstraints(maxWidth = 96f),
+                constraints = LayoutConstraints(maxWidth = 128f),
             ),
         )
 
@@ -498,6 +559,56 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun asciiClosingBracketWithCjkInteriorIsForbiddenAtLineStart() {
+        val text = "如今已占据超七成份额(国产品牌)，互联网大厂排队抢购？"
+        val result = ExplainableStubParagraphLayoutEngine(
+            lineBreaker = LookaheadLineBreaker(),
+        ).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent(text),
+                constraints = LayoutConstraints(maxWidth = 232f),
+            ),
+        )
+
+        val debugLines = result.lines.joinToString(separator = "\n") { line ->
+            val source = text.substring(line.range.start, line.range.end)
+            "${line.clusterRange} ${line.range} ${line.endReason} \"$source\""
+        }
+        assertTrue(
+            result.lines.none { line -> text.substring(line.range.start, line.range.end).startsWith(")") },
+            debugLines,
+        )
+        val closeParen = result.clusters.single { it.text == ")" }
+        assertEquals("latin-primary", closeParen.fontKey)
+    }
+
+    @Test
+    fun asciiOpeningBracketWithCjkInteriorIsForbiddenAtLineEnd() {
+        val text = "如今已占据超七成份额(国产品牌)，互联网大厂排队抢购？"
+        val result = ExplainableStubParagraphLayoutEngine(
+            lineBreaker = LookaheadLineBreaker(),
+        ).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent(text),
+                constraints = LayoutConstraints(maxWidth = 168f),
+            ),
+        )
+
+        val debugLines = result.lines.joinToString(separator = "\n") { line ->
+            val source = text.substring(line.range.start, line.range.end)
+            "${line.clusterRange} ${line.range} ${line.endReason} \"$source\""
+        }
+        assertTrue(
+            result.lines.none { line -> text.substring(line.range.start, line.range.end).endsWith("(") },
+            debugLines,
+        )
+        val openParen = result.clusters.single { it.text == "(" }
+        assertEquals("latin-primary", openParen.fontKey)
+    }
+
+    @Test
     fun keepsTextStartLatinQuotePairInLatinRun() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
@@ -573,8 +684,29 @@ class ExplainableStubParagraphLayoutEngineTest {
         val closeQuoteOverride = result.debug.roleOverrides.firstOrNull { it.range.start == 6 }
         assertEquals("LatinText", openQuoteOverride?.overriddenRole)
         assertEquals("CjkPunctuation", openQuoteOverride?.originalRole)
-        assertEquals("QuotePairAwareLatinContext", openQuoteOverride?.source)
+        assertEquals("QuotePairQuotedContentContext", openQuoteOverride?.source)
         assertEquals("LatinText", closeQuoteOverride?.overriddenRole)
+    }
+
+    @Test
+    fun keepsNumberedCjkQuotePairOnCjkFace() {
+        val text = "1.\u201C\u4F60\u77E5\u9053\u674E\u767D\u662F\u600E\u4E48\u6B7B\u7684\u5417\uFF1F\u201D"
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent(text),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val openQuote = result.debug.fontDecisions.single { it.range.start == 2 }
+        assertEquals(FontRole.CjkPunctuation.name, openQuote.role)
+        assertEquals("cjk-primary", openQuote.fontKey)
+
+        val openQuoteOverride = result.debug.roleOverrides.single { it.range.start == 2 }
+        assertEquals("NumberedCjkQuotePrefix", openQuoteOverride.source)
+        assertEquals("numbered-prefix-uses-quoted-cjk-context", openQuoteOverride.reason)
+        assertEquals(FontRole.CjkPunctuation.name, openQuoteOverride.overriddenRole)
     }
 
     @Test
@@ -700,6 +832,30 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals(32f, dash.advance)
 
         assertEquals(3, result.debug.punctuationDecisions.size)
+    }
+
+    @Test
+    fun lineStartLenticularBracketConsumesOpeningGlue() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("【引用结束】"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val opening = result.debug.punctuationDecisions.single { it.char == '【' }
+        assertEquals("Opening", opening.punctuationClass)
+        assertEquals(8f, opening.leadingGlueNatural)
+
+        val geometry = result.debug.geometryDecisions.single { it.sourceText == "【" }
+        assertEquals(8f, geometry.leadingGlueNatural)
+        assertEquals(8f, geometry.leadingGlueConsumed)
+        assertEquals(8f, geometry.resolvedAdvance)
+
+        val positioned = result.positionedClusters().first()
+        assertEquals(0f, positioned.left)
+        assertEquals(-8f, positioned.drawX)
     }
 
     @Test
@@ -881,6 +1037,29 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun latinSolidusBreaksAfterSlashWithoutAddingHyphen() {
+        // LatinStructuralSolidusBreak: `TeX/LaTeX` exposes a clean separator
+        // boundary even though the whole token can fit a fresh line. The slash
+        // stays with the previous piece; it must not start the next line.
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(
+                    firstLineIndent = Ic(0f),
+                    lineLengthGrid = LineLengthGrid(enabled = false),
+                ),
+                content = TiqianTextContent("TeX/LaTeX"),
+                constraints = LayoutConstraints(maxWidth = 80f),
+            ),
+        )
+
+        assertTrue(result.clusters.any { it.text == "TeX/" })
+        assertTrue(result.clusters.any { it.text == "LaTeX" })
+        assertEquals("TeX/", result.lineText(0))
+        assertEquals("LaTeX", result.lineText(1))
+        assertTrue(result.lines.all { it.hyphenAdvance == 0f })
+    }
+
+    @Test
     fun overlongLatinWordHardBreaksWithAHangingHyphen() {
         // LatinForcedHyphenBreak (ADR 0029): "English" (112) > measure 80 and has
         // no syllable points (NoHyphenator default), so it hard-breaks at a
@@ -899,6 +1078,176 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertTrue(result.clusters.any { it.text == "ish" }) // ≥3 chars kept at tail
         assertEquals(2, result.lines.size)
         assertTrue(result.lines[0].hyphenAdvance > 0f) // hyphen hangs at the break
+    }
+
+    @Test
+    fun urlLikeLatinTokenBreaksAtSeparatorsWithoutSyntheticHyphen() {
+        // LatinOpaqueTokenBreak: URL-looking text is not an English word. It
+        // exposes clean breakpoints at URL separators and never invents a
+        // display hyphen inside the source link.
+        val url = "https://example.com/path/to/abc123def456ghi789"
+        val result = ExplainableStubParagraphLayoutEngine(hyphenator = NoHyphenator).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent(url),
+                constraints = LayoutConstraints(maxWidth = 128f),
+            ),
+        )
+
+        assertTrue(result.lines.size > 1)
+        assertTrue(result.lines.all { it.hyphenAdvance == 0f })
+        assertTrue(result.clusters.none { it.text == url })
+        assertTrue(result.clusters.any { it.text.endsWith("/") })
+        assertTrue(result.clusters.any { it.text == "example." })
+        assertTrue(
+            result.debug.lineDecisions.none { it.repairDecision?.reasonCode == "ForbiddenAtLineStart" },
+            "URL separators are LatinText and must not trigger CJK line-start kinsoku",
+        )
+    }
+
+    @Test
+    fun overlongOpaqueLatinTokenHardBreaksWithoutSyntheticHyphen() {
+        // Mixed alpha/digit identifiers and hashes are not words either. If no
+        // separator can rescue an over-wide piece, hard-break it cleanly without
+        // a synthetic hyphen.
+        val result = ExplainableStubParagraphLayoutEngine(hyphenator = NoHyphenator).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("abc123def456ghi789"),
+                constraints = LayoutConstraints(maxWidth = 96f),
+            ),
+        )
+
+        assertTrue(result.lines.size > 1)
+        assertTrue(result.lines.all { it.hyphenAdvance == 0f })
+        assertTrue(result.clusters.none { it.text == "abc123def456ghi789" })
+        assertTrue(result.lines.all { it.visualWidth <= 96f })
+    }
+
+    @Test
+    fun longAllCapsOpaqueTokenHardBreaksWithoutSyntheticHyphen() {
+        // Long all-caps blobs can be base64/hash-like data, not abbreviations.
+        // A short NASA-style abbreviation stays protected elsewhere; this
+        // over-threshold token falls back to opaque no-hyphen cuts.
+        val token = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo"
+        val result = ExplainableStubParagraphLayoutEngine(hyphenator = NoHyphenator).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent(token),
+                constraints = LayoutConstraints(maxWidth = 96f),
+            ),
+        )
+
+        assertTrue(result.lines.size > 1)
+        assertTrue(result.lines.all { it.hyphenAdvance == 0f })
+        assertTrue(result.clusters.none { it.text == token })
+    }
+
+    @Test
+    fun opaqueLatinTokenAfterCjkPullsPrefixOntoLooseLine() {
+        val prefix = "为什么历史是 "
+        val result = ExplainableStubParagraphLayoutEngine(
+            lineBreaker = LookaheadLineBreaker(),
+            hyphenator = NoHyphenator,
+        ).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent(prefix + "abc123def456ghi789"),
+                constraints = LayoutConstraints(maxWidth = 160f),
+            ),
+        )
+
+        val firstLineText = result.clusters
+            .filterIndexed { index, _ -> index in result.lines.first().clusterRange }
+            .joinToString(separator = "") { it.text }
+        assertTrue(
+            firstLineText.length > prefix.length,
+            "first line should carry part of the opaque token instead of stretching only '$prefix': $firstLineText",
+        )
+        assertTrue(result.lines.first().hyphenAdvance == 0f)
+    }
+
+    @Test
+    fun nonLexicalLetterRunAfterCjkPullsPrefixOntoLooseLineWithoutSyntheticHyphen() {
+        val prefix = "为什么历史是 "
+        val token = "s".repeat(40) + "herstory"
+        val result = ExplainableStubParagraphLayoutEngine(
+            lineBreaker = LookaheadLineBreaker(),
+            hyphenator = NoHyphenator,
+        ).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent(prefix + token),
+                constraints = LayoutConstraints(maxWidth = 160f),
+            ),
+        )
+
+        val firstLineText = result.clusters
+            .filterIndexed { index, _ -> index in result.lines.first().clusterRange }
+            .joinToString(separator = "") { it.text }
+        assertTrue(
+            firstLineText.length > prefix.length,
+            "first line should carry part of the non-lexical letter run: $firstLineText",
+        )
+        assertTrue(result.lines.all { it.hyphenAdvance == 0f })
+    }
+
+    @Test
+    fun longLetterBlobStaysOpaqueEvenWhenTailLooksHyphenatable() {
+        val prefix = "为什么历史是 "
+        val token = "s".repeat(40) + "herstory"
+        val tailHyphenator = object : Hyphenator {
+            override fun hyphenate(word: String): List<Int> = listOf(word.length - "story".length)
+        }
+        val result = ExplainableStubParagraphLayoutEngine(
+            lineBreaker = LookaheadLineBreaker(),
+            hyphenator = tailHyphenator,
+        ).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent(prefix + token),
+                constraints = LayoutConstraints(maxWidth = 160f),
+            ),
+        )
+
+        val firstLineText = result.clusters
+            .filterIndexed { index, _ -> index in result.lines.first().clusterRange }
+            .joinToString(separator = "") { it.text }
+        assertTrue(
+            firstLineText.length > prefix.length,
+            "first line should carry part of the opaque letter blob: $firstLineText",
+        )
+        assertTrue(result.lines.all { it.hyphenAdvance == 0f })
+        assertTrue(result.clusters.none { it.text == token })
+    }
+
+    @Test
+    fun longOpaqueTokenCanBreakEvenWhenItFitsAloneButNotAfterCjkPrefix() {
+        val prefix = "为什么历史是 "
+        val token = "s".repeat(40) + "herstory"
+        val tailHyphenator = object : Hyphenator {
+            override fun hyphenate(word: String): List<Int> = listOf(word.length - "story".length)
+        }
+        val result = ExplainableStubParagraphLayoutEngine(
+            lineBreaker = LookaheadLineBreaker(),
+            hyphenator = tailHyphenator,
+        ).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent(prefix + token),
+                constraints = LayoutConstraints(maxWidth = 800f),
+            ),
+        )
+
+        val firstLineText = result.clusters
+            .filterIndexed { index, _ -> index in result.lines.first().clusterRange }
+            .joinToString(separator = "") { it.text }
+        assertTrue(
+            firstLineText.length > prefix.length,
+            "first line should carry part of the long opaque token instead of stretching only '$prefix': $firstLineText",
+        )
+        assertTrue(result.clusters.none { it.text == token })
+        assertTrue(result.lines.all { it.hyphenAdvance == 0f })
     }
 
     @Test
@@ -1879,6 +2228,7 @@ class ExplainableStubParagraphLayoutEngineTest {
         // Content fills the measure; the hung mark overflows it.
         assertEquals(64f, line0.adjustedWidth)
         assertTrue(line0.visualWidth > 64f, "hung mark must overflow: ${line0.visualWidth}")
+        assertEquals(line0.visualWidth - line0.adjustedWidth, line0.hangingPunctuationAdvance)
         assertEquals("Hang", result.debug.lineDecisions[0].repair)
 
         // Fixed Disabled → no hang; the 逗号 wraps via CarryPrevious.
@@ -2458,4 +2808,9 @@ class ExplainableStubParagraphLayoutEngineTest {
             )
         }
     }
+}
+
+private fun LayoutResult.lineText(index: Int): String {
+    val line = lines[index]
+    return line.clusterRange.joinToString("") { clusters[it].text }
 }

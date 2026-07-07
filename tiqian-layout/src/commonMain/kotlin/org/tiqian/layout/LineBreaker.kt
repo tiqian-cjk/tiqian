@@ -408,6 +408,7 @@ class LookaheadLineBreaker(
     private val pushInPenalty: Int = 2,
     private val carryPreviousPenalty: Int = 10,
     private val leaveRaggedPenalty: Int = 20,
+    private val consecutiveSyntheticHyphenPenalty: Float = 12f,
 ) : LineBreaker {
     override val strategyName: String = "lookahead"
 
@@ -445,6 +446,7 @@ class LookaheadLineBreaker(
         val gapBoundaries = cjkInterCharBoundaries + sinoWesternBoundaries
         val dRef = maxCjkStretchPerGap
         var committedDensity = 0f
+        var committedSyntheticHyphenRun = 0
         // Sorted once; `lineStart` only advances, so a monotonic cursor finds
         // the next mandatory break in amortized O(1) — newline-heavy text has
         // lines ≈ breaks, so a per-line set scan would be quadratic.
@@ -487,6 +489,7 @@ class LookaheadLineBreaker(
                         endReason = LineEndReason.MandatoryBreak,
                     )
                     committedDensity = 0f
+                    committedSyntheticHyphenRun = 0
                     lineStart = mandatoryEnd + 1
                     if (lineStart == adjustedClusters.size) {
                         committed += emptyLineCandidate(
@@ -536,6 +539,7 @@ class LookaheadLineBreaker(
                     sinoWesternStretchCap = sinoWesternStretchCap,
                     segmentEndExclusive = segmentEndExclusive,
                     prevCommittedDensity = committedDensity,
+                    prevSyntheticHyphenRun = committedSyntheticHyphenRun,
                     gapBoundaries = gapBoundaries,
                     dRef = dRef,
                     unbreakableRanges = unbreakableRanges,
@@ -549,12 +553,40 @@ class LookaheadLineBreaker(
             // Line-end kinsoku may retreat the chosen break further; the
             // mark moves to the next line (cascade-free shorten).
             val committedEnd = adjustBreakForLineEnd(bestEnd, lineStart, forbiddenLineEndClusters)
+            if (committedEnd in hardBreakAfterClusters && lineStart < committedEnd) {
+                // MandatoryBreakBindsPreviousLine: a zero-width authored break
+                // must terminate the preceding visual line. Lookahead may
+                // prefer the width-identical candidate just before the break;
+                // committing it literally would leave "\n" as a standalone
+                // line and create a bogus blank row.
+                committed += rebuildLine(
+                    lineStart..committedEnd,
+                    naturalClusters,
+                    adjustedClusters,
+                    endReason = LineEndReason.MandatoryBreak,
+                )
+                committedDensity = 0f
+                committedSyntheticHyphenRun = 0
+                lineStart = committedEnd + 1
+                if (lineStart == adjustedClusters.size) {
+                    committed += emptyLineCandidate(
+                        sourceOffset = adjustedClusters.last().range.end,
+                        endReason = LineEndReason.ParagraphEnd,
+                    )
+                }
+                continue
+            }
             committed += closeFilledLine(
                 lineStart..(committedEnd - 1), bestEnd, naturalClusters, adjustedClusters,
             )
             committed.last().let { line ->
                 val limit = lineLimit(maxWidth, firstLineIndent, line.clusterRange.first)
                 committedDensity = lineAdjustmentDensity(line, limit, isLast = false, gapBoundaries)
+                committedSyntheticHyphenRun = if (line.endsWithSyntheticHyphen(hyphenBreakClusters)) {
+                    committedSyntheticHyphenRun + 1
+                } else {
+                    0
+                }
             }
             lineStart = committedEnd
         }
@@ -598,6 +630,7 @@ class LookaheadLineBreaker(
         sinoWesternStretchCap: Float,
         segmentEndExclusive: Int = adjusted.size,
         prevCommittedDensity: Float = 0f,
+        prevSyntheticHyphenRun: Int = 0,
         gapBoundaries: Set<Int> = emptySet(),
         dRef: Float = 1f,
         unbreakableRanges: List<IntRange> = emptyList(),
@@ -629,6 +662,7 @@ class LookaheadLineBreaker(
             pushInPenalty = pushInPenalty,
             carryPreviousPenalty = carryPreviousPenalty,
             leaveRaggedPenalty = leaveRaggedPenalty,
+            unbreakableRanges = unbreakableRanges,
             firstLineIndent = firstLineIndent,
             hangableClusters = hangableClusters,
             forbiddenLineStartClusters = forbiddenLineStartClusters,
@@ -637,11 +671,23 @@ class LookaheadLineBreaker(
         val horizon = (1 + futureLineHorizon).coerceAtMost(spliced.size)
         var score = 0f
         var prevD = prevCommittedDensity
+        var syntheticHyphenRun = prevSyntheticHyphenRun
         for (idx in 0 until horizon) {
+            val line = spliced[idx]
             val isLast = (idx == spliced.lastIndex)
-            score += badness(spliced[idx], maxWidth, isLast, firstLineIndent, prevD, gapBoundaries, dRef)
-            val limit = lineLimit(maxWidth, firstLineIndent, spliced[idx].clusterRange.first)
-            prevD = lineAdjustmentDensity(spliced[idx], limit, isLast, gapBoundaries)
+            score += badness(line, maxWidth, isLast, firstLineIndent, prevD, gapBoundaries, dRef)
+            // AvoidConsecutiveSyntheticHyphenBreaks: consecutive generated
+            // hyphens read choppy. This is only a soft lookahead demerit and
+            // only applies to `hyphenBreakClusters`; clean breaks at existing
+            // '-' or CamelCase boundaries are intentionally unaffected.
+            if (line.endsWithSyntheticHyphen(hyphenBreakClusters)) {
+                score += consecutiveSyntheticHyphenPenalty * syntheticHyphenRun
+                syntheticHyphenRun += 1
+            } else {
+                syntheticHyphenRun = 0
+            }
+            val limit = lineLimit(maxWidth, firstLineIndent, line.clusterRange.first)
+            prevD = lineAdjustmentDensity(line, limit, isLast, gapBoundaries)
         }
         return score
     }
@@ -741,6 +787,11 @@ class LookaheadLineBreaker(
     }
 }
 
+private fun LineCandidate.endsWithSyntheticHyphen(hyphenBreakClusters: Set<Int>): Boolean =
+    endReason == LineEndReason.AutoWrap &&
+        !clusterRange.isEmptyClusterRange() &&
+        clusterRange.last + 1 in hyphenBreakClusters
+
 internal fun applyKinsokuRepairs(
     initial: List<LineCandidate>,
     naturalClusters: List<Cluster>,
@@ -809,6 +860,7 @@ internal fun applyKinsokuRepairs(
         // 行尾只悬挂一个 — never chain onto a line that already hangs.
         val offenderIndex = curr.clusterRange.first
         if (offenderIndex in hangableClusters && prev.hangingClusterIndex == null) {
+            val mergeEndIndex = mandatoryBreakTailEnd(curr, offenderIndex, adjustedClusters)
             val hangCandidate = RepairCandidate(
                 kind = "Hang",
                 reasonCode = "ForbiddenAtLineStart",
@@ -817,17 +869,20 @@ internal fun applyKinsokuRepairs(
                 accepted = true,
             )
             repairCandidates += hangCandidate
-            val mergedRange = prev.clusterRange.first..offenderIndex
+            val mergedRange = prev.clusterRange.first..mergeEndIndex
             mutable[i - 1] = LineCandidate(
                 clusterRange = mergedRange,
                 sourceRange = TextRange(
                     adjustedClusters[mergedRange.first].range.start,
-                    adjustedClusters[offenderIndex].range.end,
+                    adjustedClusters[mergeEndIndex].range.end,
                 ),
                 // The hung mark sits BEYOND the measure: it is excluded from
                 // the line's measure-fill width (content fills to maxWidth,
                 // the mark overflows).
-                naturalWidth = prev.naturalWidth + naturalClusters[offenderIndex].advance,
+                naturalWidth = prev.naturalWidth +
+                    (prev.clusterRange.last + 1..mergeEndIndex)
+                        .sumOf { naturalClusters[it].advance.toDouble() }
+                        .toFloat(),
                 adjustedWidth = prev.adjustedWidth,
                 repair = RepairOption.Hang(
                     penalty = hangPenalty,
@@ -836,13 +891,13 @@ internal fun applyKinsokuRepairs(
                 ),
                 repairCandidates = prev.repairCandidates + pushIn.candidate + hangCandidate,
                 hangingClusterIndex = offenderIndex,
-                endReason = if (offenderIndex == curr.clusterRange.last) curr.endReason else prev.endReason,
+                endReason = if (mergeEndIndex == curr.clusterRange.last) curr.endReason else prev.endReason,
             )
-            if (offenderIndex == curr.clusterRange.last) {
+            if (mergeEndIndex == curr.clusterRange.last) {
                 mutable.removeAt(i)
             } else {
                 mutable[i] = rebuildLine(
-                    (offenderIndex + 1)..curr.clusterRange.last,
+                    (mergeEndIndex + 1)..curr.clusterRange.last,
                     naturalClusters,
                     adjustedClusters,
                     endReason = curr.endReason,
@@ -1033,7 +1088,8 @@ private fun tryPushIn(
 ): PushInResult {
     val offenderIndex = mergeThroughClusterIndex ?: curr.clusterRange.first
     require(offenderIndex in curr.clusterRange) { "PushIn merge-through cluster must belong to the current line." }
-    val expandedRange = prev.clusterRange.first..offenderIndex
+    val mergeEndIndex = mandatoryBreakTailEnd(curr, offenderIndex, adjustedClusters)
+    val expandedRange = prev.clusterRange.first..mergeEndIndex
     val expanded = rebuildLine(expandedRange, naturalClusters, adjustedClusters)
     val overflow = expanded.adjustedWidth - maxWidth
 
@@ -1091,7 +1147,7 @@ private fun tryPushIn(
     )
     val repairedPrevious = expanded.copy(
         adjustedWidth = expanded.adjustedWidth - shrink,
-        endReason = if (offenderIndex == curr.clusterRange.last) curr.endReason else prev.endReason,
+        endReason = if (mergeEndIndex == curr.clusterRange.last) curr.endReason else prev.endReason,
         repair = RepairOption.PushIn(
             penalty = pushInPenalty,
             reason = if (shrink > 0f) {
@@ -1109,17 +1165,31 @@ private fun tryPushIn(
         // PushIn marker for the absorbed offender must not erase it.
         repairCandidates = prev.repairCandidates + candidate,
     )
-    val repairedCurrent = if (offenderIndex == curr.clusterRange.last) {
+    val repairedCurrent = if (mergeEndIndex == curr.clusterRange.last) {
         null
     } else {
         rebuildLine(
-            (offenderIndex + 1)..curr.clusterRange.last,
+            (mergeEndIndex + 1)..curr.clusterRange.last,
             naturalClusters,
             adjustedClusters,
             endReason = curr.endReason,
         )
     }
     return PushInResult(repairedPrevious, repairedCurrent, candidate)
+}
+
+private fun mandatoryBreakTailEnd(
+    curr: LineCandidate,
+    mergeThroughClusterIndex: Int,
+    adjustedClusters: List<Cluster>,
+): Int {
+    if (curr.endReason != LineEndReason.MandatoryBreak) return mergeThroughClusterIndex
+    if (mergeThroughClusterIndex >= curr.clusterRange.last) return mergeThroughClusterIndex
+    val tail = (mergeThroughClusterIndex + 1)..curr.clusterRange.last
+    val tailIsZeroWidthBreak = tail.all { idx ->
+        adjustedClusters[idx].displayText.isEmpty() && adjustedClusters[idx].advance == 0f
+    }
+    return if (tailIsZeroWidthBreak) curr.clusterRange.last else mergeThroughClusterIndex
 }
 
 /**
@@ -1251,7 +1321,10 @@ private fun fillPushInGroupEnd(
             groupEnd = containing.last
             if (groupEnd > curr.clusterRange.last) return null
         }
-        if (groupEnd in forbiddenLineEndClusters) return null
+        if (groupEnd in forbiddenLineEndClusters) {
+            groupEnd += 1
+            continue
+        }
         val nextHead = groupEnd + 1
         if (nextHead <= curr.clusterRange.last && forbiddenLineStartClusters?.contains(nextHead) == true) {
             groupEnd = nextHead

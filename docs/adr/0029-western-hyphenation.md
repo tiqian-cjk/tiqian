@@ -1,4 +1,4 @@
-# ADR 0029: 中西混排的西文音节连字（行尾悬挂连字符）
+# ADR 0029: 中西混排的西文音节连字（行尾连字符）
 
 - Status: Accepted
 - Date: 2026-06-14
@@ -22,32 +22,32 @@
 
 **数据：内置 TeX 连字模式。** `tiqian-linebreak` 定 `Hyphenator` 接口
 （`hyphenate(word): List<Int>` 给音节断点），`NoHyphenator` 为无数据默认；
-`LiangHyphenator` 实现 Frank Liang 算法（TeX/浏览器同款）。JVM 内置标准
+`LiangHyphenator` 实现 Frank Liang 算法（TeX/浏览器同款）。JVM/Android 内置标准
 `hyph-en-us`（Kuiken/hyph-utf8，宽松许可、文件头声明原样保留——**非公有领域**），
 `EnglishHyphenation.enUs` 加载之，左 2 右 3。
 
 **接入：`LineEndHangingHyphen`。** 引擎注入 `hyphenator`。**默认启用**——
 中西混排常见、短行尤其受益，故引擎默认取平台连字器（`defaultHyphenator()`，
-`expect/actual`：JVM = en-US，无内置/原生断词器的平台退化为不连字）；显式传
+`expect/actual`：JVM/Android = bundled en-US，无内置断词器的平台退化为不连字）；显式传
 `NoHyphenator` 关闭。shaping 后把每个**全字母**西文词按连字点拆成音节
 子 cluster（逐音节重排，真实宽度），断行器照常在 cluster 边界断（无需改断行器）。
-连字符**悬挂**在行尾——像 CLREQ 行尾点号悬挂那样**不占版心**：内容填满版心、
-连字符挂在其外，故内容的行尾对齐不被连字符破坏。`LineBox.hyphenAdvance` 记该行
-行尾连字符宽度（不计入 width 字段）；引擎在某行的**下一行**起始于某连字断点
-（音节续接）时给该行置 `hyphenAdvance`。
+连字符以**占版心宽**为常态：内容只填到 `measure − 连字符宽`，连字符落在版心内；
+若内容已经放不下，才退为行尾悬挂。`LineBox.hyphenAdvance` 记该行行尾连字符宽度；
+引擎在某行的**下一行**起始于某连字断点（音节续接）时给该行置 `hyphenAdvance`。
 
 ## Amendment (2026-06-14): LatinForcedHyphenBreak（硬断兜底）
 
 音节连字救不了的情况——没注入 hyphenator，或某个音节/无连字点的长 token 本身
 就比版心宽——需要兜底。此时**直接补连字符然后硬断**：对任何**仍宽于版心**的
-片段，在字符边界加断点（同样行尾悬挂连字符）。断点**尽量满足前二后三**
-（`HYPHEN_MIN_LEFT=2` / `HYPHEN_MIN_RIGHT=3`，与 en-US 连字同）——把片段首
+片段，在字符边界加断点（同样补显示层连字符，优先占版心宽、放不下才悬挂）。
+断点**尽量满足前二后三**（`HYPHEN_MIN_LEFT=2` / `HYPHEN_MIN_RIGHT=3`，
+与 en-US 连字同）——把片段首
 2 字、尾 3 字保留整块、中间逐字可断；片段短到连前二后三都满足不了时，才退化为
 任意字符断（满足不了就算了）。
 
 这步在 split pass 里与音节拆分合一：cut 点 = 音节点 ∪（超宽片段的字符兜底点），
-两者都进 `hyphenOffsets`、都悬挂连字符。需要版心宽度判断片段是否超宽，故 grid
-量化（measure）上移到 shaping 之前。**默认 NoHyphenator 下也生效**——长西文词
+两者都进 `hyphenOffsets`、都走同一套行尾连字符几何。需要版心宽度判断片段是否
+超宽，故 grid 量化（measure）上移到 shaping 之前。**默认 NoHyphenator 下也生效**——长西文词
 （无音节点）照样硬断补连字符，不再突出版心。
 
 注意与 §纵横对齐 的区别：那条是「**不加连字符**」的繁体硬切；我们这条**加**连字符
@@ -78,6 +78,19 @@
 `DecideHyphenBreakTest` 锁定「扣掉中西间距后由松转不连字」。
 `hyphenationIsSkippedWhenStretchingCjkStaysTight` 锁定「够紧就不连字」，
 `western-hyphenation` golden 是够松仍连字的一侧。
+
+## Amendment (2026-07-07): AvoidConsecutiveSyntheticHyphenBreaks
+
+连续多行都在西文词中补连字符，会显得段落被切碎；但在窄栏/长词里，断词本身仍是
+合法且必要的最后手段。因此不做硬禁，只在 lookahead 评分里加入软惩罚：
+
+- 第一处 synthetic hyphen 不罚。
+- 第二处连续 synthetic hyphen 加 `consecutiveSyntheticHyphenPenalty`。
+- 第三处及以后按连续 run 递增加罚。
+
+判定只看 `hyphenBreakClusters`：也就是会生成显示层连字符的音节/硬断续接点。已有
+`-` 处断行、CamelCase clean break、普通词边界都不受影响。greedy 快速模式保持原样；
+它仍只做局部填满和禁则修复，不额外为了段落质感回看。
 
 ## Amendment (2026-06-14): 连字符占版心宽、放不下才悬挂
 
@@ -128,21 +141,51 @@ Upper→Upper-then-lower（`XML|Http`）——**不补连字符**（大写字母
 （标点 atom 是 CJK 文本的事）。`latin-existing-hyphen` fixture 印证
 `out-of-/the-way`。
 
+## Amendment (2026-07-07): LatinOpaqueTokenBreak（URL / 标识串不是英文词）
+
+链接显示文本、URL、hash、query string、混合字母数字 id 这类 Latin run 不是英文
+单词，不应该套 §9.2 的「音节 + 合成连字符」模型。它们走独立的
+`LatinOpaqueTokenBreak`：
+
+- URL-like token（`://`、`www.`、域名式 `example.com`）在 ASCII 分隔符后给
+  clean 断点：`/ . - _ ? & = # % ~`。短 URL 可把 `https://` 作为一个前缀块；
+  当整个 URL 已经超出版心时，`/` 也参与降级断点，避免为了保 scheme 把前一行中文
+  拉得极松。
+- 普通 Latin token 内的 solidus（如 `TeX/LaTeX`）也是结构性分隔符：断点在 `/`
+  **之后**，slash 留在前一行（`TeX/` + `LaTeX`），不把 `/` 推到下一行行首，也不补
+  合成连字符。
+- 非 URL 但含数字/符号的 opaque token，只有当整个 token 超出版心时才启用这些分隔符
+  断点，避免把普通短缩写/编号提前拆开。
+- 若分隔符之间的片段仍宽于版心，则在字符边界硬断，**不进 `hyphenOffsets`**，也就
+  **不画合成连字符**。源文本仍保持原样。
+- 超长全字母 token 若整体没有可信 hyphenator 断点，或内部有一段足够长、无法被
+  hyphenator 解释的连续片段，也降级为 opaque：这覆盖纯字母 base64/hash 片段、
+  `ssss...herstory` 这类合成串。短全大写缩写（`NASA`/`HTML`）仍按 §9.4 不断；
+  超过阈值的全大写长串不再假设是人类缩写。
+- 长 opaque token 即使单独能放进一整行，也暴露 clean 字符边界；这些断点让前一行
+  能带上一部分 token，避免只剩几个 CJK 字被强行拉满。普通英文词不走这个分支。
+- 这些分隔符仍是 `LatinText` cluster 内部的 clean break，不触发 CLREQ 的 CJK 行首/
+  行尾禁则；ASCII 括号若包住 CJK 内容，仍由独立的 `CjkContextAsciiBracketKinsoku`
+  规则处理。
+
+这个分支和 `LatinForcedHyphenBreak` 的关系是：英文**词**仍按 hyphenator / 前二后三
+补连字符；opaque token 只提供 clean break。这样链接不会出现源文本里不存在的 `-`，
+长 id 也不会把前一行中文拉到极松后再整块下移。
+
 ## Consequences
 
 - 长西文词在窄版心混排时按 en-US 音节断点换行（`in-ter-na-tion-al-iza-tion`），
-  行尾挂连字符；短词、纯 CJK 行不受影响。
+  行尾补显示层连字符；短词、纯 CJK 行不受影响。
 - **源文本不动**：连字符只在显示层（行尾画 `-`），source range / 复制 / 搜索保持
   输入（与码点替换同一原则）。
-- 默认启用（JVM=en-US）。golden/单测等确定性测试**显式 pin**
+- 默认启用（JVM/Android=en-US）。golden/单测等确定性测试**显式 pin**
   `NoHyphenator`（同 repair fixture pin `Fixed` kinsoku 的先例）——故既有 golden
   零漂移；连字 fixture（`western-hyphenation`，`LayoutFixture.useEnglishHyphenation`）
   显式注入 `enUs`。`HyphenationLayoutTest` 锁定「默认引擎即连字」「拆分点恰等于
-  hyphenator 输出」「连字符不计入版心」。
+  hyphenator 输出」「连字符默认计入版心，放不下才悬挂」。
 - 渲染：共享 skia cluster-walk（`drawTiqianGlyphs`，compose + playground 共用）与
   playground AWT 在内容末尾画 `-`；dump（golden + playground）的行尾加 `hyphen=` 标记。
-- 未实现：仅 en-US（接口语种无关，按需加模式）；Android 原生断词器可后续接同一
-  `Hyphenator` 接口。已有连字符处（`well-known`、`/`）的断点、Knuth-Plass 式整段
-  最优连字，均留作后续；当前是贪心在音节点断 + 悬挂连字符。
-- 连字符目前不为换行预留版心宽度（**悬挂**模型）。若日后要「连字符占版心」的风格，
-  再走断行器的 discretionary-break 回退，另记 amendment。
+- 未实现：仅 en-US（接口语种无关，按需加模式）。Knuth-Plass 式整段最优连字留作
+  后续；当前是贪心/lookahead 在音节点、URL/标识串 clean 断点、必要硬断点之间选择。
+- 连字符当前会预留版心宽度；只有内容挤不回 `measure − 连字符宽` 时才悬挂。若日后
+  要新增“始终悬挂”或其它 discretionary-break 风格，再另记 amendment。

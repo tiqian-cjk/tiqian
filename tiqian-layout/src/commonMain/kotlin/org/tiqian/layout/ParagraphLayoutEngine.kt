@@ -79,7 +79,6 @@ import org.tiqian.font.StubFontMetricsResolver
 import org.tiqian.linebreak.Hyphenator
 import org.tiqian.linebreak.isMandatoryBreakCodePoint
 import org.tiqian.linebreak.NoHyphenator
-import org.tiqian.linebreak.LineWidthHyphenator
 import org.tiqian.shaping.ExplainableStubTextShaper
 import org.tiqian.shaping.ShapingInput
 import org.tiqian.shaping.ShapingResult
@@ -142,9 +141,24 @@ class ExplainableStubParagraphLayoutEngine(
         // 拼音 (above-base) ruby only; 注音 (RubyKind.Bopomofo, right-side) is parsed +
         // carried but its geometry/advance is the next slice (ADR 0033) — inert here.
         val pinyinSpans = input.rubySpans.filter { it.kind == RubyKind.Pinyin }
-        // Span edges force cluster splits so no cluster straddles a style change
-        // (a Latin word / coalesced 标点 run otherwise swallows the boundary).
-        val spanBoundaries: Set<Int> = sizedSpans.flatMapTo(mutableSetOf()) { listOf(it.range.start, it.range.end) }
+        // SourceRangeBoundaryClusterSplit: span / annotation edges force cluster
+        // splits so no cluster straddles a source range whose geometry is later
+        // queried. Without this, a link ending before a trailing period in
+        // `template.` would be sliced by UTF-16 ratio rather than by real cluster
+        // advance, visibly shortening its underline.
+        val spanBoundaries: Set<Int> = buildSet {
+            fun addBoundary(offset: Int) {
+                if (offset > 0 && offset < text.length) add(offset)
+            }
+            fun addRange(range: TextRange) {
+                addBoundary(range.start)
+                addBoundary(range.end)
+            }
+            sizedSpans.forEach { addRange(it.range) }
+            input.decorations.forEach { addRange(it.range) }
+            input.rubySpans.forEach { addRange(it.baseRange) }
+            input.content.sourceBoundaries.forEach(::addBoundary)
+        }
         val clreqProfile = clreqProfileResolver.resolve(input.profileId)
         val context = FontRoleContext(
             locale = input.textStyle.locale,
@@ -193,13 +207,12 @@ class ExplainableStubParagraphLayoutEngine(
         val measureEm = measure / fontSize
 
         val quotePairs = quotePairAnalyzer.analyze(text)
-        val quoteRoleOverrides = quotePairAnalyzer.classifyPairs(text, quotePairs, fontRoleClassifier, context)
-        val roleOverrideInfos = quoteRoleOverrides.toRoleOverrideInfos(
+        val quoteRoleDecisions = quotePairAnalyzer.classifyQuoteRoles(text, quotePairs, fontRoleClassifier, context)
+        val quoteRoleOverrides = quoteRoleDecisions.associate { it.index to it.role }
+        val roleOverrideInfos = quoteRoleDecisions.toRoleOverrideInfos(
             text = text,
             baseClassifier = fontRoleClassifier,
             context = context,
-            source = "QuotePairAwareLatinContext",
-            reason = "quote-pair-outer-context",
         )
         val effectiveClassifier: FontRoleClassifier = if (quoteRoleOverrides.isNotEmpty()) {
             QuotePairAwareFontRoleClassifier(fontRoleClassifier, quoteRoleOverrides)
@@ -289,25 +302,41 @@ class ExplainableStubParagraphLayoutEngine(
         //
         // LineEndHangingHyphen (CLREQ §换行与断词连字「可使用连字符处」, ADR 0029):
         // an all-letter Latin word is additionally split so the breaker may wrap
-        // it; the hyphen HANGS at the line end (like 行尾点号悬挂) — never reserved
-        // in the measure — so the content's 行尾对齐 holds. `hyphenOffsets` are the
-        // absolute source offsets a break at which earns a trailing hyphen.
+        // it. A break at one of these offsets earns a displayed trailing hyphen;
+        // later geometry reserves that hyphen inside the measure when possible
+        // and hangs only the residual that cannot fit. `hyphenOffsets` are the
+        // absolute source offsets where the next line may continue the word.
         //
         // Cut points are (a) the [hyphenator]'s syllable points, plus (b)
-        // `LatinForcedHyphenBreak`: for any piece STILL wider than the measure
-        // (hyphenation off, or a syllable/token that can't fit), character-level
-        // fallback cuts that hard-break it — preferring 前二后三 (2/3) within the
-        // piece, breaking anywhere only when that can't be met (满足不了就算了).
+        // `LatinForcedHyphenBreak`: for any word piece STILL wider than the
+        // measure (hyphenation off, or a syllable/token that can't fit),
+        // character-level fallback cuts that hard-break it — preferring 前二后三
+        // (2/3) within the piece, breaking anywhere only when that can't be met
+        // (满足不了就算了).
+        //
+        // `LatinStructuralSolidusBreak`: a solidus inside a Latin token
+        // (`TeX/LaTeX`) is a clean separator boundary even when the whole token
+        // would fit a fresh line. The slash stays with the previous piece, so
+        // breaks read `TeX/` + `LaTeX`, never `/LaTeX`.
+        //
+        // `LatinOpaqueTokenBreak`: URL-like / identifier-like Latin tokens are
+        // not words. They get clean breaks at ASCII separators; if a remaining
+        // piece is still over-wide, it hard-breaks at character boundaries with
+        // NO synthetic hyphen. This keeps links copy-faithful and avoids
+        // inventing hyphens inside hashes, query strings, or mixed alpha/digit ids.
+        //
+        // `LatinLongUnhyphenatedLetterTokenBreak`: a very long all-letter run,
+        // or a very long hyphenator-unexplained piece inside one, is also
+        // opaque, not an English word. This covers pure-letter base64/hash
+        // fragments and synthetic strings such as `ssss...herstory`; it uses
+        // the same no-hyphen hard cuts.
         val hyphenOffsets = mutableSetOf<Int>()
         var hyphenAdvanceOrNull: Float? = null
-        fun latinWordCuts(decision: FontDecision, wordRange: TextRange): List<Int> {
-            val wordText = text.substring(wordRange.start, wordRange.end)
-            val wordAdvance = shapeSegment(decision, wordRange).clusters.singleOrNull()?.advance ?: 0f
-            val widthAware = (hyphenator as? LineWidthHyphenator)
-                ?.hyphenateAtWidth(wordText, measure, wordAdvance)
-                ?.let(::listOf)
-                ?: emptyList()
-            val syllable = (hyphenator.hyphenate(wordText) + widthAware).distinct().sorted()
+        fun latinWordCuts(
+            decision: FontDecision,
+            wordRange: TextRange,
+            syllable: List<Int>,
+        ): List<Int> {
             val cuts = sortedSetOf<Int>()
             cuts += syllable.map { wordRange.start + it }
             val relBounds = (listOf(0) + syllable + listOf(wordRange.length)).distinct()
@@ -362,6 +391,51 @@ class ExplainableStubParagraphLayoutEngine(
                 h - bounds.last { it < h } >= 2 && bounds.first { it > h } - h >= 2
             }.map { wordRange.start + it }
         }
+        fun latinSeparatorCuts(
+            tokenRange: TextRange,
+            tokenAdvance: Float,
+            forceOpaqueBreaks: Boolean,
+        ): List<Int> {
+            val token = text.substring(tokenRange.start, tokenRange.end)
+            val urlLike = token.isUrlLikeLatinToken()
+            val opaque = token.any { !it.isLetter() }
+            val structuralSolidus = token.hasBreakableLatinSolidus()
+            val opaqueSeparatorMode = urlLike || (opaque && (tokenAdvance > measure || forceOpaqueBreaks))
+            if (!structuralSolidus && !opaqueSeparatorMode) {
+                return emptyList()
+            }
+            val keepUrlScheme = tokenAdvance <= measure
+            val cuts = mutableListOf<Int>()
+            for (i in 0 until token.lastIndex) {
+                val breakAfter = (structuralSolidus && !urlLike && token[i] == '/') ||
+                    (opaqueSeparatorMode && token.isLatinTokenBreakAfter(i, keepUrlScheme))
+                if (breakAfter) cuts += tokenRange.start + i + 1
+            }
+            return cuts
+        }
+        fun latinOpaqueHardCuts(
+            decision: FontDecision,
+            tokenRange: TextRange,
+            cleanCuts: List<Int>,
+            forceOpaqueBreaks: Boolean,
+        ): List<Int> {
+            val relBounds = (listOf(0) + cleanCuts.map { it - tokenRange.start } + listOf(tokenRange.length))
+                .distinct()
+                .sorted()
+            val cuts = sortedSetOf<Int>()
+            for (i in 0 until relBounds.size - 1) {
+                val a = relBounds[i]
+                val b = relBounds[i + 1]
+                if (b - a <= 1) continue
+                val pieceAdvance = shapeSegment(decision, TextRange(tokenRange.start + a, tokenRange.start + b))
+                    .clusters.singleOrNull()?.advance ?: 0f
+                if (pieceAdvance <= measure && !(forceOpaqueBreaks && b - a >= LATIN_OPAQUE_TOKEN_MIN_LENGTH)) {
+                    continue
+                }
+                for (off in (a + 1) until b) cuts += tokenRange.start + off
+            }
+            return cuts.toList()
+        }
         val shapingResults = clusterRanges.flatMap { resolvedRange ->
             if (resolvedRange.mandatoryBreak) {
                 return@flatMap listOf(mandatoryBreakShapingResult(text, resolvedRange.range))
@@ -369,29 +443,61 @@ class ExplainableStubParagraphLayoutEngine(
             val decision = fontDecisionByRange.getValue(resolvedRange.range)
             decision.shapingSegments(text).flatMap { segmentRange ->
                 val shaped = shapeSegment(decision, segmentRange)
-                val word = shaped.clusters.singleOrNull()
-                val isLatin = decision.role == FontRole.LatinText && word != null && word.text.isNotEmpty()
-                val w = if (isLatin) word.text else ""
+                val isLatin = decision.role == FontRole.LatinText && segmentRange.length > 0
+                val w = if (isLatin) text.substring(segmentRange.start, segmentRange.end) else ""
                 val allLetters = isLatin && w.all { it.isLetter() }
                 // §9.4 全大写缩写不断词；驼峰式在驼峰处断（无连字符）；含 '-' 在
                 // 已有连字符处断（§9.3，无新连字符）。以上都是 clean 断点（不进
                 // hyphenOffsets）。其余全字母词走 §9.2 音节 + 硬断（加合成连字符）。
-                val isAbbreviation = allLetters && w.length >= 2 && w.none { it.isLowerCase() }
-                val isCamelCase = allLetters && !isAbbreviation && (1 until w.length).any { w[it].isUpperCase() }
-                val cleanCuts = when {
-                    !isLatin -> emptyList()
-                    w.contains('-') -> existingHyphenCuts(segmentRange)
-                    isCamelCase -> camelCaseCuts(segmentRange)
-                    else -> emptyList()
-                }
-                val hyphenCuts = if (
-                    allLetters && !isAbbreviation && !isCamelCase && !w.contains('-') && cleanCuts.isEmpty()
+                val isAllCaps = allLetters && w.length >= 2 && w.none { it.isLowerCase() }
+                val isAbbreviation = isAllCaps && w.length < LATIN_OPAQUE_TOKEN_MIN_LENGTH
+                val isCamelCase = allLetters && !isAllCaps && !isAbbreviation &&
+                    (1 until w.length).any { w[it].isUpperCase() }
+                val tokenAdvance = shaped.clusters.sumOf { it.advance.toDouble() }.toFloat()
+                val syllableCuts = if (
+                    allLetters && !isAbbreviation && !isCamelCase && !w.contains('-')
                 ) {
-                    latinWordCuts(decision, segmentRange)
+                    hyphenator.hyphenate(w).distinct().sorted()
                 } else {
                     emptyList()
                 }
-                val allCuts = (cleanCuts + hyphenCuts).distinct().sorted()
+                val longestUnhyphenatedLetterPiece = if (allLetters) {
+                    val bounds = (listOf(0) + syllableCuts + listOf(w.length)).distinct().sorted()
+                    bounds.zipWithNext().maxOfOrNull { (a, b) -> b - a } ?: w.length
+                } else {
+                    0
+                }
+                val isLongUnhyphenatedLetterToken =
+                    allLetters && !isAbbreviation && !isCamelCase &&
+                        longestUnhyphenatedLetterPiece >= LATIN_OPAQUE_TOKEN_MIN_LENGTH
+                val isLongOpaqueLatinToken =
+                    isLongUnhyphenatedLetterToken || (isLatin && !allLetters && w.length >= LATIN_OPAQUE_TOKEN_MIN_LENGTH)
+                val cleanCuts = when {
+                    !isLatin -> emptyList()
+                    w.contains('-') -> existingHyphenCuts(segmentRange) +
+                        latinSeparatorCuts(segmentRange, tokenAdvance, isLongOpaqueLatinToken)
+                    isCamelCase -> camelCaseCuts(segmentRange)
+                    !allLetters -> latinSeparatorCuts(segmentRange, tokenAdvance, isLongOpaqueLatinToken)
+                    else -> emptyList()
+                }
+                val hyphenCuts = if (
+                    allLetters && !isAbbreviation && !isCamelCase &&
+                        !isLongUnhyphenatedLetterToken && !w.contains('-') && cleanCuts.isEmpty()
+                ) {
+                    latinWordCuts(decision, segmentRange, syllableCuts)
+                } else {
+                    emptyList()
+                }
+                val opaqueHardCuts = if (
+                    isLatin &&
+                    (!allLetters || isLongUnhyphenatedLetterToken) &&
+                    (tokenAdvance > measure || isLongOpaqueLatinToken)
+                ) {
+                    latinOpaqueHardCuts(decision, segmentRange, cleanCuts, isLongOpaqueLatinToken)
+                } else {
+                    emptyList()
+                }
+                val allCuts = (cleanCuts + hyphenCuts + opaqueHardCuts).distinct().sorted()
                 if (allCuts.isEmpty()) {
                     listOf(shaped)
                 } else {
@@ -672,14 +778,17 @@ class ExplainableStubParagraphLayoutEngine(
         // baseline by 基字 ascent + 注文 descent + gap.
         val baseAscent = metricDecisions.maxOfOrNull { it.layoutMetrics.ascent } ?: (fontSize * 0.88f)
         val baseDescent = metricDecisions.maxOfOrNull { it.layoutMetrics.descent } ?: (fontSize * 0.12f)
-        // 字身框 alignment reference (ADR 0030 follow-up): the 字身框 bottom of the
-        // BASE CJK font at the base size (so base body text keeps its baseline,
-        // shift 0). Non-Roman clusters shift so their 字身框 bottom meets this
-        // line. Roman clusters stay on the shared alphabetic baseline supplied
-        // by the CJK metrics; using their raw font-box centre makes Android Latin
-        // sit visibly too high.
+        // BaseIdeographicMetricReference (ADR 0002/0030): CJK body text AND CJK
+        // punctuation both normalize to an IdeographicEmBox on the shared Roman
+        // baseline. The reference therefore comes from any base-size ideographic
+        // metric, not only FontRole.CjkText; otherwise "MacBook。" has an
+        // ideographic line box but the punctuation is shifted toward Latin raw
+        // descent because no Han body cluster appears.
         val baseRefMetrics = metricDecisions
-            .firstOrNull { it.request.role == FontRole.CjkText && it.request.fontSize == fontSize }
+            .firstOrNull {
+                it.layoutMetrics.metricBox == MetricBox.IdeographicEmBox &&
+                    it.request.fontSize == fontSize
+            }
             ?.layoutMetrics
         val baseBoxDescent = baseRefMetrics?.descent ?: baseDescent
         // 注文 vertical extent: use the TYPOGRAPHIC box (sTypo — the visual letter box,
@@ -792,11 +901,20 @@ class ExplainableStubParagraphLayoutEngine(
         }
         // 行首/行尾禁则按解析出的 KinsokuLevel（CLREQ 四档）；空集 = 不处理档.
         val kinsokuRule = ClreqKinsokuRule(resolvedKinsoku.level)
+        val asciiBracketKinsoku = naturalClusters.cjkContextAsciiBracketKinsoku(clusterRoles)
         val forbiddenLineStartClusters: Set<Int> = naturalClusters.indices.filterTo(mutableSetOf()) { idx ->
-            kinsokuRule.forbiddenAtLineStart(naturalClusters[idx])
+            (
+                clusterRoles.getOrNull(idx).isCjkKinsokuRole() &&
+                    kinsokuRule.forbiddenAtLineStart(naturalClusters[idx])
+                ) ||
+                idx in asciiBracketKinsoku.forbiddenLineStartClusters
         }
         val forbiddenLineEndClusters: Set<Int> = naturalClusters.indices.filterTo(mutableSetOf()) { idx ->
-            kinsokuRule.forbiddenAtLineEnd(naturalClusters[idx])
+            (
+                clusterRoles.getOrNull(idx).isCjkKinsokuRole() &&
+                    kinsokuRule.forbiddenAtLineEnd(naturalClusters[idx])
+                ) ||
+                idx in asciiBracketKinsoku.forbiddenLineEndClusters
         }
         // LineEndHangingHyphen as a LAST resort (ADR 0029 amendment): a break
         // before one of these clusters is a syllable/hard-break continuation —
@@ -1073,11 +1191,14 @@ class ExplainableStubParagraphLayoutEngine(
         val finalClusters = finalGeometry.resolveClusters().map { c ->
             // 字身框 bottom alignment: shift so this cluster's ideographic box
             // bottom meets the base 字身框 bottom (0 for base font/size).
+            // ExplicitBaselineShiftSpan then stacks author intent (sup/subscript)
+            // on top of that metric alignment; Roman clusters still keep metric
+            // shift 0 but may receive the explicit style shift.
             val m = metricDecisions.firstOrNull {
                 c.range.start >= it.range.start && c.range.end <= it.range.end
             }?.layoutMetrics ?: return@map c
-            if (m.baselineClass == BaselineClass.Roman) return@map c
-            val shift = baseBoxDescent - m.descent
+            val metricShift = if (m.baselineClass == BaselineClass.Roman) 0f else baseBoxDescent - m.descent
+            val shift = c.baselineShift + metricShift + styleAt(c.range.start).baselineShift
             if (shift > -0.01f && shift < 0.01f) c else c.copy(baselineShift = shift)
         }
         val geometryDecisions = finalGeometry.toDecisionInfo()
@@ -1131,17 +1252,17 @@ class ExplainableStubParagraphLayoutEngine(
             // LineEndHangingPunctuation: the hung mark is excluded from the
             // measure-fill width (adjustedWidth) but kept in visualWidth —
             // it overflows the measure (突出版心).
-            val fillRange = if (lineCandidate.hangingClusterIndex != null) {
-                lineCandidate.clusterRange.first until lineCandidate.clusterRange.last
-            } else {
-                lineCandidate.clusterRange
-            }
-            val adjustedWidth = fillRange
-                .sumOf { trimmedClusters[it].advance.toDouble() }
+            val adjustedWidth = lineCandidate.clusterRange
+                .sumOf { idx ->
+                    if (idx == lineCandidate.hangingClusterIndex) 0.0 else trimmedClusters[idx].advance.toDouble()
+                }
                 .toFloat()
             val visualWidth = lineCandidate.clusterRange
                 .sumOf { finalClusters[it].advance.toDouble() }
                 .toFloat()
+            val hangingPunctuationAdvance = lineCandidate.hangingClusterIndex
+                ?.let { finalClusters[it].advance }
+                ?: 0f
             val hasDrawableContent = !lineCandidate.clusterRange.isEmptyClusterRange() &&
                 lineCandidate.clusterRange.any { finalClusters[it].displayText.isNotEmpty() }
             val baseIndent = when {
@@ -1179,6 +1300,7 @@ class ExplainableStubParagraphLayoutEngine(
                 naturalWidth = lineCandidate.naturalWidth,
                 adjustedWidth = adjustedWidth,
                 visualWidth = visualWidth,
+                hangingPunctuationAdvance = hangingPunctuationAdvance,
                 // GridBodyAlignment: the whole body shifts by the container
                 // slack offset; per-line indent (段首缩进 + 末行对齐) stacks on top.
                 indent = gridBodyOffset + baseIndent + alignmentInset,
@@ -1622,16 +1744,14 @@ class ExplainableStubParagraphLayoutEngine(
         return result
     }
 
-    private fun Map<Int, FontRole>.toRoleOverrideInfos(
+    private fun List<QuoteRoleDecision>.toRoleOverrideInfos(
         text: String,
         baseClassifier: FontRoleClassifier,
         context: FontRoleContext,
-        source: String,
-        reason: String,
     ): List<RoleOverrideInfo> =
-        entries
-            .sortedBy { it.key }
-            .map { (index, overriddenRole) ->
+        sortedBy { it.index }
+            .map { decision ->
+                val index = decision.index
                 val sourceText = text.substring(index, (index + 1).coerceAtMost(text.length))
                 val originalRole = baseClassifier
                     .classify(text, TextRange(index, index + 1), context)
@@ -1639,11 +1759,100 @@ class ExplainableStubParagraphLayoutEngine(
                     range = TextRange(index, index + 1),
                     sourceText = sourceText,
                     originalRole = originalRole.name,
-                    overriddenRole = overriddenRole.name,
-                    source = source,
-                    reason = reason,
+                    overriddenRole = decision.role.name,
+                    source = decision.source,
+                    reason = decision.reason,
                 )
             }
+
+    private data class AsciiBracketKinsoku(
+        val forbiddenLineStartClusters: Set<Int>,
+        val forbiddenLineEndClusters: Set<Int>,
+    )
+
+    private fun List<Cluster>.cjkContextAsciiBracketKinsoku(
+        clusterRoles: List<FontRole>,
+    ): AsciiBracketKinsoku {
+        val forbiddenLineStart = mutableSetOf<Int>()
+        val forbiddenLineEnd = mutableSetOf<Int>()
+        val openingStack = mutableMapOf<Char, MutableList<Int>>()
+
+        forEachIndexed { index, cluster ->
+            when (val bracket = cluster.singleAsciiBracketOrNull()) {
+                '(', '[', '{' -> openingStack.getOrPut(bracket) { mutableListOf() }.add(index)
+                ')', ']', '}' -> {
+                    val opening = asciiOpeningBracketFor(bracket)
+                    val openingIndex = openingStack[opening]?.removeLastOrNull() ?: return@forEachIndexed
+                    val interior = (openingIndex + 1) until index
+                    val hasCjkInterior = interior.any { i ->
+                        clusterRoles.getOrNull(i).isCjkTextualRole()
+                    }
+                    if (hasCjkInterior) {
+                        // CjkContextAsciiBracketKinsoku: typed ASCII brackets
+                        // keep their Latin face, but a short CJK parenthetical
+                        // must still obey CLREQ-style bracket placement.
+                        forbiddenLineEnd += openingIndex
+                        forbiddenLineStart += index
+                    }
+                }
+            }
+        }
+
+        return AsciiBracketKinsoku(forbiddenLineStart, forbiddenLineEnd)
+    }
+
+    private fun Cluster.singleAsciiBracketOrNull(): Char? =
+        displayText.singleOrNull()?.takeIf { it in "()[]{}" }
+
+    private fun asciiOpeningBracketFor(closing: Char): Char =
+        when (closing) {
+            ')' -> '('
+            ']' -> '['
+            '}' -> '{'
+            else -> closing
+        }
+
+    private fun FontRole?.isCjkTextualRole(): Boolean =
+        this == FontRole.CjkText || this == FontRole.CjkPunctuation
+
+    private fun FontRole?.isCjkKinsokuRole(): Boolean =
+        this == FontRole.CjkPunctuation
+
+    private fun String.isUrlLikeLatinToken(): Boolean {
+        val lower = lowercase()
+        return "://" in this || lower.startsWith("www.") || hasDomainLikeDot()
+    }
+
+    private fun String.hasDomainLikeDot(): Boolean =
+        indices.any { i ->
+            if (this[i] != '.' || i == 0 || i + 2 >= length) return@any false
+            if (!this[i - 1].isLetterOrDigit() || !this[i + 1].isLetterOrDigit()) return@any false
+            var tld = 0
+            var j = i + 1
+            while (j < length && this[j].isLetter()) {
+                tld += 1
+                j += 1
+            }
+            tld >= 2
+        }
+
+    private fun String.isLatinTokenBreakAfter(index: Int, keepUrlScheme: Boolean): Boolean {
+        if (index !in 0 until lastIndex) return false
+        return when (this[index]) {
+            '/' -> !keepUrlScheme || getOrNull(index - 1) != ':'
+            '.', '-', '_', '?', '&', '=', '#', '%', '~' -> true
+            else -> false
+        }
+    }
+
+    private fun String.hasBreakableLatinSolidus(): Boolean =
+        indices.any { i ->
+            this[i] == '/' &&
+                i > 0 &&
+                i < lastIndex &&
+                this[i - 1].isLetterOrDigit() &&
+                this[i + 1].isLetterOrDigit()
+        }
 
     private fun clusterRoleRanges(
         text: String,
@@ -2643,6 +2852,9 @@ private const val RUBY_STACK_GAP_EM = 0f
 /** `LatinForcedHyphenBreak` 硬断时尽量满足的左右边界（前二后三，同 en-US 连字）. */
 private const val HYPHEN_MIN_LEFT = 2
 private const val HYPHEN_MIN_RIGHT = 3
+
+/** `LatinOpaqueTokenBreak`: long non-lexical Latin tokens expose clean no-hyphen breakpoints. */
+private const val LATIN_OPAQUE_TOKEN_MIN_LENGTH = 24
 
 /**
  * 连字作为最后一档（ADR 0029 amendment）：整词换行后，若填满版心需要给每个汉字

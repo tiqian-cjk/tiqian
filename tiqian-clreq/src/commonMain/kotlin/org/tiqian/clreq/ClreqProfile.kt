@@ -402,8 +402,8 @@ data class PunctuationPolicy(
 object ClreqPunctuationPolicies {
     fun classify(char: Char): PunctuationClass =
         when (char) {
-            '“', '‘', '（', '《', '〈', '「', '『' -> PunctuationClass.Opening
-            '”', '’', '）', '》', '〉', '」', '』' -> PunctuationClass.Closing
+            '“', '‘', '（', '《', '〈', '「', '『', '【', '〔', '〖', '〘', '〚' -> PunctuationClass.Opening
+            '”', '’', '）', '》', '〉', '」', '』', '】', '〕', '〗', '〙', '〛' -> PunctuationClass.Closing
             '，', '、', '。', '；', '：', '！', '？' -> PunctuationClass.PauseOrStop
             '·' -> PunctuationClass.MiddleDot
             '・', '‧', '•' -> PunctuationClass.Interpunct

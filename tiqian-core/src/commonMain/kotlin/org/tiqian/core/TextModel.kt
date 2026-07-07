@@ -3,6 +3,14 @@ package org.tiqian.core
 data class TiqianTextContent(
     val text: String,
     val spans: List<TextSpan> = emptyList(),
+    /**
+     * Source offsets that must become cluster boundaries even when they carry no
+     * layout-affecting style. Render-only ranges such as links, colors, and
+     * underlines need exact occupied geometry; otherwise a range ending before
+     * trailing punctuation in a Latin cluster (`template|.`) falls back to
+     * proportional slicing.
+     */
+    val sourceBoundaries: Set<Int> = emptySet(),
 )
 
 data class TextSpan(
@@ -18,6 +26,12 @@ data class TextStyle(
     val fontWeight: Int = 400,
     /** Slant axis: italic/oblique typeface when the family offers one (ADR 0030 B 档). */
     val italic: Boolean = false,
+    /**
+     * Explicit author/style baseline offset in px (+down). This is separate from the
+     * engine's script/size metric alignment shift and stacks on top of it, e.g. for
+     * reference superscripts lowered from Compose `SpanStyle.baselineShift`.
+     */
+    val baselineShift: Float = 0f,
 )
 
 /**
@@ -40,9 +54,11 @@ data class DecorationSpan(
 data class ColorSpan(val start: Int, val end: Int, val argb: Int)
 
 /**
- * Render/semantic rich-text roles over a SOURCE range. These spans do not affect shaping,
- * breaking or justification: they reuse [LayoutResult] geometry after layout, so the source text
- * and CJK paragraph decisions stay owned by the core pipeline.
+ * Render/semantic rich-text roles over a SOURCE range. These spans do not add metrics,
+ * breaking penalties or justification rules: they reuse [LayoutResult] geometry after layout, so
+ * the source text and CJK paragraph decisions stay owned by the core pipeline. Their boundaries
+ * may still be passed through [TiqianTextContent.sourceBoundaries] so the engine can expose exact
+ * range geometry instead of slicing through a coalesced cluster.
  */
 data class RichTextSpan(
     val range: TextRange,
