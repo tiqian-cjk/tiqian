@@ -64,6 +64,34 @@ fun LayoutResult.positionedClusters(line: LineBox): List<PositionedCluster> {
 }
 
 /**
+ * Returns the visible glyph-ink bounds of the laid-out lines, in layout coordinates.
+ *
+ * This is intentionally separate from [positionedClusters]: ink overhang (notably italic
+ * Latin) may extend outside the occupied advance box, but selection, links, and hit testing
+ * must continue to use stable occupied geometry. Renderers use this only to avoid clipping
+ * real ink that belongs to already-emitted line boxes.
+ */
+fun LayoutResult.glyphInkBounds(): Rect? {
+    val positionsByRange = positionedClusters().associateBy { it.range }
+    var left = Float.POSITIVE_INFINITY
+    var top = Float.POSITIVE_INFINITY
+    var right = Float.NEGATIVE_INFINITY
+    var bottom = Float.NEGATIVE_INFINITY
+    for (run in glyphRuns) {
+        for (glyph in run.glyphs) {
+            val bounds = glyph.bounds ?: continue
+            val cluster = positionsByRange[glyph.clusterRange] ?: continue
+            left = minOf(left, cluster.drawX + glyph.x + bounds.left)
+            top = minOf(top, cluster.baseline + glyph.y + bounds.top)
+            right = maxOf(right, cluster.drawX + glyph.x + bounds.right)
+            bottom = maxOf(bottom, cluster.baseline + glyph.y + bounds.bottom)
+        }
+    }
+    if (!left.isFinite() || !top.isFinite() || !right.isFinite() || !bottom.isFinite()) return null
+    return Rect(left, top, right, bottom)
+}
+
+/**
  * Compose-like line lookup backed by Tiqian line boxes. End offsets attach to the previous line so
  * a caret at paragraph end stays on the final visible line.
  */

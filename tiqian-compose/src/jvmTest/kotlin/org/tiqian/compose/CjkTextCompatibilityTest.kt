@@ -9,6 +9,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -17,6 +18,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import org.tiqian.core.LayoutConstraints
+import org.tiqian.layout.ExplainableStubParagraphLayoutEngine
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -71,6 +74,7 @@ class CjkTextCompatibilityTest {
                     fontSize = 1.2.em,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Serif,
+                    baselineShift = BaselineShift.Superscript,
                     textDecoration = TextDecoration.Underline,
                 ),
             ) {
@@ -86,6 +90,34 @@ class CjkTextCompatibilityTest {
 
         assertTrue(compatibility.canPreserveAllKnownSemantics)
         assertEquals(emptySet(), compatibility.issues)
+    }
+
+    @Test
+    fun composeParagraphBaselineShiftLowersToMeasuredClusters() {
+        val result = ParagraphMeasurer(ExplainableStubParagraphLayoutEngine()).measure(
+            text = AnnotatedString("abc"),
+            constraints = LayoutConstraints(maxWidth = 400f),
+            density = Density(1f),
+            style = ComposeTextStyle(
+                fontSize = 20.sp,
+                baselineShift = BaselineShift.Superscript,
+            ),
+        )
+
+        assertEquals(
+            emptySet(),
+            AnnotatedString("abc").cjkTextCompatibility(
+                ComposeTextStyle(
+                    fontSize = 20.sp,
+                    baselineShift = BaselineShift.Superscript,
+                ),
+            ).issues,
+        )
+        assertEquals(
+            -BaselineShift.Superscript.multiplier * 20f,
+            result.clusters.single().baselineShift,
+            0.001f,
+        )
     }
 
     @Test
@@ -108,13 +140,12 @@ class CjkTextCompatibilityTest {
         val issues = text.cjkTextCompatibility().issues
 
         assertFalse(issues.isEmpty())
-        assertTrue(CjkTextCapabilityIssue.LinkAnnotations in issues)
         assertTrue(CjkTextCapabilityIssue.InlinePlaceholders in issues)
         assertTrue(CjkTextCapabilityIssue.UnknownStringAnnotations in issues)
     }
 
     @Test
-    fun linkStyledTextReportsOnlyLinkActionGap() {
+    fun linkStyledTextHasNoCapabilityIssue() {
         val text = buildAnnotatedString {
             withLink(LinkAnnotation.Url("https://example.com")) {
                 withStyle(SpanStyle(color = Color.Blue, textDecoration = TextDecoration.Underline)) {
@@ -125,8 +156,7 @@ class CjkTextCompatibilityTest {
 
         val issues = text.cjkTextCompatibility().issues
 
-        // Underline/color are preserved (RichTextSpan/ColorSpan); the only gap is the click action.
-        assertEquals(setOf(CjkTextCapabilityIssue.LinkAnnotations), issues)
+        assertEquals(emptySet(), issues)
     }
 
     @Test

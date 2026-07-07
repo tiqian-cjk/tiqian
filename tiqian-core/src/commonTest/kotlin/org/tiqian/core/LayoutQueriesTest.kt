@@ -121,6 +121,51 @@ class LayoutQueriesTest {
     }
 
     @Test
+    fun glyphInkBoundsKeepItalicOverhangSeparateFromOccupiedGeometry() {
+        val result = LayoutResult(
+            input = LayoutInput(
+                content = TiqianTextContent("f"),
+                textStyle = TextStyle(fontSize = 10f),
+                constraints = LayoutConstraints(maxWidth = 10f),
+            ),
+            size = Size(10f, 20f),
+            clusters = listOf(
+                Cluster(TextRange(0, 1), "f", fontKey = "latin", advance = 10f),
+            ),
+            glyphRuns = listOf(
+                GlyphRun(
+                    range = TextRange(0, 1),
+                    fontKey = "latin",
+                    glyphs = listOf(
+                        Glyph(
+                            id = 1u,
+                            clusterRange = TextRange(0, 1),
+                            advance = 10f,
+                            bounds = Rect(-3f, -9f, 12f, 2f),
+                        ),
+                    ),
+                    advance = 10f,
+                ),
+            ),
+            lines = listOf(
+                LineBox(
+                    range = TextRange(0, 1),
+                    clusterRange = 0..0,
+                    baseline = 14f,
+                    top = 0f,
+                    bottom = 20f,
+                    naturalWidth = 10f,
+                    adjustedWidth = 10f,
+                    visualWidth = 10f,
+                ),
+            ),
+        )
+
+        assertEquals(Rect(0f, 0f, 10f, 20f), result.positionedClusters().single().rect)
+        assertEquals(Rect(-3f, 5f, 12f, 16f), result.glyphInkBounds())
+    }
+
+    @Test
     fun lineAndBoxQueriesUseTiqianLineGeometry() {
         val result = sampleResult()
 

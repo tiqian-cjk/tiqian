@@ -2,7 +2,9 @@ package org.tiqian.compose
 
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PathMeasure
 import android.graphics.Rect
+import android.graphics.RectF
 import android.text.TextPaint
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -26,7 +28,9 @@ import org.tiqian.shaping.android.AndroidPositionedGlyphFontRegistry
 import org.tiqian.shaping.android.AndroidTypefaceResolver
 import org.tiqian.shaping.android.SystemAndroidTypefaceResolver
 import java.util.Locale
+import kotlin.math.ceil
 import kotlin.math.max
+import kotlin.math.min
 
 private val AndroidRendererTypefaces = SystemAndroidTypefaceResolver()
 
@@ -79,7 +83,12 @@ private fun drawAndroidGlyphs(
         }
         // CjkPunctuation clusters need the full-buffer clipped draw (context GSUB);
         // plain 汉字 are context-independent and keep the cheaper sub-range draw.
-        val clipToContext = run.role == FontRole.CjkPunctuation
+        //
+        // ItalicContextBufferLeakGuard: slanted context glyphs can overhang past
+        // the pen-span clip and appear as ink that does not belong to the target
+        // cluster. For italic punctuation, prefer target-only drawing over
+        // leaking the synthetic context buffer.
+        val clipToContext = run.role == FontRole.CjkPunctuation && !run.style.italic
         drawContextShapedText(canvas, cluster.displayText, drawX, baselineY, run.role, paint, clipToContext)
     }
 
@@ -151,22 +160,30 @@ private fun drawAndroidDecorations(
         style = Paint.Style.STROKE
         strokeWidth = (fontSize / 16f).coerceAtLeast(1f)
     }
-    val skipPad = strokePaint.strokeWidth.coerceAtLeast(1f)
+    val skipBandPad = strokePaint.strokeWidth.coerceAtLeast(1f)
+    val skipClearance = browserLikeSkipInkClearance(fontSize, strokePaint.strokeWidth)
     for (seg in result.debug.decorationSegments) {
         when (seg.kind) {
             DecorationKind.ProperNoun.name -> {
-                val skips = result.androidLineInkSkipIntervals(
-                    result.lines[seg.lineIndex], seg.top - skipPad, seg.top + skipPad, spans, typefaces,
+                drawAndroidStraightInterlinearLine(
+                    canvas = canvas,
+                    result = result,
+                    lineIndex = seg.lineIndex,
+                    left = seg.left,
+                    right = seg.right,
+                    lineY = seg.top,
+                    paint = strokePaint,
+                    skipBandPad = skipBandPad,
+                    skipClearance = skipClearance,
+                    spans = spans,
+                    typefaces = typefaces,
                 )
-                keptIntervals(seg.left, seg.right, skips, skipPad) { x0, x1 ->
-                    canvas.drawLine(x0, seg.top, x1, seg.top, strokePaint)
-                }
             }
             DecorationKind.BookTitle.name -> {
                 val skips = result.androidLineInkSkipIntervals(
-                    result.lines[seg.lineIndex], seg.top - skipPad, seg.top + skipPad, spans, typefaces,
+                    result.lines[seg.lineIndex], seg.top - skipBandPad, seg.top + skipBandPad, spans, typefaces,
                 )
-                keptIntervals(seg.left, seg.right, skips, skipPad) { x0, x1 ->
+                keptIntervals(seg.left, seg.right, skips, skipClearance) { x0, x1 ->
                     canvas.drawPath(wavyLinePath(x0, x1, seg.top, fontSize), strokePaint)
                 }
             }
@@ -211,7 +228,7 @@ private fun drawAndroidRichTextLines(
         style = Paint.Style.STROKE
         strokeWidth = (result.input.textStyle.fontSize / 16f).coerceAtLeast(1f)
     }
-    val skipPad = strokePaint.strokeWidth.coerceAtLeast(1f)
+    val skipBandPad = strokePaint.strokeWidth.coerceAtLeast(1f)
     // Skip-ink intervals re-measure the line's clusters — memoize per (line, band)
     // so several underline segments on one line pay for the walk once per draw.
     val skipCache = HashMap<Long, FloatArray>()
@@ -221,24 +238,56 @@ private fun drawAndroidRichTextLines(
         val style = spans.lastOrNull { seg.range.start >= it.range.start && seg.range.start < it.range.end }?.style
             ?: result.input.textStyle
         val rawLineY = if (role == RichTextRole.Underline) {
-            seg.baseline + style.fontSize * GENERIC_UNDERLINE_OFFSET_EM
+            // Reuse the same horizontal line geometry as 专名号: a close line below
+            // the CJK face, with skip-ink only for ink that actually crosses it.
+            seg.baseline + style.fontSize * INTERLINEAR_UNDERLINE_OFFSET_EM
         } else {
             seg.baseline - style.fontSize * GENERIC_LINE_THROUGH_OFFSET_EM
         }
         val lineY = rawLineY.coerceIn(seg.top + strokePaint.strokeWidth / 2f, seg.bottom - strokePaint.strokeWidth / 2f)
         strokePaint.color = seg.span.paint.argb ?: colorAt(seg.range.start, color, colorSpans)
         if (role == RichTextRole.Underline) {
-            val line = result.lines.getOrNull(seg.lineIndex) ?: continue
-            val cacheKey = (seg.lineIndex.toLong() shl 32) or (lineY.toRawBits().toLong() and 0xFFFFFFFFL)
-            val skips = skipCache.getOrPut(cacheKey) {
-                result.androidLineInkSkipIntervals(line, lineY - skipPad, lineY + skipPad, spans, typefaces)
-            }
-            keptIntervals(seg.left, seg.right, skips, skipPad) { x0, x1 ->
-                canvas.drawLine(x0, lineY, x1, lineY, strokePaint)
-            }
+            drawAndroidStraightInterlinearLine(
+                canvas = canvas,
+                result = result,
+                lineIndex = seg.lineIndex,
+                left = seg.left,
+                right = seg.right,
+                lineY = lineY,
+                paint = strokePaint,
+                skipBandPad = skipBandPad,
+                skipClearance = browserLikeSkipInkClearance(style.fontSize, strokePaint.strokeWidth),
+                spans = spans,
+                typefaces = typefaces,
+                skipCache = skipCache,
+            )
         } else {
             canvas.drawLine(seg.left, lineY, seg.right, lineY, strokePaint)
         }
+    }
+}
+
+private fun drawAndroidStraightInterlinearLine(
+    canvas: android.graphics.Canvas,
+    result: LayoutResult,
+    lineIndex: Int,
+    left: Float,
+    right: Float,
+    lineY: Float,
+    paint: Paint,
+    skipBandPad: Float,
+    skipClearance: Float,
+    spans: List<TextSpan>,
+    typefaces: AndroidTypefaceResolver,
+    skipCache: MutableMap<Long, FloatArray>? = null,
+) {
+    val line = result.lines.getOrNull(lineIndex) ?: return
+    val cacheKey = (lineIndex.toLong() shl 32) or (lineY.toRawBits().toLong() and 0xFFFFFFFFL)
+    val skips = skipCache?.getOrPut(cacheKey) {
+        result.androidLineInkSkipIntervals(line, lineY - skipBandPad, lineY + skipBandPad, spans, typefaces)
+    } ?: result.androidLineInkSkipIntervals(line, lineY - skipBandPad, lineY + skipBandPad, spans, typefaces)
+    keptIntervals(left, right, skips, skipClearance) { x0, x1 ->
+        canvas.drawLine(x0, lineY, x1, lineY, paint)
     }
 }
 
@@ -393,24 +442,91 @@ private fun LayoutResult.androidLineInkSkipIntervals(
     spans: List<TextSpan>,
     typefaces: AndroidTypefaceResolver,
 ): FloatArray {
+    val out = mutableListOf<Float>()
     val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         textLocale = Locale.forLanguageTag(input.textStyle.locale)
     }
-    val bounds = Rect()
-    val out = mutableListOf<Float>()
+    val path = Path()
+    val bounds = RectF()
     forEachAndroidPositionedCluster(spans) { l, cluster, drawX, baselineY, run ->
         if (l !== line) return@forEachAndroidPositionedCluster
+        // AndroidOutlineBandSkipInk: TextBlob.getIntercepts is Skia-only, so the
+        // Android renderer derives equivalent intervals from the real outline
+        // path and the underline's vertical band. This skips only the ink slice
+        // that touches the line, not the whole glyph or text cluster.
         paint.textSize = run.style.fontSize
         paint.typeface = typefaces.resolve(run.role, run.style.fontFamilies, run.style.fontWeight, run.style.italic)
-        paint.getTextBounds(cluster.displayText, 0, cluster.displayText.length, bounds)
-        val top = baselineY + bounds.top
-        val bottom = baselineY + bounds.bottom
-        if (bottom >= bandTop && top <= bandBottom) {
-            out += drawX + bounds.left
-            out += drawX + bounds.right
+        paint.fontFeatureSettings = null
+        path.reset()
+        paint.getTextPath(cluster.displayText, 0, cluster.displayText.length, drawX, baselineY, path)
+        if (path.isEmpty) return@forEachAndroidPositionedCluster
+        path.computeBounds(bounds, true)
+        if (bounds.bottom < bandTop || bounds.top > bandBottom) return@forEachAndroidPositionedCluster
+        path.horizontalBandIntercepts(bandTop, bandBottom).forEach { out += it }
+    }
+    return out.toFloatArray()
+}
+
+private data class PathPoint(val x: Float, val y: Float)
+
+private fun Path.horizontalBandIntercepts(bandTop: Float, bandBottom: Float): FloatArray {
+    if (isEmpty) return FloatArray(0)
+    val contours = flattenedContours(errorPx = 0.4f)
+    if (contours.isEmpty()) return FloatArray(0)
+    val out = mutableListOf<Float>()
+    val bandHeight = (bandBottom - bandTop).coerceAtLeast(0f)
+    val samples = max(1, ceil(bandHeight / 0.5f).toInt())
+    for (sample in 0..samples) {
+        val y = bandTop + bandHeight * (sample.toFloat() / samples)
+        val xs = mutableListOf<Float>()
+        for (contour in contours) {
+            for (index in 0 until contour.lastIndex) {
+                val a = contour[index]
+                val b = contour[index + 1]
+                if ((a.y <= y && y < b.y) || (b.y <= y && y < a.y)) {
+                    val t = (y - a.y) / (b.y - a.y)
+                    xs += a.x + (b.x - a.x) * t
+                }
+            }
+        }
+        xs.sort()
+        var index = 0
+        while (index + 1 < xs.size) {
+            val left = xs[index]
+            val right = xs[index + 1]
+            if (right > left + 0.25f) {
+                out += left
+                out += right
+            }
+            index += 2
         }
     }
     return out.toFloatArray()
+}
+
+private fun Path.flattenedContours(errorPx: Float): List<List<PathPoint>> {
+    val contours = mutableListOf<List<PathPoint>>()
+    val measure = PathMeasure(this, false)
+    val step = errorPx.coerceAtLeast(0.25f)
+    do {
+        val length = measure.length
+        if (length <= 0f) continue
+        val count = ceil(length / step).toInt().coerceAtLeast(1)
+        val points = ArrayList<PathPoint>(count + 2)
+        val position = FloatArray(2)
+        for (index in 0..count) {
+            val distance = length * (index.toFloat() / count)
+            if (measure.getPosTan(distance, position, null)) {
+                val point = PathPoint(position[0], position[1])
+                if (points.lastOrNull() != point) points += point
+            }
+        }
+        val first = points.firstOrNull()
+        val last = points.lastOrNull()
+        if (first != null && last != null && first != last) points += first
+        if (points.size >= 3) contours += points
+    } while (measure.nextContour())
+    return contours
 }
 
 private inline fun keptIntervals(
@@ -455,5 +571,10 @@ private fun wavyLinePath(left: Float, right: Float, y: Float, fontSize: Float): 
 }
 
 private const val INLINE_CODE_BACKGROUND_COLOR: Int = 0x1A000000
-private const val GENERIC_UNDERLINE_OFFSET_EM = 0.12f
+private const val INTERLINEAR_UNDERLINE_OFFSET_EM = 0.18f
 private const val GENERIC_LINE_THROUGH_OFFSET_EM = 0.30f
+private const val BROWSER_LIKE_SKIP_INK_CLEARANCE_EM = 0.10f
+private const val BROWSER_LIKE_SKIP_INK_CLEARANCE_MAX = 13f
+
+private fun browserLikeSkipInkClearance(fontSize: Float, strokeWidth: Float): Float =
+    min(max(strokeWidth, fontSize * BROWSER_LIKE_SKIP_INK_CLEARANCE_EM), BROWSER_LIKE_SKIP_INK_CLEARANCE_MAX)

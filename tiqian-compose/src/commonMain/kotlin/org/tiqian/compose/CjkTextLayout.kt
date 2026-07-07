@@ -1,10 +1,14 @@
 package org.tiqian.compose
 
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.AlignmentLine
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.Measurable
@@ -17,9 +21,11 @@ import androidx.compose.ui.node.SemanticsModifierNode
 import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.node.invalidateMeasurement
 import androidx.compose.ui.node.invalidateSemantics
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import org.tiqian.clreq.ClreqProfile
@@ -32,6 +38,10 @@ import org.tiqian.core.RichTextSpan
 import org.tiqian.core.RubySpan
 import org.tiqian.core.TextSpan
 import org.tiqian.core.TextStyle
+import org.tiqian.core.getBoundingBoxes
+import org.tiqian.core.glyphInkBounds
+import org.tiqian.core.getOffsetForPosition
+import org.tiqian.core.positionedClusters
 import kotlin.math.ceil
 
 /**
@@ -67,19 +77,61 @@ internal fun CjkTextLayout(
     onTextLayout: (LayoutResult) -> Unit = {},
 ) {
     validateTextControls(maxLines, minLines, overflow)
+    // CjkTextLinkClicks: Compose-Text-parity link handling. A tap is hit-tested
+    // against the ENGINE's own geometry (getOffsetForPosition + bounding boxes —
+    // no hidden Compose Text layout, ADR 0036), then dispatched to the link's
+    // LinkInteractionListener, falling back to LocalUriHandler for plain Urls.
+    val hasLinks = semanticsText.hasLinkAnnotations(0, semanticsText.length)
+    val latestResult = remember { arrayOfNulls<LayoutResult>(1) }
+    val latestOnTextLayout = rememberUpdatedState(onTextLayout)
+    val reportLayout: (LayoutResult) -> Unit = remember(hasLinks) {
+        { result ->
+            if (hasLinks) latestResult[0] = result
+            latestOnTextLayout.value(result)
+        }
+    }
+    val uriHandler = LocalUriHandler.current
+    val linkModifier = if (hasLinks) {
+        Modifier.pointerInput(semanticsText, uriHandler) {
+            detectTapGestures { position ->
+                val result = latestResult[0] ?: return@detectTapGestures
+                val offset = result.getOffsetForPosition(position.x, position.y)
+                if (semanticsText.length == 0) return@detectTapGestures
+                val queryStart = offset.coerceIn(0, semanticsText.length - 1)
+                val hit = semanticsText
+                    .getLinkAnnotations(queryStart, queryStart + 1)
+                    .firstOrNull { range ->
+                        result.getBoundingBoxes(range.start, range.end).any { box ->
+                            position.x >= box.left && position.x <= box.right &&
+                                position.y >= box.top && position.y <= box.bottom
+                        }
+                    } ?: return@detectTapGestures
+                val link = hit.item
+                val listener = link.linkInteractionListener
+                when {
+                    listener != null -> listener.onClick(link)
+                    link is LinkAnnotation.Url -> uriHandler.openUri(link.url)
+                }
+            }
+        }
+    } else {
+        Modifier
+    }
     // Backed by a single Modifier.Node (like BasicText): it owns BOTH measure and draw,
-    // and its update() explicitly invalidates measurement AND draw on any param change.
-    // That's what makes editing repaint even when the new content lays out to the SAME
-    // size — routing a measure-phase result through snapshot state + drawBehind only
-    // repaints on relayout, leaving stale glyphs while typing.
+    // so update() can request measurement+draw for layout changes and draw only for
+    // paint changes. That's what makes editing repaint even when the new content lays
+    // out to the SAME size — routing a measure-phase result through snapshot state +
+    // drawBehind only repaints on relayout, leaving stale glyphs while typing.
     Box(
-        modifier.then(
-            CjkTextLayoutElement(
-                text, semanticsText, textStyle, paragraphStyle, color,
-                decorations, colorSpans, richTextSpans, spans, rubySpans,
-                softWrap, overflow, maxLines, minLines, measurer, onTextLayout,
+        modifier
+            .then(linkModifier)
+            .then(
+                CjkTextLayoutElement(
+                    text, semanticsText, textStyle, paragraphStyle, color,
+                    decorations, colorSpans, richTextSpans, spans, rubySpans,
+                    softWrap, overflow, maxLines, minLines, measurer, reportLayout,
+                ),
             ),
-        ),
     )
 }
 
@@ -167,6 +219,10 @@ private class CjkTextLayoutNode(
     private var result: LayoutResult? = null
     private var drawClipWidth: Float = 0f
     private var drawClipHeight: Float = 0f
+    private var drawClipLeft: Float = 0f
+    private var drawClipTop: Float = 0f
+    private var drawClipRight: Float = 0f
+    private var drawClipBottom: Float = 0f
 
     fun update(
         text: String,
@@ -188,17 +244,36 @@ private class CjkTextLayoutNode(
     ) {
         validateTextControls(maxLines, minLines, overflow)
         // Split invalidation like BasicText: layout-affecting params re-measure
-        // (and must ALSO repaint — same-size relayout does not imply redraw);
-        // render-only params (color/colorSpans/richTextSpans, clip mode) repaint
-        // without re-running the paragraph engine.
+        // (and must ALSO repaint — same-size relayout does not imply redraw).
+        // Render-only paint changes only request redraw; render-only range
+        // boundary changes also request measurement so the engine can expose
+        // exact occupied geometry for source ranges.
+        val oldSourceBoundaries = sourceBoundariesFor(
+            textLength = this.text.length,
+            decorations = this.decorations,
+            colorSpans = this.colorSpans,
+            richTextSpans = this.richTextSpans,
+            spans = this.spans,
+            rubySpans = this.rubySpans,
+        )
+        val newSourceBoundaries = sourceBoundariesFor(
+            textLength = text.length,
+            decorations = decorations,
+            colorSpans = colorSpans,
+            richTextSpans = richTextSpans,
+            spans = spans,
+            rubySpans = rubySpans,
+        )
         val layoutChanged = text != this.text || textStyle != this.textStyle ||
             paragraphStyle != this.paragraphStyle || decorations != this.decorations ||
             spans != this.spans || rubySpans != this.rubySpans ||
             softWrap != this.softWrap || maxLines != this.maxLines ||
-            minLines != this.minLines || measurer !== this.measurer
+            minLines != this.minLines || measurer !== this.measurer ||
+            oldSourceBoundaries != newSourceBoundaries
         val drawChanged = color != this.color || colorSpans != this.colorSpans ||
             richTextSpans != this.richTextSpans || overflow != this.overflow
         val semanticsChanged = semanticsText != this.semanticsText
+        val callbackChanged = onTextLayout !== this.onTextLayout
         this.text = text
         this.semanticsText = semanticsText
         this.textStyle = textStyle
@@ -214,7 +289,6 @@ private class CjkTextLayoutNode(
         this.maxLines = maxLines
         this.minLines = minLines
         this.measurer = measurer
-        // A new callback instance alone needs no invalidation — it fires on the next layout.
         this.onTextLayout = onTextLayout
         if (layoutChanged) {
             invalidateMeasurement()
@@ -223,6 +297,10 @@ private class CjkTextLayoutNode(
             invalidateDraw()
         }
         if (semanticsChanged) invalidateSemantics()
+        // Link hit-testing stores the latest LayoutResult through onTextLayout. When only
+        // annotations/callback wiring change, layout geometry is still valid but measure may not
+        // rerun, so hand the current result to the new callback.
+        if (callbackChanged && !layoutChanged) result?.let(onTextLayout)
     }
 
     override fun SemanticsPropertyReceiver.applySemantics() {
@@ -243,6 +321,14 @@ private class CjkTextLayoutNode(
             decorations = decorations,
             spans = spans,
             rubySpans = rubySpans,
+            sourceBoundaries = sourceBoundariesFor(
+                textLength = text.length,
+                decorations = decorations,
+                colorSpans = colorSpans,
+                richTextSpans = richTextSpans,
+                spans = spans,
+                rubySpans = rubySpans,
+            ),
         )
         result = laidOut
         onTextLayout(laidOut)
@@ -259,6 +345,24 @@ private class CjkTextLayoutNode(
             .toInt().coerceIn(constraints.minHeight, constraints.maxHeight)
         drawClipWidth = w.toFloat()
         drawClipHeight = h.toFloat()
+        val ink = laidOut.glyphInkBounds()
+        // LegalHangingInkClip: TextOverflow.Clip should still paint CJK hanging
+        // punctuation and hanging hyphens because the engine emitted them as part
+        // of the line, not as overflow text. Do not use raw visualWidth here:
+        // an over-long unwrapped run may also be wider than the node and should
+        // stay clipped. Only the explicit hanging fields are allowed past the edge.
+        val legalClipRight = laidOut.lines.maxOfOrNull { line ->
+            val punctuationEdge = minOf(drawClipWidth, line.indent + line.adjustedWidth) +
+                line.hangingPunctuationAdvance
+            val hyphenEdge = minOf(drawClipWidth, line.indent + line.visualWidth) +
+                line.hyphenAdvance
+            maxOf(drawClipWidth, punctuationEdge, hyphenEdge)
+        } ?: drawClipWidth
+        val legalClipLeft = laidOut.positionedClusters().minOfOrNull { it.drawX } ?: 0f
+        drawClipLeft = minOf(0f, legalClipLeft, ink?.left ?: 0f)
+        drawClipTop = minOf(0f, ink?.top ?: 0f)
+        drawClipRight = maxOf(drawClipWidth, legalClipRight, ink?.right ?: drawClipWidth)
+        drawClipBottom = maxOf(drawClipHeight, ink?.bottom ?: drawClipHeight)
         // Expose the first line's baseline so Row.alignByBaseline can line a 拼音 list
         // body (first line pushed down by its ruby band) up with its marker.
         val firstBaseline = laidOut.lines.firstOrNull()?.baseline?.let { ceil(it).toInt() } ?: AlignmentLine.Unspecified
@@ -271,7 +375,7 @@ private class CjkTextLayoutNode(
             if (overflow == TextOverflow.Visible) {
                 drawParagraph(it, color, colorSpans, richTextSpans, spans)
             } else {
-                clipRect(right = drawClipWidth, bottom = drawClipHeight) {
+                clipRect(left = drawClipLeft, top = drawClipTop, right = drawClipRight, bottom = drawClipBottom) {
                     drawScope.drawParagraph(it, color, colorSpans, richTextSpans, spans)
                 }
             }
@@ -287,6 +391,28 @@ private fun validateTextControls(maxLines: Int, minLines: Int, overflow: TextOve
     require(overflow == TextOverflow.Clip || overflow == TextOverflow.Visible) {
         "Only TextOverflow.Clip and TextOverflow.Visible are implemented. Ellipsis needs a Tiqian overflow marker model."
     }
+}
+
+private fun sourceBoundariesFor(
+    textLength: Int,
+    decorations: List<DecorationSpan>,
+    colorSpans: List<ColorSpan>,
+    richTextSpans: List<RichTextSpan>,
+    spans: List<TextSpan>,
+    rubySpans: List<RubySpan>,
+): Set<Int> = buildSet {
+    fun addBoundary(offset: Int) {
+        if (offset > 0 && offset < textLength) add(offset)
+    }
+    fun addRange(start: Int, end: Int) {
+        addBoundary(start)
+        addBoundary(end)
+    }
+    decorations.forEach { addRange(it.range.start, it.range.end) }
+    colorSpans.forEach { addRange(it.start, it.end) }
+    richTextSpans.forEach { addRange(it.range.start, it.range.end) }
+    spans.forEach { addRange(it.range.start, it.range.end) }
+    rubySpans.forEach { addRange(it.baseRange.start, it.baseRange.end) }
 }
 
 

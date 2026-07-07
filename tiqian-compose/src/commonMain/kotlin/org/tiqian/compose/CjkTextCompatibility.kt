@@ -7,7 +7,6 @@ import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle as ComposeTextStyle
 import androidx.compose.ui.text.font.GenericFontFamily
-import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
@@ -38,7 +37,7 @@ data class CjkTextCompatibility(
  */
 enum class CjkTextCapabilityIssue {
     ParagraphStyleRanges,
-    /** Link ranges are preserved as `RichTextSpan`; clickable/a11y actions are not implemented. */
+    /** Retained for callers compiled against older reports; current `LinkAnnotation` ranges and clicks are supported. */
     LinkAnnotations,
     UrlAnnotations,
     TtsAnnotations,
@@ -84,7 +83,6 @@ fun AnnotatedString.cjkTextCompatibility(
     val issues = linkedSetOf<CjkTextCapabilityIssue>()
 
     if (paragraphStyles.isNotEmpty()) issues += CjkTextCapabilityIssue.ParagraphStyleRanges
-    if (hasLinkAnnotations(0, length)) issues += CjkTextCapabilityIssue.LinkAnnotations
     if (getUrlAnnotations(0, length).isNotEmpty()) issues += CjkTextCapabilityIssue.UrlAnnotations
     if (getTtsAnnotations(0, length).isNotEmpty()) issues += CjkTextCapabilityIssue.TtsAnnotations
     if (text.any { it == InlinePlaceholderChar }) issues += CjkTextCapabilityIssue.InlinePlaceholders
@@ -119,7 +117,6 @@ private fun SpanStyle.collectCapabilityIssues(issues: MutableSet<CjkTextCapabili
     if (brush != null) issues += CjkTextCapabilityIssue.BrushForeground
     if (shadow != null && shadow != Shadow.None) issues += CjkTextCapabilityIssue.Shadow
     if (drawStyle != null && drawStyle != Fill) issues += CjkTextCapabilityIssue.DrawStyle
-    if (baselineShift != null && baselineShift != BaselineShift.None) issues += CjkTextCapabilityIssue.BaselineShift
     val geometricTransform = textGeometricTransform
     if (geometricTransform != null && !geometricTransform.isIdentity()) {
         issues += CjkTextCapabilityIssue.GeometricTransform

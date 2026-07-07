@@ -2,6 +2,11 @@
 
 - Status: Accepted
 - Date: 2026-06-24
+- Amendment 2026-07-07: `LinkAnnotation` pointer clicks are supported by hit-testing Tiqian's
+  own `LayoutResult` geometry; URL links fall back to `LocalUriHandler`.
+- Amendment 2026-07-07: `SpanStyle.baselineShift` is supported by lowering it to
+  `TextStyle.baselineShift` and stacking that explicit author shift on the engine's cluster
+  baseline geometry.
 
 ## Context
 
@@ -41,9 +46,9 @@ Keep the explicit Tiqian-native API, and add a Compose interop API beside it:
 
 The compatibility report is the renderer boundary, but it is not a host-renderer switch.
 Tiqian accepts the input shape; the report returns `canPreserveAllKnownSemantics = true` only when
-the current Compose frontend can preserve every detected feature. Link actions, URL/TTS annotations,
-inline placeholders, unknown string annotations, brush foregrounds, shadows, draw styles, baseline
-shifts, geometric transforms, locale lists, synthesis, font-feature settings, letter spacing,
+the current Compose frontend can preserve every detected feature. Legacy URL/TTS annotations,
+inline placeholders, unknown string annotations, brush foregrounds, shadows, draw styles,
+geometric transforms, locale lists, synthesis, font-feature settings, letter spacing,
 non-generic font families, platform styles, paragraph style ranges, and Compose paragraph controls
 are reported as Tiqian capability issues.
 
@@ -55,12 +60,20 @@ Supported Compose rich text remains the subset already wired through the real pi
 - `SpanStyle.color` as render-only `ColorSpan`;
 - `SpanStyle.fontSize` / `fontWeight` / `fontStyle` / generic `fontFamily` as layout-affecting
   `TextSpan`s; span-level `.em` font size remains relative to the resolved paragraph font size;
+- `SpanStyle.baselineShift` as layout-affecting `TextSpan.baselineShift`: Compose multipliers
+  resolve against the span's final font size, flip into Tiqian's +down coordinates, and stack with
+  the engine's metric baseline alignment;
 - `SpanStyle.background`, `TextDecoration.Underline`, and `TextDecoration.LineThrough` as
-  render-only `RichTextSpan`s painted from `LayoutResult` geometry; underline reuses Tiqian's
-  skip-ink primitive instead of drawing a raw line through glyph ink;
-- `LinkAnnotation` ranges as `RichTextRole.Link` source ranges. The range is preserved for geometry
-  and future actions, but clickable navigation and accessibility actions remain a separate frontend
-  slice and still appear in the capability report;
+  `RichTextSpan`s painted from `LayoutResult` geometry; their source edges are also passed as
+  cluster-boundary hints (`SourceRangeBoundaryClusterSplit`) so a link/underline ending before
+  trailing punctuation such as `template.` does not fall back to proportional slicing through one
+  Latin cluster. Underline reuses Tiqian's skip-ink primitive instead of drawing a raw line through
+  glyph ink;
+- `LinkAnnotation` ranges as `RichTextRole.Link` source ranges plus pointer click actions backed by
+  Tiqian geometry: taps are mapped through `LayoutResult.getOffsetForPosition`, verified against
+  `LayoutResult.getBoundingBoxes`, then dispatched to `linkInteractionListener` or, for
+  `LinkAnnotation.Url`, `LocalUriHandler.openUri`. Accessibility link actions are not claimed
+  beyond exposing the source `AnnotatedString` to semantics;
 - paragraph-level `TextStyle.textDecoration` / background reach the same rich-text render-role path
   by wrapping the source `AnnotatedString` in an outer span; source text and existing annotations are
   preserved;
@@ -68,7 +81,9 @@ Supported Compose rich text remains the subset already wired through the real pi
   `ParagraphStyle.lastLineAlignment` degree of freedom. Non-last lines remain CLREQ justified;
 - `softWrap=false` measures with an unbounded line width; `maxLines` trims the visible line boxes;
   `minLines` reserves extra measured height without inventing hidden clusters; `TextOverflow.Clip`
-  clips to the measured visible box and `TextOverflow.Visible` leaves overhang visible;
+  clips true overflow to the measured visible box but preserves engine-owned legal paint overhang
+  (`LineEndHangingPunctuation`, `LineEndHangingHyphen`, and ink overhang from emitted clusters);
+  `TextOverflow.Visible` leaves all overhang visible;
 - source mandatory breaks (`\n`, coalesced CRLF, UAX#14 mandatory controls) create zero-advance,
   unshaped break clusters; consecutive and trailing breaks preserve blank lines, while long source
   lines still auto-wrap before the hard break;
@@ -105,9 +120,9 @@ during dogfooding.
 - Frontend modules still do not make CLREQ/font-fallback/glue/kinsoku/justification decisions; they only
   lower style values and expose capability reports.
 - `CjkText` exposes the source `AnnotatedString` to Compose semantics for baseline screen-reader
-  text. Geometry-sensitive actions (links, selection, TalkBack character boxes) must be backed by
-  Tiqian `LayoutResult` queries such as offset/line/box/range hit testing, not by a hidden Compose
-  Text layout.
+  text. Link pointer actions are backed by Tiqian `LayoutResult` queries such as offset/box hit
+  testing, not by a hidden Compose Text layout; selection and TalkBack character boxes remain future
+  frontend work.
 - Vertical writing and JLREQ remain out of scope. The compatibility report can grow new reasons or
   supported features without changing source text semantics.
 
@@ -115,5 +130,6 @@ during dogfooding.
 
 ```shell
 ./gradlew :tiqian-compose:jvmTest --tests 'org.tiqian.compose.CjkTextCompatibilityTest'
+./gradlew :tiqian-compose:jvmTest --tests 'org.tiqian.compose.CjkTextLinkClickTest'
 ./gradlew :tiqian-compose:jvmTest --tests 'org.tiqian.compose.CjkTextRenderTest'
 ```

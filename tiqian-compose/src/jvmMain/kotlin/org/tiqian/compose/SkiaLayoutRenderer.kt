@@ -20,6 +20,8 @@ import org.jetbrains.skia.Paint
 import org.jetbrains.skia.PaintMode
 import org.jetbrains.skia.Rect
 import org.jetbrains.skia.shaper.Shaper
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Draws a [LayoutResult] onto the Compose desktop canvas. Pure presentation:
@@ -75,22 +77,26 @@ internal actual fun ContentDrawScope.drawParagraph(
             // any glyph ink that crosses it, via Skia's getIntercepts. For pure
             // CJK the line sits below the face → no intercepts → continuous; it
             // matters for Western descenders inside a 专名号/书名号 span.
-            val skipPad = framePaint.strokeWidth.coerceAtLeast(1f)
+            val skipBandPad = framePaint.strokeWidth.coerceAtLeast(1f)
+            val skipClearance = browserLikeSkipInkClearance(fontSize, framePaint.strokeWidth)
             for (seg in result.debug.decorationSegments) {
                 when (seg.kind) {
                     "ProperNoun" -> {
-                        val skips = result.lineInkSkipIntervals(
-                            result.lines[seg.lineIndex],
-                            cjkFont,
-                            latinFont,
-                            shaper,
-                            seg.top - skipPad,
-                            seg.top + skipPad,
-                            spans,
+                        drawSkiaStraightInterlinearLine(
+                            canvas = skCanvas,
+                            result = result,
+                            lineIndex = seg.lineIndex,
+                            left = seg.left,
+                            right = seg.right,
+                            lineY = seg.top,
+                            paint = framePaint,
+                            skipBandPad = skipBandPad,
+                            skipClearance = skipClearance,
+                            spans = spans,
+                            cjkFont = cjkFont,
+                            latinFont = latinFont,
+                            shaper = shaper,
                         )
-                        keptIntervals(seg.left, seg.right, skips, skipPad) { x0, x1 ->
-                            skCanvas.drawLine(x0, seg.top, x1, seg.top, framePaint)
-                        }
                     }
                     "BookTitle" -> {
                         val skips = result.lineInkSkipIntervals(
@@ -98,11 +104,11 @@ internal actual fun ContentDrawScope.drawParagraph(
                             cjkFont,
                             latinFont,
                             shaper,
-                            seg.top - skipPad,
-                            seg.top + skipPad,
+                            seg.top - skipBandPad,
+                            seg.top + skipBandPad,
                             spans,
                         )
-                        keptIntervals(seg.left, seg.right, skips, skipPad) { x0, x1 ->
+                        keptIntervals(seg.left, seg.right, skips, skipClearance) { x0, x1 ->
                             skCanvas.drawPath(org.tiqian.shaping.skia.wavyLinePath(x0, x1, seg.top, fontSize), framePaint)
                         }
                     }
@@ -225,7 +231,7 @@ private fun drawSkiaRichTextLines(
         mode = PaintMode.STROKE
         strokeWidth = (result.input.textStyle.fontSize / 16f).coerceAtLeast(1f)
     }
-    val skipPad = paint.strokeWidth.coerceAtLeast(1f)
+    val skipBandPad = paint.strokeWidth.coerceAtLeast(1f)
     // Skip-ink intervals re-shape the line's clusters — memoize per (line, band)
     // so several underline segments on one line pay for shaping once per draw.
     val skipCache = HashMap<Long, FloatArray>()
@@ -235,32 +241,60 @@ private fun drawSkiaRichTextLines(
         val style = spans.lastOrNull { seg.range.start >= it.range.start && seg.range.start < it.range.end }?.style
             ?: result.input.textStyle
         val rawLineY = if (role == RichTextRole.Underline) {
-            seg.baseline + style.fontSize * GENERIC_UNDERLINE_OFFSET_EM
+            // Reuse the same horizontal line geometry as 专名号: a close line below
+            // the CJK face, with skip-ink only for ink that actually crosses it.
+            seg.baseline + style.fontSize * INTERLINEAR_UNDERLINE_OFFSET_EM
         } else {
             seg.baseline - style.fontSize * GENERIC_LINE_THROUGH_OFFSET_EM
         }
         val lineY = rawLineY.coerceIn(seg.top + paint.strokeWidth / 2f, seg.bottom - paint.strokeWidth / 2f)
         paint.color = seg.span.paint.argb ?: colorAt(seg.range.start, color, colorSpans)
         if (role == RichTextRole.Underline) {
-            val line = result.lines.getOrNull(seg.lineIndex) ?: continue
-            val cacheKey = (seg.lineIndex.toLong() shl 32) or (lineY.toRawBits().toLong() and 0xFFFFFFFFL)
-            val skips = skipCache.getOrPut(cacheKey) {
-                result.lineInkSkipIntervals(
-                    line,
-                    cjkFont,
-                    latinFont,
-                    shaper,
-                    lineY - skipPad,
-                    lineY + skipPad,
-                    spans,
-                )
-            }
-            keptIntervals(seg.left, seg.right, skips, skipPad) { x0, x1 ->
-                canvas.drawLine(x0, lineY, x1, lineY, paint)
-            }
+            drawSkiaStraightInterlinearLine(
+                canvas = canvas,
+                result = result,
+                lineIndex = seg.lineIndex,
+                left = seg.left,
+                right = seg.right,
+                lineY = lineY,
+                paint = paint,
+                skipBandPad = skipBandPad,
+                skipClearance = browserLikeSkipInkClearance(style.fontSize, paint.strokeWidth),
+                spans = spans,
+                cjkFont = cjkFont,
+                latinFont = latinFont,
+                shaper = shaper,
+                skipCache = skipCache,
+            )
         } else {
             canvas.drawLine(seg.left, lineY, seg.right, lineY, paint)
         }
+    }
+}
+
+private fun drawSkiaStraightInterlinearLine(
+    canvas: org.jetbrains.skia.Canvas,
+    result: LayoutResult,
+    lineIndex: Int,
+    left: Float,
+    right: Float,
+    lineY: Float,
+    paint: Paint,
+    skipBandPad: Float,
+    skipClearance: Float,
+    spans: List<TextSpan>,
+    cjkFont: Font,
+    latinFont: Font,
+    shaper: Shaper,
+    skipCache: MutableMap<Long, FloatArray>? = null,
+) {
+    val line = result.lines.getOrNull(lineIndex) ?: return
+    val cacheKey = (lineIndex.toLong() shl 32) or (lineY.toRawBits().toLong() and 0xFFFFFFFFL)
+    val skips = skipCache?.getOrPut(cacheKey) {
+        result.lineInkSkipIntervals(line, cjkFont, latinFont, shaper, lineY - skipBandPad, lineY + skipBandPad, spans)
+    } ?: result.lineInkSkipIntervals(line, cjkFont, latinFont, shaper, lineY - skipBandPad, lineY + skipBandPad, spans)
+    keptIntervals(left, right, skips, skipClearance) { x0, x1 ->
+        canvas.drawLine(x0, lineY, x1, lineY, paint)
     }
 }
 
@@ -297,5 +331,10 @@ private inline fun keptIntervals(
 }
 
 private const val INLINE_CODE_BACKGROUND_COLOR: Int = 0x1A000000
-private const val GENERIC_UNDERLINE_OFFSET_EM = 0.12f
+private const val INTERLINEAR_UNDERLINE_OFFSET_EM = 0.18f
 private const val GENERIC_LINE_THROUGH_OFFSET_EM = 0.30f
+private const val BROWSER_LIKE_SKIP_INK_CLEARANCE_EM = 0.10f
+private const val BROWSER_LIKE_SKIP_INK_CLEARANCE_MAX = 13f
+
+private fun browserLikeSkipInkClearance(fontSize: Float, strokeWidth: Float): Float =
+    min(max(strokeWidth, fontSize * BROWSER_LIKE_SKIP_INK_CLEARANCE_EM), BROWSER_LIKE_SKIP_INK_CLEARANCE_MAX)

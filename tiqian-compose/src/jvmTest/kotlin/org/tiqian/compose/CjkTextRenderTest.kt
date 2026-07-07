@@ -19,9 +19,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.use
 import androidx.compose.ui.unit.sp
+import org.tiqian.core.Cluster
+import org.tiqian.core.LayoutInput
 import org.tiqian.core.LineEndReason
+import org.tiqian.core.LineBox
 import org.tiqian.core.LayoutResult
+import org.tiqian.core.Size
+import org.tiqian.core.TextRange
 import org.tiqian.core.ic
+import org.tiqian.layout.ParagraphLayoutEngine
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 import kotlin.test.Test
@@ -132,6 +138,68 @@ class CjkTextRenderTest {
         }
 
         assertEquals(1, limited?.lines?.size)
+    }
+
+    @Test
+    fun clipOverflowStillPaintsEngineHangingPunctuationWithoutGlyphBounds() {
+        val text = "中文中文，"
+        var measuredWidth = 0
+        val measurer = ParagraphMeasurer(
+            object : ParagraphLayoutEngine {
+                override fun layout(input: LayoutInput): LayoutResult {
+                    val clusters = listOf(
+                        Cluster(TextRange(0, 1), "中", fontKey = "cjk", advance = 16f),
+                        Cluster(TextRange(1, 2), "文", fontKey = "cjk", advance = 16f),
+                        Cluster(TextRange(2, 3), "中", fontKey = "cjk", advance = 16f),
+                        Cluster(TextRange(3, 4), "文", fontKey = "cjk", advance = 16f),
+                        Cluster(TextRange(4, 5), "，", fontKey = "cjk", advance = 8f),
+                    )
+                    return LayoutResult(
+                        input = input,
+                        size = Size(72f, 24f),
+                        clusters = clusters,
+                        glyphRuns = emptyList(),
+                        lines = listOf(
+                            LineBox(
+                                range = TextRange(0, text.length),
+                                clusterRange = clusters.indices,
+                                baseline = 18f,
+                                top = 0f,
+                                bottom = 24f,
+                                naturalWidth = 72f,
+                                adjustedWidth = 64f,
+                                visualWidth = 72f,
+                                hangingPunctuationAdvance = 8f,
+                                endReason = LineEndReason.AutoWrap,
+                            ),
+                        ),
+                    )
+                }
+            },
+        )
+
+        val image = ImageComposeScene(width = 120, height = 64) {
+            Box(Modifier.fillMaxSize().background(Color.White).padding(8.dp)) {
+                CjkText(
+                    text = text,
+                    modifier = Modifier.width(64.dp).onSizeChanged { measuredWidth = it.width },
+                    textStyle = CjkTextStyle(fontSize = 16.sp),
+                    overflow = TextOverflow.Clip,
+                    measurer = measurer,
+                )
+            }
+        }.use { scene -> scene.render().toComposeImageBitmap().toPixelMap() }
+
+        var overhangInk = 0
+        for (y in 0 until image.height) {
+            for (x in 72 until 82) {
+                val c = image[x, y]
+                if (c.red < 0.5f && c.green < 0.5f && c.blue < 0.5f) overhangInk++
+            }
+        }
+
+        assertEquals(64, measuredWidth)
+        assertTrue(overhangInk > 0, "Expected hung punctuation ink beyond the measured 64px box")
     }
 
     @Test

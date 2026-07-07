@@ -7,6 +7,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
@@ -70,6 +71,23 @@ class CjkAnnotatedTextTest {
         assertEquals(30f, span.style.fontSize) // 1.5 × 20 (em relative to base)
         assertEquals(700, span.style.fontWeight)
         assertEquals(listOf("serif"), span.style.fontFamilies) // generic token, role-resolved later
+    }
+
+    @Test
+    fun styleSpansLowerBaselineShiftAgainstResolvedFontSize() {
+        val base = TextStyle(fontSize = 20f)
+        val text = buildAnnotatedString {
+            append("正文")
+            withStyle(SpanStyle(fontSize = 0.75.em, baselineShift = BaselineShift.Superscript)) {
+                append("[1]")
+            }
+        }
+
+        val span = text.cjkStyleSpans(base, Density(1f)).single()
+
+        assertEquals(TextRange(2, 5), span.range)
+        assertEquals(15f, span.style.fontSize)
+        assertEquals(-BaselineShift.Superscript.multiplier * 15f, span.style.baselineShift, 0.001f)
     }
 
     @Test

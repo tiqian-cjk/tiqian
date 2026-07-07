@@ -119,9 +119,9 @@ internal fun AnnotatedString.cjkColorSpans(): List<ColorSpan> =
         .map { ColorSpan(it.start, it.end, it.item.color.toArgb()) }
 
 /**
- * Extracts render/semantic rich-text roles that do not affect shaping or breaking. These spans are
- * drawn from [LayoutResult] geometry after layout, so they preserve source ranges while avoiding a
- * renderer-side text layout fork.
+ * Extracts render/semantic rich-text roles. These spans add no layout rules of their own; their
+ * source edges are passed separately as cluster-boundary hints so [LayoutResult] geometry can
+ * preserve exact source ranges without a renderer-side text layout fork.
  */
 internal fun AnnotatedString.cjkRichTextSpans(): List<RichTextSpan> {
     val out = mutableListOf<RichTextSpan>()
@@ -163,19 +163,45 @@ internal fun AnnotatedString.cjkRichTextSpans(): List<RichTextSpan> {
 }
 
 /**
+ * Source range edges that should be exact cluster boundaries for geometry queries.
+ * Render-only ranges (color, underline, links) still need boxes that end at the
+ * authored source edge rather than a proportional slice through a larger Latin cluster.
+ */
+internal fun AnnotatedString.cjkSourceBoundaries(): Set<Int> {
+    val out = sortedSetOf<Int>()
+    fun addBoundary(offset: Int) {
+        if (offset > 0 && offset < length) out += offset
+    }
+    fun addRange(start: Int, end: Int) {
+        addBoundary(start)
+        addBoundary(end)
+    }
+    spanStyles.forEach { addRange(it.start, it.end) }
+    getLinkAnnotations(0, length).forEach { addRange(it.start, it.end) }
+    getStringAnnotations(CjkDecorationTag, 0, length).forEach { addRange(it.start, it.end) }
+    getStringAnnotations(CjkRubyTag, 0, length).forEach { addRange(it.start, it.end) }
+    getStringAnnotations(CjkBopomofoTag, 0, length).forEach { addRange(it.start, it.end) }
+    getStringAnnotations(CjkRichTextTag, 0, length).forEach { addRange(it.start, it.end) }
+    return out
+}
+
+/**
  * Flattens the layout-affecting `SpanStyle`s (`fontSize` / `fontWeight` /
- * `fontStyle`) into non-overlapping, fully-resolved [TextSpan]s for the engine +
- * renderer (rich-text 字号/字重/斜体, ADR 0030 B 档). Each segment's style is
+ * `fontStyle` / `baselineShift`) into non-overlapping, fully-resolved [TextSpan]s for the engine +
+ * renderer (rich-text 字号/字重/斜体/上标位移, ADR 0030 B 档). Each segment's style is
  * [base] with the covering overrides applied (later spans win), so unset fields
  * inherit the paragraph base — `.em` font size is relative to [base] (1.8.em =
  * 1.8× base, the natural inline-emphasis unit); `.sp` is resolved to px via
- * [density] (density + fontScale aware — NOT treated as raw px). Segments with no
- * layout-affecting override are dropped (color rides [cjkColorSpans]).
+ * [density] (density + fontScale aware — NOT treated as raw px). Compose baseline
+ * shift multipliers resolve against the segment's final font size and are flipped
+ * into Tiqian's +down coordinate system. Segments with no layout-affecting override
+ * are dropped (color rides [cjkColorSpans]).
  */
 internal fun AnnotatedString.cjkStyleSpans(base: TextStyle, density: Density): List<TextSpan> {
     val relevant = spanStyles.filter {
         it.item.fontSize != TextUnit.Unspecified || it.item.fontWeight != null ||
-            it.item.fontStyle != null || it.item.fontFamily != null
+            it.item.fontStyle != null || it.item.fontFamily != null ||
+            it.item.baselineShift != null
     }
     if (relevant.isEmpty()) return emptyList()
     val bounds = sortedSetOf(0, length)
@@ -192,6 +218,7 @@ internal fun AnnotatedString.cjkStyleSpans(base: TextStyle, density: Density): L
         var weight = base.fontWeight
         var italic = base.italic
         var families = base.fontFamilies
+        var baselineShiftMultiplier: Float? = null
         for (s in covering) {
             val unit = s.item.fontSize
             if (unit != TextUnit.Unspecified) {
@@ -203,14 +230,22 @@ internal fun AnnotatedString.cjkStyleSpans(base: TextStyle, density: Density): L
             }
             s.item.fontWeight?.let { weight = it.weight }
             s.item.fontStyle?.let { italic = it == FontStyle.Italic }
+            s.item.baselineShift?.let { baselineShiftMultiplier = it.multiplier }
             // Generic families (Serif/SansSerif/Monospace) carry a token name the
             // engine resolves role-aware; custom FontListFontFamily is not wired
             // (no portable name) and stays at base (ADR 0030 字体 limitation).
             (s.item.fontFamily as? GenericFontFamily)?.let { families = listOf(it.name) }
         }
+        val baselineShift = base.baselineShift - (baselineShiftMultiplier ?: 0f) * size
         out += TextSpan(
             TextRange(a, b),
-            base.copy(fontSize = size, fontWeight = weight, italic = italic, fontFamilies = families),
+            base.copy(
+                fontSize = size,
+                fontWeight = weight,
+                italic = italic,
+                fontFamilies = families,
+                baselineShift = baselineShift,
+            ),
         )
     }
     return out
@@ -238,6 +273,7 @@ fun ParagraphMeasurer.measure(
         decorations = text.cjkDecorations(),
         spans = text.cjkStyleSpans(core, density),
         rubySpans = text.cjkRubySpans(),
+        sourceBoundaries = text.cjkSourceBoundaries(),
     )
 }
 
@@ -261,6 +297,7 @@ fun ParagraphMeasurer.measure(
         decorations = lowered.text.cjkDecorations(),
         spans = lowered.text.cjkStyleSpans(core, density),
         rubySpans = lowered.text.cjkRubySpans(),
+        sourceBoundaries = lowered.text.cjkSourceBoundaries(),
     )
 }
 

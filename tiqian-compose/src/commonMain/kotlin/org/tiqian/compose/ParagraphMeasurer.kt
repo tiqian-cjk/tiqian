@@ -29,10 +29,11 @@ class ParagraphMeasurer(
         decorations: List<DecorationSpan> = emptyList(),
         spans: List<TextSpan> = emptyList(),
         rubySpans: List<RubySpan> = emptyList(),
+        sourceBoundaries: Set<Int> = emptySet(),
     ): LayoutResult =
         engine.layout(
             LayoutInput(
-                content = TiqianTextContent(text, spans),
+                content = TiqianTextContent(text, spans, sourceBoundaries),
                 textStyle = textStyle,
                 paragraphStyle = paragraphStyle,
                 constraints = constraints,

@@ -8,6 +8,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
@@ -76,9 +77,11 @@ private fun AnnotatedString.withParagraphRenderStyle(style: ComposeTextStyle): A
     val spanStyle = style.toSpanStyle()
     val renderStyle = SpanStyle(
         background = spanStyle.background,
+        baselineShift = spanStyle.baselineShift,
         textDecoration = spanStyle.textDecoration,
     )
     if (renderStyle.background == Color.Unspecified &&
+        (renderStyle.baselineShift == null || renderStyle.baselineShift == BaselineShift.None) &&
         (renderStyle.textDecoration == null || renderStyle.textDecoration == TextDecoration.None)
     ) {
         return this

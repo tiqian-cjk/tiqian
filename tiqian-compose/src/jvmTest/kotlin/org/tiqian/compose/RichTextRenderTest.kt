@@ -15,12 +15,22 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.use
 import org.jetbrains.skia.EncodedImageFormat
+import org.tiqian.core.LayoutResult
+import org.tiqian.core.RichTextRole
+import org.tiqian.core.TextRange
+import org.tiqian.core.getBoundingBoxes
+import org.tiqian.core.positionedClusters
+import org.tiqian.core.positionedRichTextSegments
+import org.tiqian.layout.ExplainableStubParagraphLayoutEngine
 import java.io.File
+import kotlin.math.roundToInt
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -67,4 +77,78 @@ class RichTextRenderTest {
         assertTrue(yellow > 600, "expected yellow background pixels, got $yellow")
         assertTrue(blue > 200, "expected blue text/underline pixels, got $blue")
     }
+
+    @Test
+    fun cjkUnderlineReusesInterlinearLineAndIsNotSkippedAway() {
+        var layout: LayoutResult? = null
+        val text = buildAnnotatedString {
+            withStyle(SpanStyle(color = Color.Blue, textDecoration = TextDecoration.Underline)) {
+                append("中文链接文字")
+            }
+        }
+        val fontSize = 40f
+
+        val image = ImageComposeScene(width = 360, height = 120) {
+            Box(Modifier.fillMaxSize().background(Color.White)) {
+                CjkText(
+                    text,
+                    modifier = Modifier.width(340.dp),
+                    textStyle = CjkTextStyle(fontSize = fontSize.sp),
+                    onTextLayout = { layout = it },
+                )
+            }
+        }.use { it.render() }
+
+        val result = layout ?: error("onTextLayout not called")
+        val boxes = result.getBoundingBoxes(0, text.length)
+        val left = boxes.minOf { it.left }.roundToInt().coerceAtLeast(0)
+        val right = boxes.maxOf { it.right }.roundToInt().coerceAtMost(image.width)
+        val y = (result.lines.single().baseline + fontSize * INTERLINEAR_UNDERLINE_OFFSET_EM_FOR_TEST)
+            .roundToInt()
+            .coerceIn(0, image.height - 1)
+
+        val px = image.toComposeImageBitmap().toPixelMap()
+        var underlinePixels = 0
+        for (yy in (y - 1).coerceAtLeast(0)..(y + 1).coerceAtMost(px.height - 1)) {
+            for (x in left until right) {
+                val c = px[x, yy]
+                if (c.blue > 0.65f && c.red < 0.35f && c.green < 0.45f) underlinePixels++
+            }
+        }
+
+        assertTrue(
+            underlinePixels > (right - left),
+            "expected CJK underline to survive skip-ink at interlinear-line y, got $underlinePixels",
+        )
+    }
+
+    @Test
+    fun underlineEndingBeforeLatinPunctuationUsesSourceBoundaryCluster() {
+        val text = buildAnnotatedString {
+            withStyle(SpanStyle(textDecoration = TextDecoration.Underline)) {
+                append("template")
+            }
+            append(".")
+        }
+        val result = ParagraphMeasurer(ExplainableStubParagraphLayoutEngine()).measure(
+            text = text,
+            constraints = org.tiqian.core.LayoutConstraints(maxWidth = 400f),
+            density = Density(1f),
+            textStyle = CjkTextStyle(fontSize = 16.sp),
+        )
+
+        val positioned = result.positionedClusters()
+        val punctuationCluster = positioned.single { it.range == TextRange("template".length, text.length) }
+        val templateRight = positioned
+            .filter { it.range.start >= 0 && it.range.end <= "template".length }
+            .maxOf { it.right }
+        val underline = result.positionedRichTextSegments(text.cjkRichTextSpans())
+            .single { it.span.role == RichTextRole.Underline }
+
+        assertEquals(TextRange(0, "template".length), underline.range)
+        assertEquals(templateRight, underline.right, absoluteTolerance = 0.01f)
+        assertEquals(punctuationCluster.left, underline.right, absoluteTolerance = 0.01f)
+    }
 }
+
+private const val INTERLINEAR_UNDERLINE_OFFSET_EM_FOR_TEST = 0.18f
