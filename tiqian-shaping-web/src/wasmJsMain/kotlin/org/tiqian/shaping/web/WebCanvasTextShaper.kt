@@ -14,19 +14,38 @@ import org.w3c.dom.CanvasRenderingContext2D
 import org.w3c.dom.HTMLCanvasElement
 
 /**
+ * The CJK and Latin CSS font stacks, supplied by the APPLICATION — Tiqian does
+ * not pick fonts. This SAME instance MUST feed both the shaper (measure) and the
+ * DOM renderer (draw), or advances won't match the drawn glyphs (measure == draw
+ * is the whole point; a mismatch is what made an earlier prototype's dash tofu).
+ */
+class WebFontFamilies(
+    /** CSS `font-family` for CJK text / punctuation / symbols. */
+    val cjk: String,
+    /** CSS `font-family` for Latin text runs. */
+    val latin: String,
+) {
+    fun forRole(role: FontRole): String = if (role == FontRole.LatinText) latin else cjk
+
+    /** For callers holding only the serialized role name (LayoutResult dumps). */
+    fun forRoleName(name: String?): String = if (name == FontRole.LatinText.name) latin else cjk
+}
+
+/**
  * `OffscreenMeasureTextShaping` (ADR 0039): the web shaping adapter. It MEASURES
  * with an offscreen 2D canvas — `measureText` for advance, `TextMetrics`
  * ink-box extents for ink bounds — and never rasterizes to screen (that's the
- * DOM renderer's job). The measuring font MUST equal the DOM render font, so the
- * caller supplies one [cssFontFor] mapping used by both.
+ * DOM renderer's job). The measuring [fonts] MUST be the SAME instance the DOM
+ * renderer draws with.
  *
  * Slice 1 scope: plain per-segment advance + ink. `halt` half-width body and
- * Han-context `locl` (measuring inside `中X中`) are follow-ups; without them the
- * engine degrades to policy-derived punctuation geometry exactly as the AWT
- * adapter does (ADR 0014) — a known, named gap, not a model change.
+ * Han-context `locl` are unavailable on web canvas (no `fontFeatureSettings`,
+ * `ctx.lang` doesn't affect `measureText`), so the engine degrades to
+ * policy-derived punctuation geometry exactly as the AWT adapter does (ADR 0014)
+ * — a platform limit, not a model change.
  */
 class WebCanvasTextShaper(
-    private val cssFontFor: (FontRole) -> String = ::defaultWebFontFamily,
+    private val fonts: WebFontFamilies,
 ) : TextShaper {
 
     private val ctx: CanvasRenderingContext2D by lazy {
@@ -40,7 +59,7 @@ class WebCanvasTextShaper(
         val source = input.text.substring(input.range.start, input.range.end)
         val display = input.displayText
 
-        ctx.font = "${size}px ${cssFontFor(input.fontDecision.role)}"
+        ctx.font = "${size}px ${fonts.forRole(input.fontDecision.role)}"
         val m = ctx.measureText(display)
         val advance = m.width.toFloat()
         // TextMetrics ink extents are distances from the text ORIGIN: left/ascent
@@ -81,21 +100,3 @@ class WebCanvasTextShaper(
         return ShapingResult(listOf(cluster), listOf(run), listOf(decision))
     }
 }
-
-/**
- * Default role → CSS font stack. Latin runs get a Latin family first; everything
- * else leads with a CJK family so shared punctuation resolves to its CJK glyph
- * (`PreferCjkForAmbiguousPunctuation`). The shaper and the DOM renderer MUST use
- * the SAME mapping (measure == draw), so both read [WebFonts].
- */
-object WebFonts {
-    const val LATIN = "\"Inter\", \"Source Han Sans SC\", \"Noto Sans CJK SC\", \"PingFang SC\", sans-serif"
-    const val CJK = "\"Source Han Sans SC\", \"Noto Sans CJK SC\", \"PingFang SC\", sans-serif"
-
-    fun forRole(role: FontRole): String = if (role == FontRole.LatinText) LATIN else CJK
-
-    /** For callers holding only the serialized role name (LayoutResult dumps). */
-    fun forRoleName(name: String?): String = if (name == FontRole.LatinText.name) LATIN else CJK
-}
-
-fun defaultWebFontFamily(role: FontRole): String = WebFonts.forRole(role)

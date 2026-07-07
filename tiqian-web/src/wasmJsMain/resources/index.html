@@ -14,6 +14,21 @@
 <body>
     <h1>提椠 · Web 渲染 <span class="sub">ADR 0039 · 真引擎 wasmJs 浏览器内布局</span></h1>
     <div id="app"></div>
+    <script>
+        // Source-faithful copy (ADR 0039 CopyTransparentSpacingSpans): the DOM shows
+        // CLREQ display forms (——→⸺), but copy must yield the SOURCE. Swap each
+        // substituted span's text back to its data-tq-src in a clone of the selection.
+        document.addEventListener('copy', function (e) {
+            var sel = window.getSelection();
+            if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+            var frag = sel.getRangeAt(0).cloneContents();
+            frag.querySelectorAll('[data-tq-src]').forEach(function (el) {
+                el.textContent = el.getAttribute('data-tq-src');
+            });
+            var text = frag.textContent;
+            if (text) { e.clipboardData.setData('text/plain', text); e.preventDefault(); }
+        });
+    </script>
     <script type="application/javascript" src="tiqian-web.js"></script>
 </body>
 </html>

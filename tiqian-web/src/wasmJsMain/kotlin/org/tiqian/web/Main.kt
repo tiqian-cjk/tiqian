@@ -10,6 +10,7 @@ import org.tiqian.core.TiqianTextContent
 import org.tiqian.layout.ExplainableStubParagraphLayoutEngine
 import org.tiqian.layout.LookaheadLineBreaker
 import org.tiqian.shaping.web.WebCanvasTextShaper
+import org.tiqian.shaping.web.WebFontFamilies
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLInputElement
 
@@ -30,9 +31,15 @@ private val paragraphs = listOf(
 private const val FONT_SIZE = 19f
 
 fun main() {
+    // The APPLICATION picks its fonts; the SAME instance feeds both the shaper
+    // (measure) and the renderer (draw) so advances match the drawn glyphs.
+    val fonts = WebFontFamilies(
+        cjk = "\"Source Han Sans SC\", \"Noto Sans CJK SC\", \"PingFang SC\", sans-serif",
+        latin = "\"Inter\", \"Source Han Sans SC\", \"Noto Sans CJK SC\", \"PingFang SC\", sans-serif",
+    )
     val engine = ExplainableStubParagraphLayoutEngine(
         lineBreaker = LookaheadLineBreaker(),
-        textShaper = WebCanvasTextShaper(),
+        textShaper = WebCanvasTextShaper(fonts),
     )
     val root = document.getElementById("app") as HTMLElement
 
@@ -76,7 +83,7 @@ fun main() {
                     ),
                 ),
             )
-            DomParagraphRenderer.render(para, result)
+            DomParagraphRenderer.render(para, result, fonts)
             stage.appendChild(para)
         }
     }
@@ -87,3 +94,5 @@ fun main() {
     root.appendChild(stage)
     relayout()
 }
+// Source-faithful copy is pure DOM glue (reads `data-tq-src`, no engine state),
+// so it lives in index.html's <script>, not here (ADR 0039 CopyTransparentSpacingSpans).

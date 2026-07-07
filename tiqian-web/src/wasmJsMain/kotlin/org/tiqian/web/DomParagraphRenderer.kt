@@ -3,7 +3,7 @@ package org.tiqian.web
 import kotlinx.browser.document
 import org.tiqian.core.LayoutResult
 import org.tiqian.core.positionedClusters
-import org.tiqian.shaping.web.WebFonts
+import org.tiqian.shaping.web.WebFontFamilies
 import org.w3c.dom.HTMLElement
 
 /**
@@ -21,7 +21,7 @@ import org.w3c.dom.HTMLElement
  */
 object DomParagraphRenderer {
 
-    fun render(host: HTMLElement, result: LayoutResult) {
+    fun render(host: HTMLElement, result: LayoutResult, fonts: WebFontFamilies) {
         while (host.firstChild != null) host.removeChild(host.firstChild!!)
         val fontSize = result.input.textStyle.fontSize
         val height = result.lines.lastOrNull()?.bottom ?: 0f
@@ -38,14 +38,17 @@ object DomParagraphRenderer {
                     cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
                 }?.role
                 host.appendChild(
-                    glyphSpan(cluster.displayText, pc.drawX, line.top, h, fontSize, WebFonts.forRoleName(roleName)),
+                    glyphSpan(
+                        cluster.displayText, cluster.text, pc.drawX, line.top, h, fontSize,
+                        fonts.forRoleName(roleName),
+                    ),
                 )
             }
             // EngineOwnedHyphenation: the engine reserved the hyphen inside the
             // measure; draw it at indent+visualWidth. The browser never hyphenates.
             if (line.hyphenAdvance > 0f) {
                 host.appendChild(
-                    glyphSpan("-", line.indent + line.visualWidth, line.top, h, fontSize, WebFonts.LATIN),
+                    glyphSpan("-", "-", line.indent + line.visualWidth, line.top, h, fontSize, fonts.latin),
                 )
             }
         }
@@ -53,6 +56,7 @@ object DomParagraphRenderer {
 
     private fun glyphSpan(
         text: String,
+        source: String,
         left: Float,
         top: Float,
         lineHeight: Float,
@@ -61,6 +65,9 @@ object DomParagraphRenderer {
     ): HTMLElement {
         val span = document.createElement("span") as HTMLElement
         span.textContent = text
+        // Source-faithful copy: a CLREQ-substituted cluster (——→⸺, ……→⋯) shows
+        // the display form but must COPY as source. The copy handler reads this.
+        if (source != text) span.setAttribute("data-tq-src", source)
         span.style.apply {
             setProperty("position", "absolute")
             setProperty("left", "${left}px")
