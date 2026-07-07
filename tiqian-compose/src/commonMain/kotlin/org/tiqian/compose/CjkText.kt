@@ -390,6 +390,11 @@ sealed interface ListMarker {
         override fun format(n: Int): String = "$n."
     }
 
+    /** 阿拉伯数字 + 自定义后缀：`1)`/`2)` 等，用于保留 Markdown 的 ordered delimiter。 */
+    data class DecimalSuffix(val suffix: String) : ListMarker {
+        override fun format(n: Int): String = "$n$suffix"
+    }
+
     /** 汉字数字 + 顿号：`一、` `二、` …（[suffix] 可改为 `）`/`.` 等）。 */
     data class CjkNumber(val suffix: String = "、") : ListMarker {
         override fun format(n: Int): String = cjkNumeral(n) + suffix

@@ -27,6 +27,8 @@ class CjkListTest {
     fun markersFormatPerKind() {
         assertEquals("1.", ListMarker.Decimal.format(1))
         assertEquals("10.", ListMarker.Decimal.format(10))
+        assertEquals("1)", ListMarker.DecimalSuffix(")").format(1))
+        assertEquals("10)", ListMarker.DecimalSuffix(")").format(10))
         assertEquals("一、", ListMarker.CjkNumber().format(1))
         assertEquals("十、", ListMarker.CjkNumber().format(10))
         assertEquals("二十一、", ListMarker.CjkNumber().format(21))
