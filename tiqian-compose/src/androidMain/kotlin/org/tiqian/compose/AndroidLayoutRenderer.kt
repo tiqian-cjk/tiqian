@@ -150,7 +150,7 @@ private fun drawAndroidDecorations(
     }
     for (dot in result.debug.decorationDecisions) {
         if (dot.applied && dot.dotDiameter > 0f) {
-            canvas.drawCircle(dot.anchorX, dot.anchorY, dot.dotDiameter / 2f, fillPaint)
+            canvas.drawCircle(dot.anchorX, dot.anchorY, dot.dotDiameter * EMPHASIS_DOT_SCALE / 2f, fillPaint)
         }
     }
 
@@ -555,13 +555,14 @@ private inline fun keptIntervals(
 
 private fun wavyLinePath(left: Float, right: Float, y: Float, fontSize: Float): Path {
     val path = Path()
-    val halfWave = (fontSize * 0.125f).coerceAtLeast(1f)
+    val halfWave = (fontSize * 0.2f).coerceAtLeast(1f)
     val amplitude = fontSize * 0.06f
     path.moveTo(left, y)
     var x = left
     var up = true
-    while (x < right) {
-        val nextX = (x + halfWave).coerceAtMost(right)
+    while (x < right - WAVY_ENDPOINT_EPSILON_PX) {
+        val rawNextX = x + halfWave
+        val nextX = if (rawNextX >= right - WAVY_ENDPOINT_EPSILON_PX) right else rawNextX
         val controlY = if (up) y - amplitude * 2f else y + amplitude * 2f
         path.quadTo((x + nextX) / 2f, controlY, nextX, y)
         x = nextX
@@ -571,10 +572,12 @@ private fun wavyLinePath(left: Float, right: Float, y: Float, fontSize: Float): 
 }
 
 private const val INLINE_CODE_BACKGROUND_COLOR: Int = 0x1A000000
+private const val EMPHASIS_DOT_SCALE = 0.85f
 private const val INTERLINEAR_UNDERLINE_OFFSET_EM = 0.18f
 private const val GENERIC_LINE_THROUGH_OFFSET_EM = 0.30f
 private const val BROWSER_LIKE_SKIP_INK_CLEARANCE_EM = 0.10f
 private const val BROWSER_LIKE_SKIP_INK_CLEARANCE_MAX = 13f
+private const val WAVY_ENDPOINT_EPSILON_PX = 0.01f
 
 private fun browserLikeSkipInkClearance(fontSize: Float, strokeWidth: Float): Float =
     min(max(strokeWidth, fontSize * BROWSER_LIKE_SKIP_INK_CLEARANCE_EM), BROWSER_LIKE_SKIP_INK_CLEARANCE_MAX)

@@ -55,12 +55,11 @@ internal actual fun ContentDrawScope.drawParagraph(
         drawTiqianGlyphs(skCanvas, result, cjkFont, latinFont, paint, shaper, colorSpans = colorSpans, spans = spans)
         drawSkiaRichTextLines(skCanvas, result, color, colorSpans, richTextSegments, spans, cjkFont, latinFont, shaper)
 
-        // Emphasis dots (ADR 0018): a filled circle of the engine-decided
-        // diameter centred on the anchor — smaller than the `•` glyph so it
-        // seats in the line gap without touching the next line.
+        // Emphasis dots (ADR 0018): paint a slightly smaller circle than the
+        // engine clearance diameter, centred on the engine anchor.
         for (dot in result.debug.decorationDecisions) {
             if (dot.applied && dot.dotDiameter > 0f) {
-                skCanvas.drawCircle(dot.anchorX, dot.anchorY, dot.dotDiameter / 2f, paint)
+                skCanvas.drawCircle(dot.anchorX, dot.anchorY, dot.dotDiameter * EMPHASIS_DOT_SCALE / 2f, paint)
             }
         }
 
@@ -331,6 +330,7 @@ private inline fun keptIntervals(
 }
 
 private const val INLINE_CODE_BACKGROUND_COLOR: Int = 0x1A000000
+private const val EMPHASIS_DOT_SCALE = 0.85f
 private const val INTERLINEAR_UNDERLINE_OFFSET_EM = 0.18f
 private const val GENERIC_LINE_THROUGH_OFFSET_EM = 0.30f
 private const val BROWSER_LIKE_SKIP_INK_CLEARANCE_EM = 0.10f
