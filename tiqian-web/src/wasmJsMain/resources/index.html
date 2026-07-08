@@ -22,6 +22,9 @@
             var sel = window.getSelection();
             if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
             var frag = sel.getRangeAt(0).cloneContents();
+            frag.querySelectorAll('[data-tq-copy-ignore]').forEach(function (el) {
+                el.remove();
+            });
             frag.querySelectorAll('[data-tq-src]').forEach(function (el) {
                 el.textContent = el.getAttribute('data-tq-src');
             });
