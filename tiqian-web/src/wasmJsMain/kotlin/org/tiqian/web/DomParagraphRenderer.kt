@@ -76,12 +76,14 @@ object DomParagraphRenderer {
                 val nat = naturalWidth[cluster.range] ?: cluster.advance
                 // Leading offset for the first glyph (段首缩进); the rest flow.
                 val leadingMargin = if (i == 0) pc.drawX else 0f
-                // Trailing gap = the engine's glue/justify after this glyph. Put it as
-                // SELECTABLE space so the highlight has no per-glyph hole: `letter-spacing`
-                // for single-code-point glyphs (CJK / punctuation / spaces — seamless), but
-                // `padding-right` for multi-char Latin words (letter-spacing would splay
-                // "the"→"t h e"). Both are covered by the native selection.
-                //
+                // Trailing gap = the engine's glue/justify after this glyph. It MUST land in
+                // a box the native selection covers, or the highlight gets a hole there.
+                // `letter-spacing` is covered (but splays a multi-letter word into "t h e");
+                // `padding-right` does NOT splay but is NOT covered by ::selection. So a
+                // single-glyph cluster carries its gap with letter-spacing, and a multi-letter
+                // word is split — its last letter (a single glyph) carries the gap with
+                // letter-spacing (`SelectableTrailingGapViaLastLetter`), keeping the word body
+                // intact and the gap selectable.
                 val trailingGap = if (i + 1 < cells.size) {
                     cells[i + 1].drawX - pc.drawX - nat
                 } else {
@@ -90,12 +92,16 @@ object DomParagraphRenderer {
                 val roleName = result.debug.fontDecisions.firstOrNull {
                     cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
                 }?.role
-                lineDiv.appendChild(
-                    glyphSpan(
-                        cluster.displayText, cluster.text, leadingMargin, trailingGap,
-                        cluster.displayText.length == 1, fonts.forRoleName(roleName),
-                    ),
-                )
+                val family = fonts.forRoleName(roleName)
+                val display = cluster.displayText
+                // Split only a plain (non-substituted) multi-letter word, so the two halves
+                // still copy back to the exact source; a substituted cluster stays whole.
+                if (display.length > 1 && trailingGap != 0f && cluster.text == display) {
+                    lineDiv.appendChild(glyphSpan(display.dropLast(1), display.dropLast(1), leadingMargin, 0f, false, family))
+                    lineDiv.appendChild(glyphSpan(display.takeLast(1), display.takeLast(1), 0f, trailingGap, true, family))
+                } else {
+                    lineDiv.appendChild(glyphSpan(display, cluster.text, leadingMargin, trailingGap, display.length == 1, family))
+                }
             }
             // EngineOwnedHyphenation: the engine reserved the hyphen inside the measure;
             // place it at indent+visualWidth. The browser never hyphenates.
