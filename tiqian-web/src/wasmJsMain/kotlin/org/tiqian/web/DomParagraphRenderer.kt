@@ -1,7 +1,11 @@
 package org.tiqian.web
 
 import kotlinx.browser.document
+import org.tiqian.core.ColorSpan
+import org.tiqian.core.DecorationKind
 import org.tiqian.core.LayoutResult
+import org.tiqian.core.RichTextRole
+import org.tiqian.core.RichTextSpan
 import org.tiqian.core.TextRange
 import org.tiqian.core.positionedClusters
 import org.tiqian.shaping.web.WebFontFamilies
@@ -34,12 +38,31 @@ import org.w3c.dom.HTMLElement
  * handler from `textContent` (which ignores block boundaries → no injected
  * newlines from soft wraps) with substituted spans (`——`→`⸺`) mapped back to
  * their `data-tq-src` source (ADR 0037 source-faithful copy).
+ *
+ * `CssNativeDecorations`: rich text is painted with per-cluster CSS, which on web
+ * gets NATIVE `text-decoration-skip-ink` — the underline / 专名号 / 书名号 (wavy)
+ * break around descenders for free, and stay continuous across the engine's
+ * `letter-spacing` gaps (unlike the predecessor 赫蹏, whose inserted-whitespace
+ * elements broke the line). 着重号 uses CSS `text-emphasis` on exactly the
+ * clusters the engine marked (Han only, punctuation skipped). Color / background
+ * ride the same per-cluster style.
  */
 object DomParagraphRenderer {
 
-    fun render(host: HTMLElement, result: LayoutResult, fonts: WebFontFamilies) {
+    fun render(
+        host: HTMLElement,
+        result: LayoutResult,
+        fonts: WebFontFamilies,
+        colorSpans: List<ColorSpan> = emptyList(),
+        richTextSpans: List<RichTextSpan> = emptyList(),
+    ) {
         while (host.firstChild != null) host.removeChild(host.firstChild!!)
         val fontSize = result.input.textStyle.fontSize
+        val decorations = result.input.decorations
+        // Clusters the engine actually dotted (着重号 skips punctuation, ADR 0018).
+        val emphasized = result.debug.decorationDecisions
+            .filter { it.applied && it.kind == DecorationKind.Emphasis.name }
+            .map { it.clusterRange }
 
         // Natural shaped width per cluster from the GLYPH advances (which exclude
         // layout-owned glue/justify — see the class doc). Cluster.advance carries
@@ -98,13 +121,14 @@ object DomParagraphRenderer {
                 }?.role
                 val family = fonts.forRoleName(roleName)
                 val display = cluster.displayText
+                val deco = decoFor(cluster.range, colorSpans, richTextSpans, decorations, emphasized)
                 // Split only a plain (non-substituted) multi-letter word, so the two halves
                 // still copy back to the exact source; a substituted cluster stays whole.
                 if (display.length > 1 && trailingGap != 0f && cluster.text == display) {
-                    lineDiv.appendChild(glyphSpan(display.dropLast(1), display.dropLast(1), leadingMargin, 0f, false, family))
-                    lineDiv.appendChild(glyphSpan(display.takeLast(1), display.takeLast(1), 0f, trailingGap, true, family))
+                    lineDiv.appendChild(glyphSpan(display.dropLast(1), display.dropLast(1), leadingMargin, 0f, false, family, deco))
+                    lineDiv.appendChild(glyphSpan(display.takeLast(1), display.takeLast(1), 0f, trailingGap, true, family, deco))
                 } else {
-                    lineDiv.appendChild(glyphSpan(display, cluster.text, leadingMargin, trailingGap, display.length == 1, family))
+                    lineDiv.appendChild(glyphSpan(display, cluster.text, leadingMargin, trailingGap, display.length == 1, family, deco))
                 }
             }
             // EngineOwnedHyphenation: the engine reserved the hyphen inside the measure;
@@ -117,7 +141,7 @@ object DomParagraphRenderer {
                     0f
                 }
                 lineDiv.appendChild(
-                    glyphSpan("-", "-", (line.indent + line.visualWidth) - flowEnd, 0f, true, fonts.latin),
+                    glyphSpan("-", "-", (line.indent + line.visualWidth) - flowEnd, 0f, true, fonts.latin, ClusterDeco()),
                 )
             }
             host.appendChild(lineDiv)
@@ -131,6 +155,7 @@ object DomParagraphRenderer {
         trailingGap: Float,
         singleGlyph: Boolean,
         fontFamily: String,
+        deco: ClusterDeco,
     ): HTMLElement {
         val span = document.createElement("span") as HTMLElement
         span.textContent = text
@@ -148,7 +173,77 @@ object DomParagraphRenderer {
             }
             setProperty("font-family", fontFamily)
             setProperty("white-space", "pre")
+            // CssNativeDecorations — continuous across letter-spacing, native skip-ink.
+            deco.color?.let { setProperty("color", it) }
+            deco.background?.let { setProperty("background-color", it) }
+            deco.textDecoration?.let {
+                setProperty("text-decoration", it)
+                deco.decorationColor?.let { c -> setProperty("text-decoration-color", c) }
+            }
+            if (deco.emphasis) {
+                setProperty("text-emphasis", "filled dot")
+                setProperty("text-emphasis-position", "under") // 着重号 sits UNDER the char (horizontal CJK)
+                setProperty("-webkit-text-emphasis", "filled dot")
+                setProperty("-webkit-text-emphasis-position", "under")
+            }
         }
         return span
     }
+
+    /** Per-cluster CSS resolved from the engine's render-only spans/decorations. */
+    private data class ClusterDeco(
+        val color: String? = null,
+        val background: String? = null,
+        val textDecoration: String? = null,
+        val decorationColor: String? = null,
+        val emphasis: Boolean = false,
+    )
+
+    private fun decoFor(
+        range: TextRange,
+        colorSpans: List<ColorSpan>,
+        richTextSpans: List<RichTextSpan>,
+        decorations: List<org.tiqian.core.DecorationSpan>,
+        emphasized: List<TextRange>,
+    ): ClusterDeco {
+        val off = range.start
+        val color = colorSpans.lastOrNull { off >= it.start && off < it.end }?.let { argbToCss(it.argb) }
+
+        val lines = LinkedHashSet<String>()
+        var wavy = false
+        var decorationColor: String? = null
+        var background: String? = null
+        for (s in richTextSpans) {
+            if (off < s.range.start || off >= s.range.end) continue
+            when (s.role) {
+                RichTextRole.Underline -> { lines += "underline"; s.paint.argb?.let { decorationColor = argbToCss(it) } }
+                RichTextRole.LineThrough -> lines += "line-through"
+                RichTextRole.Background -> s.paint.argb?.let { background = argbToCss(it) }
+                RichTextRole.InlineCode -> background = argbToCss(s.paint.argb ?: INLINE_CODE_BACKGROUND)
+                else -> {}
+            }
+        }
+        for (d in decorations) {
+            if (off < d.range.start || off >= d.range.end) continue
+            when (d.kind) {
+                DecorationKind.ProperNoun -> lines += "underline" // 专名号: straight underline
+                DecorationKind.BookTitle -> { lines += "underline"; wavy = true } // 书名号甲式: wavy
+                else -> {} // Emphasis handled via text-emphasis; Mourning frame is a later slice
+            }
+        }
+        val textDecoration = if (lines.isEmpty()) null else lines.joinToString(" ") + if (wavy) " wavy" else ""
+        val emphasis = emphasized.any { off >= it.start && off < it.end }
+        return ClusterDeco(color, background, textDecoration, decorationColor, emphasis)
+    }
+
+    /** ARGB Int → CSS `rgba(...)`. */
+    private fun argbToCss(argb: Int): String {
+        val a = ((argb ushr 24) and 0xFF) / 255.0
+        val r = (argb ushr 16) and 0xFF
+        val g = (argb ushr 8) and 0xFF
+        val b = argb and 0xFF
+        return "rgba($r, $g, $b, $a)"
+    }
+
+    private const val INLINE_CODE_BACKGROUND = 0x1A000000
 }
