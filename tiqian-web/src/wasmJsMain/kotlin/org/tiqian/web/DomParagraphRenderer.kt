@@ -59,6 +59,13 @@ object DomParagraphRenderer {
                 setProperty("line-height", "${h}px")
                 setProperty("white-space", "pre") // engine owns wrapping; never let the browser re-break
                 setProperty("font-size", "${fontSize}px")
+                // `FlushSelectionAtMeasure`: clip the line to the engine's content edge so a
+                // line-end half-width punctuation's blank right half, or a collapsed trailing
+                // space, extends NEITHER the ink NOR the selection highlight past the measure
+                // — the selection's right edge stays as even as the left. (`+ hanging` keeps
+                // any legitimately hung punctuation, ADR 0006, inside the clip.)
+                setProperty("width", "${line.indent + line.visualWidth + line.hangingPunctuationAdvance}px")
+                setProperty("overflow-x", "clip") // horizontal only — never clip Latin descenders
             }
 
             val cells = result.positionedClusters(line)
@@ -74,6 +81,7 @@ object DomParagraphRenderer {
                 // for single-code-point glyphs (CJK / punctuation / spaces — seamless), but
                 // `padding-right` for multi-char Latin words (letter-spacing would splay
                 // "the"→"t h e"). Both are covered by the native selection.
+                //
                 val trailingGap = if (i + 1 < cells.size) {
                     cells[i + 1].drawX - pc.drawX - nat
                 } else {
@@ -123,9 +131,10 @@ object DomParagraphRenderer {
             if (marginLeft != 0f) setProperty("margin-left", "${marginLeft}px")
             if (trailingGap != 0f) {
                 // Both are inside the native selection box (unlike margin); letter-spacing
-                // would splay a multi-letter word, so words use padding-right instead.
+                // would splay a multi-letter word, so words use padding-right instead
+                // (which cannot be negative — a rare clamp on the last word of a line).
                 if (singleGlyph) setProperty("letter-spacing", "${trailingGap}px")
-                else setProperty("padding-right", "${trailingGap}px")
+                else if (trailingGap > 0f) setProperty("padding-right", "${trailingGap}px")
             }
             setProperty("font-family", fontFamily)
             setProperty("white-space", "pre")
