@@ -1,21 +1,23 @@
 # ADR 0033: 注音 ruby（行间注 第二刀，右侧竖排 ㄅㄆㄇ + 调号）
 
-- Status: Accepted（几何 + 绘制已落地 2026-06-20，render-verify 调整中）
+- Status: Accepted（注音几何 + 绘制已落地；完整纵横对齐 deferred）
 - Date: 2026-06-20
 - Builds on [ADR 0032](0032-ruby-annotations.md)（拼音 ruby，上方）
 
 ## 实现状态
 
 输入侧（`RubyKind.Bopomofo`、`BopomofoParser`、`bopomofo`）+ 几何（`computeBopomofoDecisions`：30 份
-表映到字身框；纵横对齐每字 0.5em 预留）+ 绘制（符号填字身框；调号 CJK 字体 + 墨迹探测 → 缩到
-ink 宽 = 调号格 + 垂直居中）全部落地。`BopomofoDecisionInfo` 入 dump。`BopomofoLayoutTest` /
-`BopomofoParserTest` 守。逐情况几何按 CLREQ 配图 render-verify 微调中。
+表映到字身框；**已标注基字**右侧 0.5em 注音区预留）+ 绘制（符号填字身框；调号 CJK 字体 +
+墨迹探测 → 缩到 ink 宽 = 调号格 + 垂直居中）已落地。`BopomofoDecisionInfo` 入 dump。
+`BopomofoLayoutTest` / `BopomofoParserTest` 守。完整纵横对齐（段内每字统一预留）不在当前
+slice 宣称完成，留给后续 profile / 竖排相关能力。
 
 ## Context
 
 注音（ㄅㄆㄇ）与拼音几何完全不同：横排时注文在基字**右侧**、竖排 ㄅㄆㄇ + 调号，且采
-**纵横对齐**——每字右侧预留半字、注文落在其中。CLREQ §注音符号标音的排版 给了**逐情况配图**，
-绘制极严，本 ADR 把口述几何（用户逐条核过）钉死为实现规格。
+完整形态要求**纵横对齐**——每字右侧预留半字、注文落在其中。CLREQ §注音符号标音的排版
+给了**逐情况配图**，绘制极严。本 ADR 先钉死注音区内部几何与已标注基字的预留模型；全段
+每字预留另行推进。
 
 ## 输入模型 & 解析
 
@@ -35,8 +37,9 @@ ink 宽 = 调号格 + 垂直居中）全部落地。`BopomofoDecisionInfo` 入 d
 | 符号列 | 9 | 1–10 | ㄅㄆㄇ（+ 轻声） |
 | 调号列 | 5 | 10–15 | 平上去 / 入声 |
 
-**纵横对齐**：段内**每字**（含未标注的标点 / 西文 / 缩进）右侧预留这 15 份，注文落入其中——
-注音 present ⇒ 全段每字 advance += 0.5em（uniform）。
+**当前横排 v1**：仅已标注基字的右侧预留这 15 份，注文落入其中；相邻未标注文本保持正常
+advance。完整纵横对齐要求段内**每字**（含未标注的标点 / 西文 / 缩进）右侧统一预留 0.5em，
+但这属于后续能力，当前实现不宣称完成。
 
 ### 竖向（距框顶 0–30 份）
 
@@ -83,14 +86,16 @@ ink 宽 = 调号格 + 垂直居中）全部落地。`BopomofoDecisionInfo` 入 d
   `ideo`=−0.120(=sTypoDesc)、`idtp` 缺失(→sTypoAsc 0.880),故与旧值一致、零漂移。该字身框
   同时供**行高 + 拼音 + 注音**(三者都读 `typoAscent/typoDescent`,改度量来源即全跟上)。
   名分厘清:`icfb/icft` 才是内缩的真字面、`ideo/idtp` 是 1em em 框——本项目取后者作「字身框」基准。
-- advance：注音 present ⇒ 每字右侧 `RubySpan`-driven 结构性预留 0.5em（复用 ADR 0032 的
-  `rubySpreadByCluster` 思路，但这里是**每字**统一预留，纵横对齐）。
+- advance：`RubySpan.kind == Bopomofo` ⇒ 该 base range 的末 cluster 右侧结构性预留 0.5em
+  注音区（复用 ADR 0032 的 `rubySpreadByCluster` 思路）。完整纵横对齐的每字统一预留不在
+  当前实现内。
 - 绘制：每注音符号按 0.3em 字号画在其 9×9 份格；调号 5×5 / 轻声 2 高，按上表落位；都用
   注文专用字体（须含 ㄅㄆㄇ 字形）。`BopomofoDecisionInfo` 入 dump（逐符 + 调号位置）。
 - 验收：逐情况渲染 vs CLREQ 配图（绘制极严，render-verify loop）。
 
 ## Consequences
 
-- 动 advance（每字 +0.5em，纵横对齐）——比拼音影响大；无注音时零漂移。
+- 动 advance（已标注基字 +0.5em）——比拼音影响大；无注音时零漂移。完整纵横对齐仍需后续
+  profile / 排版模式承接。
 - 注文字体必须含 ㄅㄆㄇ（ADR 0032 的 per-span 字体能力正为此铺）。
 - 竖排雏形：ㄅㄆㄇ 竖直堆叠 + 调号摆位是竖排前哨。

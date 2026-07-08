@@ -137,9 +137,12 @@ class ExplainableStubParagraphLayoutEngine(
         val rubyFontWeight = (input.textStyle.fontWeight + RUBY_FONT_WEIGHT_BOOST).coerceIn(1, 900)
         // `BopomofoLegibilityWeightBoost`: right-side ㄅㄆㄇ is smaller and thinner
         // on Android CJK fonts, so it gets a stronger boost than pinyin ruby.
-        val bopomofoFontWeight = (input.textStyle.fontWeight + BOPOMOFO_FONT_WEIGHT_BOOST).coerceIn(1, 900)
-        // 拼音 (above-base) ruby only; 注音 (RubyKind.Bopomofo, right-side) is parsed +
-        // carried but its geometry/advance is the next slice (ADR 0033) — inert here.
+        // It follows the annotated base glyph's effective weight, not only the
+        // paragraph default: a bold base carries bold 注音 too.
+        fun bopomofoFontWeightAt(offset: Int): Int =
+            (styleAt(offset).fontWeight + BOPOMOFO_FONT_WEIGHT_BOOST).coerceIn(1, 900)
+        // 拼音 (above-base) ruby only; 注音 (RubyKind.Bopomofo, right-side) is parsed
+        // separately below because its geometry/advance/weight follow ADR 0033.
         val pinyinSpans = input.rubySpans.filter { it.kind == RubyKind.Pinyin }
         // SourceRangeBoundaryClusterSplit: span / annotation edges force cluster
         // splits so no cluster straddles a source range whose geometry is later
@@ -1373,6 +1376,7 @@ class ExplainableStubParagraphLayoutEngine(
             lineBoxes = lines,
             finalClusters = finalClusters,
             naturalClusters = naturalClusters,
+            measureRubyWidth = ::measureRubyWidth,
             rubyBaselineDrop = rubyBaselineDrop,
             rubyFontSize = rubyFontSize,
             rubyFontWeight = rubyFontWeight,
@@ -1386,7 +1390,7 @@ class ExplainableStubParagraphLayoutEngine(
             baseAscent = baseAscent,
             baseDescent = baseDescent,
             fontSize = fontSize,
-            bopomofoFontWeight = bopomofoFontWeight,
+            bopomofoFontWeightAt = ::bopomofoFontWeightAt,
         )
 
         val widestLine = lines.maxOfOrNull { it.indent + it.visualWidth + it.hyphenAdvance } ?: 0f
@@ -2285,6 +2289,7 @@ class ExplainableStubParagraphLayoutEngine(
         lineBoxes: List<LineBox>,
         finalClusters: List<Cluster>,
         naturalClusters: List<Cluster>,
+        measureRubyWidth: (String, List<String>) -> Float,
         rubyBaselineDrop: Float,
         rubyFontSize: Float,
         rubyFontWeight: Int,
@@ -2307,7 +2312,7 @@ class ExplainableStubParagraphLayoutEngine(
                     x += cluster.advance
                 }
                 if (!baseLeft.isNaN()) {
-                    val estRubyWidth = ruby.text.length * rubyFontSize * 0.5f // diagnostic only
+                    val rubyWidth = measureRubyWidth(ruby.text, ruby.fontFamilies)
                     out += RubyDecisionInfo(
                         baseRange = ruby.baseRange,
                         text = ruby.text,
@@ -2315,7 +2320,8 @@ class ExplainableStubParagraphLayoutEngine(
                         centerX = baseLeft + contentWidth / 2f,
                         baselineY = lineBoxes[lineIndex].baseline - rubyBaselineDrop,
                         fontSize = rubyFontSize,
-                        overhang = ((estRubyWidth - contentWidth) / 2f).coerceAtLeast(0f),
+                        width = rubyWidth,
+                        overhang = ((rubyWidth - contentWidth) / 2f).coerceAtLeast(0f),
                         fontFamilies = ruby.fontFamilies,
                         fontWeight = rubyFontWeight,
                     )
@@ -2339,7 +2345,7 @@ class ExplainableStubParagraphLayoutEngine(
         baseAscent: Float,
         baseDescent: Float,
         fontSize: Float,
-        bopomofoFontWeight: Int,
+        bopomofoFontWeightAt: (Int) -> Int,
     ): List<BopomofoDecisionInfo> {
         if (rubySpans.isEmpty()) return emptyList()
         val hUnit = fontSize / 30f
@@ -2374,6 +2380,11 @@ class ExplainableStubParagraphLayoutEngine(
                         role = role,
                     )
                 val placements = buildList {
+                    if (parsed.tone == BopomofoTone.Neutral) {
+                        // 轻声在视觉/阅读顺序上都先于注音符号；它仍放在同一个符号列内。
+                        val (topU, botU) = bopomofoNeutralRow(n)
+                        add(box(1f, 9f, topU, botU, BopomofoGlyphRole.Neutral, "˙"))
+                    }
                     // ㄅㄆㄇ symbols: 9-份 column at [1,10]份.
                     val rows = bopomofoSymbolRows(n, neutral)
                     parsed.symbols.take(3).forEachIndexed { i, sym ->
@@ -2384,10 +2395,7 @@ class ExplainableStubParagraphLayoutEngine(
                         // 轻声: full-width vert-alt drawn at the 9-份 column size; the box
                         // is the DOT's target rect (column-wide × the 2-份 neutral row) —
                         // the renderer h-centres + ink-positions the dot into it.
-                        BopomofoTone.Neutral -> {
-                            val (topU, botU) = bopomofoNeutralRow(n)
-                            add(box(1f, 9f, topU, botU, BopomofoGlyphRole.Neutral, "˙"))
-                        }
+                        BopomofoTone.Neutral -> Unit
                         // 平上去: 5×5 in the 调号 column [10,15]份, upper-right.
                         BopomofoTone.Yangping, BopomofoTone.Shang, BopomofoTone.Qu -> {
                             val (topU, botU) = bopomofoRegularToneRow(n)
@@ -2402,7 +2410,14 @@ class ExplainableStubParagraphLayoutEngine(
                     }
                 }
                 if (placements.isNotEmpty()) {
-                    out += BopomofoDecisionInfo(ruby.baseRange, lineIndex, placements, ruby.fontFamilies, bopomofoFontWeight)
+                    out += BopomofoDecisionInfo(
+                        ruby.baseRange,
+                        ruby.text,
+                        lineIndex,
+                        placements,
+                        ruby.fontFamilies,
+                        bopomofoFontWeightAt(ruby.baseRange.start),
+                    )
                 }
             }
         }
@@ -2730,6 +2745,7 @@ private data class PunctuationGeometryLedger(
                 trailingGlueNatural = budget.trailingNatural,
                 trailingGlueConsumed = budget.trailingConsumed,
                 justificationDelta = delta,
+                rubySpread = rubySpreadByCluster[index] ?: 0f,
                 resolvedAdvance = resolvedAdvance(index, naturalClusters[index]),
                 source = "PunctuationGeometryLedger",
                 reason = geometry.reason,

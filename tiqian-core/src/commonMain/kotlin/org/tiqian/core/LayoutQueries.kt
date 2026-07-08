@@ -268,7 +268,7 @@ private fun LayoutResult.positionedClusters(lineIndex: Int, line: LineBox): List
         .associate { it.clusterRange to -it.totalReduction }
 
     var x = line.indent
-    return line.clusterRange.mapIndexed { indexInLine, clusterIndex ->
+    val positioned = line.clusterRange.mapIndexed { indexInLine, clusterIndex ->
         val cluster = clusters[clusterIndex]
         val leadingGap = if (indexInLine != 0) leadingAutoSpaceGaps[cluster.range] ?: 0f else 0f
         val drawX = x + leadingGap - (leadingConsumed[cluster.range] ?: 0f)
@@ -286,6 +286,7 @@ private fun LayoutResult.positionedClusters(lineIndex: Int, line: LineBox): List
         x += cluster.advance
         positioned
     }
+    return withRubySelectionGeometry(positioned, lineIndex)
 }
 
 private fun LayoutResult.nearestLineForOffset(offset: Int): Int =
@@ -315,4 +316,85 @@ private fun PositionedCluster.sliceRect(start: Int, end: Int): Rect {
     val l = xForOffset(start)
     val r = xForOffset(end)
     return Rect(l, top, r, bottom)
+}
+
+private fun LayoutResult.naturalAdvanceByRange(): Map<TextRange, Float> {
+    val out = HashMap<TextRange, Float>()
+    for (run in glyphRuns) {
+        for (glyph in run.glyphs) {
+            out[glyph.clusterRange] = (out[glyph.clusterRange] ?: 0f) + glyph.advance
+        }
+    }
+    return out
+}
+
+private fun LayoutResult.rubySpreadByRange(): Map<TextRange, Float> =
+    debug.geometryDecisions
+        .filter { it.rubySpread != 0f }
+        .associate { it.range to it.rubySpread }
+
+private data class SelectionBounds(
+    var left: Float,
+    var right: Float,
+)
+
+private fun LayoutResult.withRubySelectionGeometry(
+    positioned: List<PositionedCluster>,
+    lineIndex: Int,
+): List<PositionedCluster> {
+    val rubies = debug.rubyDecisions.filter { it.lineIndex == lineIndex && it.width > 0f }
+    if (rubies.isEmpty()) return positioned
+
+    val naturalAdvanceByRange = naturalAdvanceByRange()
+    val rubySpreadByRange = rubySpreadByRange()
+    val bounds = positioned.map { pc ->
+        val rubySpread = rubySpreadByRange[pc.range] ?: 0f
+        SelectionBounds(pc.left, (pc.right - rubySpread).coerceAtLeast(pc.left))
+    }
+    fun centerOf(pc: PositionedCluster): Float {
+        val natural = naturalAdvanceByRange[pc.range] ?: (pc.width - (rubySpreadByRange[pc.range] ?: 0f))
+        return pc.drawX + natural.coerceAtLeast(0f) / 2f
+    }
+
+    for (ruby in rubies) {
+        val baseIndices = positioned.indices.filter { index ->
+            val range = positioned[index].range
+            range.start >= ruby.baseRange.start && range.end <= ruby.baseRange.end
+        }
+        if (baseIndices.isEmpty()) continue
+
+        val centers = baseIndices.map { centerOf(positioned[it]) }
+        val rubyLeft = ruby.centerX - ruby.width / 2f
+        val rubyRight = ruby.centerX + ruby.width / 2f
+        for (i in baseIndices.indices) {
+            val segmentLeft = if (i == 0) {
+                rubyLeft
+            } else {
+                maxOf(rubyLeft, (centers[i - 1] + centers[i]) / 2f)
+            }
+            val segmentRight = if (i == baseIndices.lastIndex) {
+                rubyRight
+            } else {
+                minOf(rubyRight, (centers[i] + centers[i + 1]) / 2f)
+            }
+            val bound = bounds[baseIndices[i]]
+            bound.left = minOf(bound.left, segmentLeft)
+            bound.right = maxOf(bound.right, segmentRight)
+        }
+    }
+
+    for (i in 0 until bounds.lastIndex) {
+        val left = bounds[i]
+        val right = bounds[i + 1]
+        if (left.right <= right.left) continue
+        val boundary = ((centerOf(positioned[i]) + centerOf(positioned[i + 1])) / 2f)
+            .coerceIn(minOf(left.left, right.left), maxOf(left.right, right.right))
+        left.right = minOf(left.right, boundary).coerceAtLeast(left.left)
+        right.left = maxOf(right.left, boundary).coerceAtMost(right.right)
+    }
+
+    return positioned.mapIndexed { index, pc ->
+        val bound = bounds[index]
+        pc.copy(left = bound.left, right = bound.right)
+    }
 }

@@ -2,6 +2,7 @@ package org.tiqian.core
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class LayoutQueriesTest {
 
@@ -220,6 +221,23 @@ class LayoutQueriesTest {
         assertEquals(4, result.getOffsetForPosition(30f, 25f))
     }
 
+    @Test
+    fun rubySelectionGeometryRedistributesAvoidanceSpreadWithoutOverlap() {
+        val result = rubySelectionResult()
+
+        val positioned = result.positionedClusters()
+
+        assertEquals(Rect(-6f, 0f, 26f, 20f), positioned[0].rect)
+        assertEquals(Rect(29f, 0f, 61f, 20f), positioned[1].rect)
+        assertEquals(Rect(64f, 0f, 96f, 20f), positioned[2].rect)
+        assertTrue(
+            positioned.zipWithNext().all { (left, right) -> left.right <= right.left },
+            "ruby selection rects must not overlap: $positioned",
+        )
+        assertEquals(Rect(-6f, 0f, 26f, 20f), result.getBoundingBoxes(TextRange(0, 1)).single())
+        assertEquals(Rect(29f, 0f, 61f, 20f), result.getBoundingBoxes(TextRange(1, 2)).single())
+    }
+
     private fun sampleResult(): LayoutResult =
         LayoutResult(
             input = LayoutInput(
@@ -257,5 +275,106 @@ class LayoutQueriesTest {
                     visualWidth = 10f,
                 ),
             ),
+        )
+
+    private fun rubySelectionResult(): LayoutResult =
+        LayoutResult(
+            input = LayoutInput(
+                content = TiqianTextContent("张王李"),
+                textStyle = TextStyle(fontSize = 20f),
+                constraints = LayoutConstraints(maxWidth = 200f),
+            ),
+            size = Size(90f, 20f),
+            clusters = listOf(
+                Cluster(TextRange(0, 1), "张", fontKey = "cjk", advance = 35f),
+                Cluster(TextRange(1, 2), "王", fontKey = "cjk", advance = 35f),
+                Cluster(TextRange(2, 3), "李", fontKey = "cjk", advance = 20f),
+            ),
+            glyphRuns = listOf(
+                GlyphRun(
+                    range = TextRange(0, 3),
+                    fontKey = "cjk",
+                    glyphs = listOf(
+                        Glyph(id = 1u, clusterRange = TextRange(0, 1), advance = 20f),
+                        Glyph(id = 2u, clusterRange = TextRange(1, 2), advance = 20f),
+                        Glyph(id = 3u, clusterRange = TextRange(2, 3), advance = 20f),
+                    ),
+                    advance = 60f,
+                ),
+            ),
+            lines = listOf(
+                LineBox(
+                    range = TextRange(0, 3),
+                    clusterRange = 0..2,
+                    baseline = 15f,
+                    top = 0f,
+                    bottom = 20f,
+                    naturalWidth = 60f,
+                    adjustedWidth = 90f,
+                    visualWidth = 90f,
+                ),
+            ),
+            debug = LayoutDebugInfo(
+                geometryDecisions = listOf(
+                    rubyGeometry(TextRange(0, 1), "张", rubySpread = 15f, resolvedAdvance = 35f),
+                    rubyGeometry(TextRange(1, 2), "王", rubySpread = 15f, resolvedAdvance = 35f),
+                    rubyGeometry(TextRange(2, 3), "李", rubySpread = 0f, resolvedAdvance = 20f),
+                ),
+                rubyDecisions = listOf(
+                    RubyDecisionInfo(
+                        baseRange = TextRange(0, 1),
+                        text = "zhuāng",
+                        lineIndex = 0,
+                        centerX = 10f,
+                        baselineY = 0f,
+                        fontSize = 10f,
+                        width = 32f,
+                        overhang = 6f,
+                    ),
+                    RubyDecisionInfo(
+                        baseRange = TextRange(1, 2),
+                        text = "chuáng",
+                        lineIndex = 0,
+                        centerX = 45f,
+                        baselineY = 0f,
+                        fontSize = 10f,
+                        width = 32f,
+                        overhang = 6f,
+                    ),
+                    RubyDecisionInfo(
+                        baseRange = TextRange(2, 3),
+                        text = "shuāng",
+                        lineIndex = 0,
+                        centerX = 80f,
+                        baselineY = 0f,
+                        fontSize = 10f,
+                        width = 32f,
+                        overhang = 6f,
+                    ),
+                ),
+            ),
+        )
+
+    private fun rubyGeometry(
+        range: TextRange,
+        text: String,
+        rubySpread: Float,
+        resolvedAdvance: Float,
+    ): ClusterGeometryDecisionInfo =
+        ClusterGeometryDecisionInfo(
+            range = range,
+            sourceText = text,
+            displayText = text,
+            baseAdvance = 20f,
+            bodyWidth = 20f,
+            leadingGlueNatural = 0f,
+            leadingGlueConsumed = 0f,
+            trailingGlueNatural = 0f,
+            trailingGlueConsumed = 0f,
+            justificationDelta = 0f,
+            rubySpread = rubySpread,
+            resolvedAdvance = resolvedAdvance,
+            source = "test",
+            reason = "RubyAvoidanceSpread",
         )
 }

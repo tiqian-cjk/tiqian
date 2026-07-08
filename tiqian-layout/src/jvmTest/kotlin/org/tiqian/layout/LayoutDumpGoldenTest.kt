@@ -173,7 +173,9 @@ class LayoutDumpGoldenTest {
                 "geom ${g.range.start}-${g.range.end} body=${g.bodyWidth.fmt()} " +
                     "lead=${g.leadingGlueConsumed.fmt()}/${g.leadingGlueNatural.fmt()} " +
                     "trail=${g.trailingGlueConsumed.fmt()}/${g.trailingGlueNatural.fmt()} " +
-                    "justify=${g.justificationDelta.fmt()} resolved=${g.resolvedAdvance.fmt()}",
+                    "justify=${g.justificationDelta.fmt()}" +
+                    (if (g.rubySpread != 0f) " ruby=${g.rubySpread.fmt()}" else "") +
+                    " resolved=${g.resolvedAdvance.fmt()}",
             )
         }
         debug.spacingDecisions.forEach { s ->
@@ -227,11 +229,12 @@ class LayoutDumpGoldenTest {
         debug.rubyDecisions.forEach { r ->
             appendLine(
                 "ruby ${r.baseRange.start}-${r.baseRange.end} '${r.text}' line=${r.lineIndex} " +
-                    "centerX=${r.centerX.fmt()} baselineY=${r.baselineY.fmt()} size=${r.fontSize.fmt()} overhang=${r.overhang.fmt()}",
+                    "centerX=${r.centerX.fmt()} baselineY=${r.baselineY.fmt()} size=${r.fontSize.fmt()} " +
+                    "width=${r.width.fmt()} overhang=${r.overhang.fmt()}",
             )
         }
         debug.bopomofoDecisions.forEach { z ->
-            appendLine("bopomofo ${z.baseRange.start}-${z.baseRange.end} line=${z.lineIndex}")
+            appendLine("bopomofo ${z.baseRange.start}-${z.baseRange.end} '${z.text}' line=${z.lineIndex}")
             z.placements.forEach { p ->
                 appendLine(
                     "  ${p.role} '${p.text}' rect=${p.left.fmt()},${p.top.fmt()},${p.width.fmt()},${p.height.fmt()}",

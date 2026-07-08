@@ -240,9 +240,9 @@ data class LineSpacingDecisionInfo(
  * [baseRange] on line [lineIndex]. [centerX] is the base range's horizontal
  * centre (the注文 centres on it, CLREQ「横排注音注文整体水平向基字居中」);
  * [baselineY] is the ruby text baseline (inside the reserved band above the
- * base ascent); [fontSize] is the ruby size (≤ base). [overhang] > 0 means the
- * 注文 is wider than the base and overhangs each side by that much (v1: allowed,
- * 避让 is a follow-up).
+ * base ascent); [fontSize] is the ruby size (≤ base). [width] is the measured
+ * 注文 width in its own font. [overhang] > 0 means the 注文 is wider than the
+ * base content and overhangs each side before minimum-gap avoidance is applied.
  */
 data class RubyDecisionInfo(
     val baseRange: TextRange,
@@ -251,6 +251,7 @@ data class RubyDecisionInfo(
     val centerX: Float,
     val baselineY: Float,
     val fontSize: Float,
+    val width: Float = 0f,
     val overhang: Float,
     /** 注文专用字体（family 名优先列表）；空 = 渲染器默认。 */
     val fontFamilies: List<String> = emptyList(),
@@ -266,6 +267,7 @@ data class RubyDecisionInfo(
  */
 data class BopomofoDecisionInfo(
     val baseRange: TextRange,
+    val text: String,
     val lineIndex: Int,
     val placements: List<BopomofoGlyphPlacement>,
     /** 注文 font (must carry ㄅㄆㄇ glyphs); empty = renderer's CJK default. */
@@ -460,6 +462,12 @@ data class ClusterGeometryDecisionInfo(
     val trailingGlueNatural: Float,
     val trailingGlueConsumed: Float,
     val justificationDelta: Float,
+    /**
+     * Structural advance added by ruby/注音 avoidance. Selection geometry may
+     * redistribute this gap to the owning annotation projection instead of
+     * blindly assigning it to the previous cluster's trailing box.
+     */
+    val rubySpread: Float = 0f,
     val resolvedAdvance: Float,
     val source: String,
     val reason: String,

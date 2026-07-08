@@ -8,20 +8,25 @@ import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.RubyKind
 import org.tiqian.core.RubySpan
 import org.tiqian.core.TextRange
+import org.tiqian.core.TextSpan
+import org.tiqian.core.TextStyle
 import org.tiqian.core.TiqianTextContent
 import org.tiqian.core.BopomofoGlyphRole
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** 注音 (ADR 0033): right-side ㄅㄆㄇ symbols + parsed tone, with 纵横对齐 reservation. */
+/** 注音 (ADR 0033): right-side ㄅㄆㄇ symbols + parsed tone, with annotated-base reservation. */
 class BopomofoLayoutTest {
 
     private val engine = ExplainableStubParagraphLayoutEngine()
 
-    private fun layout(bopomofo: List<RubySpan>) = engine.layout(
+    private fun layout(
+        bopomofo: List<RubySpan>,
+        spans: List<TextSpan> = emptyList(),
+    ) = engine.layout(
         LayoutInput(
-            content = TiqianTextContent("中文"),
+            content = TiqianTextContent("中文", spans = spans),
             constraints = LayoutConstraints(maxWidth = 4000f),
             paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
             rubySpans = bopomofo,
@@ -52,17 +57,53 @@ class BopomofoLayoutTest {
     }
 
     @Test
-    fun everyCharReservesHalfEm() {
+    fun annotatedBaseReservesHalfEmOnly() {
         val plain = engine.layout(
             LayoutInput(
                 content = TiqianTextContent("中文"),
                 constraints = LayoutConstraints(maxWidth = 4000f),
                 paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
             ),
-        ).clusters.first().advance
+        )
         val withBopomofo = layout(listOf(RubySpan(TextRange(0, 1), "ㄓㄨㄥ", kind = RubyKind.Bopomofo)))
-            .clusters.first().advance
-        // 纵横对齐: every char +0.5em (even the unannotated 文).
-        assertTrue(withBopomofo > plain, "bopomofo reserves advance ($withBopomofo vs $plain)")
+
+        assertTrue(
+            withBopomofo.clusters[0].advance > plain.clusters[0].advance,
+            "bopomofo reserves advance on annotated base (${withBopomofo.clusters[0].advance} vs ${plain.clusters[0].advance})",
+        )
+        assertEquals(
+            plain.clusters[1].advance,
+            withBopomofo.clusters[1].advance,
+            "current v1 does not reserve the unannotated adjacent char",
+        )
+    }
+
+    @Test
+    fun fontWeightFollowsAnnotatedBasePlusThreeSteps() {
+        val result = layout(
+            bopomofo = listOf(
+                RubySpan(TextRange(0, 1), "ㄓㄨㄥ", kind = RubyKind.Bopomofo),
+                RubySpan(TextRange(1, 2), "ㄨㄣˊ", kind = RubyKind.Bopomofo),
+            ),
+            spans = listOf(
+                TextSpan(TextRange(0, 1), TextStyle(fontWeight = 500)),
+                TextSpan(TextRange(1, 2), TextStyle(fontWeight = 700)),
+            ),
+        )
+
+        val zhong = result.debug.bopomofoDecisions.first { it.baseRange == TextRange(0, 1) }
+        val wen = result.debug.bopomofoDecisions.first { it.baseRange == TextRange(1, 2) }
+        assertEquals(800, zhong.fontWeight)
+        assertEquals(900, wen.fontWeight, "bopomofo weight clamps at 900")
+    }
+
+    @Test
+    fun decisionKeepsSourceReadingForCopy() {
+        val result = layout(listOf(RubySpan(TextRange(0, 1), "˙ㄉㄜ", kind = RubyKind.Bopomofo)))
+        val decision = result.debug.bopomofoDecisions.single()
+
+        assertEquals("˙ㄉㄜ", decision.text)
+        assertEquals(listOf("˙", "ㄉ", "ㄜ"), decision.placements.map { it.text })
+        assertEquals(BopomofoGlyphRole.Neutral, decision.placements.first().role)
     }
 }
