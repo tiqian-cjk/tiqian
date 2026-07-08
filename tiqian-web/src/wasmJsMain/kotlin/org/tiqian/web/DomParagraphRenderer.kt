@@ -62,9 +62,13 @@ object DomParagraphRenderer {
                 // `FlushSelectionAtMeasure`: clip the line to the engine's content edge so a
                 // line-end half-width punctuation's blank right half, or a collapsed trailing
                 // space, extends NEITHER the ink NOR the selection highlight past the measure
-                // — the selection's right edge stays as even as the left. (`+ hanging` keeps
-                // any legitimately hung punctuation, ADR 0006, inside the clip.)
-                setProperty("width", "${line.indent + line.visualWidth + line.hangingPunctuationAdvance}px")
+                // — the selection's right edge stays as even as the left. The clip keeps any
+                // legitimately hung glyphs — a line-end hyphen (`LineEndHangingHyphen`, ADR
+                // 0029) or hung punctuation (ADR 0006) — inside it, so only blank overflow is cut.
+                setProperty(
+                    "width",
+                    "${line.indent + line.visualWidth + line.hyphenAdvance + line.hangingPunctuationAdvance}px",
+                )
                 setProperty("overflow-x", "clip") // horizontal only — never clip Latin descenders
             }
 

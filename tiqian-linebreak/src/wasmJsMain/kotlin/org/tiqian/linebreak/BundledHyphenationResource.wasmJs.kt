@@ -1,11 +1,11 @@
 package org.tiqian.linebreak
 
 /**
- * Web (Wasm) ships NO bundled hyphenation patterns yet — synchronous resource
- * loading isn't available in the browser, and embedding the ~30KB TeX pattern
- * blob as a Wasm string constant is deferred to a follow-up. This is only ever
- * hit if `EnglishHyphenation.enUs` is referenced explicitly; the web default
- * ([defaultHyphenator]) is `NoHyphenator`, so it isn't on the default path.
- * Named gap: `WebBundledHyphenationDeferred` (ADR 0039).
+ * Web (Wasm) has no synchronous resource loading, so the en-US TeX patterns are
+ * embedded at build time as a Kotlin constant generated from the SAME
+ * `hyph-en-us.tex` the JVM/Android resource path reads (single source of truth;
+ * see the `generateWasmHyphenationPatterns` task). This closes the former
+ * `WebBundledHyphenationDeferred` gap — English hyphenation now works on web
+ * exactly as on the other platforms (ADR 0039).
  */
-internal actual fun loadBundledEnglishHyphenationPatterns(): String = ""
+internal actual fun loadBundledEnglishHyphenationPatterns(): String = EN_US_HYPHENATION_PATTERNS
