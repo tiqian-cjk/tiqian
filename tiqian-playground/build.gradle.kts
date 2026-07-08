@@ -25,3 +25,11 @@ tasks.register<JavaExec>("runPlayground") {
     mainClass.set("org.tiqian.playground.MainKt")
     classpath = files(tasks.named("jvmJar")) + configurations.named("jvmRuntimeClasspath").get()
 }
+
+tasks.register<JavaExec>("runWebPrototype") {
+    group = "application"
+    description = "Emits the ADR 0039 PreBrokenLineDom web-render prototype HTML."
+    dependsOn("jvmJar")
+    mainClass.set("org.tiqian.playground.WebPrototypeMainKt")
+    classpath = files(tasks.named("jvmJar")) + configurations.named("jvmRuntimeClasspath").get()
+}
