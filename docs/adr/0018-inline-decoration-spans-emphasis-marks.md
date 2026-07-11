@@ -33,20 +33,22 @@ Layout 在行/cluster 几何定稿后解析 span，产出
   Latin/其它 → skip（`no-dot-on-non-han`，西文强调走斜体不在本期）。
 - **anchor 语义**：dot 墨迹中心应落到的画布坐标。
   `anchorX` = cluster 字形中心（最终行内 x + 去掉 justify delta 的字形
-  advance 的一半）；`anchorY` = `line.baseline + 0.35em`。下沉量**相对
+  advance 的一半）；`anchorY` = `line.baseline +
+  ParagraphStyle.emphasisDotCenterOffsetEm × em`，默认 `0.45em`。下沉量**相对
   baseline 而非 em box 底**：`CenteredCjkVisual` 的 em box descent 是人为的
   0.5em，而汉字真实墨迹只到 baseline 下 ≈0.1em——按 em box 下沉会把点压进
-  下一行墨迹。0.35em 让点紧贴字底（@16px 约 2px 间隙），lineHeight 1.0 也
-  不与下一行冲突。CLREQ 未规定间距，取值进常量便于 profile 化。
+  下一行墨迹。CLREQ 只规定着重号位于文字底端，没有规定精确距离；因此
+  `ExplicitEmphasisDotOffset` 把距离保留为显式排版输入，调用方可以按字体与
+  场景调整。
 - **渲染**：画 U+2022（CJK 字体 glyph，`LocaleTaggedShaping` 同源路径），
   量出 ink bounds 后把墨迹中心对齐 anchor——字形差异由渲染层吸收，引擎
   决策与字体解耦。AWT 调试 raster 以等效实心圆近似（非真值渲染路径）。
 
 ### 不改 line metrics
 
-着重号**不参与** line height / 断行 / justification。由于 anchor 紧贴字底
-（baseline + 0.35em，仍在 CenteredCjkVisual 的 0.5em descent 带内），默认
-行高即可容纳；更宽的 lineHeight 只是让版面更松，不是正确性前提。
+着重号**不参与** line height / 断行 / justification。`lineHeight` 只提供容纳
+行间标记的空间，不参与反推 anchor；更宽的 lineHeight 会让版面更松，但不会
+暗中移动着重号。空间下限由 `InterlinearMarkLineSpacingFloor` 独立保证。
 
 ### 示亡号（Slice 9 落地）
 
@@ -86,6 +88,14 @@ Layout 在行/cluster 几何定稿后解析 span，产出
 - **着重号锚点 0.35em → 0.45em**：原值点的墨水上缘距字身底仅 0.12em，
   视觉上贴字。下移后点与字面有明确空隙，且在 floor 保证的行距带内
   （点底 +0.56em < 下一行字身顶 +0.62em @1.5em 行高）。
+
+### Amendment (2026-07-10): 显式距离，不跟随行高
+
+`0.45em` 从内部常量提升为
+`ParagraphStyle.emphasisDotCenterOffsetEm` 的默认值。删除根据 `lineHeight`
+自动移动 anchor 的实验公式：行高与着重号距离是两项独立排版输入，前者负责
+容纳空间，后者负责点相对字面的视觉距离。这样不同字体或宿主场景仍可显式
+调节距离，同时同一字体不会因为响应式行高变化而让着重号上下漂移。
 
 ## Consequences
 

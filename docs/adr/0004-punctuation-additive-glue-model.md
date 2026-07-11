@@ -108,6 +108,22 @@ substitution 合成 `⸺`，但 justify 末档仍把其右侧边界当普通
   参与末档均匀 tracking；这次限制只针对不可拆长标号，避免把长标号误读成
   “后面多了一个空格”。
 
+### Amendment (2026-07-10): 西文主导视觉行不进入 CjkInterChar
+
+Web 正文 dogfood 在移动行宽暴露出 `Rust（Winio）、Rust（windows-reactor）`
+一类技术名称：视觉行内没有汉字正文，只有西文与中文标点；若仅凭中文标点
+进入无上限 `CjkInterChar`，括号和顿号两侧会被各拉开约半个字，读起来像
+source 中存在空格。
+
+新增具名 fallback `WesternDominantLineNaturalSpacing`：
+
+- 判定范围是**当前视觉行**；没有 `FontRole.CjkText` 时，先照常执行
+  `WordSpace` 与 `CjkLatinSpace`，但不进入 `CjkInterChar`。
+- 剩余 deficit 可以保留为 ragged，并写入 justification decision 与 line
+  notes；这比在西文技术名称内部制造假空格更忠实于 source 与西文排版习惯。
+- 只要视觉行含有汉字正文，仍按既有混排规则让普通标点↔西文边界参与末档
+  均匀 tracking；本修订不是恢复全局 `CjkOnlyInterCharBoundary`。
+
 ## Consequences
 
 - 行尾标点「自然半宽」不是硬编码 `-= 0.5em`，而是 `lineEndPolicy + trailingGlue.min`。

@@ -1,6 +1,6 @@
 # ADR 0037: Source-faithful plain text, mandatory breaks, and the CjkText entry
 
-- Status: Accepted
+- Status: Accepted (2026-07-11 U+200B amendment)
 - Date: 2026-06-28
 
 ## Context
@@ -23,7 +23,20 @@
 
 段内**强制换行**(`<br>` 那种「不分块只换行」)是另一回事、且在中文正文罕见，本 ADR 不为它引入独立概念——`\n` 一律按硬断行处理。
 
-### 2. Compose 入口：`CjkText`
+### 2. `ZeroWidthSpaceSoftBreak`：U+200B 是结构控制，不是坏字形
+
+U+200B ZERO WIDTH SPACE 属 UAX #14 的 `ZW` 类：它没有 ink 和 advance，但在其后提供一个
+软断点。它必须成为独立的零宽、无 glyph cluster，并保留 source range；不能送给字体 shaping，
+也不能因为 `measureText()` 合法返回 `0` 而把整段判为字体失败。
+
+断行器把该 cluster 视为 non-rendering control：自动折行不能让它独占一个空白视觉行，落到行首时
+应零压缩并回前一行；段首或强制断行后的 U+200B 则与其后的首个可见 cluster 共行。Web DOM 不画
+该字符，但以 source marker 保证复制仍得到原始 U+200B。
+
+本规则**只覆盖 U+200B**。U+2060 WORD JOINER 与 U+FEFF ZWNBSP/BOM 是 `WJ` 类，要求禁止断行；
+U+200C/U+200D 还参与字形连接。它们不能因同样“测得零宽”就套用本规则，支持前必须分别建模。
+
+### 3. Compose 入口：`CjkText`
 
 - `CjkText(String)` / `CjkText(AnnotatedString)` = 默认文本控件，按 §1 忠实呈现，是 Compose `Text` 的 drop-in。
 - `CjkText(blocks: List<CjkBlock>)` 重载 = 结构化文档（段落/列表/章节，首行缩进/段间距经 `ParagraphStyle`）。
@@ -34,11 +47,13 @@
 
 引擎级（干净模块 `tiqian-linebreak` + `tiqian-layout`，不依赖 compose）：
 
-1. `tiqian-linebreak`：识别强制断行类码点（含 `CRLF` 合一），产出 `BreakKind.Required` 断点。
-2. 引擎 cluster 构建：强制断行符成独立零宽 cluster，标记「其后强制断 + 不 shape」。
-3. `LookaheadLineBreaker`：接受强制断点集，在其处硬断（贪心/lookahead 不得跨越或填过）；只含强制断 cluster 的行 = 空行（零宽内容、一个行高）。
+1. `tiqian-linebreak`：识别强制断行类码点（含 `CRLF` 合一），产出 `BreakKind.Required` 断点；
+   单独识别 U+200B，不与 `WJ` / shaping controls 混同。
+2. 引擎 cluster 构建：强制断行符成独立零宽 cluster，标记「其后强制断 + 不 shape」；U+200B
+   成独立 `ZeroWidthSpaceSoftBreakNoShape` cluster。
+3. `LookaheadLineBreaker`：接受强制断点集，在其处硬断（贪心/lookahead 不得跨越或填过）；只含强制断 cluster 的行 = 空行（零宽内容、一个行高）。non-rendering soft control 不得产生空白 auto-wrap 行。
 4. 默认 `firstLineIndent = 0`（纯文本路径）。
-5. golden + 新 fixture：单 `\n`、多空行、首尾空行、`CRLF`、长行回绕齐头。
+5. golden + fixture：单 `\n`、多空行、首尾空行、`CRLF`、长行回绕齐头、U+200B 软断与段首控制。
 
 Compose 入口用 `CjkText` 直接接线；public `CjkParagraph` 不保留兼容别名。Compose
 模块内部可以保留一个私有/`internal` layout node，但它不是作者 API。

@@ -56,3 +56,12 @@ justify 跳过末行的既有规则保证：短标签、标题永远不被拉伸
 - 示亡号框几何跟随对齐后的字位（框贴字面，行末 justify delta 在框外）。
 - 多行 ragged（诗歌等特定场合）不在第一阶段；将来若需要，是新的段落
   级特性而不是恢复 `TextAlign.Start`。
+
+### Amendment (2026-07-10): WesternDominantLineNaturalSpacing
+
+「非末行永远走 justify 链」不等于每个视觉行都必须进入中文末档均分字距。
+当前视觉行没有 `FontRole.CjkText` 时，它是西文主导排版：西文词距仍按第一档
+拉伸，中西间距若存在仍按第二档处理，但不能仅因中文括号、顿号等标点进入
+`CjkInterChar`。各有上限的西文资源耗尽后允许保留 ragged deficit，并以
+`WesternDominantLineNaturalSpacing` 写入 debug。含汉字正文的混排行不变，
+仍以中文双齐为基线。
