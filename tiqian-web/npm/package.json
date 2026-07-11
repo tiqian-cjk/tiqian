@@ -1,0 +1,39 @@
+{
+  "name": "@tiqian/web",
+  "version": "0.1.0-dev",
+  "type": "module",
+  "scripts": {
+    "test": "node --test *.test.mjs"
+  },
+  "files": [
+    "api.d.ts",
+    "api.js",
+    "element.d.ts",
+    "element.js",
+    "font-shaping.js",
+    "runtime.js",
+    "runtime/",
+    "styles.css",
+    "styles.js"
+  ],
+  "exports": {
+    ".": {
+      "types": "./api.d.ts",
+      "default": "./api.js"
+    },
+    "./element": {
+      "types": "./element.d.ts",
+      "default": "./element.js"
+    },
+    "./styles.css": "./styles.css"
+  },
+  "sideEffects": [
+    "./api.js",
+    "./element.js",
+    "./styles.css"
+  ],
+  "dependencies": {
+    "harfbuzzjs": "1.4.0",
+    "woff2-encoder": "2.0.0"
+  }
+}

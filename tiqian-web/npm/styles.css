@@ -1,0 +1,18 @@
+tiqian-prose {
+  display: block;
+}
+
+tiqian-prose [data-tq-rendered="true"] {
+  position: relative;
+}
+
+[data-tq-rendered="true"],
+[data-tq-rendered="true"] [data-tq-source-semantic] {
+  white-space-collapse: preserve !important;
+  overflow-wrap: normal !important;
+  text-autospace: no-autospace !important;
+  text-wrap-mode: nowrap !important;
+  -webkit-hyphens: manual !important;
+  hyphens: manual !important;
+  word-break: normal !important;
+}
