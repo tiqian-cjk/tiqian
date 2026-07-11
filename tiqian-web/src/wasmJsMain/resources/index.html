@@ -9,29 +9,26 @@
                font-family: -apple-system, "PingFang SC", sans-serif; }
         h1 { font-size: 17px; font-weight: 600; }
         h1 .sub { color: #999; font-weight: 400; font-size: 13px; margin-left: 8px; }
+        [data-tiqian-root] a {
+            color: #0969da;
+            cursor: pointer;
+            text-decoration-line: underline;
+            text-decoration-color: currentColor;
+            text-decoration-style: solid;
+            text-decoration-skip-ink: auto;
+            text-underline-offset: 0.18em;
+            text-decoration-thickness: 0.08em;
+            transition: color 140ms ease, text-decoration-color 140ms ease;
+        }
+        [data-tiqian-root] a:hover,
+        [data-tiqian-root] a:active {
+            color: #0550ae;
+        }
     </style>
 </head>
 <body>
     <h1>提椠 · Web 渲染 <span class="sub">ADR 0039 · 真引擎 wasmJs 浏览器内布局</span></h1>
     <div id="app"></div>
-    <script>
-        // Source-faithful copy (ADR 0039 CopyTransparentSpacingSpans): the DOM shows
-        // CLREQ display forms (——→⸺), but copy must yield the SOURCE. Swap each
-        // substituted span's text back to its data-tq-src in a clone of the selection.
-        document.addEventListener('copy', function (e) {
-            var sel = window.getSelection();
-            if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
-            var frag = sel.getRangeAt(0).cloneContents();
-            frag.querySelectorAll('[data-tq-copy-ignore]').forEach(function (el) {
-                el.remove();
-            });
-            frag.querySelectorAll('[data-tq-src]').forEach(function (el) {
-                el.textContent = el.getAttribute('data-tq-src');
-            });
-            var text = frag.textContent;
-            if (text) { e.clipboardData.setData('text/plain', text); e.preventDefault(); }
-        });
-    </script>
     <script type="application/javascript" src="tiqian-web.js"></script>
 </body>
 </html>
