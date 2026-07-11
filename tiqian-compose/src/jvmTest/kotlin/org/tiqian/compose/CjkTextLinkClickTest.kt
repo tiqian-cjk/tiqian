@@ -9,6 +9,8 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
@@ -142,6 +144,51 @@ class CjkTextLinkClickTest {
             tap(scene, box.center)
 
             assertEquals(1, clicks, "link annotations added without text changes must still hit-test")
+        }
+    }
+
+    @Test
+    fun draggingAwayFromLinkDoesNotClickWhenReleasedBackInside() {
+        var clicks = 0
+        val text = buildAnnotatedString {
+            withLink(LinkAnnotation.Clickable("tag", linkInteractionListener = { clicks++ })) {
+                append("链接")
+            }
+            append("正文后续。")
+        }
+        var layout: LayoutResult? = null
+
+        ImageComposeScene(width = 360, height = 180) {
+            CjkText(
+                text = text,
+                modifier = Modifier.width(340.dp),
+                style = TextStyle(fontSize = 20.sp),
+                onTextLayout = { layout = it },
+            )
+        }.use { scene ->
+            scene.render()
+            val box = (layout ?: error("onTextLayout not called"))
+                .getBoundingBoxes(0, "链接".length)
+                .first()
+            val outside = Offset(box.right + 80f, box.center.y)
+
+            val primaryPressed = PointerButtons(isPrimaryPressed = true)
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                box.center,
+                buttons = primaryPressed,
+                button = PointerButton.Primary,
+            )
+            scene.sendPointerEvent(PointerEventType.Move, outside, buttons = primaryPressed)
+            scene.sendPointerEvent(PointerEventType.Move, box.center, buttons = primaryPressed)
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                box.center,
+                buttons = PointerButtons(),
+                button = PointerButton.Primary,
+            )
+
+            assertEquals(0, clicks, "a drag that leaves the link must cancel the click")
         }
     }
 

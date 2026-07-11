@@ -1,14 +1,17 @@
 package org.tiqian.compose
 
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.layout.AlignmentLine
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.Measurable
@@ -17,17 +20,20 @@ import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.node.LayoutModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.PointerInputModifierNode
 import androidx.compose.ui.node.SemanticsModifierNode
 import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.node.invalidateMeasurement
 import androidx.compose.ui.node.invalidateSemantics
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.IntSize
 import org.tiqian.clreq.ClreqProfile
 import org.tiqian.core.ColorSpan
 import org.tiqian.core.DecorationSpan
@@ -84,36 +90,15 @@ internal fun CjkTextLayout(
     val hasLinks = semanticsText.hasLinkAnnotations(0, semanticsText.length)
     val latestResult = remember { arrayOfNulls<LayoutResult>(1) }
     val latestOnTextLayout = rememberUpdatedState(onTextLayout)
-    val reportLayout: (LayoutResult) -> Unit = remember(hasLinks) {
+    val reportLayout: (LayoutResult) -> Unit = remember {
         { result ->
-            if (hasLinks) latestResult[0] = result
+            latestResult[0] = result
             latestOnTextLayout.value(result)
         }
     }
     val uriHandler = LocalUriHandler.current
     val linkModifier = if (hasLinks) {
-        Modifier.pointerInput(semanticsText, uriHandler) {
-            detectTapGestures { position ->
-                val result = latestResult[0] ?: return@detectTapGestures
-                val offset = result.getOffsetForPosition(position.x, position.y)
-                if (semanticsText.length == 0) return@detectTapGestures
-                val queryStart = offset.coerceIn(0, semanticsText.length - 1)
-                val hit = semanticsText
-                    .getLinkAnnotations(queryStart, queryStart + 1)
-                    .firstOrNull { range ->
-                        result.getBoundingBoxes(range.start, range.end).any { box ->
-                            position.x >= box.left && position.x <= box.right &&
-                                position.y >= box.top && position.y <= box.bottom
-                        }
-                    } ?: return@detectTapGestures
-                val link = hit.item
-                val listener = link.linkInteractionListener
-                when {
-                    listener != null -> listener.onClick(link)
-                    link is LinkAnnotation.Url -> uriHandler.openUri(link.url)
-                }
-            }
-        }
+        CjkTextLinkElement(semanticsText, latestResult, uriHandler)
     } else {
         Modifier
     }
@@ -133,6 +118,130 @@ internal fun CjkTextLayout(
                 ),
             ),
     )
+}
+
+private class CjkTextLinkElement(
+    private val text: AnnotatedString,
+    private val latestResult: Array<LayoutResult?>,
+    private val uriHandler: UriHandler,
+) : ModifierNodeElement<CjkTextLinkNode>() {
+    override fun create() = CjkTextLinkNode(text, latestResult, uriHandler)
+
+    override fun update(node: CjkTextLinkNode) {
+        node.update(text, latestResult, uriHandler)
+    }
+
+    override fun equals(other: Any?): Boolean =
+        other is CjkTextLinkElement && text == other.text &&
+            latestResult === other.latestResult && uriHandler === other.uriHandler
+
+    override fun hashCode(): Int {
+        var result = text.hashCode()
+        result = 31 * result + latestResult.hashCode()
+        result = 31 * result + uriHandler.hashCode()
+        return result
+    }
+}
+
+private class CjkTextLinkNode(
+    private var text: AnnotatedString,
+    private var latestResult: Array<LayoutResult?>,
+    private var uriHandler: UriHandler,
+) : Modifier.Node(), PointerInputModifierNode {
+    private var pressedLink: LinkHit? = null
+    private var pressedPointerId: PointerId? = null
+
+    fun update(
+        text: AnnotatedString,
+        latestResult: Array<LayoutResult?>,
+        uriHandler: UriHandler,
+    ) {
+        if (text != this.text) pressedLink = null
+        this.text = text
+        this.latestResult = latestResult
+        this.uriHandler = uriHandler
+    }
+
+    override fun onPointerEvent(pointerEvent: PointerEvent, pass: PointerEventPass, bounds: IntSize) {
+        val isPointerMove = pointerEvent.type == PointerEventType.Enter ||
+            pointerEvent.type == PointerEventType.Move
+        if (pass == PointerEventPass.Final && isPointerMove) {
+            val pointerId = pressedPointerId ?: return
+            if (pointerEvent.changes.firstOrNull { it.id == pointerId }?.isConsumed == true) {
+                clearPressedLink()
+            }
+            return
+        }
+        if (pass != PointerEventPass.Main) return
+        when (pointerEvent.type) {
+            PointerEventType.Press -> {
+                val change = pointerEvent.changes.firstOrNull { it.pressed && !it.previousPressed } ?: return
+                if (change.isConsumed) return
+                pressedLink = latestResult[0]?.let { linkHitAt(text, it, change.position) }
+                if (pressedLink != null) {
+                    pressedPointerId = change.id
+                    change.consume()
+                }
+            }
+
+            PointerEventType.Enter,
+            PointerEventType.Move,
+            -> {
+                val pointerId = pressedPointerId ?: return
+                val change = pointerEvent.changes.firstOrNull { it.id == pointerId } ?: return
+                val currentHit = latestResult[0]?.let { linkHitAt(text, it, change.position) }
+                if (change.isConsumed || currentHit != pressedLink) clearPressedLink()
+            }
+
+            PointerEventType.Release -> {
+                val downHit = pressedLink ?: return
+                val pointerId = pressedPointerId ?: return
+                val change = pointerEvent.changes.firstOrNull { it.id == pointerId } ?: return
+                clearPressedLink()
+                if (change.isConsumed) return
+                val upHit = latestResult[0]?.let { linkHitAt(text, it, change.position) }
+                if (upHit != downHit) return
+                change.consume()
+                val link = upHit.link
+                val listener = link.linkInteractionListener
+                when {
+                    listener != null -> listener.onClick(link)
+                    link is LinkAnnotation.Url -> uriHandler.openUri(link.url)
+                }
+            }
+
+            PointerEventType.Exit -> clearPressedLink()
+        }
+    }
+
+    override fun onCancelPointerInput() {
+        clearPressedLink()
+    }
+
+    private fun clearPressedLink() {
+        pressedLink = null
+        pressedPointerId = null
+    }
+}
+
+private data class LinkHit(
+    val link: LinkAnnotation,
+    val start: Int,
+    val end: Int,
+)
+
+private fun linkHitAt(text: AnnotatedString, result: LayoutResult, position: Offset): LinkHit? {
+    if (text.length == 0) return null
+    val offset = result.getOffsetForPosition(position.x, position.y)
+    val queryStart = offset.coerceIn(0, text.length - 1)
+    return text.getLinkAnnotations(queryStart, queryStart + 1)
+        .firstOrNull { range ->
+            result.getBoundingBoxes(range.start, range.end).any { box ->
+                position.x >= box.left && position.x <= box.right &&
+                    position.y >= box.top && position.y <= box.bottom
+            }
+        }
+        ?.let { LinkHit(it.item, it.start, it.end) }
 }
 
 /** Backs [CjkTextLayout] — a measure+draw [Modifier.Node] that repaints on update. */
