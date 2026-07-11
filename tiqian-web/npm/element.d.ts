@@ -1,5 +1,5 @@
 export declare class TiqianProseElement extends HTMLElement {
-  emphasisDotCenterOffsetEm: number | null;
+  emphasisDotGapEm: number | null;
 }
 
 declare global {

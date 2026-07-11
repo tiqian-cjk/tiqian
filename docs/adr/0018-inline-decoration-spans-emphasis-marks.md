@@ -33,16 +33,14 @@ Layout 在行/cluster 几何定稿后解析 span，产出
   Latin/其它 → skip（`no-dot-on-non-han`，西文强调走斜体不在本期）。
 - **anchor 语义**：dot 墨迹中心应落到的画布坐标。
   `anchorX` = cluster 字形中心（最终行内 x + 去掉 justify delta 的字形
-  advance 的一半）；`anchorY` = `line.baseline +
-  ParagraphStyle.emphasisDotCenterOffsetEm × em`，默认 `0.45em`。下沉量**相对
-  baseline 而非 em box 底**：`CenteredCjkVisual` 的 em box descent 是人为的
-  0.5em，而汉字真实墨迹只到 baseline 下 ≈0.1em——按 em box 下沉会把点压进
-  下一行墨迹。CLREQ 只规定着重号位于文字底端，没有规定精确距离；因此
-  `ExplicitEmphasisDotOffset` 把距离保留为显式排版输入，调用方可以按字体与
-  场景调整。
-- **渲染**：画 U+2022（CJK 字体 glyph，`LocaleTaggedShaping` 同源路径），
-  量出 ink bounds 后把墨迹中心对齐 anchor——字形差异由渲染层吸收，引擎
-  决策与字体解耦。AWT 调试 raster 以等效实心圆近似（非真值渲染路径）。
+  advance 的一半）；`anchorY` 从该 cluster 的真实字面底边开始，加上
+  `ParagraphStyle.emphasisDotGapEm × clusterEm` 的净空和圆点半径。默认净空
+  `0.1em`。CLREQ 只规定着重号位于文字底端，没有规定精确距离，因此
+  `ExplicitEmphasisDotGap` 把距离保留为显式排版输入；定位仍随真实字体度量、
+  span 字号与 baseline shift 变化，不把 baseline 当作字面底边。
+- **渲染**：`DecorationDecisionInfo.dotDiameter` 是最终墨迹直径，默认 `0.19em`。
+  Web、Compose 与调试前端均在 anchor 画同样大小的实心圆，不得再乘隐藏 scale；
+  引擎用于定位的半径与实际墨迹因此完全一致。
 
 ### 不改 line metrics
 
@@ -85,17 +83,23 @@ Layout 在行/cluster 几何定稿后解析 span，产出
     原 `ParagraphStyle.printingSides` + 双面装 5/8 已删——单/双面是**印刷正反面透印**
     概念，屏幕前端无背面、无法兑现（同竖排/JLREQ「不过早承诺」）。双面 5/8 随打印
     后端连同 ADR 再回。
-- **着重号锚点 0.35em → 0.45em**：原值点的墨水上缘距字身底仅 0.12em，
+- **着重号锚点 0.35em → 0.45em**（历史实现，已由 2026-07-11 amendment 取代）：原值点的墨水上缘距字身底仅 0.12em，
   视觉上贴字。下移后点与字面有明确空隙，且在 floor 保证的行距带内
   （点底 +0.56em < 下一行字身顶 +0.62em @1.5em 行高）。
 
 ### Amendment (2026-07-10): 显式距离，不跟随行高
 
-`0.45em` 从内部常量提升为
-`ParagraphStyle.emphasisDotCenterOffsetEm` 的默认值。删除根据 `lineHeight`
-自动移动 anchor 的实验公式：行高与着重号距离是两项独立排版输入，前者负责
-容纳空间，后者负责点相对字面的视觉距离。这样不同字体或宿主场景仍可显式
-调节距离，同时同一字体不会因为响应式行高变化而让着重号上下漂移。
+旧实现曾把 `0.45em` 中心下沉量提升为显式参数，并删除根据 `lineHeight`
+自动移动 anchor 的实验公式。这个修订确立了“行高与着重号距离相互独立”，
+但中心相对 baseline 仍没有表达真正的字面间距。
+
+### Amendment (2026-07-11): 字面净空与单一圆点几何
+
+公共参数改为 `ParagraphStyle.emphasisDotGapEm`：它表达字面底边到圆点墨迹上缘
+的净空，默认 `0.1em`。引擎用每个 cluster 的 `layoutDescent + baselineShift`
+取得字面底边，再加净空与真实半径得到 anchor。原先各前端额外乘 `0.85` 的缩放
+删除，`dotDiameter` 成为唯一真值。由此保留距离可调能力，同时不再依赖 baseline、
+行高或渲染器私有常量。
 
 ## Consequences
 

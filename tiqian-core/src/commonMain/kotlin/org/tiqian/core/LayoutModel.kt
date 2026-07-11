@@ -167,6 +167,7 @@ data class LayoutDebugInfo(
     val mandatoryBreakDecisions: List<MandatoryBreakDecisionInfo> = emptyList(),
     val maxLinesDecision: MaxLinesDecisionInfo? = null,
     val lineSpacingDecision: LineSpacingDecisionInfo? = null,
+    val rubyLineHeightDecision: RubyLineHeightDecisionInfo? = null,
     val kinsokuDecision: KinsokuDecisionInfo? = null,
     val lineLengthGridDecision: LineLengthGridDecisionInfo? = null,
     val firstLineIndentDecision: FirstLineIndentDecisionInfo? = null,
@@ -280,13 +281,32 @@ data class LineSpacingDecisionInfo(
 )
 
 /**
+ * `ConditionalRubyLineHeight`: pinyin ruby first consumes [availableInterlineSpace].
+ * Only [lineExtras] beyond that space change line boxes, following [mode].
+ * [expandedLineIndices] is empty when the existing line height fits.
+ */
+data class RubyLineHeightDecisionInfo(
+    val mode: String,
+    val baseLineHeight: Float,
+    val baseFaceHeight: Float,
+    val rubyExtent: Float,
+    val availableInterlineSpace: Float,
+    val maxExtra: Float,
+    val lineExtras: List<Float>,
+    val expandedLineIndices: List<Int>,
+    val reason: String,
+)
+
+/**
  * 行间注 geometry (ruby, ADR 0032): annotation [text] placed over the base
  * [baseRange] on line [lineIndex]. [centerX] is the base range's horizontal
  * centre (the注文 centres on it, CLREQ「横排注音注文整体水平向基字居中」);
- * [baselineY] is the ruby text baseline (inside the reserved band above the
- * base ascent); [fontSize] is the ruby size (≤ base). [width] is the measured
- * 注文 width in its own font. [overhang] > 0 means the 注文 is wider than the
- * base content and overhangs each side before minimum-gap avoidance is applied.
+ * [baselineY] is the ruby text baseline above the annotated base face. Ruby
+ * first occupies the existing inter-line area; only a deficit expands line
+ * boxes according to `ParagraphStyle.rubyLineHeightMode`. [fontSize] is the
+ * ruby size (≤ base). [width] is the measured 注文 width in its own font.
+ * [overhang] > 0 means the 注文 is wider than the base content and overhangs
+ * each side before minimum-gap avoidance is applied.
  */
 data class RubyDecisionInfo(
     val baseRange: TextRange,
@@ -295,6 +315,10 @@ data class RubyDecisionInfo(
     val centerX: Float,
     val baselineY: Float,
     val fontSize: Float,
+    /** Declared Latin font ascent above [baselineY], for overflow and diagnostics. */
+    val ascent: Float = 0f,
+    /** Declared Latin font descent below [baselineY], for overflow and diagnostics. */
+    val descent: Float = 0f,
     val width: Float = 0f,
     val overhang: Float,
     /** 注文专用字体（family 名优先列表）；空 = 渲染器默认。 */
@@ -380,9 +404,8 @@ data class DecorationDecisionInfo(
     val anchorY: Float = 0f,
     /**
      * 着重号 dot diameter (px), for the renderer to draw a filled circle of the
-     * size the engine reserved clearance for. The dot is intentionally smaller
-     * than the font's `•` glyph so it seats in the line gap without touching the
-     * next line (ADR 0018). 0 for non-dot decorations.
+     * exact size used by the engine's gap geometry. Renderers must not apply a
+     * second scale factor. 0 for non-dot decorations.
      */
     val dotDiameter: Float = 0f,
 )

@@ -7,7 +7,7 @@ import kotlin.js.js
 import kotlinx.browser.document
 import kotlinx.browser.window
 import org.tiqian.core.ColorSpan
-import org.tiqian.core.DEFAULT_EMPHASIS_DOT_CENTER_OFFSET_EM
+import org.tiqian.core.DEFAULT_EMPHASIS_DOT_GAP_EM
 import org.tiqian.core.DecorationKind
 import org.tiqian.core.DecorationSpan
 import org.tiqian.core.Ic
@@ -342,7 +342,7 @@ object TiqianWeb {
                 paragraphStyle = ParagraphStyle(
                     lineHeight = paragraph.lowered.lineHeight,
                     firstLineIndent = Ic(options.firstLineIndentIc),
-                    emphasisDotCenterOffsetEm = options.emphasisDotCenterOffsetEm,
+                    emphasisDotGapEm = options.emphasisDotGapEm,
                 ),
                 decorations = paragraph.lowered.decorations,
                 rubySpans = emptyList(),
@@ -453,8 +453,8 @@ object TiqianWeb {
         val fontSize = optionFloat(options, "fontSize")
         val lineHeight = optionFloat(options, "lineHeight")
         val firstLineIndent = optionFloat(options, "firstLineIndentIc") ?: 0f
-        val emphasisDotCenterOffsetEm = optionFloat(options, "emphasisDotCenterOffsetEm")
-            ?: DEFAULT_EMPHASIS_DOT_CENTER_OFFSET_EM
+        val emphasisDotGapEm = optionFloat(options, "emphasisDotGapEm")
+            ?: DEFAULT_EMPHASIS_DOT_GAP_EM
         val paragraphSelector = optionString(options, "paragraphSelector") ?: DEFAULT_PARAGRAPH_SELECTOR
         val dashCapabilityObject = optionObject(options, "cjkDashCapability")
         val dashCapability = dashCapabilityObject?.let { capability ->
@@ -469,7 +469,7 @@ object TiqianWeb {
             fontSize = fontSize,
             lineHeight = lineHeight,
             firstLineIndentIc = firstLineIndent,
-            emphasisDotCenterOffsetEm = emphasisDotCenterOffsetEm,
+            emphasisDotGapEm = emphasisDotGapEm,
             paragraphSelector = paragraphSelector,
             cjkDashCapability = dashCapability,
         )
@@ -485,7 +485,7 @@ object TiqianWeb {
         val fontSize: Float? = null,
         val lineHeight: Float? = null,
         val firstLineIndentIc: Float = 0f,
-        val emphasisDotCenterOffsetEm: Float = DEFAULT_EMPHASIS_DOT_CENTER_OFFSET_EM,
+        val emphasisDotGapEm: Float = DEFAULT_EMPHASIS_DOT_GAP_EM,
         val paragraphSelector: String = DEFAULT_PARAGRAPH_SELECTOR,
         val cjkDashCapability: WebCjkDashCapability? = null,
     ) {

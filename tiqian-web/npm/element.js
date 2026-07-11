@@ -50,7 +50,7 @@ function nextFrame() {
 }
 
 class TiqianProseElement extends HTMLElement {
-  static observedAttributes = ["emphasis-dot-center-offset-em"];
+  static observedAttributes = ["emphasis-dot-gap-em"];
 
   #forceTypographyRefresh = false;
   #fontLoadingDoneListener = null;
@@ -65,16 +65,16 @@ class TiqianProseElement extends HTMLElement {
   #typographyFrame = 0;
   #typographyObserver = null;
 
-  get emphasisDotCenterOffsetEm() {
-    const value = Number.parseFloat(this.getAttribute("emphasis-dot-center-offset-em"));
+  get emphasisDotGapEm() {
+    const value = Number.parseFloat(this.getAttribute("emphasis-dot-gap-em"));
     return Number.isFinite(value) ? value : null;
   }
 
-  set emphasisDotCenterOffsetEm(value) {
+  set emphasisDotGapEm(value) {
     if (value == null) {
-      this.removeAttribute("emphasis-dot-center-offset-em");
+      this.removeAttribute("emphasis-dot-gap-em");
     } else {
-      this.setAttribute("emphasis-dot-center-offset-em", String(value));
+      this.setAttribute("emphasis-dot-gap-em", String(value));
     }
   }
 
@@ -146,7 +146,7 @@ class TiqianProseElement extends HTMLElement {
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
-    if (name !== "emphasis-dot-center-offset-em" || oldValue === newValue) return;
+    if (name !== "emphasis-dot-gap-em" || oldValue === newValue) return;
     if (!this.isConnected || !this.#hasDispatched) return;
     this.#dispatchProgressiveEnhance(this.#generation).catch((error) => {
       this.dataset.tiqianCapabilityIssue = "FontCapabilityPreparationFailed";
@@ -155,8 +155,8 @@ class TiqianProseElement extends HTMLElement {
   }
 
   #baseEnhanceOptions() {
-    const emphasisDotCenterOffsetEm = this.emphasisDotCenterOffsetEm;
-    return emphasisDotCenterOffsetEm == null ? undefined : { emphasisDotCenterOffsetEm };
+    const emphasisDotGapEm = this.emphasisDotGapEm;
+    return emphasisDotGapEm == null ? undefined : { emphasisDotGapEm };
   }
 
   async #dispatchProgressiveEnhance(generation) {

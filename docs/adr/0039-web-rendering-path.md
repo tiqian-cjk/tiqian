@@ -155,9 +155,9 @@ formatting context。lowerer 在 source projection 中放一个结构性的 U+FF
 decoration，继续使用宿主 `<strong>` 的真实粗体，不能被 `BilingualEmphasisWesternItalic` 误改成
 斜体。DOM 仍浅克隆原 `<strong>` 以保留 class / color / transition 等宿主声明；只在 geometry leaf
 上覆盖引擎实际 shaping 的字重。着重号继续画引擎给出的 SVG 几何，不使用浏览器
-`text-emphasis` 再排一遍。Web API 用 `emphasisDotCenterOffsetEm` 把 ADR 0018 的
-显式距离传入 layout；`<tiqian-prose>` 对应
-`emphasis-dot-center-offset-em` attribute。两者都不从宿主 `line-height` 推导距离。
+`text-emphasis` 再排一遍。Web API 用 `emphasisDotGapEm` 把 ADR 0018 的
+字面净空传入 layout；`<tiqian-prose>` 对应 `emphasis-dot-gap-em` attribute。
+两者都不从宿主 `line-height` 推导距离。
 
 `InlineBoxBoundaryAdvance` 把宿主 inline 的真实边界几何作为 layout input，而不是渲染后补偿：DOM
 在原生 source 仍连接时测得 inline-start/end 的 padding、border、margin 与 `::before/::after` 占宽，
@@ -334,5 +334,5 @@ document-level handler 只在 selection 与 `[data-tq-rendered]` 相交时接管
   lowerer 后静默丢语义。
 - 复用现有 golden:web adapter 的逐标点 advance / ink 侧与 AWT / Skia / Android 对照,分歧入
   `haltValidation` 通道。
-- roadmap「倾向等 Rust core」的考量与本 ADR 不冲突:core 换 Rust 只改引擎实现语言,
+- 如果未来更换 core 的实现语言，本 ADR 的前端边界仍然成立：
   `OffscreenMeasureTextShaping` 度量后端与 `PreBrokenLineDom` 渲染边界不变。

@@ -995,7 +995,7 @@ object DomParagraphRenderer {
             val circle = document.createElementNS(SVG_NS, "circle")
             circle.setAttribute("cx", "${dot.anchorX}")
             circle.setAttribute("cy", "${dot.anchorY}")
-            circle.setAttribute("r", "${dot.dotDiameter * EMPHASIS_DOT_SCALE / 2f}")
+            circle.setAttribute("r", "${dot.dotDiameter / 2f}")
             circle.setAttribute("fill", color)
             circle.setAttribute("style", "fill:$color!important")
             svg.appendChild(circle)
@@ -1171,7 +1171,6 @@ object DomParagraphRenderer {
     // browser text sizes while staying clear of the CJK face.
     private const val UNDERLINE_OFFSET_EM = 0.18f
     private const val LINE_THICKNESS_EM = 0.08f
-    private const val EMPHASIS_DOT_SCALE = 0.85f
     private const val RUBY_ASCENT_RATIO = 0.8f // fallback 注文 ascent when font metrics are unavailable
     private const val BOPOMOFO_TONE_TARGET_INK_WIDTH_SCALE = 0.82f
     private const val BOPOMOFO_TONE_SLASH_INK_WIDTH_EM_REGULAR = 0.404f

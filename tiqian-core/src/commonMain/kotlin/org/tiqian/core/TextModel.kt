@@ -181,8 +181,17 @@ enum class DecorationKind {
     BookTitle,
 }
 
-/** ADR 0018: 着重号墨迹中心相对基线的默认下沉量，单位 em。 */
-const val DEFAULT_EMPHASIS_DOT_CENTER_OFFSET_EM: Float = 0.45f
+/** How insufficient inter-line space for pinyin ruby expands the baseline grid. */
+enum class RubyLineHeightMode {
+    /** Default: add the missing space only before lines that carry pinyin ruby. */
+    PerLine,
+
+    /** Add the same missing space before every line in the paragraph. */
+    UniformParagraph,
+}
+
+/** ADR 0018: 着重号与被注文字字面底边之间的默认净空，单位 em。 */
+const val DEFAULT_EMPHASIS_DOT_GAP_EM: Float = 0.1f
 
 data class ParagraphStyle(
     /**
@@ -236,20 +245,23 @@ data class ParagraphStyle(
      */
     val lineLengthGrid: LineLengthGrid = LineLengthGrid(),
     /**
-     * 行间注（拼音）行高分配：默认 **false** = 只有**含注音的那一行**抬高行高给注文留带，
-     * 其余行不受影响（ADR 0032）。`true` = 整段每行都预留同一条注文带，使行距整齐划一
-     * （以全段抬高为代价）——按需开启。注音（右侧 ㄅㄆㄇ）不占行高，不受此项影响。
+     * 拼音 ruby 的条件式行高策略（ADR 0032）。引擎先用现有行距
+     * (`lineHeight - 基文字面高`) 容纳注文；能放下时两种模式都不改变行盒。
+     * 空间不足时，[RubyLineHeightMode.PerLine]（默认）只加高含注文的行，
+     * [RubyLineHeightMode.UniformParagraph] 则把同样的增量应用到整段每一行。
+     * 右侧注音不使用此项。
      */
-    val rubyUniformBand: Boolean = false,
+    val rubyLineHeightMode: RubyLineHeightMode = RubyLineHeightMode.PerLine,
     /**
-     * 着重号圆点墨迹中心相对被注文字 baseline 的显式下沉量，单位 em。
+     * 着重号圆点墨迹上缘与被注文字字面底边之间的显式净空，单位 em。
      *
      * CLREQ 规定横排着重号位于文字底端，但没有规定点与字面的精确距离；
-     * 因此距离由排版样式显式决定，而不是从 [lineHeight] 反推。更宽的行高只
-     * 提供更多容纳空间，不会暗中移动着重号。默认值见
-     * [DEFAULT_EMPHASIS_DOT_CENTER_OFFSET_EM]（ADR 0018）。
+     * 因此距离由排版样式显式决定。引擎以每个 cluster 的真实字面度量定位
+     * 圆点，不从 baseline 或 [lineHeight] 猜位置。更宽的行高只提供更多容纳
+     * 空间，不会暗中移动着重号。默认值见 [DEFAULT_EMPHASIS_DOT_GAP_EM]
+     *（ADR 0018）。
      */
-    val emphasisDotCenterOffsetEm: Float = DEFAULT_EMPHASIS_DOT_CENTER_OFFSET_EM,
+    val emphasisDotGapEm: Float = DEFAULT_EMPHASIS_DOT_GAP_EM,
 )
 
 /**

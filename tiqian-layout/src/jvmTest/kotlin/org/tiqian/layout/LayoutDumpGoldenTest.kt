@@ -70,8 +70,10 @@ class LayoutDumpGoldenTest {
                             paragraphStyle = org.tiqian.core.ParagraphStyle(
                                 lineHeight = fixture.lineHeight,
                                 firstLineIndent = fixture.firstLineIndentEm?.let { org.tiqian.core.Ic(it) },
+                                rubyLineHeightMode = fixture.rubyLineHeightMode,
                             ),
                             decorations = fixture.decorations,
+                            rubySpans = fixture.rubySpans,
                         ),
                     )
                     append(result.dump(label))
@@ -239,7 +241,8 @@ class LayoutDumpGoldenTest {
         debug.decorationDecisions.forEach { d ->
             appendLine(
                 "deco ${d.clusterRange.start}-${d.clusterRange.end} '${d.sourceText}' kind=${d.kind} " +
-                    "applied=${d.applied} anchor=${d.anchorX.fmt()},${d.anchorY.fmt()} reason=${d.reason}",
+                    "applied=${d.applied} anchor=${d.anchorX.fmt()},${d.anchorY.fmt()} " +
+                    "diameter=${d.dotDiameter.fmt()} reason=${d.reason}",
             )
         }
         debug.lineSpacingDecision?.let { d ->
@@ -247,6 +250,15 @@ class LayoutDumpGoldenTest {
                 "linespacing natural=${d.naturalHeight.fmt()} requested=${d.requestedLineHeight?.fmt() ?: "-"} " +
                     "resolved=${d.resolvedHeight.fmt()} floor=${d.spacingFloor.fmt()} " +
                     "applied=${d.floorApplied} reason=${d.reason}",
+            )
+        }
+        debug.rubyLineHeightDecision?.let { d ->
+            appendLine(
+                "rubylineheight mode=${d.mode} base=${d.baseLineHeight.fmt()} " +
+                    "face=${d.baseFaceHeight.fmt()} ruby=${d.rubyExtent.fmt()} " +
+                    "available=${d.availableInterlineSpace.fmt()} maxExtra=${d.maxExtra.fmt()} " +
+                    "extras=${d.lineExtras.joinToString(",") { it.fmt() }.ifEmpty { "-" }} " +
+                    "lines=${d.expandedLineIndices.joinToString(",").ifEmpty { "-" }} reason=${d.reason}",
             )
         }
         debug.maxLinesDecision?.let { d ->
@@ -263,7 +275,7 @@ class LayoutDumpGoldenTest {
             appendLine(
                 "ruby ${r.baseRange.start}-${r.baseRange.end} '${r.text}' line=${r.lineIndex} " +
                     "centerX=${r.centerX.fmt()} baselineY=${r.baselineY.fmt()} size=${r.fontSize.fmt()} " +
-                    "width=${r.width.fmt()} overhang=${r.overhang.fmt()}",
+                    "box=${r.ascent.fmt()}/${r.descent.fmt()} width=${r.width.fmt()} overhang=${r.overhang.fmt()}",
             )
         }
         debug.bopomofoDecisions.forEach { z ->

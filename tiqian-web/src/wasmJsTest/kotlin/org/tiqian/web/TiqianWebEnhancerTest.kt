@@ -88,12 +88,12 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
-    fun exposesExplicitEmphasisDotCenterOffset() {
-        fun enhanceWithOffset(offset: Float): Float {
+    fun exposesExplicitEmphasisDotGap() {
+        fun enhanceWithGap(gap: Float): Float {
             val root = mount(
                 """
                 <div data-tiqian-root="true" style="width: 320px">
-                  <p>前<strong>强调</strong>后。</p>
+                  <p style="font-size: 18px">前<strong>强调</strong>后。</p>
                 </div>
                 """.trimIndent(),
             )
@@ -101,14 +101,14 @@ class TiqianWebEnhancerTest {
                 1,
                 TiqianWeb.enhance(
                     root,
-                    testOptions().copy(emphasisDotCenterOffsetEm = offset),
+                    testOptions().copy(emphasisDotGapEm = gap),
                 ),
             )
             return root.querySelector("circle")!!.getAttribute("cy")!!.toFloat()
         }
 
-        val defaultCenter = enhanceWithOffset(0.45f)
-        val adjustedCenter = enhanceWithOffset(0.60f)
+        val defaultCenter = enhanceWithGap(0.10f)
+        val adjustedCenter = enhanceWithGap(0.25f)
         assertEquals(18f * 0.15f, adjustedCenter - defaultCenter, 0.01f)
     }
 

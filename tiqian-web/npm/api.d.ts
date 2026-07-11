@@ -7,7 +7,7 @@ export interface TiqianWebOptions {
   fontSize?: number;
   lineHeight?: number;
   firstLineIndentIc?: number;
-  emphasisDotCenterOffsetEm?: number;
+  emphasisDotGapEm?: number;
   paragraphSelector?: string;
 }
 

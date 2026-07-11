@@ -20,6 +20,8 @@ import org.tiqian.core.RubyDecisionInfo
 import org.tiqian.clreq.BopomofoParser
 import org.tiqian.clreq.BopomofoTone
 import org.tiqian.core.RubyKind
+import org.tiqian.core.RubyLineHeightDecisionInfo
+import org.tiqian.core.RubyLineHeightMode
 import org.tiqian.core.RubySpan
 import org.tiqian.core.BopomofoDecisionInfo
 import org.tiqian.core.BopomofoGlyphPlacement
@@ -119,6 +121,9 @@ class ExplainableStubParagraphLayoutEngine(
     override fun layout(input: LayoutInput): LayoutResult {
         val text = input.content.text
         val fontSize = input.textStyle.fontSize
+        require(input.paragraphStyle.emphasisDotGapEm.isFinite() && input.paragraphStyle.emphasisDotGapEm >= 0f) {
+            "ParagraphStyle.emphasisDotGapEm must be finite and non-negative"
+        }
         input.inlineBoxes.forEach { inlineBox ->
             require(
                 inlineBox.range.start >= 0 &&
@@ -169,10 +174,11 @@ class ExplainableStubParagraphLayoutEngine(
         val emphasisRanges = input.decorations.filter { it.kind == DecorationKind.Emphasis }.map { it.range }
         fun emphasisItalicAt(offset: Int): Boolean =
             emphasisRanges.any { offset >= it.start && offset < it.end }
-        // 行间注 (ruby, ADR 0032): 注文 above the base; the band reserved in the line
-        // height is the注文 font's REAL ascent+descent stacked over the base 字身顶
-        // (computed after metricDecisions below). advance handled by 避让.
+        // 行间注 (ruby, ADR 0032):注文 first uses the existing inter-line area.
+        // Only a measured deficit expands line boxes according to rubyLineHeightMode;
+        // advance is still handled by 避让 before breaking.
         val rubyFontSize = fontSize * RUBY_FONT_EM
+        val rubyStackGap = fontSize * RUBY_STACK_GAP_EM
         // `RubyLegibilityWeightBoost`: small above-base pinyin stays one weight
         // step heavier than the base; Android gallery shows this is enough.
         val rubyFontWeight = (input.textStyle.fontWeight + RUBY_FONT_WEIGHT_BOOST).coerceIn(1, 900)
@@ -652,28 +658,60 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
         val spacingPlan = punctuationSpacingCompressor.compress(punctuationAtoms, em = fontSize)
-        // Measure a 注文's width in ITS OWN font at the ruby size (拼音 is variable-width).
-        fun measureRubyWidth(rubyText: String, families: List<String>): Float {
-            if (rubyText.isEmpty()) return 0f
-            val range = TextRange(0, rubyText.length)
+        // Shape each注文 once in ITS OWN font for horizontal width. Vertical fit
+        // deliberately uses that Latin face's declared ascent/descent, not glyph
+        // ink: changing hé to p or g must not change the line-height decision.
+        val rubyFontGeometryBySpan = pinyinSpans.associateWith { ruby ->
+            val metricText = ruby.text.ifEmpty { "x" }
+            val range = TextRange(0, metricText.length)
+            val preferredFamilies = ruby.fontFamilies
             val decision = fallbackResolver.resolve(
-                text = rubyText,
+                text = metricText,
                 range = range,
                 request = FontRequest(
-                    preferredFamilies = families.ifEmpty { input.textStyle.fontFamilies },
+                    preferredFamilies = preferredFamilies,
                     locale = input.textStyle.locale,
                     role = FontRole.LatinText,
                 ),
             )
-            return textShaper.shape(
-                ShapingInput(
-                    text = rubyText,
-                    range = range,
-                    style = input.textStyle.copy(fontSize = rubyFontSize, fontFamilies = families, fontWeight = rubyFontWeight),
-                    fontDecision = decision,
-                    displayText = rubyText,
+            val raw = fontMetricsResolver.resolve(
+                FontMetricsRequest(
+                    fontKey = decision.candidate.key,
+                    fontSize = rubyFontSize,
+                    role = FontRole.LatinText,
+                    locale = input.textStyle.locale,
+                    fontFamilies = preferredFamilies,
                 ),
-            ).clusters.sumOf { it.advance.toDouble() }.toFloat()
+            )
+            val declaredAscent = raw.typoAscent ?: raw.ascent
+            val declaredDescent = raw.typoDescent ?: raw.descent
+            val shaped = if (ruby.text.isEmpty()) {
+                null
+            } else {
+                textShaper.shape(
+                    ShapingInput(
+                        text = ruby.text,
+                        range = TextRange(0, ruby.text.length),
+                        style = input.textStyle.copy(
+                            fontSize = rubyFontSize,
+                            fontFamilies = ruby.fontFamilies,
+                            fontWeight = rubyFontWeight,
+                        ),
+                        fontDecision = decision,
+                        displayText = ruby.text,
+                    ),
+                )
+            }
+            RubyFontGeometry(
+                width = shaped?.clusters.orEmpty().sumOf { it.advance.toDouble() }.toFloat(),
+                ascent = if (ruby.text.isEmpty()) 0f else declaredAscent,
+                descent = if (ruby.text.isEmpty()) 0f else declaredDescent,
+                requiredExtent = if (ruby.text.isEmpty()) {
+                    0f
+                } else {
+                    declaredAscent + declaredDescent + rubyStackGap
+                },
+            )
         }
         // 避让: left→right, push a 注文 (and everything after) right by the MINIMAL
         // amount that restores the word-space gap to the previous 注文; record it as
@@ -689,7 +727,7 @@ class ExplainableStubParagraphLayoutEngine(
             val measures = pinyinSpans.mapNotNull { ruby ->
                 val idxRange = natural.clusterIndexRangeFor(ruby.baseRange) ?: return@mapNotNull null
                 val center = (leftX[idxRange.first] + leftX[idxRange.last] + natural[idxRange.last].advance) / 2f
-                Triple(idxRange.first, center, measureRubyWidth(ruby.text, ruby.fontFamilies))
+                Triple(idxRange.first, center, rubyFontGeometryBySpan.getValue(ruby).width)
             }.sortedBy { it.first }
             val spread = HashMap<Int, Float>()
             var shift = 0f
@@ -856,13 +894,16 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        // 行间注 vertical placement (ADR 0032): stack the 注文 font's REAL 字身框
-        // (ascent/descent at the ruby size, ADR 0002 amendment — no synthesized em)
-        // on top of the base 字身顶, with a small clearance. The band reserved in the
-        // line height = 注文 ascent+descent+gap; the注文 baseline drops below the base
-        // baseline by 基字 ascent + 注文 descent + gap.
-        val baseAscent = metricDecisions.maxOfOrNull { it.layoutMetrics.ascent } ?: (fontSize * 0.88f)
-        val baseDescent = metricDecisions.maxOfOrNull { it.layoutMetrics.descent } ?: (fontSize * 0.12f)
+        // 行间注 vertical placement (ADR 0032): use the ideographic base face,
+        // then seat the ruby font's declared Latin box above it. Glyph ink does
+        // not participate, so reading content cannot change the baseline grid.
+        val baseMetricDecisions = metricDecisions
+            .filter { it.layoutMetrics.metricBox == MetricBox.IdeographicEmBox }
+            .ifEmpty { metricDecisions }
+        val baseAscent = baseMetricDecisions.maxOfOrNull { it.layoutMetrics.ascent }
+            ?: (fontSize * CJK_FACE_ASCENT_FALLBACK_EM)
+        val baseDescent = baseMetricDecisions.maxOfOrNull { it.layoutMetrics.descent }
+            ?: (fontSize * CJK_FACE_DESCENT_FALLBACK_EM)
         // BaseIdeographicMetricReference (ADR 0002/0030): CJK body text AND CJK
         // punctuation both normalize to an IdeographicEmBox on the shared Roman
         // baseline. The reference therefore comes from any base-size ideographic
@@ -876,30 +917,10 @@ class ExplainableStubParagraphLayoutEngine(
             }
             ?.layoutMetrics
         val baseBoxDescent = baseRefMetrics?.descent ?: baseDescent
-        // 注文 vertical extent: use the TYPOGRAPHIC box (sTypo — the visual letter box,
-        // accents + descenders), NOT the full hhea (RawFontBox adds line gap + generous
-        // ascent), so a 拼音 line is only as tall as the pinyin needs, not ~0.6em taller.
-        val rubyRaw = if (pinyinSpans.isEmpty()) {
-            null
-        } else {
-            val rubyDecision = fallbackResolver.resolve(
-                text = "x",
-                range = TextRange(0, 1),
-                request = FontRequest(preferredFamilies = emptyList(), locale = input.textStyle.locale, role = FontRole.LatinText),
-            )
-            val req = FontMetricsRequest(
-                fontKey = rubyDecision.candidate.key,
-                fontSize = rubyFontSize,
-                role = FontRole.LatinText,
-                locale = input.textStyle.locale,
-            )
-            fontMetricsResolver.resolve(req)
-        }
-        val rubyAscent = rubyRaw?.let { it.typoAscent ?: it.ascent } ?: 0f
-        val rubyDescent = rubyRaw?.let { it.typoDescent ?: it.descent } ?: 0f
-        val rubyStackGap = fontSize * RUBY_STACK_GAP_EM
-        val rubyExtent = if (rubyRaw == null) 0f else rubyAscent + rubyDescent + rubyStackGap
-        val rubyBaselineDrop = baseAscent + rubyDescent + rubyStackGap
+        // Required vertical space comes from the resolved Latin face's declared
+        // ascent/descent. It is stable for every reading in the same font; glyph
+        // bounds are deliberately irrelevant to line-height and placement.
+        val rubyExtent = rubyFontGeometryBySpan.values.maxOfOrNull { it.requiredExtent } ?: 0f
 
         // InterlinearMarkLineSpacingFloor (CLREQ 5.6.1.1): with 行间标点
         // (着重号、示亡号 etc.) present, line spacing (height − 字身高) must not
@@ -908,20 +929,16 @@ class ExplainableStubParagraphLayoutEngine(
         // print backend, like 竖排.)
         val interlinearSpacingFloor = if (input.decorations.isEmpty()) 0f else 0.5f * fontSize
         val defaultBodyLineHeight = fontSize * DEFAULT_BODY_LINE_HEIGHT_EM
-        // Base line metrics WITHOUT the ruby band — the band is added PER LINE below
-        // (only lines that carry 拼音 ruby get it, unless `rubyUniformBand`), so a
-        // single ruby no longer inflates the whole paragraph's line height (ADR 0032).
+        // Resolve the unannotated baseline grid first. Ruby can consume its full
+        // inter-line gap (not merely this line box's upper half-leading); only the
+        // measured shortfall is added below on a per-line or paragraph-wide basis.
         val baseLineMetrics = metricDecisions.lineMetrics(
             explicitLineHeight = input.paragraphStyle.lineHeight,
             defaultLineHeight = defaultBodyLineHeight,
             spacingFloor = interlinearSpacingFloor,
         )
-        // 行间注 band = only the 注文 that EXCEEDS the line's existing upper half-leading.
-        // The default 1.5em line already leaves ~0.25em above the 字身顶; the 拼音 sits in
-        // that gap first, so a 拼音 line grows by far less than the full 注文 height (it
-        // was being pushed ~0.6em taller for no reason).
-        val baseUpperLeading = ((baseLineMetrics.height - (baseAscent + baseDescent)) / 2f).coerceAtLeast(0f)
-        val rubyBand = (rubyExtent - baseUpperLeading).coerceAtLeast(0f)
+        val baseFaceHeight = baseAscent + baseDescent
+        val existingInterlineSpace = (baseLineMetrics.height - baseFaceHeight).coerceAtLeast(0f)
         val lineSpacingDecision = if (baseLineMetrics.height <= 0f) {
             null
         } else {
@@ -1323,14 +1340,46 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        // Per-line annotation/object extents. Ruby and opaque inline objects
-        // share the space above the baseline (take the max, not the sum); inline
-        // objects may also extend below it. Each line therefore grows only by
-        // the top/bottom amount its own contents actually require.
-        val pinyinClusterRanges = pinyinSpans.mapNotNull { naturalClusters.clusterIndexRangeFor(it.baseRange) }
-        val lineRubyTopExtra = lineSolution.lines.map { lc ->
-            val hasRuby = pinyinClusterRanges.any { it.first <= lc.clusterRange.last && it.last >= lc.clusterRange.first }
-            if (rubyBand > 0f && (input.paragraphStyle.rubyUniformBand || hasRuby)) rubyBand else 0f
+        // Per-line annotation/object extents. Ruby consumes existing inter-line
+        // space first; a deficit is added before annotated lines by default, or
+        // before every line in UniformParagraph mode. Opaque inline objects own
+        // layout geometry and may extend above or below the base box.
+        val pinyinClusterRanges = pinyinSpans.mapNotNull { ruby ->
+            naturalClusters.clusterIndexRangeFor(ruby.baseRange)?.let { ruby to it }
+        }
+        val perLineRubyDeficit = lineSolution.lines.map { line ->
+            val requiredExtent = pinyinClusterRanges.mapNotNull { (ruby, range) ->
+                if (range.first <= line.clusterRange.last && range.last >= line.clusterRange.first) {
+                    rubyFontGeometryBySpan[ruby]?.requiredExtent
+                } else {
+                    null
+                }
+            }.maxOrNull() ?: 0f
+            (requiredExtent - existingInterlineSpace).coerceAtLeast(0f)
+        }
+        val paragraphRubyDeficit = perLineRubyDeficit.maxOrNull() ?: 0f
+        val lineRubyTopExtra = when (input.paragraphStyle.rubyLineHeightMode) {
+            RubyLineHeightMode.PerLine -> perLineRubyDeficit
+            RubyLineHeightMode.UniformParagraph -> List(lineSolution.lines.size) { paragraphRubyDeficit }
+        }
+        val rubyLineHeightDecision = if (pinyinSpans.isEmpty()) {
+            null
+        } else {
+            RubyLineHeightDecisionInfo(
+                mode = input.paragraphStyle.rubyLineHeightMode.name,
+                baseLineHeight = baseLineMetrics.height,
+                baseFaceHeight = baseFaceHeight,
+                rubyExtent = rubyExtent,
+                availableInterlineSpace = existingInterlineSpace,
+                maxExtra = lineRubyTopExtra.maxOrNull() ?: 0f,
+                lineExtras = lineRubyTopExtra,
+                expandedLineIndices = lineRubyTopExtra.indices.filter { lineRubyTopExtra[it] > 0f },
+                reason = if (lineRubyTopExtra.any { it > 0f }) {
+                    "ConditionalRubyLineHeight"
+                } else {
+                    "ExistingInterlineSpaceFitsRuby"
+                },
+            )
         }
         val baseTopExtent = baseLineMetrics.baseline
         val baseBottomExtent = baseLineMetrics.height - baseLineMetrics.baseline
@@ -1476,8 +1525,9 @@ class ExplainableStubParagraphLayoutEngine(
             clusterRoles = clusterRoles,
             justifyDeltaByCluster = justifyDeltaByCluster,
             rubySpreadByCluster = rubyAndBopomofoSpread,
+            metricDecisions = metricDecisions,
             fontSize = fontSize,
-            emphasisDotCenterOffsetEm = input.paragraphStyle.emphasisDotCenterOffsetEm,
+            emphasisDotGapEm = input.paragraphStyle.emphasisDotGapEm,
         )
         val decorationSegments = computeDecorationSegments(
             decorations = input.decorations,
@@ -1497,8 +1547,10 @@ class ExplainableStubParagraphLayoutEngine(
             lineBoxes = lines,
             finalClusters = finalClusters,
             naturalClusters = naturalClusters,
-            measureRubyWidth = ::measureRubyWidth,
-            rubyBaselineDrop = rubyBaselineDrop,
+            metricDecisions = metricDecisions,
+            rubyFontGeometryBySpan = rubyFontGeometryBySpan,
+            rubyStackGap = rubyStackGap,
+            fallbackBaseAscent = baseAscent,
             rubyFontSize = rubyFontSize,
             rubyFontWeight = rubyFontWeight,
         )
@@ -1657,6 +1709,7 @@ class ExplainableStubParagraphLayoutEngine(
                 mandatoryBreakDecisions = mandatoryBreakDecisions,
                 maxLinesDecision = maxLinesDecision,
                 lineSpacingDecision = lineSpacingDecision,
+                rubyLineHeightDecision = rubyLineHeightDecision,
                 kinsokuDecision = kinsokuDecision,
                 lineLengthGridDecision = lineLengthGridDecision,
                 firstLineIndentDecision = firstLineIndentDecision,
@@ -1678,12 +1731,12 @@ class ExplainableStubParagraphLayoutEngine(
      * italics instead — `BilingualEmphasisWesternItalic`, applied at shaping).
      *
      * Anchor = the point the dot INK CENTRE must land on: x is the glyph
-     * centre (final position minus the trailing justification delta), y is
-     * `baseline + ParagraphStyle.emphasisDotCenterOffsetEm·em`. The offset is
-     * explicit typography input (`ExplicitEmphasisDotOffset`), not derived from
-     * line height: leading provides room for the mark but does not silently move
-     * it. Renderers measure their dot glyph's ink and align its centre here, so
-     * font differences stay in the render layer.
+     * centre (final position minus the trailing justification delta); y starts
+     * at the annotated cluster's real ideographic-face bottom, then adds
+     * `ParagraphStyle.emphasisDotGapEm·clusterEm + dotRadius`. This
+     * `ExplicitEmphasisDotGap` is independent of line height and stays correct
+     * for mixed font sizes and explicit baseline shifts. [dotDiameter] is final
+     * paint geometry: renderers draw it exactly and apply no hidden scaling.
      */
     private fun computeDecorationDecisions(
         decorations: List<DecorationSpan>,
@@ -1693,8 +1746,9 @@ class ExplainableStubParagraphLayoutEngine(
         clusterRoles: List<FontRole>,
         justifyDeltaByCluster: Map<Int, Float>,
         rubySpreadByCluster: Map<Int, Float>,
+        metricDecisions: List<ClusterMetricDecision>,
         fontSize: Float,
-        emphasisDotCenterOffsetEm: Float,
+        emphasisDotGapEm: Float,
     ): List<DecorationDecisionInfo> {
         if (decorations.isEmpty()) return emptyList()
 
@@ -1714,6 +1768,14 @@ class ExplainableStubParagraphLayoutEngine(
                         // the 注音 column reservation (着重号 belongs under 基文, not 基文+注音).
                         val glyphAdvance = cluster.advance -
                             (justifyDeltaByCluster[idx] ?: 0f) - (rubySpreadByCluster[idx] ?: 0f)
+                        val metric = metricDecisions.firstOrNull {
+                            cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
+                        }
+                        val clusterEm = metric?.request?.fontSize ?: fontSize
+                        val faceDescent = metric?.layoutMetrics?.descent
+                            ?: clusterEm * CJK_FACE_DESCENT_FALLBACK_EM
+                        val candidateDotDiameter = clusterEm * EMPHASIS_DOT_DIAMETER_EM
+                        val dotDiameter = if (applied) candidateDotDiameter else 0f
                         decisions += DecorationDecisionInfo(
                             clusterRange = cluster.range,
                             sourceText = cluster.text,
@@ -1725,9 +1787,9 @@ class ExplainableStubParagraphLayoutEngine(
                                 else -> "no-dot-on-non-han"
                             },
                             anchorX = x + glyphAdvance / 2f,
-                            anchorY = lineBoxes[lineIndex].baseline +
-                                fontSize * emphasisDotCenterOffsetEm,
-                            dotDiameter = if (applied) fontSize * EMPHASIS_DOT_DIAMETER_EM else 0f,
+                            anchorY = lineBoxes[lineIndex].baseline + cluster.baselineShift +
+                                faceDescent + clusterEm * emphasisDotGapEm + candidateDotDiameter / 2f,
+                            dotDiameter = dotDiameter,
                         )
                     }
                     x += cluster.advance
@@ -1818,9 +1880,9 @@ class ExplainableStubParagraphLayoutEngine(
                 val leftEdge = left ?: return@forEachIndexed
                 val baseline = lineBoxes[lineIndex].baseline
                 val isLine = span.kind != DecorationKind.Mourning
-                // 行间线贴字：face bottom (+0.12em) plus a hairline of air;
-                // at the default emphasis offset, 先线后点 holds because the
-                // dot ink starts at 0.45em - 0.11em radius = +0.34em.
+                // 行间线贴字：face bottom (+0.12em) plus a hairline of air.
+                // At the default 0.1em emphasis gap, dot ink starts at +0.22em,
+                // so the +0.18em line remains first.
                 val lineY = baseline + fontSize * INTERLINEAR_LINE_Y_EM
                 spanSegments += DecorationSegmentInfo(
                     sourceRange = TextRange(segStart, segEnd),
@@ -2484,8 +2546,12 @@ class ExplainableStubParagraphLayoutEngine(
      * 行间注 geometry (ruby, ADR 0032): centre each注文 over the x-span of its
      * base clusters on the line they land. `advance` is untouched (注文 overhangs
      * if wider — diagnostic [RubyDecisionInfo.overhang]); the renderer measures
-     * the real注文 width and centres on [RubyDecisionInfo.centerX]. A base split
-     * across lines yields one decision per line (each over its on-line fragment).
+     * the real注文 width and centres on [RubyDecisionInfo.centerX]. Vertical
+     * placement seats each annotation's declared Latin descent above the highest
+     * annotated base face. It first occupies existing inter-line space; any
+     * font-metric deficit was already reflected in the selected line-height mode.
+     * A base split across lines yields one decision per line (each over its
+     * on-line fragment).
      */
     private fun computeRubyDecisions(
         rubySpans: List<RubySpan>,
@@ -2493,18 +2559,22 @@ class ExplainableStubParagraphLayoutEngine(
         lineBoxes: List<LineBox>,
         finalClusters: List<Cluster>,
         naturalClusters: List<Cluster>,
-        measureRubyWidth: (String, List<String>) -> Float,
-        rubyBaselineDrop: Float,
+        metricDecisions: List<ClusterMetricDecision>,
+        rubyFontGeometryBySpan: Map<RubySpan, RubyFontGeometry>,
+        rubyStackGap: Float,
+        fallbackBaseAscent: Float,
         rubyFontSize: Float,
         rubyFontWeight: Int,
     ): List<RubyDecisionInfo> {
         if (rubySpans.isEmpty()) return emptyList()
         val out = mutableListOf<RubyDecisionInfo>()
         for (ruby in rubySpans) {
+            val rubyGeometry = rubyFontGeometryBySpan.getValue(ruby)
             lineRanges.forEachIndexed { lineIndex, clusterRange ->
                 var x = lineBoxes[lineIndex].indent
                 var baseLeft = Float.NaN
                 var contentWidth = 0f
+                var baseFaceTop = Float.POSITIVE_INFINITY
                 for (idx in clusterRange) {
                     val cluster = finalClusters[idx]
                     if (cluster.range.start >= ruby.baseRange.start && cluster.range.end <= ruby.baseRange.end) {
@@ -2512,18 +2582,27 @@ class ExplainableStubParagraphLayoutEngine(
                         // Centre on the base CONTENT (natural width), NOT the 避让-widened
                         // slot — the spread is trailing space the注文 must not centre over.
                         contentWidth += naturalClusters[idx].advance
+                        val ascent = metricDecisions.firstOrNull {
+                            cluster.range.start >= it.range.start && cluster.range.end <= it.range.end
+                        }?.layoutMetrics?.ascent ?: fallbackBaseAscent
+                        baseFaceTop = minOf(
+                            baseFaceTop,
+                            lineBoxes[lineIndex].baseline + cluster.baselineShift - ascent,
+                        )
                     }
                     x += cluster.advance
                 }
                 if (!baseLeft.isNaN()) {
-                    val rubyWidth = measureRubyWidth(ruby.text, ruby.fontFamilies)
+                    val rubyWidth = rubyGeometry.width
                     out += RubyDecisionInfo(
                         baseRange = ruby.baseRange,
                         text = ruby.text,
                         lineIndex = lineIndex,
                         centerX = baseLeft + contentWidth / 2f,
-                        baselineY = lineBoxes[lineIndex].baseline - rubyBaselineDrop,
+                        baselineY = baseFaceTop - rubyStackGap - rubyGeometry.descent,
                         fontSize = rubyFontSize,
+                        ascent = rubyGeometry.ascent,
+                        descent = rubyGeometry.descent,
                         width = rubyWidth,
                         overhang = ((rubyWidth - contentWidth) / 2f).coerceAtLeast(0f),
                         fontFamilies = ruby.fontFamilies,
@@ -2665,7 +2744,6 @@ class ExplainableStubParagraphLayoutEngine(
         explicitLineHeight: Float?,
         defaultLineHeight: Float,
         spacingFloor: Float = 0f,
-        rubyBand: Float = 0f,
     ): ResolvedLineMetrics {
         if (isEmpty()) {
             // EmptyParagraphBaselineFallback: a paragraph with no shapeable
@@ -2686,9 +2764,7 @@ class ExplainableStubParagraphLayoutEngine(
         // ㄅㄆㄇ in a different metric) stretches EVERY line in the paragraph. Pure-Latin
         // paragraphs (no 字身框 cluster) fall back to all clusters so they still fit.
         val heightSource = filter { it.layoutMetrics.metricBox == MetricBox.IdeographicEmBox }.ifEmpty { this }
-        // 行间注 (ADR 0032): the注文 band sits ABOVE the base 字面, so it adds to
-        // the ascent — the baseline drops to leave room above and the line grows.
-        val ascent = heightSource.maxOf { it.layoutMetrics.ascent } + rubyBand
+        val ascent = heightSource.maxOf { it.layoutMetrics.ascent }
         val descent = heightSource.maxOf { it.layoutMetrics.descent }
         val naturalHeight = ascent + descent
         // Height = the explicit value, else the CjkBodyLineHeightDefault, but
@@ -2738,6 +2814,13 @@ private data class ClusterMetricDecision(
     val request: FontMetricsRequest,
     val rawMetrics: RawFontMetrics,
     val layoutMetrics: LayoutFontMetrics,
+)
+
+private data class RubyFontGeometry(
+    val width: Float,
+    val ascent: Float,
+    val descent: Float,
+    val requiredExtent: Float,
 )
 
 private data class ResolvedLineMetrics(
@@ -3092,12 +3175,10 @@ private data class LineEdgeTrimResult(
     val decisions: List<LineEdgeTrimDecisionInfo>,
 )
 
-/**
- * ADR 0018: 着重号 dot diameter, as a fraction of em. CLREQ 着重号 is a small
- * solid dot, much smaller than the font's `•` glyph (~0.375em); renderers draw
- * a filled circle of this size so it fits the line gap. Matches the AWT raster.
- */
-private const val EMPHASIS_DOT_DIAMETER_EM = 0.22f
+/** ADR 0018 final painted diameter; renderers must not apply another scale factor. */
+private const val EMPHASIS_DOT_DIAMETER_EM = 0.19f
+private const val CJK_FACE_ASCENT_FALLBACK_EM = 0.88f
+private const val CJK_FACE_DESCENT_FALLBACK_EM = 0.12f
 
 /**
  * `CjkBodyLineHeightDefault`: 中文正文默认行高 1.5em(行距约 0.5em),无显式
@@ -3128,11 +3209,9 @@ private const val EMPTY_PARAGRAPH_BASELINE_RATIO = 0.75f
  */
 private const val RUBY_MIN_GAP_EM_OF_RUBY = 0.25f
 /**
- * Extra clearance between the注文 字身框底 and the base 字身框顶 — **default 0**:
- * the typo boxes already carry ink margins (汉字墨迹不顶字身顶、西文降部不到 descent
- * 底), so flush-stacking the real font 字身框 (ADR 0002「用字体声明度量」) already
- * separates the ink. Bump only if a style wants looser ruby. (Placement itself is
- * the REAL ascent/descent, not a synthesized em.)
+ * Extra clearance between the注文 Latin font box and the base 字身框顶 — **default 0**.
+ * The base glyph has its own internal top margin; bump only if a style wants
+ * visibly looser ruby.
  */
 private const val RUBY_STACK_GAP_EM = 0f
 
@@ -3177,8 +3256,8 @@ private const val MOURNING_FRAME_FACE_DESCENT_EM = 0.12f
 
 /**
  * 行间线（专名号/书名号甲式）的横排 y：字身底 (+0.12em) 下方留一线空气
- * （行间标点应尽量紧贴所标注汉字一侧）。使用着重号默认中心距时，点墨水
- * 上缘在 0.45em - 0.11em 半径 = +0.34em，先线后点成立。
+ * （行间标点应尽量紧贴所标注汉字一侧）。着重号默认净空 0.1em，点墨水
+ * 上缘在 +0.22em，故 +0.18em 的线仍在点之前。
  */
 private const val INTERLINEAR_LINE_Y_EM = 0.18f
 

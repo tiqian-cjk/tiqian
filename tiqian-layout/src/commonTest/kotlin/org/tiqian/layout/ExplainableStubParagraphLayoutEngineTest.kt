@@ -1682,24 +1682,29 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertTrue(decisions.none { it.sourceText == "。" })
 
         // Anchor maths for 豆 (4-5): line 0 holds clusters 0..7, x offset of
-        // index 4 = 4×16 = 64, glyph centre 64+8 = 72; anchorY = line 0
-        // baseline + 16×0.45 (explicit style default); the
-        // dot is a 0.22em circle, not the full `•` glyph.
+        // index 4 = 4×16 = 64, glyph centre 64+8 = 72. Vertically, the
+        // dot starts after the real CJK face descent (0.12em) plus the explicit
+        // 0.1em gap; the anchor is another radius down. The 0.19em diameter is
+        // final paint geometry, not a renderer-side approximation.
         val first = decisions.single { it.sourceText == "豆" }
         assertEquals(72f, first.anchorX)
-        assertEquals(16f * 0.22f, first.dotDiameter, 0.01f)
+        assertEquals(16f * 0.19f, first.dotDiameter, 0.01f)
         val line0Baseline = result.lines.first().baseline
-        assertEquals(line0Baseline + 7.2f, first.anchorY, 0.01f)
+        assertEquals(
+            line0Baseline + 16f * 0.12f + 16f * 0.1f + first.dotDiameter / 2f,
+            first.anchorY,
+            0.01f,
+        )
     }
 
     @Test
-    fun emphasisDotOffsetIsExplicitAndIndependentOfLineHeight() {
+    fun emphasisDotGapIsExplicitAndIndependentOfLineHeight() {
         fun layout(lineHeight: Float) = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
                 paragraphStyle = ParagraphStyle(
                     firstLineIndent = Ic(0f),
                     lineHeight = lineHeight,
-                    emphasisDotCenterOffsetEm = 0.60f,
+                    emphasisDotGapEm = 0.25f,
                 ),
                 content = TiqianTextContent("着重"),
                 constraints = LayoutConstraints(maxWidth = 128f),
@@ -1714,7 +1719,11 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         for (result in listOf(layout(24f), layout(48f))) {
             val first = result.debug.decorationDecisions.first { it.applied }
-            assertEquals(result.lines.first().baseline + 9.6f, first.anchorY, 0.01f)
+            assertEquals(
+                result.lines.first().baseline + 16f * 0.12f + 16f * 0.25f + first.dotDiameter / 2f,
+                first.anchorY,
+                0.01f,
+            )
         }
     }
 
@@ -2421,9 +2430,9 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals(161f, wangfuzhi.left)
         assertEquals(208f, wangfuzhi.right)
 
-        // At the default 0.45em centre offset, 先线后点 holds structurally:
-        // the line sits above the emphasis dot ink (0.45 - 0.11 = +0.34em);
-        // the spacing floor applies (no explicit lineHeight).
+        // At the default 0.1em face gap, 先线后点 holds structurally:
+        // line y = +0.18em; dot ink starts at face bottom + gap = +0.22em.
+        // The spacing floor applies (no explicit lineHeight).
         assertEquals(24f, result.lines[0].bottom - result.lines[0].top)
     }
 

@@ -3,6 +3,8 @@ package org.tiqian.test
 import org.tiqian.core.DecorationKind
 import org.tiqian.core.DecorationSpan
 import org.tiqian.core.LayoutConstraints
+import org.tiqian.core.RubyLineHeightMode
+import org.tiqian.core.RubySpan
 import org.tiqian.core.TextRange
 
 data class LayoutFixture(
@@ -12,6 +14,8 @@ data class LayoutFixture(
     val notes: String,
     val lineHeight: Float? = null,
     val decorations: List<DecorationSpan> = emptyList(),
+    val rubySpans: List<RubySpan> = emptyList(),
+    val rubyLineHeightMode: RubyLineHeightMode = RubyLineHeightMode.PerLine,
     /**
      * Fixtures pin 0 unless they exercise 段首缩进 — the maxWidth geometry
      * of the micro fixtures above is hand-tuned to specific break points
@@ -151,6 +155,16 @@ object EarlyLayoutFixtures {
             decorations = listOf(
                 DecorationSpan(range = TextRange(4, 16), kind = DecorationKind.Emphasis),
             ),
+        ),
+        LayoutFixture(
+            id = "ruby-line-height",
+            text = "甲乙丙丁戊己庚辛壬癸子丑",
+            constraints = LayoutConstraints(maxWidth = 64f),
+            notes = "ConditionalRubyLineHeight: an 18px line leaves only 2px above the " +
+                "16px base face, so the 8px pinyin box adds the 6px deficit only " +
+                "before its annotated line in the default PerLine mode.",
+            lineHeight = 18f,
+            rubySpans = listOf(RubySpan(baseRange = TextRange(4, 5), text = "wù")),
         ),
         LayoutFixture(
             id = "first-line-indent",
