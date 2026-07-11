@@ -137,8 +137,12 @@ class LayoutDumpGoldenTest {
                 .ifEmpty { "-" }
             val justify = debug.justificationDecisions.firstOrNull { it.lineRange == line.range }
                 ?.let { j ->
-                    "deficit=${j.deficitBefore.fmt()}->${j.deficitAfter.fmt()} " +
-                        j.allocations.joinToString(",") { "${it.kind}@${it.clusterRange.start}+${it.delta.fmt()}" }
+                    "deficit=${j.deficitBefore.fmt()}->${j.deficitAfter.fmt()}" +
+                        j.allocations
+                            .joinToString(",") { "${it.kind}@${it.clusterRange.start}+${it.delta.fmt()}" }
+                            .takeIf { it.isNotEmpty() }
+                            ?.let { " $it" }
+                            .orEmpty()
                 } ?: "-"
             val indent = if (line.indent > 0f) "indent=${line.indent.fmt()} " else ""
             val hyphen = if (line.hyphenAdvance > 0f) "hyphen=${line.hyphenAdvance.fmt()} " else ""
@@ -149,7 +153,10 @@ class LayoutDumpGoldenTest {
             )
         }
         clusters.forEach { c ->
-            appendLine("cluster ${c.range.start}-${c.range.end} '${c.displayText}' adv=${c.advance.fmt()}")
+            appendLine(
+                "cluster ${c.range.start}-${c.range.end} '${c.displayText}' adv=${c.advance.fmt()}" +
+                    (if (c.glyphInlineShift != 0f) " glyphShift=${c.glyphInlineShift.fmt()}" else ""),
+            )
         }
         debug.fontDecisions.forEach { f ->
             appendLine(
@@ -163,6 +170,9 @@ class LayoutDumpGoldenTest {
                     "adv=${p.advance.fmt()} body=${p.bodyWidth.fmt()} " +
                     "lead=${p.leadingGlueNatural.fmt()} trail=${p.trailingGlueNatural.fmt()} " +
                     "anchor=${p.anchor} source=${p.geometrySource}" +
+                    (if (p.advanceExpansion != 0f) " expand=${p.advanceExpansion.fmt()}" else "") +
+                    (if (p.glyphInlineShift != 0f) " glyphShift=${p.glyphInlineShift.fmt()}" else "") +
+                    (p.glyphPlacementReason?.let { " placement=$it" } ?: "") +
                     (p.haltAdvance?.let { " halt=${it.fmt()}" } ?: "") +
                     (p.inkBoundsFallback?.let { " fallback=$it" } ?: "") +
                     (p.haltValidation?.let { " haltWarn=$it" } ?: ""),
@@ -175,7 +185,24 @@ class LayoutDumpGoldenTest {
                     "trail=${g.trailingGlueConsumed.fmt()}/${g.trailingGlueNatural.fmt()} " +
                     "justify=${g.justificationDelta.fmt()}" +
                     (if (g.rubySpread != 0f) " ruby=${g.rubySpread.fmt()}" else "") +
+                    (if (g.glyphInlineShift != 0f) " glyphShift=${g.glyphInlineShift.fmt()}" else "") +
+                    (g.glyphPlacementReason?.let { " placement=$it" } ?: "") +
                     " resolved=${g.resolvedAdvance.fmt()}",
+            )
+        }
+        debug.inlineBoxDecisions.forEach { box ->
+            appendLine(
+                "inline-box ${box.range.start}-${box.range.end} " +
+                    "start=${box.inlineStart.fmt()} end=${box.inlineEnd.fmt()} " +
+                    "clusters=${box.firstClusterIndex}-${box.lastClusterIndex} reason=${box.reason}",
+            )
+        }
+        debug.inlineObjectDecisions.forEach { inlineObject ->
+            appendLine(
+                "inline-object ${inlineObject.range.start}-${inlineObject.range.end} " +
+                    "advance=${inlineObject.advance.fmt()} ascent=${inlineObject.ascent.fmt()} " +
+                    "descent=${inlineObject.descent.fmt()} cluster=${inlineObject.clusterIndex} " +
+                    "line=${inlineObject.lineIndex} reason=${inlineObject.reason}",
             )
         }
         debug.spacingDecisions.forEach { s ->
@@ -195,6 +222,12 @@ class LayoutDumpGoldenTest {
             appendLine(
                 "mandatorybreak ${b.range.start}-${b.range.end} afterCluster=${b.breakAfterClusterIndex} " +
                     "reason=${b.reason}",
+            )
+        }
+        debug.zeroWidthBreakDecisions.forEach { b ->
+            appendLine(
+                "zerowidthbreak ${b.range.start}-${b.range.end} " +
+                    "source='${b.sourceText.escapeDumpText()}' cluster=${b.clusterIndex} reason=${b.reason}",
             )
         }
         debug.lineEdgeTrimDecisions.forEach { t ->
@@ -273,6 +306,7 @@ class LayoutDumpGoldenTest {
                 '\u0085' -> append("\\u0085")
                 '\u2028' -> append("\\u2028")
                 '\u2029' -> append("\\u2029")
+                '\u200B' -> append("\\u200B")
                 else -> append(ch)
             }
         }

@@ -31,6 +31,13 @@ fun isMandatoryBreakCodePoint(codePoint: Int): Boolean =
         codePoint == 0x2028 || // LS  line separator
         codePoint == 0x2029    // PS  paragraph separator
 
+/**
+ * UAX #14 class ZW: U+200B contributes a soft break opportunity but no ink or
+ * advance. WORD JOINER (U+2060) and ZWNBSP/BOM (U+FEFF) are deliberately not
+ * included because they have the opposite no-break semantics.
+ */
+fun isZeroWidthSpaceCodePoint(codePoint: Int): Boolean = codePoint == 0x200B
+
 interface LineBreakAnalyzer {
     fun analyze(text: String): List<BreakOpportunity>
 }
@@ -62,4 +69,3 @@ data class ForbiddenBreak(
     val range: TextRange,
     val reason: String,
 )
-

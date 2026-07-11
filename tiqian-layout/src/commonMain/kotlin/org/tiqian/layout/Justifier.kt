@@ -14,10 +14,11 @@ import org.tiqian.font.FontRole
  *   2. CjkLatinSpace     — the sino-western gap（中西间距）: stretches from
  *                          the autospace base (0.25em) by up to another
  *                          0.25em — total 0.5em, CLREQ's upper bound.
- *   3. CjkInterChar      — last resort: EVEN inter-character expansion
- *                          （平均拉大字距）, UNCAPPED — CLREQ's final tier
- *                          has no upper bound, and a justified line left
- *                          short reads as an untrimmed line-end blank.
+ *   3. CjkInterChar      — last resort for lines containing CJK body text:
+ *                          EVEN inter-character expansion（平均拉大字距）,
+ *                          UNCAPPED. A Western-dominant visual line does not
+ *                          enter this tier merely because it contains CJK
+ *                          punctuation; see `WesternDominantLineNaturalSpacing`.
  *
  * CLREQ's expansion list has no punctuation-space tier: punctuation
  * adjustment space participates in COMPRESSION only. The earlier tier-1
@@ -84,8 +85,6 @@ class Justifier(
             "clusterRoles must align with adjustedClusters."
         }
 
-        val first = adjustedClusters[lineClusterRange.first]
-        val last = adjustedClusters[lineClusterRange.last]
         val adjustedWidth = lineClusterRange.sumOf { adjustedClusters[it].advance.toDouble() }.toFloat()
         val deficitBefore = (maxWidth - adjustedWidth).coerceAtLeast(0f)
 
@@ -193,6 +192,23 @@ class Justifier(
             into = allocations,
         )
         if (remaining <= 0f) return finalize(lineClusterRange, deficitBefore, remaining, allocations)
+
+        // WesternDominantLineNaturalSpacing: a visual line containing no CJK
+        // body text remains Western composition even when full-width Chinese
+        // punctuation occurs inside technical names such as `Rust（Winio）`.
+        // Word-space and sino-western tiers above still run when applicable;
+        // the remaining deficit stays ragged instead of turning punctuation ↔
+        // Latin boundaries into half-em pseudo-spaces.
+        val hasCjkBodyText = lineClusterRange.any { clusterRoles[it] == FontRole.CjkText }
+        if (!hasCjkBodyText) {
+            return finalize(
+                lineClusterRange = lineClusterRange,
+                deficitBefore = deficitBefore,
+                unfilled = remaining,
+                allocations = allocations,
+                fallbackReason = "WesternDominantLineNaturalSpacing",
+            )
+        }
 
         // 3. CjkInterChar — last resort: EVEN expansion across boundaries
         // （CLREQ「剩余所有字符间距，同时、同等量拉伸」）, uncapped (equal
@@ -348,11 +364,13 @@ class Justifier(
         deficitBefore: Float,
         unfilled: Float,
         allocations: List<JustificationAllocation>,
+        fallbackReason: String? = null,
     ): JustificationPlan = JustificationPlan(
         lineClusterRange = lineClusterRange,
         allocations = allocations,
         deficitBefore = deficitBefore,
         unfilledDeficit = unfilled.coerceAtLeast(0f),
+        fallbackReason = fallbackReason,
     )
 
     private fun isIdeographAlphaNumericBoundary(
@@ -444,6 +462,7 @@ data class JustificationPlan(
     val allocations: List<JustificationAllocation>,
     val deficitBefore: Float,
     val unfilledDeficit: Float,
+    val fallbackReason: String? = null,
 )
 
 /**

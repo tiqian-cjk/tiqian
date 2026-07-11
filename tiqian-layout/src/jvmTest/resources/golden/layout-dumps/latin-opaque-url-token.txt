@@ -5,10 +5,10 @@ maxWidth: 160.0
 size 160.0x144.0
 kinsoku measure=10.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:10字→Basic+Hang
 line[0] 0-10 natural=146.0 adjusted=146.0 visual=160.0 repair=- candidates=- justify=deficit=14.0->0.0 CjkLatinSpace@2+3.3,CjkInterChar@0+10.7
-line[1] 10-19 natural=144.0 adjusted=144.0 visual=144.0 repair=- candidates=- justify=deficit=16.0->16.0 
-line[2] 19-28 natural=144.0 adjusted=144.0 visual=144.0 repair=- candidates=- justify=deficit=16.0->16.0 
+line[1] 10-19 natural=144.0 adjusted=144.0 visual=144.0 repair=- candidates=- justify=deficit=16.0->16.0
+line[2] 19-28 natural=144.0 adjusted=144.0 visual=144.0 repair=- candidates=- justify=deficit=16.0->16.0
 line[3] 28-38 natural=160.0 adjusted=160.0 visual=160.0 repair=- candidates=- justify=-
-line[4] 38-46 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=deficit=32.0->32.0 
+line[4] 38-46 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=deficit=32.0->32.0
 line[5] 46-49 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
 cluster 0-1 '链' adv=26.7
 cluster 1-2 '接' adv=16.0
@@ -46,10 +46,10 @@ linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reaso
 size 160.0x144.0
 kinsoku measure=10.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:10字→Basic+Hang
 line[0] 0-10 natural=146.0 adjusted=146.0 visual=160.0 repair=- candidates=- justify=deficit=14.0->0.0 CjkLatinSpace@2+3.3,CjkInterChar@0+10.7
-line[1] 10-19 natural=144.0 adjusted=144.0 visual=144.0 repair=- candidates=- justify=deficit=16.0->16.0 
-line[2] 19-28 natural=144.0 adjusted=144.0 visual=144.0 repair=- candidates=- justify=deficit=16.0->16.0 
+line[1] 10-19 natural=144.0 adjusted=144.0 visual=144.0 repair=- candidates=- justify=deficit=16.0->16.0
+line[2] 19-28 natural=144.0 adjusted=144.0 visual=144.0 repair=- candidates=- justify=deficit=16.0->16.0
 line[3] 28-38 natural=160.0 adjusted=160.0 visual=160.0 repair=PushIn(LineAdjustmentPushIn shrink=0.0) candidates=PushIn+ justify=-
-line[4] 38-46 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=deficit=32.0->32.0 
+line[4] 38-46 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=deficit=32.0->32.0
 line[5] 46-49 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
 cluster 0-1 '链' adv=26.7
 cluster 1-2 '接' adv=16.0

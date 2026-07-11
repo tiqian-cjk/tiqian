@@ -18,6 +18,40 @@ data class TextSpan(
     val style: TextStyle,
 )
 
+/**
+ * Layout-owned inline box edges around a source text range.
+ *
+ * The text shaper only measures glyphs. Frontends with native inline semantics
+ * (for example DOM padding, borders, margins, or generated `::before` /
+ * `::after` content) use this span to reserve the same leading and trailing
+ * advances in line breaking. [inlineStart] and [inlineEnd] are physical px in
+ * the current horizontal writing mode; negative margins are therefore allowed.
+ */
+data class InlineBoxSpan(
+    val range: TextRange,
+    val inlineStart: Float = 0f,
+    val inlineEnd: Float = 0f,
+)
+
+/** Structural token used by text projections to reserve one inline object. */
+const val INLINE_OBJECT_REPLACEMENT_CHAR: Char = '\uFFFC'
+
+/**
+ * One indivisible inline object occupying [range].
+ *
+ * The source projection contains exactly one [INLINE_OBJECT_REPLACEMENT_CHAR]
+ * at [range]. The object is not font-shaped: [advance] is its measured
+ * margin-box width, while [ascent] and [descent] are its block extents above
+ * and below the surrounding text baseline. Layout uses all three values for
+ * breaking and per-line metrics; the platform renderer owns the actual object.
+ */
+data class InlineObjectSpan(
+    val range: TextRange,
+    val advance: Float,
+    val ascent: Float,
+    val descent: Float,
+)
+
 data class TextStyle(
     val fontFamilies: List<String> = emptyList(),
     val fontSize: Float = 16f,
@@ -147,6 +181,9 @@ enum class DecorationKind {
     BookTitle,
 }
 
+/** ADR 0018: 着重号墨迹中心相对基线的默认下沉量，单位 em。 */
+const val DEFAULT_EMPHASIS_DOT_CENTER_OFFSET_EM: Float = 0.45f
+
 data class ParagraphStyle(
     /**
      * Alignment of the paragraph's LAST line only. CLREQ:「与西文排版不同，
@@ -204,6 +241,15 @@ data class ParagraphStyle(
      * （以全段抬高为代价）——按需开启。注音（右侧 ㄅㄆㄇ）不占行高，不受此项影响。
      */
     val rubyUniformBand: Boolean = false,
+    /**
+     * 着重号圆点墨迹中心相对被注文字 baseline 的显式下沉量，单位 em。
+     *
+     * CLREQ 规定横排着重号位于文字底端，但没有规定点与字面的精确距离；
+     * 因此距离由排版样式显式决定，而不是从 [lineHeight] 反推。更宽的行高只
+     * 提供更多容纳空间，不会暗中移动着重号。默认值见
+     * [DEFAULT_EMPHASIS_DOT_CENTER_OFFSET_EM]（ADR 0018）。
+     */
+    val emphasisDotCenterOffsetEm: Float = DEFAULT_EMPHASIS_DOT_CENTER_OFFSET_EM,
 )
 
 /**
@@ -274,4 +320,6 @@ data class LayoutInput(
     val profileId: LayoutProfileId = BuiltInLayoutProfiles.ClreqHorizontal,
     val decorations: List<DecorationSpan> = emptyList(),
     val rubySpans: List<RubySpan> = emptyList(),
+    val inlineBoxes: List<InlineBoxSpan> = emptyList(),
+    val inlineObjects: List<InlineObjectSpan> = emptyList(),
 )

@@ -21,6 +21,75 @@ class JustifierTest {
     private fun space(at: Int) = Cluster(TextRange(at, at + 1), " ", fontKey = "latin", advance = 0.25f * em)
     private fun latin(at: Int, w: Float) = Cluster(TextRange(at, at + 2), "Hi", fontKey = "latin", advance = w)
     private fun slashLatin(at: Int, w: Float) = Cluster(TextRange(at, at + 3), "/Hi", fontKey = "latin", advance = w)
+    private fun punctuation(at: Int, text: String = "（") =
+        Cluster(TextRange(at, at + 1), text, fontKey = "cjk", advance = em)
+
+    @Test
+    fun westernDominantLineDoesNotStretchAroundCjkPunctuation() {
+        // Rust（Winio）、Rust — the visual line contains Chinese punctuation,
+        // but no CJK body text. Tier ③ must not manufacture wide spaces around
+        // the brackets merely to fill the measure.
+        val clusters = listOf(
+            latin(0, 3f * em),
+            punctuation(2),
+            latin(3, 3f * em),
+            punctuation(5, "）"),
+            punctuation(6, "、"),
+            latin(7, 3f * em),
+        )
+        val roles = listOf(
+            FontRole.LatinText,
+            FontRole.CjkPunctuation,
+            FontRole.LatinText,
+            FontRole.CjkPunctuation,
+            FontRole.CjkPunctuation,
+            FontRole.LatinText,
+        )
+        val natural = clusters.sumOf { it.advance.toDouble() }.toFloat()
+        val plan = Justifier().justify(
+            adjustedClusters = clusters,
+            clusterRoles = roles,
+            lineClusterRange = clusters.indices,
+            maxWidth = natural + 2f * em,
+            fontSize = em,
+            skip = false,
+            cjkLatinSpaceBaseEm = 0.25f,
+            cjkLatinSpaceMaxEm = 0.5f,
+        )
+
+        assertTrue(plan.allocations.none { it.kind == GlueKind.CjkInterChar })
+        assertEquals(2f * em, plan.unfilledDeficit, 0.001f)
+        assertEquals("WesternDominantLineNaturalSpacing", plan.fallbackReason)
+    }
+
+    @Test
+    fun mixedCjkLineStillStretchesPunctuationWesternBoundary() {
+        // Once the visual line contains CJK body text it remains a mixed CJK
+        // line: the established uniform tier-③ treatment still includes the
+        // Western↔punctuation boundary.
+        val clusters = listOf(latin(0, 2f * em), punctuation(2), cjk(3))
+        val roles = listOf(FontRole.LatinText, FontRole.CjkPunctuation, FontRole.CjkText)
+        val natural = clusters.sumOf { it.advance.toDouble() }.toFloat()
+        val plan = Justifier().justify(
+            adjustedClusters = clusters,
+            clusterRoles = roles,
+            lineClusterRange = clusters.indices,
+            maxWidth = natural + 0.5f * em,
+            fontSize = em,
+            skip = false,
+            cjkLatinSpaceBaseEm = 0.25f,
+            cjkLatinSpaceMaxEm = 0.5f,
+        )
+
+        assertTrue(
+            plan.allocations.any {
+                it.kind == GlueKind.CjkInterChar && it.targetClusterIndex == 0
+            },
+            "mixed CJK lines retain punctuation-western tier-3 tracking",
+        )
+        assertEquals(0f, plan.unfilledDeficit)
+        assertEquals(null, plan.fallbackReason)
+    }
 
     @Test
     fun typedSinoWesternSpaceStretchesInTierTwo() {

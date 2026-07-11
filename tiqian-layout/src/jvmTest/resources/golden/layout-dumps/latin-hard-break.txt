@@ -5,7 +5,7 @@ maxWidth: 64.0
 size 64.0x72.0
 kinsoku measure=4.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:4字→Basic+Hang
 line[0] 0-3 hyphen=16.0 natural=50.0 adjusted=50.0 visual=50.0 repair=- candidates=- justify=-
-line[1] 3-5 hyphen=16.0 natural=32.0 adjusted=32.0 visual=32.0 repair=- candidates=- justify=deficit=16.0->16.0 
+line[1] 3-5 hyphen=16.0 natural=32.0 adjusted=32.0 visual=32.0 repair=- candidates=- justify=deficit=16.0->16.0
 line[2] 5-8 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
 cluster 0-1 '中' adv=16.0
 cluster 1-3 'Ne' adv=34.0
@@ -20,7 +20,7 @@ linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reaso
 size 64.0x72.0
 kinsoku measure=4.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:4字→Basic+Hang
 line[0] 0-3 hyphen=16.0 natural=50.0 adjusted=50.0 visual=50.0 repair=- candidates=- justify=-
-line[1] 3-5 hyphen=16.0 natural=32.0 adjusted=32.0 visual=32.0 repair=- candidates=- justify=deficit=16.0->16.0 
+line[1] 3-5 hyphen=16.0 natural=32.0 adjusted=32.0 visual=32.0 repair=- candidates=- justify=deficit=16.0->16.0
 line[2] 5-8 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
 cluster 0-1 '中' adv=16.0
 cluster 1-3 'Ne' adv=34.0

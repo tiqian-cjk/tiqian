@@ -14,6 +14,21 @@ data class Cluster(
      * runs are the common case).
      */
     val baselineShift: Float = 0f,
+    /**
+     * Structural inline advance before this cluster's glyph origin. It is part
+     * of [advance], but renderers add it to the occupied left edge before
+     * drawing the glyph. DOM inline-start padding and generated content use
+     * this channel so measure and paint share one box model.
+     */
+    val leadingLayoutAdvance: Float = 0f,
+    /**
+     * Layout-owned horizontal shift from the cluster pen to the glyph origin.
+     * It does not contribute to [advance]. Punctuation layout uses this when a
+     * proportional glyph must be placed inside a wider CLREQ body/space box;
+     * renderers consume it through `PositionedCluster.drawX` instead of
+     * re-deriving punctuation classes or font heuristics.
+     */
+    val glyphInlineShift: Float = 0f,
 )
 
 data class GlyphRun(
@@ -155,6 +170,35 @@ data class LayoutDebugInfo(
     val kinsokuDecision: KinsokuDecisionInfo? = null,
     val lineLengthGridDecision: LineLengthGridDecisionInfo? = null,
     val firstLineIndentDecision: FirstLineIndentDecisionInfo? = null,
+    val inlineBoxDecisions: List<InlineBoxDecisionInfo> = emptyList(),
+    val inlineObjectDecisions: List<InlineObjectDecisionInfo> = emptyList(),
+    val zeroWidthBreakDecisions: List<ZeroWidthBreakDecisionInfo> = emptyList(),
+)
+
+data class InlineBoxDecisionInfo(
+    val range: TextRange,
+    val inlineStart: Float,
+    val inlineEnd: Float,
+    val firstClusterIndex: Int,
+    val lastClusterIndex: Int,
+    val reason: String = "InlineBoxBoundaryAdvance",
+)
+
+data class InlineObjectDecisionInfo(
+    val range: TextRange,
+    val advance: Float,
+    val ascent: Float,
+    val descent: Float,
+    val clusterIndex: Int,
+    val lineIndex: Int,
+    val reason: String = "MeasurableOpaqueInlineObject",
+)
+
+data class ZeroWidthBreakDecisionInfo(
+    val range: TextRange,
+    val sourceText: String,
+    val clusterIndex: Int,
+    val reason: String = "ZeroWidthSpaceSoftBreakNoShape",
 )
 
 data class MandatoryBreakDecisionInfo(
@@ -397,6 +441,17 @@ data class ShapingDecisionInfo(
      * PingFang SC / Hiragino / Heiti).
      */
     val missingGlyphs: Int = 0,
+    /** Exact platform face selected by a shaper when that identity is observable. */
+    val resolvedFace: String? = null,
+    /** Script and language supplied to the shaping engine, when explicit. */
+    val script: String? = null,
+    val language: String? = null,
+    /** Named glyph-selection strategy, for example `PairedEmDash`. */
+    val strategy: String? = null,
+    /** Evidence for an OpenType feature decision, not merely a requested tag. */
+    val featureEvidence: String? = null,
+    /** Named reason the frontend must keep the source content native. */
+    val capabilityIssue: String? = null,
 )
 
 data class MetricDecisionInfo(
@@ -430,12 +485,16 @@ data class PunctuationDecisionInfo(
     val policyBodyFloor: Float = bodyWidth,
     val inkWidth: Float? = null,
     val inkCenter: Float? = null,
+    /** Anchored body floor required to keep real glyph ink out of adjacent clusters. */
+    val inkContainmentBodyFloor: Float? = null,
+    /** True when `InkContainmentBodyFloor` reduced the mark's compressible glue. */
+    val inkContainmentApplied: Boolean = false,
     /**
      * `MissingInkBoundsFallback` reason code when shaping ran but ink bounds
      * could not be attributed to this punctuation character; null when bounds
      * are present or when no shaping information exists at all (pure policy
-     * path). See ADR 0014 — ink bounds are diagnostic, so this fallback
-     * changes explainability only, never glue placement.
+     * path). Missing bounds disable `InkContainmentBodyFloor`; profile/halt
+     * geometry remains the named fallback.
      */
     val inkBoundsFallback: String? = null,
     /**
@@ -449,6 +508,12 @@ data class PunctuationDecisionInfo(
      * halt data.
      */
     val haltValidation: String? = null,
+    /** Added layout advance when the shaped glyph is narrower than the CLREQ box. */
+    val advanceExpansion: Float = 0f,
+    /** Glyph-origin placement inside that expanded box. */
+    val glyphInlineShift: Float = 0f,
+    /** Named placement heuristic, null when no glyph shift was needed. */
+    val glyphPlacementReason: String? = null,
 )
 
 data class ClusterGeometryDecisionInfo(
@@ -468,6 +533,10 @@ data class ClusterGeometryDecisionInfo(
      * blindly assigning it to the previous cluster's trailing box.
      */
     val rubySpread: Float = 0f,
+    /** Layout-owned glyph-origin shift applied to this cluster. */
+    val glyphInlineShift: Float = 0f,
+    /** Named source for [glyphInlineShift], null when no shift was applied. */
+    val glyphPlacementReason: String? = null,
     val resolvedAdvance: Float,
     val source: String,
     val reason: String,

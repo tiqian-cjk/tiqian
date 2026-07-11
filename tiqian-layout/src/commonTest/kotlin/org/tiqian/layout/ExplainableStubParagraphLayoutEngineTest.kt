@@ -19,6 +19,7 @@ import org.tiqian.core.LayoutInput
 import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.Rect
 import org.tiqian.core.TextRange
+import org.tiqian.core.TextSpan
 import org.tiqian.core.TextStyle
 import org.tiqian.core.TiqianTextContent
 import org.tiqian.core.positionedClusters
@@ -710,6 +711,84 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun expandsOnlyCjkContextQuotesAndAnchorsTheirUnderwidthGlyphs() {
+        // MiSans-like metrics: curly quotes are proportional (0.375em) even
+        // though this pair belongs to Chinese prose. Layout must retain the
+        // source glyphs while placing them in profile-anchored 1em boxes.
+        val engine = ExplainableStubParagraphLayoutEngine(
+            textShaper = object : TextShaper {
+                private val delegate = ExplainableStubTextShaper()
+
+                override fun shape(input: ShapingInput): ShapingResult {
+                    val result = delegate.shape(input)
+                    if (input.displayText != "“" && input.displayText != "”") return result
+                    val advance = 6f
+                    return result.copy(
+                        clusters = result.clusters.map { it.copy(advance = advance) },
+                        glyphRuns = result.glyphRuns.map { run ->
+                            run.copy(
+                                advance = advance,
+                                glyphs = run.glyphs.map {
+                                    it.copy(
+                                        advance = advance,
+                                        bounds = Rect(1f, -10f, 5f, 0f),
+                                    )
+                                },
+                            )
+                        },
+                        decisions = result.decisions.map { it.copy(advance = advance) },
+                    )
+                }
+            },
+        )
+
+        val result = engine.layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("中“文”中"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val opening = result.clusters.single { it.text == "“" }
+        val closing = result.clusters.single { it.text == "”" }
+        assertEquals(16f, opening.advance)
+        assertEquals(16f, closing.advance)
+        assertEquals(9f, opening.glyphInlineShift)
+        assertEquals(1f, closing.glyphInlineShift)
+
+        val openingDecision = result.debug.punctuationDecisions.single { it.char == '“' }
+        val closingDecision = result.debug.punctuationDecisions.single { it.char == '”' }
+        assertEquals(10f, openingDecision.advanceExpansion)
+        assertEquals("ProfileAnchoredUnderwidthGlyphShift", openingDecision.glyphPlacementReason)
+        assertEquals("ProfileAnchoredUnderwidthGlyphShift", closingDecision.glyphPlacementReason)
+
+        val positioned = result.positionedClusters().associateBy { it.range }
+        assertEquals(
+            positioned.getValue(opening.range).left + 9f,
+            positioned.getValue(opening.range).drawX,
+        )
+        assertEquals(
+            positioned.getValue(closing.range).left + 1f,
+            positioned.getValue(closing.range).drawX,
+        )
+    }
+
+    @Test
+    fun leavesLatinContextCurlyQuotesOutsideCjkPunctuationGeometry() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("“Hello” world"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        assertTrue(result.debug.punctuationDecisions.none { it.char == '“' || it.char == '”' })
+        assertTrue(result.clusters.all { it.glyphInlineShift == 0f })
+    }
+
+    @Test
     fun buildsTwoEmPunctuationAtomForRecommendedDashCodepoint() {
         val atom = PunctuationAtomBuilder().build("⸺", index = 0, em = 16f)
 
@@ -719,7 +798,7 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
-    fun inkBoundsAreDiagnosticOnlyAndDoNotAffectGlue() {
+    fun inkBoundsReduceCompressionCapacityWithoutChangingGlueSide() {
         val atom = PunctuationAtomBuilder().build(
             char = '，',
             range = org.tiqian.core.TextRange(0, 1),
@@ -732,10 +811,12 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         requireNotNull(atom)
         assertEquals(16f, atom.advance)
-        assertEquals(8f, atom.bodyWidth)
-        // PauseOrStop: all glue on trailing side (class-derived, not ink-derived)
+        assertEquals(11f, atom.bodyWidth)
+        assertEquals(11f, atom.inkContainmentBodyFloor)
+        assertTrue(atom.inkContainmentApplied)
+        // PauseOrStop: all remaining glue stays on the profile's trailing side.
         assertEquals(0f, atom.leadingGlue.natural)
-        assertEquals(8f, atom.trailingGlue.natural)
+        assertEquals(5f, atom.trailingGlue.natural)
         assertEquals("ProfileDerivedWithInkDiagnostics", atom.geometrySource)
         // Ink fields are retained as diagnostics
         assertEquals(2f, atom.inkWidth)
@@ -787,17 +868,19 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         val punctuation = result.debug.punctuationDecisions.single()
         assertEquals(inkBounds, punctuation.inkBounds)
-        assertEquals(8f, punctuation.bodyWidth)
+        assertEquals(11f, punctuation.bodyWidth)
+        assertEquals(11f, punctuation.inkContainmentBodyFloor)
+        assertTrue(punctuation.inkContainmentApplied)
         // 。 is PauseOrStop: all glue on trailing side
         assertEquals(0f, punctuation.leadingGlueNatural)
-        assertEquals(8f, punctuation.trailingGlueNatural)
+        assertEquals(5f, punctuation.trailingGlueNatural)
         assertEquals("ProfileDerivedWithInkDiagnostics", punctuation.geometrySource)
 
         val geometry = result.debug.geometryDecisions.single()
         assertEquals("ProfileDerivedWithInkDiagnostics", geometry.reason)
-        assertEquals(8f, geometry.bodyWidth)
+        assertEquals(11f, geometry.bodyWidth)
         assertEquals(0f, geometry.leadingGlueNatural)
-        assertEquals(8f, geometry.trailingGlueNatural)
+        assertEquals(5f, geometry.trailingGlueNatural)
     }
 
     @Test
@@ -1600,13 +1683,39 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         // Anchor maths for 豆 (4-5): line 0 holds clusters 0..7, x offset of
         // index 4 = 4×16 = 64, glyph centre 64+8 = 72; anchorY = line 0
-        // baseline + 16×0.34 (seated between the face and the next line); the
+        // baseline + 16×0.45 (explicit style default); the
         // dot is a 0.22em circle, not the full `•` glyph.
         val first = decisions.single { it.sourceText == "豆" }
         assertEquals(72f, first.anchorX)
         assertEquals(16f * 0.22f, first.dotDiameter, 0.01f)
         val line0Baseline = result.lines.first().baseline
-        assertEquals(line0Baseline + 5.44f, first.anchorY, 0.01f)
+        assertEquals(line0Baseline + 7.2f, first.anchorY, 0.01f)
+    }
+
+    @Test
+    fun emphasisDotOffsetIsExplicitAndIndependentOfLineHeight() {
+        fun layout(lineHeight: Float) = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(
+                    firstLineIndent = Ic(0f),
+                    lineHeight = lineHeight,
+                    emphasisDotCenterOffsetEm = 0.60f,
+                ),
+                content = TiqianTextContent("着重"),
+                constraints = LayoutConstraints(maxWidth = 128f),
+                decorations = listOf(
+                    org.tiqian.core.DecorationSpan(
+                        range = org.tiqian.core.TextRange(0, 2),
+                        kind = org.tiqian.core.DecorationKind.Emphasis,
+                    ),
+                ),
+            ),
+        )
+
+        for (result in listOf(layout(24f), layout(48f))) {
+            val first = result.debug.decorationDecisions.first { it.applied }
+            assertEquals(result.lines.first().baseline + 9.6f, first.anchorY, 0.01f)
+        }
     }
 
     @Test
@@ -2312,8 +2421,9 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals(161f, wangfuzhi.left)
         assertEquals(208f, wangfuzhi.right)
 
-        // 先线后点 holds structurally: the line sits above any emphasis dot
-        // ink (+0.34em); the spacing floor applies (no explicit lineHeight).
+        // At the default 0.45em centre offset, 先线后点 holds structurally:
+        // the line sits above the emphasis dot ink (0.45 - 0.11 = +0.34em);
+        // the spacing floor applies (no explicit lineHeight).
         assertEquals(24f, result.lines[0].bottom - result.lines[0].top)
     }
 
@@ -2595,6 +2705,98 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals("——", dashCluster.displayText)
         val dashDecision = result.debug.fontDecisions.single { it.sourceText == "——" }
         assertTrue(dashDecision.substitutionReason.endsWith("DashSubstitutionInkCoverageRollback"))
+    }
+
+    @Test
+    fun dashSubstitutionRollsBackWhenFallbackReportsAFullOneEmGlyph() {
+        // Browser font fallback can return a healthy-looking one-em U+2E3A:
+        // its ink fills 95% of its own (wrong) advance, but only 47.5% of the
+        // required CLREQ two-em box. The target box, not fallback advance, is
+        // the denominator.
+        val engine = ExplainableStubParagraphLayoutEngine(
+            textShaper = object : TextShaper {
+                private val delegate = ExplainableStubTextShaper()
+
+                override fun shape(input: ShapingInput): ShapingResult {
+                    val result = delegate.shape(input)
+                    if (!input.displayText.contains('⸺')) return result
+                    return result.copy(
+                        clusters = result.clusters.map { it.copy(advance = 16f) },
+                        glyphRuns = result.glyphRuns.map { run ->
+                            run.copy(
+                                advance = 16f,
+                                glyphs = run.glyphs.map {
+                                    it.copy(
+                                        advance = 16f,
+                                        bounds = Rect(0.5f, -9f, 15.7f, -7f),
+                                    )
+                                },
+                            )
+                        },
+                        decisions = result.decisions.map { it.copy(advance = 16f) },
+                    )
+                }
+            },
+        )
+
+        val result = engine.layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("中——文"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        assertEquals("——", result.clusters.single { it.text == "——" }.displayText)
+        assertTrue(
+            result.debug.fontDecisions.single { it.sourceText == "——" }
+                .substitutionReason.endsWith("DashSubstitutionInkCoverageRollback"),
+        )
+    }
+
+    @Test
+    fun dashCoverageTargetUsesTheDashSpanFontSize() {
+        val engine = ExplainableStubParagraphLayoutEngine(
+            textShaper = object : TextShaper {
+                private val delegate = ExplainableStubTextShaper()
+
+                override fun shape(input: ShapingInput): ShapingResult {
+                    val result = delegate.shape(input)
+                    if (!input.displayText.contains('⸺')) return result
+                    // A complete one-em fallback at the span's 32px size.
+                    return result.copy(
+                        clusters = result.clusters.map { it.copy(advance = 32f) },
+                        glyphRuns = result.glyphRuns.map { run ->
+                            run.copy(
+                                advance = 32f,
+                                glyphs = run.glyphs.map {
+                                    it.copy(
+                                        advance = 32f,
+                                        bounds = Rect(1f, -18f, 31f, -14f),
+                                    )
+                                },
+                            )
+                        },
+                        decisions = result.decisions.map { it.copy(advance = 32f) },
+                    )
+                }
+            },
+        )
+
+        val result = engine.layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent(
+                    text = "中——文",
+                    spans = listOf(
+                        TextSpan(TextRange(1, 3), TextStyle(fontSize = 32f)),
+                    ),
+                ),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        assertEquals("——", result.clusters.single { it.text == "——" }.displayText)
     }
 
     @Test

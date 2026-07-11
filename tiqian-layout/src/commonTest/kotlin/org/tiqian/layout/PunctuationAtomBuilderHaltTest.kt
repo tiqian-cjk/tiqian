@@ -1,9 +1,12 @@
 package org.tiqian.layout
 
+import org.tiqian.clreq.InteriorPunctuationStyle
+import org.tiqian.clreq.PunctuationWidthPolicy
 import org.tiqian.core.Rect
 import org.tiqian.core.TextRange
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * FontHaltDerivedBody (ADR 0014 follow-up): when the shaper reports an
@@ -134,5 +137,123 @@ class PunctuationAtomBuilderHaltTest {
         assertEquals(8f, adj.naturalInnerGlue)
         assertEquals(0f, adj.adjustedInnerGlue)
         assertEquals(8f, adj.reduction)
+    }
+
+    @Test
+    fun bookTitleBracketsKeepInkInsideCompressedAnchoredBodies() {
+        val opening = builder.build(
+            char = '《',
+            range = TextRange(0, 1),
+            em = em,
+            inkInput = PunctuationInkInput(
+                advance = 16f,
+                inkBounds = Rect(left = 6.5f, top = -12f, right = 15.5f, bottom = 2f),
+            ),
+        )!!
+        val closing = builder.build(
+            char = '》',
+            range = TextRange(1, 2),
+            em = em,
+            inkInput = PunctuationInkInput(
+                advance = 16f,
+                inkBounds = Rect(left = 0.5f, top = -12f, right = 9.5f, bottom = 2f),
+            ),
+        )!!
+
+        assertEquals(9.5f, opening.bodyWidth)
+        assertEquals(6.5f, opening.leadingGlue.natural)
+        assertEquals(0f, opening.trailingGlue.natural)
+        assertEquals(9.5f, closing.bodyWidth)
+        assertEquals(0f, closing.leadingGlue.natural)
+        assertEquals(6.5f, closing.trailingGlue.natural)
+        assertTrue(opening.inkContainmentApplied)
+        assertTrue(closing.inkContainmentApplied)
+
+        // Fully consuming the opening mark's leading glue shifts its raw glyph
+        // left by 6.5px: ink 6.5..15.5 becomes 0..9 and fits the 9.5px body.
+        assertTrue(15.5f - opening.leadingGlue.natural <= opening.bodyWidth)
+        assertTrue(9.5f <= closing.bodyWidth)
+    }
+
+    @Test
+    fun forcedHalfWidthExpandsAndAnchorsWhenBookTitleInkDoesNotFit() {
+        val atom = builder.build(
+            char = '《',
+            range = TextRange(0, 1),
+            em = em,
+            inkInput = PunctuationInkInput(
+                advance = 16f,
+                inkBounds = Rect(left = 6.5f, top = -12f, right = 15.5f, bottom = 2f),
+            ),
+            widthPolicy = PunctuationWidthPolicy(interior = InteriorPunctuationStyle.Kaiming),
+        )!!
+
+        assertEquals(9.5f, atom.advance)
+        assertEquals(9.5f, atom.bodyWidth)
+        assertEquals(-6.5f, atom.glyphInlineShift)
+        assertEquals("ForcedHalfWidthGlyphAnchorShift", atom.glyphPlacementReason)
+        assertTrue(atom.inkContainmentApplied)
+    }
+
+    @Test
+    fun openingInkOverhangIsShiftedInsideItsCompressedBody() {
+        val atom = builder.build(
+            char = '《',
+            range = TextRange(0, 1),
+            em = em,
+            inkInput = PunctuationInkInput(
+                advance = 16f,
+                inkBounds = Rect(left = 6.5f, top = -12f, right = 17f, bottom = 2f),
+            ),
+        )!!
+
+        assertEquals(10.5f, atom.inkContainmentBodyFloor)
+        assertEquals(10.5f, atom.bodyWidth)
+        assertEquals(-1f, atom.glyphInlineShift)
+        assertEquals("InkContainmentGlyphShift", atom.glyphPlacementReason)
+
+        val compressedOrigin = atom.glyphInlineShift - atom.leadingGlue.natural
+        assertEquals(0f, 6.5f + compressedOrigin, 0.001f)
+        assertEquals(atom.bodyWidth, 17f + compressedOrigin, 0.001f)
+    }
+
+    @Test
+    fun forcedHalfWidthReportsInkClampWhenItChangesTheAnchorShift() {
+        val atom = builder.build(
+            char = '《',
+            range = TextRange(0, 1),
+            em = em,
+            inkInput = PunctuationInkInput(
+                advance = 16f,
+                inkBounds = Rect(left = 6.5f, top = -12f, right = 17f, bottom = 2f),
+            ),
+            widthPolicy = PunctuationWidthPolicy(interior = InteriorPunctuationStyle.Kaiming),
+        )!!
+
+        assertEquals(10.5f, atom.bodyWidth)
+        assertEquals(-6.5f, atom.glyphInlineShift)
+        assertEquals("InkContainmentGlyphShift", atom.glyphPlacementReason)
+        assertEquals(0f, 6.5f + atom.glyphInlineShift, 0.001f)
+        assertEquals(atom.bodyWidth, 17f + atom.glyphInlineShift, 0.001f)
+    }
+
+    @Test
+    fun negativeClosingInkBearingCannotEscapeTheLeadingBody() {
+        val atom = builder.build(
+            char = '》',
+            range = TextRange(0, 1),
+            em = em,
+            inkInput = PunctuationInkInput(
+                advance = 16f,
+                inkBounds = Rect(left = -1f, top = -12f, right = 8f, bottom = 2f),
+            ),
+        )!!
+
+        assertEquals(9f, atom.inkContainmentBodyFloor)
+        assertEquals(9f, atom.bodyWidth)
+        assertEquals(1f, atom.glyphInlineShift)
+        assertEquals("InkContainmentGlyphShift", atom.glyphPlacementReason)
+        assertEquals(0f, -1f + atom.glyphInlineShift, 0.001f)
+        assertEquals(atom.bodyWidth, 8f + atom.glyphInlineShift, 0.001f)
     }
 }

@@ -4,7 +4,7 @@ maxWidth: 128.0
 == greedy ==
 size 112.0x48.0
 kinsoku measure=8.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:8字→Basic+Hang
-line[0] 0-7 natural=112.0 adjusted=112.0 visual=112.0 repair=- candidates=- justify=deficit=16.0->16.0 
+line[0] 0-7 natural=112.0 adjusted=112.0 visual=112.0 repair=- candidates=- justify=deficit=16.0->16.0
 line[1] 7-14 natural=112.0 adjusted=112.0 visual=112.0 repair=- candidates=- justify=-
 cluster 0-4 'out-' adv=64.0
 cluster 4-7 'of-' adv=48.0
@@ -15,7 +15,7 @@ linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reaso
 == lookahead ==
 size 112.0x48.0
 kinsoku measure=8.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:8字→Basic+Hang
-line[0] 0-7 natural=112.0 adjusted=112.0 visual=112.0 repair=- candidates=- justify=deficit=16.0->16.0 
+line[0] 0-7 natural=112.0 adjusted=112.0 visual=112.0 repair=- candidates=- justify=deficit=16.0->16.0
 line[1] 7-14 natural=112.0 adjusted=112.0 visual=112.0 repair=- candidates=- justify=-
 cluster 0-4 'out-' adv=64.0
 cluster 4-7 'of-' adv=48.0

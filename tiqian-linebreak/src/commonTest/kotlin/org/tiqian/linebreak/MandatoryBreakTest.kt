@@ -18,6 +18,14 @@ class MandatoryBreakTest {
         }
     }
 
+    @Test
+    fun recognizesZeroWidthSpaceWithoutConflatingNoBreakControls() {
+        assertTrue(isZeroWidthSpaceCodePoint(0x200B), u(0x200B))
+        for (cp in listOf(0x200C, 0x200D, 0x2060, 0xFEFF)) {
+            assertFalse(isZeroWidthSpaceCodePoint(cp), u(cp))
+        }
+    }
+
     // Common-stdlib codepoint label (no JVM String.format, so this test compiles on wasmJs too).
     private fun u(cp: Int): String = "U+" + cp.toString(16).uppercase().padStart(4, '0')
 

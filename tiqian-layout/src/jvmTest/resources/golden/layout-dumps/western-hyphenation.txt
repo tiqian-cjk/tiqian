@@ -5,7 +5,7 @@ maxWidth: 160.0
 size 160.0x72.0
 kinsoku measure=10.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:10字→Basic+Hang
 line[0] 0-9 hyphen=16.0 natural=130.0 adjusted=130.0 visual=144.0 repair=- candidates=- justify=deficit=14.0->0.0 CjkLatinSpace@3+3.3,CjkInterChar@0+5.3,CjkInterChar@1+5.3
-line[1] 9-17 hyphen=16.0 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=deficit=16.0->16.0 
+line[1] 9-17 hyphen=16.0 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=deficit=16.0->16.0
 line[2] 17-27 natural=146.0 adjusted=146.0 visual=146.0 repair=- candidates=- justify=-
 cluster 0-1 '请' adv=21.3
 cluster 1-2 '运' adv=21.3
@@ -34,7 +34,7 @@ linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reaso
 size 160.0x72.0
 kinsoku measure=10.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:10字→Basic+Hang
 line[0] 0-9 hyphen=16.0 natural=130.0 adjusted=130.0 visual=144.0 repair=- candidates=- justify=deficit=14.0->0.0 CjkLatinSpace@3+3.3,CjkInterChar@0+5.3,CjkInterChar@1+5.3
-line[1] 9-17 hyphen=16.0 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=deficit=16.0->16.0 
+line[1] 9-17 hyphen=16.0 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=deficit=16.0->16.0
 line[2] 17-27 natural=146.0 adjusted=146.0 visual=146.0 repair=- candidates=- justify=-
 cluster 0-1 '请' adv=21.3
 cluster 1-2 '运' adv=21.3

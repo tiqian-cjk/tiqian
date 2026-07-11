@@ -5,8 +5,8 @@ maxWidth: 240.0
 size 240.0x96.0
 kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
 line[0] 0-12 natural=184.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+8.0,CjkInterChar@1+8.0,CjkInterChar@2+8.0,CjkInterChar@3+8.0,CjkInterChar@4+8.0,CjkInterChar@5+8.0,CjkInterChar@6+8.0,CjkInterChar@7+8.0
-line[1] 12-28 natural=232.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=deficit=16.0->16.0 
-line[2] 28-43 natural=216.0 adjusted=208.0 visual=208.0 repair=- candidates=- justify=deficit=32.0->32.0 
+line[1] 12-28 natural=232.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=deficit=16.0->16.0
+line[2] 28-43 natural=216.0 adjusted=208.0 visual=208.0 repair=- candidates=- justify=deficit=32.0->32.0
 line[3] 43-58 natural=232.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=-
 cluster 0-1 '他' adv=24.0
 cluster 1-2 '引' adv=24.0
@@ -71,8 +71,8 @@ linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reaso
 size 240.0x96.0
 kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
 line[0] 0-12 natural=184.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+8.0,CjkInterChar@1+8.0,CjkInterChar@2+8.0,CjkInterChar@3+8.0,CjkInterChar@4+8.0,CjkInterChar@5+8.0,CjkInterChar@6+8.0,CjkInterChar@7+8.0
-line[1] 12-28 natural=232.0 adjusted=224.0 visual=224.0 repair=PushIn(LineAdjustmentPushIn shrink=0.0) candidates=PushIn+ justify=deficit=16.0->16.0 
-line[2] 28-43 natural=216.0 adjusted=208.0 visual=208.0 repair=- candidates=- justify=deficit=32.0->32.0 
+line[1] 12-28 natural=232.0 adjusted=224.0 visual=224.0 repair=PushIn(LineAdjustmentPushIn shrink=0.0) candidates=PushIn+ justify=deficit=16.0->16.0
+line[2] 28-43 natural=216.0 adjusted=208.0 visual=208.0 repair=- candidates=- justify=deficit=32.0->32.0
 line[3] 43-58 natural=232.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=-
 cluster 0-1 '他' adv=24.0
 cluster 1-2 '引' adv=24.0

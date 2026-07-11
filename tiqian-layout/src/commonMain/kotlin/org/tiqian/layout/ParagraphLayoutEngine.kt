@@ -36,6 +36,11 @@ import org.tiqian.core.JustificationDecisionInfo
 import org.tiqian.core.LayoutDebugInfo
 import org.tiqian.core.LayoutInput
 import org.tiqian.core.LayoutResult
+import org.tiqian.core.InlineBoxDecisionInfo
+import org.tiqian.core.InlineBoxSpan
+import org.tiqian.core.InlineObjectDecisionInfo
+import org.tiqian.core.InlineObjectSpan
+import org.tiqian.core.INLINE_OBJECT_REPLACEMENT_CHAR
 import org.tiqian.core.LineBox
 import org.tiqian.core.LineDebugInfo
 import org.tiqian.core.LineDecisionInfo
@@ -44,6 +49,7 @@ import org.tiqian.core.LineRepairAllocationInfo
 import org.tiqian.core.LineRepairCandidateInfo
 import org.tiqian.core.LineRepairDecisionInfo
 import org.tiqian.core.MandatoryBreakDecisionInfo
+import org.tiqian.core.ZeroWidthBreakDecisionInfo
 import org.tiqian.core.MaxLinesDecisionInfo
 import org.tiqian.core.MetricDecisionInfo
 import org.tiqian.core.PunctuationDecisionInfo
@@ -51,6 +57,7 @@ import org.tiqian.core.Rect
 import org.tiqian.core.RoleOverrideInfo
 import org.tiqian.core.Size
 import org.tiqian.core.SpacingDecisionInfo
+import org.tiqian.core.ShapingDecisionInfo
 import org.tiqian.core.LastLineAlignment
 import org.tiqian.core.KinsokuDecisionInfo
 import org.tiqian.core.LineLengthGridDecisionInfo
@@ -78,6 +85,7 @@ import org.tiqian.font.ScriptAwareFontMetricsNormalizer
 import org.tiqian.font.StubFontMetricsResolver
 import org.tiqian.linebreak.Hyphenator
 import org.tiqian.linebreak.isMandatoryBreakCodePoint
+import org.tiqian.linebreak.isZeroWidthSpaceCodePoint
 import org.tiqian.linebreak.NoHyphenator
 import org.tiqian.shaping.ExplainableStubTextShaper
 import org.tiqian.shaping.ShapingInput
@@ -111,6 +119,39 @@ class ExplainableStubParagraphLayoutEngine(
     override fun layout(input: LayoutInput): LayoutResult {
         val text = input.content.text
         val fontSize = input.textStyle.fontSize
+        input.inlineBoxes.forEach { inlineBox ->
+            require(
+                inlineBox.range.start >= 0 &&
+                    inlineBox.range.start < inlineBox.range.end &&
+                    inlineBox.range.end <= text.length,
+            ) {
+                "InlineBoxSpan ${inlineBox.range} must be a non-empty source range"
+            }
+            require(inlineBox.inlineStart.isFinite() && inlineBox.inlineEnd.isFinite()) {
+                "InlineBoxSpan ${inlineBox.range} must have finite inline edges"
+            }
+        }
+        require(input.inlineObjects.distinctBy { it.range }.size == input.inlineObjects.size) {
+            "InlineObjectSpan ranges must be unique"
+        }
+        input.inlineObjects.forEach { inlineObject ->
+            require(
+                inlineObject.range.length == 1 &&
+                    inlineObject.range.start >= 0 &&
+                    inlineObject.range.end <= text.length &&
+                    text[inlineObject.range.start] == INLINE_OBJECT_REPLACEMENT_CHAR,
+            ) {
+                "InlineObjectSpan ${inlineObject.range} must cover one U+FFFC replacement character"
+            }
+            require(
+                inlineObject.advance.isFinite() && inlineObject.advance > 0f &&
+                    inlineObject.ascent.isFinite() && inlineObject.ascent >= 0f &&
+                    inlineObject.descent.isFinite() && inlineObject.descent >= 0f,
+            ) {
+                "InlineObjectSpan ${inlineObject.range} must have finite positive geometry"
+            }
+        }
+        val inlineObjectByRange = input.inlineObjects.associateBy { it.range }
         // Rich-text per-span style (ADR 0030 B 档): a cluster covered by a span
         // SHAPES at that span's size + weight + slant, and is MEASURED at its
         // size; the paragraph base still owns the structural em decisions (grid /
@@ -160,6 +201,8 @@ class ExplainableStubParagraphLayoutEngine(
             sizedSpans.forEach { addRange(it.range) }
             input.decorations.forEach { addRange(it.range) }
             input.rubySpans.forEach { addRange(it.baseRange) }
+            input.inlineBoxes.forEach { addRange(it.range) }
+            input.inlineObjects.forEach { addRange(it.range) }
             input.content.sourceBoundaries.forEach(::addBoundary)
         }
         val clreqProfile = clreqProfileResolver.resolve(input.profileId)
@@ -224,7 +267,9 @@ class ExplainableStubParagraphLayoutEngine(
         }
 
         val clusterRanges = clusterRoleRanges(text, effectiveClassifier, context, clreqProfile, spanBoundaries)
-        val shapeableRanges = clusterRanges.filterNot { it.mandatoryBreak }
+        val shapeableRanges = clusterRanges.filterNot {
+            it.mandatoryBreak || it.zeroWidthSoftBreak || inlineObjectByRange.containsKey(it.range)
+        }
         val fontDecisions = shapeableRanges.map { resolvedRange ->
             fallbackResolver.resolve(
                 text = text,
@@ -252,11 +297,17 @@ class ExplainableStubParagraphLayoutEngine(
         //   em dashes instead. Only judged when the shaper reports ink bounds;
         //   stub/AWT (no ink) keep the substitution.
         val substitutionRollbacks = mutableMapOf<TextRange, String>()
-        fun ShapingResult.dashInkCoverageDeficient(displayText: String): Boolean {
+        fun ShapingResult.dashInkCoverageDeficient(displayText: String, segmentFontSize: Float): Boolean {
             if (!displayText.contains('\u2E3A')) return false
             val glyph = glyphRuns.flatMap { it.glyphs }.singleOrNull() ?: return false
             val ink = glyph.bounds ?: return false
-            return (ink.right - ink.left) < glyph.advance * DASH_SUBSTITUTION_MIN_INK_COVERAGE
+            // `DashSubstitutionTwoEmInkCoverage`: compare with the CLREQ
+            // target box, not the browser/font fallback's reported advance.
+            // A missing U+2E3A commonly falls back to a perfectly filled 1em
+            // glyph; dividing by that wrong 1em advance made the fallback look
+            // valid and silently shrank a Chinese dash by half.
+            val targetAdvance = DASH_SUBSTITUTION_TARGET_EM * segmentFontSize
+            return (ink.right - ink.left) < targetAdvance * DASH_SUBSTITUTION_MIN_INK_COVERAGE
         }
         fun shapeSegment(decision: FontDecision, segmentRange: TextRange): ShapingResult {
             val sourceText = text.substring(segmentRange.start, segmentRange.end)
@@ -279,7 +330,8 @@ class ExplainableStubParagraphLayoutEngine(
             val rollbackCause = when {
                 substitution.displayText == sourceText -> null
                 shaped.decisions.any { it.missingGlyphs > 0 } -> "SubstitutionRollbackOnMissingGlyph"
-                shaped.dashInkCoverageDeficient(substitution.displayText) -> "DashSubstitutionInkCoverageRollback"
+                shaped.dashInkCoverageDeficient(substitution.displayText, segmentStyle.fontSize) ->
+                    "DashSubstitutionInkCoverageRollback"
                 else -> null
             }
             return if (rollbackCause == null) {
@@ -440,8 +492,14 @@ class ExplainableStubParagraphLayoutEngine(
             return cuts.sorted()
         }
         val shapingResults = clusterRanges.flatMap { resolvedRange ->
+            inlineObjectByRange[resolvedRange.range]?.let { inlineObject ->
+                return@flatMap listOf(inlineObjectShapingResult(text, inlineObject))
+            }
             if (resolvedRange.mandatoryBreak) {
                 return@flatMap listOf(mandatoryBreakShapingResult(text, resolvedRange.range))
+            }
+            if (resolvedRange.zeroWidthSoftBreak) {
+                return@flatMap listOf(zeroWidthSoftBreakShapingResult(text, resolvedRange.range))
             }
             val decision = fontDecisionByRange.getValue(resolvedRange.range)
             decision.shapingSegments(text).flatMap { segmentRange ->
@@ -539,13 +597,27 @@ class ExplainableStubParagraphLayoutEngine(
             policy = clreqProfile.autoSpace,
             fontSize = fontSize,
         )
-        val naturalClusters = autoSpaceResult.clusters
+        val inlineBoxResult = autoSpaceResult.clusters.applyInlineBoxSpans(input.inlineBoxes)
+        val naturalClusters = inlineBoxResult.clusters
+        val inlineObjectByClusterIndex = buildMap {
+            for (inlineObject in input.inlineObjects) {
+                val clusterIndex = naturalClusters.indexOfFirst {
+                    it.range == inlineObject.range && it.isInlineObjectCluster()
+                }
+                require(clusterIndex >= 0) {
+                    "Inline object ${inlineObject.range} did not produce a layout cluster"
+                }
+                put(clusterIndex, inlineObject)
+            }
+        }
         val autoSpaceDecisions = autoSpaceResult.decisions
         val clusterRoles = naturalClusters.map { cluster ->
             fontDecisions.firstOrNull { cluster.range.isInside(it.range) }?.role ?: FontRole.Unknown
         }
         val mandatoryBreakClusters = naturalClusters.indices
             .filterTo(mutableSetOf()) { idx -> naturalClusters[idx].isMandatoryBreakCluster() }
+        val zeroWidthBreakClusters = naturalClusters.indices
+            .filterTo(mutableSetOf()) { idx -> naturalClusters[idx].isZeroWidthSoftBreakCluster() }
         val mandatoryBreakDecisions = naturalClusters.mapIndexedNotNull { idx, cluster ->
             if (!cluster.isMandatoryBreakCluster()) return@mapIndexedNotNull null
             MandatoryBreakDecisionInfo(
@@ -553,6 +625,14 @@ class ExplainableStubParagraphLayoutEngine(
                 sourceText = cluster.text,
                 breakAfterClusterIndex = idx,
                 reason = "MandatoryBreakNoShape",
+            )
+        }
+        val zeroWidthBreakDecisions = zeroWidthBreakClusters.sorted().map { clusterIndex ->
+            val cluster = naturalClusters[clusterIndex]
+            ZeroWidthBreakDecisionInfo(
+                range = cluster.range,
+                sourceText = cluster.text,
+                clusterIndex = clusterIndex,
             )
         }
 
@@ -651,7 +731,8 @@ class ExplainableStubParagraphLayoutEngine(
             naturalClusters = naturalClusters,
             punctuationAtoms = punctuationAtoms,
             spacingPlan = spacingPlan,
-        ).withRubySpread(rubyAndBopomofoSpread)
+        ).withInlineBoxAdvances(inlineBoxResult.advanceByCluster)
+            .withRubySpread(rubyAndBopomofoSpread)
         val clusters = baseGeometry.resolveClusters()
         // CLREQ 挤压处理优先顺序 (ADR 0020): tiered shrink resources for
         // PushIn. Punctuation classes map to tiers; style knobs gate the
@@ -907,7 +988,8 @@ class ExplainableStubParagraphLayoutEngine(
         val kinsokuRule = ClreqKinsokuRule(resolvedKinsoku.level)
         val asciiBracketKinsoku = naturalClusters.cjkContextAsciiBracketKinsoku(clusterRoles)
         val forbiddenLineStartClusters: Set<Int> = naturalClusters.indices.filterTo(mutableSetOf()) { idx ->
-            (
+            idx in zeroWidthBreakClusters ||
+                (
                 clusterRoles.getOrNull(idx).isCjkKinsokuRole() &&
                     kinsokuRule.forbiddenAtLineStart(naturalClusters[idx])
                 ) ||
@@ -996,6 +1078,7 @@ class ExplainableStubParagraphLayoutEngine(
                     LineAdjustmentStrategy.PushOutOnly -> 0f
                 },
                 hardBreakAfterClusters = mandatoryBreakClusters,
+                nonRenderingControlClusters = zeroWidthBreakClusters,
             )
         }
         val pushInAllocations = lineSolution.lines
@@ -1240,17 +1323,38 @@ class ExplainableStubParagraphLayoutEngine(
             )
         }
 
-        // 行间注 band per line (ADR 0032): only the line(s) that carry 拼音 ruby reserve
-        // the 注文 band; `rubyUniformBand` opts every line in (uniform spacing, taller
-        // whole paragraph). 注音 (side ㄅㄆㄇ) never reserves line height. Tops accumulate
-        // so a ruby line pushes the lines below it down, the rest stay put.
+        // Per-line annotation/object extents. Ruby and opaque inline objects
+        // share the space above the baseline (take the max, not the sum); inline
+        // objects may also extend below it. Each line therefore grows only by
+        // the top/bottom amount its own contents actually require.
         val pinyinClusterRanges = pinyinSpans.mapNotNull { naturalClusters.clusterIndexRangeFor(it.baseRange) }
-        val lineExtra = lineSolution.lines.map { lc ->
+        val lineRubyTopExtra = lineSolution.lines.map { lc ->
             val hasRuby = pinyinClusterRanges.any { it.first <= lc.clusterRange.last && it.last >= lc.clusterRange.first }
             if (rubyBand > 0f && (input.paragraphStyle.rubyUniformBand || hasRuby)) rubyBand else 0f
         }
+        val baseTopExtent = baseLineMetrics.baseline
+        val baseBottomExtent = baseLineMetrics.height - baseLineMetrics.baseline
+        val lineObjectTopExtra = lineSolution.lines.map { line ->
+            val ascent = line.clusterRange.mapNotNull(inlineObjectByClusterIndex::get)
+                .maxOfOrNull { it.ascent } ?: 0f
+            (ascent - baseTopExtent).coerceAtLeast(0f)
+        }
+        val lineObjectBottomExtra = lineSolution.lines.map { line ->
+            val descent = line.clusterRange.mapNotNull(inlineObjectByClusterIndex::get)
+                .maxOfOrNull { it.descent } ?: 0f
+            (descent - baseBottomExtent).coerceAtLeast(0f)
+        }
+        val lineTopExtra = lineRubyTopExtra.indices.map { index ->
+            maxOf(lineRubyTopExtra[index], lineObjectTopExtra[index])
+        }
         val lineTop = FloatArray(lineSolution.lines.size)
-        run { var acc = 0f; for (i in lineExtra.indices) { lineTop[i] = acc; acc += baseLineMetrics.height + lineExtra[i] } }
+        run {
+            var acc = 0f
+            for (i in lineTopExtra.indices) {
+                lineTop[i] = acc
+                acc += baseLineMetrics.height + lineTopExtra[i] + lineObjectBottomExtra[i]
+            }
+        }
 
         val laidOutLines = lineSolution.lines.mapIndexed { lineIndex, lineCandidate ->
             // LineEndHangingPunctuation: the hung mark is excluded from the
@@ -1298,9 +1402,10 @@ class ExplainableStubParagraphLayoutEngine(
             LineBox(
                 range = lineCandidate.sourceRange,
                 clusterRange = lineCandidate.clusterRange,
-                baseline = lineTop[lineIndex] + lineExtra[lineIndex] + baseLineMetrics.baseline,
+                baseline = lineTop[lineIndex] + lineTopExtra[lineIndex] + baseLineMetrics.baseline,
                 top = lineTop[lineIndex],
-                bottom = lineTop[lineIndex] + lineExtra[lineIndex] + baseLineMetrics.height,
+                bottom = lineTop[lineIndex] + lineTopExtra[lineIndex] +
+                    baseLineMetrics.height + lineObjectBottomExtra[lineIndex],
                 naturalWidth = lineCandidate.naturalWidth,
                 adjustedWidth = adjustedWidth,
                 visualWidth = visualWidth,
@@ -1320,6 +1425,9 @@ class ExplainableStubParagraphLayoutEngine(
                         },
                         "end:${lineCandidate.endReason}",
                         "natural=${lineCandidate.naturalWidth},adjusted=${lineCandidate.adjustedWidth},visual=$visualWidth",
+                    ) + listOfNotNull(
+                        justificationPlans.getOrNull(lineIndex)?.fallbackReason
+                            ?.let { "justify-fallback:$it" },
                     ),
                 ),
             )
@@ -1340,6 +1448,18 @@ class ExplainableStubParagraphLayoutEngine(
             null
         }
         val visibleLineRanges = lineSolution.lines.take(lines.size).map { it.clusterRange }
+        val inlineObjectDecisions = inlineObjectByClusterIndex.entries
+            .sortedBy { it.key }
+            .map { (clusterIndex, inlineObject) ->
+                InlineObjectDecisionInfo(
+                    range = inlineObject.range,
+                    advance = inlineObject.advance,
+                    ascent = inlineObject.ascent,
+                    descent = inlineObject.descent,
+                    clusterIndex = clusterIndex,
+                    lineIndex = lineSolution.lines.indexOfFirst { clusterIndex in it.clusterRange },
+                )
+            }
         // Ink-edge insets so 行间线/着重号 hug the text, not the edge blanks: the leading
         // autospace gap + consumed 开标点 leading glue (mirrors the renderer's glyph
         // shift, SkiaTextBlobs.forEachPositionedCluster). The trailing justify stretch
@@ -1357,6 +1477,7 @@ class ExplainableStubParagraphLayoutEngine(
             justifyDeltaByCluster = justifyDeltaByCluster,
             rubySpreadByCluster = rubyAndBopomofoSpread,
             fontSize = fontSize,
+            emphasisDotCenterOffsetEm = input.paragraphStyle.emphasisDotCenterOffsetEm,
         )
         val decorationSegments = computeDecorationSegments(
             decorations = input.decorations,
@@ -1459,9 +1580,14 @@ class ExplainableStubParagraphLayoutEngine(
                         policyBodyFloor = atom.policyBodyFloor,
                         inkWidth = atom.inkWidth,
                         inkCenter = atom.inkCenter,
+                        inkContainmentBodyFloor = atom.inkContainmentBodyFloor,
+                        inkContainmentApplied = atom.inkContainmentApplied,
                         inkBoundsFallback = atom.inkBoundsFallback,
                         haltAdvance = atom.haltAdvance,
                         haltValidation = atom.haltValidation,
+                        advanceExpansion = atom.advanceExpansion,
+                        glyphInlineShift = atom.glyphInlineShift,
+                        glyphPlacementReason = atom.glyphPlacementReason,
                     )
                 },
                 geometryDecisions = geometryDecisions,
@@ -1494,7 +1620,11 @@ class ExplainableStubParagraphLayoutEngine(
                             "natural:${line.naturalWidth}",
                             "adjusted:${line.adjustedWidth}",
                             "visual:${line.visualWidth}",
-                        ) + listOfNotNull(candidate.repair?.let { "repair-reason:${it.reason}" }),
+                        ) + listOfNotNull(
+                            candidate.repair?.let { "repair-reason:${it.reason}" },
+                            justificationPlans.getOrNull(lineIndex)?.fallbackReason
+                                ?.let { "justify-fallback:$it" },
+                        ),
                     )
                 },
                 justificationDecisions = justificationPlans.zip(lineSolution.lines)
@@ -1530,6 +1660,9 @@ class ExplainableStubParagraphLayoutEngine(
                 kinsokuDecision = kinsokuDecision,
                 lineLengthGridDecision = lineLengthGridDecision,
                 firstLineIndentDecision = firstLineIndentDecision,
+                inlineBoxDecisions = inlineBoxResult.decisions,
+                inlineObjectDecisions = inlineObjectDecisions,
+                zeroWidthBreakDecisions = zeroWidthBreakDecisions,
             ),
         )
     }
@@ -1546,14 +1679,11 @@ class ExplainableStubParagraphLayoutEngine(
      *
      * Anchor = the point the dot INK CENTRE must land on: x is the glyph
      * centre (final position minus the trailing justification delta), y is
-     * `baseline + EMPHASIS_DOT_CENTER_EM·em`. The drop is baseline-relative,
-     * NOT descent-relative: real Han ink ends ≈0.12em below the baseline (the
-     * font-declared typo descent, ADR 0002 amendment), so anchoring the dot to
-     * the box bottom would land it inside the NEXT line's ink. 0.45em keeps
-     * clear daylight under the character face (字身底 baseline+0.12em; ≈2px
-     * clearance at 16px) and clears the next line even at lineHeight 1.0. Renderers
-     * measure their dot glyph's ink and align its centre here, so font
-     * differences stay in the render layer.
+     * `baseline + ParagraphStyle.emphasisDotCenterOffsetEm·em`. The offset is
+     * explicit typography input (`ExplicitEmphasisDotOffset`), not derived from
+     * line height: leading provides room for the mark but does not silently move
+     * it. Renderers measure their dot glyph's ink and align its centre here, so
+     * font differences stay in the render layer.
      */
     private fun computeDecorationDecisions(
         decorations: List<DecorationSpan>,
@@ -1564,6 +1694,7 @@ class ExplainableStubParagraphLayoutEngine(
         justifyDeltaByCluster: Map<Int, Float>,
         rubySpreadByCluster: Map<Int, Float>,
         fontSize: Float,
+        emphasisDotCenterOffsetEm: Float,
     ): List<DecorationDecisionInfo> {
         if (decorations.isEmpty()) return emptyList()
 
@@ -1594,7 +1725,8 @@ class ExplainableStubParagraphLayoutEngine(
                                 else -> "no-dot-on-non-han"
                             },
                             anchorX = x + glyphAdvance / 2f,
-                            anchorY = lineBoxes[lineIndex].baseline + fontSize * EMPHASIS_DOT_CENTER_EM,
+                            anchorY = lineBoxes[lineIndex].baseline +
+                                fontSize * emphasisDotCenterOffsetEm,
                             dotDiameter = if (applied) fontSize * EMPHASIS_DOT_DIAMETER_EM else 0f,
                         )
                     }
@@ -1687,8 +1819,8 @@ class ExplainableStubParagraphLayoutEngine(
                 val baseline = lineBoxes[lineIndex].baseline
                 val isLine = span.kind != DecorationKind.Mourning
                 // 行间线贴字：face bottom (+0.12em) plus a hairline of air;
-                // 先线后点 holds because the emphasis dot ink starts at
-                // +0.34em, below the line.
+                // at the default emphasis offset, 先线后点 holds because the
+                // dot ink starts at 0.45em - 0.11em radius = +0.34em.
                 val lineY = baseline + fontSize * INTERLINEAR_LINE_Y_EM
                 spanSegments += DecorationSegmentInfo(
                     sourceRange = TextRange(segStart, segEnd),
@@ -1889,6 +2021,18 @@ class ExplainableStubParagraphLayoutEngine(
                 index = end
                 continue
             }
+            if (isZeroWidthSpaceCodePoint(codePoint)) {
+                val end = index + charCount
+                ranges.add(
+                    ResolvedClusterRange(
+                        range = TextRange(start, end),
+                        role = FontRole.Unknown,
+                        zeroWidthSoftBreak = true,
+                    ),
+                )
+                index = end
+                continue
+            }
             val firstRange = TextRange(start, start + charCount)
             val role = classifier.classify(text, firstRange, context)
 
@@ -1949,8 +2093,68 @@ class ExplainableStubParagraphLayoutEngine(
         )
     }
 
+    private fun zeroWidthSoftBreakShapingResult(text: String, range: TextRange): ShapingResult {
+        val sourceText = text.substring(range.start, range.end)
+        val cluster = Cluster(
+            range = range,
+            text = sourceText,
+            displayText = "",
+            fontKey = ZERO_WIDTH_SOFT_BREAK_FONT_KEY,
+            advance = 0f,
+        )
+        return ShapingResult(
+            clusters = listOf(cluster),
+            glyphRuns = emptyList(),
+            decisions = listOf(
+                ShapingDecisionInfo(
+                    range = range,
+                    sourceText = sourceText,
+                    displayText = "",
+                    fontKey = ZERO_WIDTH_SOFT_BREAK_FONT_KEY,
+                    glyphCount = 0,
+                    advance = 0f,
+                    source = "StructuralControl",
+                    reason = "ZeroWidthSpaceSoftBreakNoShape",
+                ),
+            ),
+        )
+    }
+
+    private fun inlineObjectShapingResult(text: String, inlineObject: InlineObjectSpan): ShapingResult {
+        val sourceText = text.substring(inlineObject.range.start, inlineObject.range.end)
+        return ShapingResult(
+            clusters = listOf(
+                Cluster(
+                    range = inlineObject.range,
+                    text = sourceText,
+                    displayText = sourceText,
+                    fontKey = INLINE_OBJECT_FONT_KEY,
+                    advance = inlineObject.advance,
+                ),
+            ),
+            glyphRuns = emptyList(),
+            decisions = listOf(
+                ShapingDecisionInfo(
+                    range = inlineObject.range,
+                    sourceText = sourceText,
+                    displayText = sourceText,
+                    fontKey = INLINE_OBJECT_FONT_KEY,
+                    glyphCount = 0,
+                    advance = inlineObject.advance,
+                    source = "InlineObject",
+                    reason = "MeasurableOpaqueInlineObject:no-font-shaping",
+                ),
+            ),
+        )
+    }
+
     private fun Cluster.isMandatoryBreakCluster(): Boolean =
         fontKey == MANDATORY_BREAK_FONT_KEY && displayText.isEmpty()
+
+    private fun Cluster.isZeroWidthSoftBreakCluster(): Boolean =
+        fontKey == ZERO_WIDTH_SOFT_BREAK_FONT_KEY && displayText.isEmpty()
+
+    private fun Cluster.isInlineObjectCluster(): Boolean = fontKey == INLINE_OBJECT_FONT_KEY
 
     private fun Cluster.punctuationAtoms(
         em: Float,
@@ -2504,7 +2708,7 @@ class ExplainableStubParagraphLayoutEngine(
     }
 
     private fun List<Cluster>.renderableGlyphRunClusters(): List<List<Cluster>> =
-        filter { it.displayText.isNotEmpty() }.groupAdjacentBy { previous, current ->
+        filter { it.displayText.isNotEmpty() && !it.isInlineObjectCluster() }.groupAdjacentBy { previous, current ->
             previous.fontKey == current.fontKey && previous.range.end == current.range.start
         }
 
@@ -2547,6 +2751,54 @@ private data class AutoSpaceApplicationResult(
     val decisions: List<AutoSpaceDecisionInfo>,
 )
 
+private data class InlineBoxApplicationResult(
+    val clusters: List<Cluster>,
+    val advanceByCluster: Map<Int, Float>,
+    val decisions: List<InlineBoxDecisionInfo>,
+)
+
+private fun List<Cluster>.applyInlineBoxSpans(spans: List<InlineBoxSpan>): InlineBoxApplicationResult {
+    if (isEmpty() || spans.isEmpty()) {
+        return InlineBoxApplicationResult(this, emptyMap(), emptyList())
+    }
+    val leadingByCluster = HashMap<Int, Float>()
+    val trailingByCluster = HashMap<Int, Float>()
+    val decisions = mutableListOf<InlineBoxDecisionInfo>()
+    for (span in spans) {
+        if (span.range.start >= span.range.end) continue
+        val clusterRange = clusterIndexRangeFor(span.range) ?: continue
+        if (span.inlineStart != 0f) {
+            leadingByCluster.merge(clusterRange.first, span.inlineStart) { a, b -> a + b }
+        }
+        if (span.inlineEnd != 0f) {
+            trailingByCluster.merge(clusterRange.last, span.inlineEnd) { a, b -> a + b }
+        }
+        decisions += InlineBoxDecisionInfo(
+            range = span.range,
+            inlineStart = span.inlineStart,
+            inlineEnd = span.inlineEnd,
+            firstClusterIndex = clusterRange.first,
+            lastClusterIndex = clusterRange.last,
+        )
+    }
+    val advanceByCluster = HashMap<Int, Float>()
+    val resolved = mapIndexed { index, cluster ->
+        val leading = leadingByCluster[index] ?: 0f
+        val trailing = trailingByCluster[index] ?: 0f
+        val structural = leading + trailing
+        if (structural != 0f) advanceByCluster[index] = structural
+        if (structural == 0f && leading == 0f) {
+            cluster
+        } else {
+            cluster.copy(
+                advance = (cluster.advance + structural).coerceAtLeast(0f),
+                leadingLayoutAdvance = cluster.leadingLayoutAdvance + leading,
+            )
+        }
+    }
+    return InlineBoxApplicationResult(resolved, advanceByCluster, decisions)
+}
+
 private data class PunctuationGeometryLedger(
     private val naturalClusters: List<Cluster>,
     private val geometries: Map<Int, PunctuationClusterGeometry>,
@@ -2567,6 +2819,8 @@ private data class PunctuationGeometryLedger(
      * are post-break and get replaced).
      */
     private val rubySpreadByCluster: Map<Int, Float> = emptyMap(),
+    /** Structural inline box edges are never punctuation compression budget. */
+    private val inlineBoxAdvanceByCluster: Map<Int, Float> = emptyMap(),
 ) {
     companion object {
         fun from(
@@ -2610,6 +2864,8 @@ private data class PunctuationGeometryLedger(
                     bodyWidth = atomsForCluster.sumOf { it.bodyWidth.toDouble() }.toFloat(),
                     leadingGlueNatural = atomsForCluster.first().leadingGlue.natural,
                     trailingGlueNatural = atomsForCluster.last().trailingGlue.natural,
+                    glyphInlineShift = atomsForCluster.singleOrNull()?.glyphInlineShift ?: 0f,
+                    glyphPlacementReason = atomsForCluster.singleOrNull()?.glyphPlacementReason,
                     reason = atomsForCluster.first().geometrySource,
                 )
             }.toMap()
@@ -2619,8 +2875,19 @@ private data class PunctuationGeometryLedger(
     fun resolveClusters(): List<Cluster> =
         naturalClusters.mapIndexed { index, cluster ->
             val resolved = resolvedAdvance(index, cluster)
-            if (resolved == cluster.advance) cluster else cluster.copy(advance = resolved)
+            val glyphInlineShift = geometries[index]?.glyphInlineShift ?: 0f
+            if (resolved == cluster.advance && glyphInlineShift == 0f) {
+                cluster
+            } else {
+                cluster.copy(
+                    advance = resolved,
+                    glyphInlineShift = cluster.glyphInlineShift + glyphInlineShift,
+                )
+            }
         }
+
+    fun withInlineBoxAdvances(advanceByCluster: Map<Int, Float>): PunctuationGeometryLedger =
+        if (advanceByCluster.isEmpty()) this else copy(inlineBoxAdvanceByCluster = advanceByCluster)
 
     fun consumeTrailingByCluster(consumptionByCluster: Map<Int, Float>): PunctuationGeometryLedger =
         copy(
@@ -2746,6 +3013,8 @@ private data class PunctuationGeometryLedger(
                 trailingGlueConsumed = budget.trailingConsumed,
                 justificationDelta = delta,
                 rubySpread = rubySpreadByCluster[index] ?: 0f,
+                glyphInlineShift = geometry.glyphInlineShift,
+                glyphPlacementReason = geometry.glyphPlacementReason,
                 resolvedAdvance = resolvedAdvance(index, naturalClusters[index]),
                 source = "PunctuationGeometryLedger",
                 reason = geometry.reason,
@@ -2769,8 +3038,12 @@ private data class PunctuationGeometryLedger(
             val delta = justificationDeltaByCluster[index] ?: 0f
             return (cluster.advance + delta + spread - rawTrim).coerceAtLeast(0f)
         }
+        val inlineBoxAdvance = inlineBoxAdvanceByCluster[index] ?: 0f
         val budget = budgets[index]
-            ?: return (geometry.bodyWidth + (justificationDeltaByCluster[index] ?: 0f) + spread - rawTrim).coerceAtLeast(0f)
+            ?: return (
+                geometry.bodyWidth + inlineBoxAdvance +
+                    (justificationDeltaByCluster[index] ?: 0f) + spread - rawTrim
+                ).coerceAtLeast(0f)
         val delta = justificationDeltaByCluster[index] ?: 0f
         return (
             geometry.bodyWidth +
@@ -2778,7 +3051,8 @@ private data class PunctuationGeometryLedger(
                 budget.trailingRemaining +
                 delta +
                 spread -
-                rawTrim
+                rawTrim +
+                inlineBoxAdvance
             ).coerceAtLeast(0f)
     }
 }
@@ -2791,6 +3065,8 @@ private data class PunctuationClusterGeometry(
     val bodyWidth: Float,
     val leadingGlueNatural: Float,
     val trailingGlueNatural: Float,
+    val glyphInlineShift: Float,
+    val glyphPlacementReason: String?,
     val reason: String,
 )
 
@@ -2798,6 +3074,7 @@ private data class ResolvedClusterRange(
     val range: TextRange,
     val role: FontRole,
     val mandatoryBreak: Boolean = false,
+    val zeroWidthSoftBreak: Boolean = false,
 )
 
 private data class GlueBudget(
@@ -2814,16 +3091,6 @@ private data class LineEdgeTrimResult(
     val geometry: PunctuationGeometryLedger,
     val decisions: List<LineEdgeTrimDecisionInfo>,
 )
-
-/**
- * ADR 0018: 着重号 dot ink centre sits this far below the BASELINE. Sized for
- * the tight case — the minimum 着重号 line height (natural + 0.5em floor) —
- * so an [EMPHASIS_DOT_DIAMETER_EM] dot seats roughly midway between the
- * character face below the baseline and the next line's ink, clearing both.
- * (The old 0.45 + a full-size `•` glyph overlapped the next line by ~1px on
- * real fonts — measured by `EmphasisClearanceProbe`.)
- */
-private const val EMPHASIS_DOT_CENTER_EM = 0.34f
 
 /**
  * ADR 0018: 着重号 dot diameter, as a fraction of em. CLREQ 着重号 is a small
@@ -2848,8 +3115,11 @@ private const val RUBY_FONT_WEIGHT_BOOST = 100
 /** `BopomofoLegibilityWeightBoost`: 注音 ㄅㄆㄇ 更小，默认比基文重 300. */
 private const val BOPOMOFO_FONT_WEIGHT_BOOST = 300
 private const val MANDATORY_BREAK_FONT_KEY = "mandatory-break"
+private const val ZERO_WIDTH_SOFT_BREAK_FONT_KEY = "zero-width-space"
+private const val INLINE_OBJECT_FONT_KEY = "inline-object"
 /** `DashSubstitutionInkCoverageRollback`: keep `⸺` only if its ink fills ≥85% of the 2em advance (Pixel Noto ≈80% rolls back; Source Han ≈94% keeps). */
 private const val DASH_SUBSTITUTION_MIN_INK_COVERAGE = 0.85f
+private const val DASH_SUBSTITUTION_TARGET_EM = 2f
 /** `EmptyParagraphBaselineFallback`: see [lineMetrics]'s empty branch. */
 private const val EMPTY_PARAGRAPH_BASELINE_RATIO = 0.75f
 /**
@@ -2907,8 +3177,8 @@ private const val MOURNING_FRAME_FACE_DESCENT_EM = 0.12f
 
 /**
  * 行间线（专名号/书名号甲式）的横排 y：字身底 (+0.12em) 下方留一线空气
- * （行间标点应尽量紧贴所标注汉字一侧），与着重号同现时点墨水上缘在
- * +0.34em——先线后点成立。
+ * （行间标点应尽量紧贴所标注汉字一侧）。使用着重号默认中心距时，点墨水
+ * 上缘在 0.45em - 0.11em 半径 = +0.34em，先线后点成立。
  */
 private const val INTERLINEAR_LINE_Y_EM = 0.18f
 

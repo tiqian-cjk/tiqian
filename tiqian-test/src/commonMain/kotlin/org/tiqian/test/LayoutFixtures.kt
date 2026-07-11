@@ -195,6 +195,14 @@ object EarlyLayoutFixtures {
                 "synthetic hyphen.",
         ),
         LayoutFixture(
+            id = "zero-width-space-soft-break",
+            text = "A.\u200B.\u200B.Complete？AaFont？",
+            constraints = LayoutConstraints(maxWidth = 96f),
+            notes = "UAX #14 ZW: U+200B is a source-faithful zero-width soft break " +
+                "control. It is not shaped, never creates a blank visual line, and " +
+                "does not weaken the visible-zero-advance capability guard.",
+        ),
+        LayoutFixture(
             id = "western-hyphenation",
             text = "请运行 internationalization 命令",
             constraints = LayoutConstraints(maxWidth = 160f),

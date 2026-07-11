@@ -88,6 +88,12 @@ interface LineBreaker {
          * not cross them.
          */
         hardBreakAfterClusters: Set<Int> = emptySet(),
+        /**
+         * Zero-advance structural controls that must not count as a line's
+         * first visible content. This prevents a leading U+200B from becoming
+         * its own empty auto-wrapped line before an over-wide token.
+         */
+        nonRenderingControlClusters: Set<Int> = emptySet(),
     ): LineSolution
 }
 
@@ -246,6 +252,7 @@ class GreedyLineBreaker(
         lineAdjustmentPushIn: Boolean,
         lineAdjustmentCompressBias: Float,
         hardBreakAfterClusters: Set<Int>,
+        nonRenderingControlClusters: Set<Int>,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -257,7 +264,7 @@ class GreedyLineBreaker(
             firstLineIndent, forbiddenLineEndClusters,
             hyphenBreakClusters, cjkInterCharBoundaries, maxCjkStretchPerGap,
             sinoWesternBoundaries, sinoWesternStretchCap,
-            hardBreakAfterClusters,
+            hardBreakAfterClusters, nonRenderingControlClusters,
         )
         val repaired = applyKinsokuRepairs(
             initial = greedy,
@@ -295,16 +302,18 @@ class GreedyLineBreaker(
         sinoWesternBoundaries: Set<Int>,
         sinoWesternStretchCap: Float,
         hardBreakAfterClusters: Set<Int>,
+        nonRenderingControlClusters: Set<Int>,
     ): List<LineCandidate> {
         val lines = mutableListOf<LineCandidate>()
         var lineStart = 0
         var adjustedAccum = 0f
         var naturalAccum = 0f
+        var hasRenderingContent = false
 
         var i = 0
         while (i < adjustedClusters.size) {
             val nextAdjusted = adjustedAccum + adjustedClusters[i].advance
-            val overflows = nextAdjusted > lineLimit(maxWidth, firstLineIndent, lineStart) && i > lineStart
+            val overflows = nextAdjusted > lineLimit(maxWidth, firstLineIndent, lineStart) && hasRenderingContent
             if (overflows) {
                 val decided = decideHyphenBreak(
                     lineStart, i, adjustedClusters,
@@ -320,10 +329,12 @@ class GreedyLineBreaker(
                 lineStart = breakAt
                 adjustedAccum = adjustedClusters[breakAt].advance
                 naturalAccum = naturalClusters[breakAt].advance
+                hasRenderingContent = breakAt !in nonRenderingControlClusters
                 i = breakAt + 1
             } else {
                 adjustedAccum = nextAdjusted
                 naturalAccum += naturalClusters[i].advance
+                if (i !in nonRenderingControlClusters) hasRenderingContent = true
                 if (i in hardBreakAfterClusters) {
                     lines += rebuildLine(
                         clusterRange = lineStart..i,
@@ -334,6 +345,7 @@ class GreedyLineBreaker(
                     lineStart = i + 1
                     adjustedAccum = 0f
                     naturalAccum = 0f
+                    hasRenderingContent = false
                 }
                 i += 1
             }
@@ -430,6 +442,7 @@ class LookaheadLineBreaker(
         lineAdjustmentPushIn: Boolean,
         lineAdjustmentCompressBias: Float,
         hardBreakAfterClusters: Set<Int>,
+        nonRenderingControlClusters: Set<Int>,
     ): LineSolution {
         if (adjustedClusters.isEmpty()) return LineSolution(emptyList())
         require(naturalClusters.size == adjustedClusters.size) {
@@ -468,6 +481,7 @@ class LookaheadLineBreaker(
                         lineStart,
                         lineLimit(maxWidth, firstLineIndent, lineStart),
                         endExclusive = segmentEndExclusive,
+                        nonRenderingControlClusters = nonRenderingControlClusters,
                     ),
                     adjustedClusters = adjustedClusters,
                     lineLimit = lineLimit(maxWidth, firstLineIndent, lineStart),
@@ -516,6 +530,10 @@ class LookaheadLineBreaker(
                 .filter { it in (lineStart + 1)..adjustedClusters.size }
                 .filter { it <= segmentEndExclusive }
                 .filter { e -> unbreakableRanges.none { e > it.first && e <= it.last } }
+                .filter { e ->
+                    (lineStart until e).any { it !in nonRenderingControlClusters } ||
+                        e == segmentEndExclusive
+                }
                 .distinct()
                 .ifEmpty { listOf(greedyEnd) }
 
@@ -543,6 +561,7 @@ class LookaheadLineBreaker(
                     gapBoundaries = gapBoundaries,
                     dRef = dRef,
                     unbreakableRanges = unbreakableRanges,
+                    nonRenderingControlClusters = nonRenderingControlClusters,
                 )
                 if (score < bestScore) {
                     bestScore = score
@@ -634,6 +653,7 @@ class LookaheadLineBreaker(
         gapBoundaries: Set<Int> = emptySet(),
         dRef: Float = 1f,
         unbreakableRanges: List<IntRange> = emptyList(),
+        nonRenderingControlClusters: Set<Int> = emptySet(),
     ): Float {
         val firstLine = rebuildLine(s..(e - 1), natural, adjusted)
         val future = rawGreedyLinesFrom(
@@ -648,6 +668,7 @@ class LookaheadLineBreaker(
             sinoWesternStretchCap = sinoWesternStretchCap,
             endExclusive = segmentEndExclusive,
             unbreakableRanges = unbreakableRanges,
+            nonRenderingControlClusters = nonRenderingControlClusters,
         )
         // Apply kinsoku once across [firstLine] + future so both splice
         // conflicts and future-line conflicts are scored with the same PushIn
@@ -704,17 +725,19 @@ class LookaheadLineBreaker(
         sinoWesternStretchCap: Float,
         endExclusive: Int = adjusted.size,
         unbreakableRanges: List<IntRange> = emptyList(),
+        nonRenderingControlClusters: Set<Int> = emptySet(),
     ): List<LineCandidate> {
         if (start >= endExclusive) return emptyList()
 
         val lines = mutableListOf<LineCandidate>()
         var lineStart = start
         var adjustedAccum = 0f
+        var hasRenderingContent = false
 
         var i = start
         while (i < endExclusive) {
             val nextAdjusted = adjustedAccum + adjusted[i].advance
-            val overflows = nextAdjusted > maxWidth && i > lineStart
+            val overflows = nextAdjusted > maxWidth && hasRenderingContent
             if (overflows) {
                 // Honest futures (ADR 0038): simulated lines obey the same
                 // unbreakable groups as committed ones — a candidate must not
@@ -735,9 +758,11 @@ class LookaheadLineBreaker(
                 )
                 lineStart = breakAt
                 adjustedAccum = adjusted[breakAt].advance
+                hasRenderingContent = breakAt !in nonRenderingControlClusters
                 i = breakAt + 1
             } else {
                 adjustedAccum = nextAdjusted
+                if (i !in nonRenderingControlClusters) hasRenderingContent = true
                 i += 1
             }
         }
@@ -1500,13 +1525,16 @@ internal fun findGreedyEnd(
     start: Int,
     maxWidth: Float,
     endExclusive: Int = adjustedClusters.size,
+    nonRenderingControlClusters: Set<Int> = emptySet(),
 ): Int {
     var accum = 0f
     var i = start
+    var hasRenderingContent = false
     while (i < endExclusive) {
         val next = accum + adjustedClusters[i].advance
-        if (next > maxWidth && i > start) return i
+        if (next > maxWidth && hasRenderingContent) return i
         accum = next
+        if (i !in nonRenderingControlClusters) hasRenderingContent = true
         i += 1
     }
     return endExclusive

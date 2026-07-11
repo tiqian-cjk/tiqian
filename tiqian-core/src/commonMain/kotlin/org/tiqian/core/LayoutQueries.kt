@@ -271,7 +271,8 @@ private fun LayoutResult.positionedClusters(lineIndex: Int, line: LineBox): List
     val positioned = line.clusterRange.mapIndexed { indexInLine, clusterIndex ->
         val cluster = clusters[clusterIndex]
         val leadingGap = if (indexInLine != 0) leadingAutoSpaceGaps[cluster.range] ?: 0f else 0f
-        val drawX = x + leadingGap - (leadingConsumed[cluster.range] ?: 0f)
+        val drawX = x + cluster.leadingLayoutAdvance + cluster.glyphInlineShift + leadingGap -
+            (leadingConsumed[cluster.range] ?: 0f)
         val positioned = PositionedCluster(
             lineIndex = lineIndex,
             clusterIndex = clusterIndex,
