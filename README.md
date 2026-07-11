@@ -2,75 +2,72 @@
 
 提椠是一个中日韩段落书写器。
 
-提椠在平台已有的文字测量与绘制能力之上，额外负责了段落中的断行、避头尾、标点挤压、两端对齐与行内空间分配等排版能力。
+它复用各个平台已有的字体、文字测量与绘制能力，统一处理中文正文里的字体选择、
+断行、避头尾、标点空间、两端对齐、行内空间分配与行间注。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/sample-paragraph-white.svg">
+  <img src="docs/images/sample-paragraph-black.svg" alt="提椠简体中文横排样张，包含拼音行间注与着重号">
+</picture>
+
+样张由提椠实际排版，包含段首缩进、两端对齐、中西混排、中文标点、拼音行间注与着重号。
 
 ## 当前状态
 
-目前提椠仍处于早期开发阶段，API 和模块结构可能继续调整。
+提椠仍处于早期开发阶段，尚未发布稳定版本，公共 API 和模块结构可能继续调整。
 
 - [x] 简体中文横排
 - [ ] 繁体中文横排
+  - [x] 注音
 - [ ] 简 / 繁直排
 - [ ] 日文排版（JLREQ）
 - [ ] 韩文排版（KLREQ）
 
-## 模块
+目前可以通过 Compose 和 Web 两种前端使用提椠。Android View 模块只保留了接入接口，
+还不是可直接使用的完整前端。
 
-| 模块                       | 职责                                                                           |
-|--------------------------|------------------------------------------------------------------------------|
-| `tiqian-core`            | 定义平台无关的布局数据结构，包括文本片段、字形序列、行盒与布局结果。                                           |
-| `tiqian-font`            | 处理字体选择、字符分类与字体度量，把平台返回的字体信息转换为提椠使用的排版度量。                                     |
-| `tiqian-shaping-api`     | 定义文字测量与字形生成的统一接口。                                                            |
-| `tiqian-shaping-jvm`     | 基于 JVM / AWT 实现 `tiqian-shaping-api`，用于测试、调试与桌面环境。                           |
-| `tiqian-shaping-skia`    | 基于 Skia / Skiko 实现 `tiqian-shaping-api`，用于 Compose Desktop 等 Skia 渲染环境。      |
-| `tiqian-shaping-android` | 基于 Android `TextPaint` 实现 `tiqian-shaping-api`，用于 Android 平台接入。              |
-| `tiqian-shaping-web`     | 基于浏览器离屏 Canvas 实现 shaping / font metrics 度量，不负责上屏绘制。                         |
-| `tiqian-linebreak`       | 提供断行机会计算，包括 CJK 断行、西文按词换行与连字符断词。                                             |
-| `tiqian-clreq`           | 提供中文排版规则 profile，包括标点分类、禁则规则、标点挤压与间距策略。                                      |
-| `tiqian-layout`          | 段落布局核心。根据文本、字体度量、行宽和排版规则生成最终的 layout result；golden dump 在其测试资源里。            |
-| `tiqian-compose`         | Compose 前端适配，负责把 `LayoutResult` 渲染到 Compose Desktop / Compose Multiplatform。 |
-| `tiqian-gallery-android` | Android Compose 真机 gallery，用真实设备 dogfood 排版能力。                                |
-| `tiqian-android-view`    | Android View 前端适配接口，用于后续接入原生 Android 视图体系。                                   |
-| `tiqian-web`             | Web ESM package 与 light-DOM `<tiqian-prose>` 渐进增强前端；保留宿主 SSR、语义节点与 CSS。          |
-| `tiqian-playground`      | 生成 layout dump、HTML 调试报告和可视化预览，用于检查布局决策。                                     |
-| `tiqian-test`            | 存放跨模块共享的测试 fixture 文本。                                                        |
+## Compose
 
+`tiqian-compose` 支持 Compose Desktop 和 Android 31 及以上版本。普通文本可以直接把
+Compose 的 `Text` 换成 `CjkText`；已有的 `AnnotatedString` 和 `TextStyle` 也可以继续使用。
 
-## 上手
+```kotlin
+val paragraph = buildAnnotatedString {
+    append("编号 A-17 的青铜")
+    ruby("盉", "hé")
+    append("仍")
+    emphasis { append("一并保留") }
+    append("。")
+}
 
-编译 + 全部测试
-```shell
-./gradlew build
+CjkText(
+    text = paragraph,
+    style = MaterialTheme.typography.bodyLarge,
+)
 ```
 
-生成 layout dump + HTML 调试报告
-```shell
-./gradlew :tiqian-playground:runPlayground
-```
+接受 `String` 或 `AnnotatedString` 的 `CjkText` 会保留源码中的换行，并支持常用的 Compose
+字体样式、背景、下划线、删除线、inline code 与链接点击。接入现有富文本渲染器时，可以先调用
+`cjkTextCompatibility()` 查看当前段落中尚不能保真的能力。结构化正文、节和列表使用显式的
+`CjkText(blocks = ...)` 入口。
 
-Jetpack Compose Desktop Demo
-```shell
-./gradlew :tiqian-compose:runComposeDemo 
-```
+## Web
 
-### Web 使用
+`@tiqian/web` 用来增强服务器已经输出的正文 HTML。页面会先按普通 HTML 显示，提椠加载
+完成后再接管支持的段落。没有 JavaScript、加载失败或遇到暂不支持的内容时，原文仍然可读；
+网站原有的字体、颜色、链接和交互样式也会继续生效。
 
-`@tiqian/web` 用来增强服务器已经输出的正文 HTML。页面会先按普通 HTML 显示，
-提椠加载完成后再接管支持的段落。没有 JavaScript、加载失败或遇到暂不支持的内容时，
-原文仍然可读；网站原有的字体、颜色和链接样式也会继续生效。
-
-#### 构建
+### 构建 Web 包
 
 ```shell
 ./gradlew :tiqian-web:assembleNpmPackage
 ```
 
-构建结果位于 `tiqian-web/npm/`，可以把这个目录作为本地的 `@tiqian/web` package 接入网站。
+构建结果位于 `tiqian-web/npm/`，可以把这个目录作为本地的 `@tiqian/web` 包接入网站。
 
-#### 推荐：`<tiqian-prose>`
+### 使用 `<tiqian-prose>`
 
-静态博客和 SSR 网站推荐使用 custom element。把现有正文放进 `<tiqian-prose>`，
-然后在页面中导入一次入口：
+静态博客和 SSR 网站推荐使用自定义元素。把现有正文放进 `<tiqian-prose>`，然后导入一次入口：
 
 ```html
 <tiqian-prose class="prose">
@@ -82,17 +79,17 @@ Jetpack Compose Desktop Demo
 </script>
 ```
 
-组件会等页面字体和样式准备好后再增强正文，并在容器宽度或排版样式变化时重新排版。
-节点从页面移除时，它也会自动清理，因此可以直接用于 Astro、Swup 等带页面导航的网站。
+组件会等待页面字体与样式准备好，再逐段增强正文；容器宽度或排版样式变化时会重新排版，
+节点移除时会自行清理，因此可以直接用于 Astro、Swup 等带客户端导航的网站。
 
 `<tiqian-prose>` 使用 light DOM，不会把正文隔离进 shadow DOM。原有的 `.prose a`、
-`p > a`、`:hover` 等 CSS 仍然有效，也不需要为提椠重新写一套链接或字体样式。
-暂时无法处理的段落会保留浏览器原生排版。
+`p > a`、`:hover` 等 CSS 仍然有效，也不需要为提椠重新定义字体或链接样式。暂时无法
+保真处理的段落会保留浏览器原生排版。
 
-#### 命令式 API
+### 命令式 API
 
-如果正文根节点不能改成 custom element，或者应用需要自行管理页面生命周期，
-可以直接调用包根导出的 API：
+如果正文根节点不能改成自定义元素，或者应用需要自行管理页面生命周期，可以直接调用
+包根导出的 API：
 
 ```js
 import { enhance, destroy } from "@tiqian/web";
@@ -105,10 +102,61 @@ await enhance(article);
 await destroy(article);
 ```
 
-## 参考文献
+## 运行仓库
+
+项目使用 Gradle Wrapper 构建，并会按需准备 JDK 25 工具链。Android 模块需要本机安装
+Android SDK；Web 浏览器测试需要 Chrome 或 Chromium。
+
+```shell
+# 编译并运行全部测试
+./gradlew build
+
+# 生成 layout dump 和 HTML 调试报告
+./gradlew :tiqian-layout:generateLayoutReport
+
+# 打开 Compose Desktop demo
+./gradlew runComposeDemo
+
+# 构建同一 Demo 的 Android 启动壳
+./gradlew :tiqian-demo-android:assembleDebug
+```
+
+Layout report 位于
+`tiqian-layout/build/reports/tiqian-layout-report/index.html`。
+
+## 项目结构
+
+- **排版核心**：`tiqian-core`、`tiqian-font`、`tiqian-linebreak`、`tiqian-clreq`、
+  `tiqian-layout` 定义排版数据、字体度量、断行与中文排版规则，并生成可解释的
+  `LayoutResult`。
+- **平台测量**：`tiqian-shaping-api`、`tiqian-shaping-jvm`、`tiqian-shaping-skia`、
+  `tiqian-shaping-android`、`tiqian-shaping-web` 使用各平台的文字系统取得字形、排版宽度
+  与墨迹边界。
+- **前端**：`tiqian-compose`、`tiqian-web`、`tiqian-android-view` 把同一份
+  `LayoutResult` 呈现在 Compose、DOM 或 Android View 中。
+- **Demo**：`tiqian-demo` 提供 Desktop 入口和共享示例界面，`tiqian-demo-android`
+  只负责把同一界面装进 Android 应用。
+- **工具与测试**：`tiqian-layout` 的报告与样张任务、`tiqian-test` 的共享语料提供
+  调试和跨模块验证。
+
+平台层只负责测量与绘制，字体回退、标点空间、避头尾和两端对齐等决策都由排版核心完成。
+
+## 文档
+
+- [Roadmap](docs/roadmap.md) 记录当前进度、已经完成的切片与下一步工作。
+- [当前架构](docs/architecture.md) 说明 pipeline、模块边界与平台接入方式。
+- [ADR 索引](docs/adr/README.md) 记录已经确定的架构和排版取舍。
+- [初始设计备忘录](docs/cjk-layout-engine-design.md) 保留项目早期的目标与设计背景。
+- [贡献指南](docs/contributing.md) 说明开发环境、实现约定、验证方式与提交格式。
+
+## 参考资料
 
 - W3C[《中文排版需求》](https://www.w3.org/TR/clreq/)
 - The Type[《孔雀计划：中文字体排印的思路》](https://www.thetype.com/kongque/)
-- 教育部[《重訂標點符號手冊》（2008年修訂版）](https://language.moe.gov.tw/001/Upload/FILES/SITE_CONTENT/M0001/HAU/c2.htm)
+- 教育部[《重訂標點符號手冊》（2008 年修訂版）](https://language.moe.gov.tw/001/Upload/FILES/SITE_CONTENT/M0001/HAU/c2.htm)
 - 教育部[《國語注音符號手冊》](https://language.moe.gov.tw/001/Upload/files/site_content/M0001/juyin/html_ch/index.html)
 - CY/T 154-2017[《中文出版物夹用英文的编辑规范》](https://std.samr.gov.cn/hb/search/stdHBDetailed?id=8B1827F23645BB19E05397BE0A0AB44A)
+
+## 许可证
+
+提椠以 [Mozilla Public License 2.0](LICENSE) 发布。
