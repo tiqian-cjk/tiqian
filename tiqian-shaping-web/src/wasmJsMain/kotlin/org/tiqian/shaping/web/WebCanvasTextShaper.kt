@@ -1,6 +1,8 @@
 package org.tiqian.shaping.web
 
+import kotlin.JsFun
 import kotlin.js.ExperimentalWasmJsInterop
+import kotlin.js.JsAny
 import kotlinx.browser.document
 import org.tiqian.core.Cluster
 import org.tiqian.core.Glyph
@@ -45,14 +47,38 @@ class WebFontFamilies(
      */
     val bopomofo: String = BOPOMOFO_FALLBACK_FAMILIES.joinToString(", ") { it.cssFamilyToken() },
 ) {
+    private val roleFamilyCache = mutableMapOf<Pair<FontRole, List<String>>, String>()
+
     fun forRole(role: FontRole, preferredFamilies: List<String> = emptyList()): String {
+        val key = role to preferredFamilies
+        roleFamilyCache[key]?.let { return it }
         val default = if (role == FontRole.LatinText) latin else cjk
-        return when (preferredFamilies.firstOrNull()) {
-            "monospace" -> if (role == FontRole.LatinText) latinMonospace else cjk
-            "serif" -> if (role == FontRole.LatinText) latinSerif else cjkSerif
-            "sans-serif", "sansserif" -> default
-            else -> default
+        val resolved = if (preferredFamilies.isEmpty()) {
+            default
+        } else {
+            when (preferredFamilies.singleOrNull()?.lowercase()) {
+                "monospace" -> if (role == FontRole.LatinText) latinMonospace else cjk
+                "serif" -> if (role == FontRole.LatinText) latinSerif else cjkSerif
+                "sans-serif", "sansserif" -> default
+                else -> preferredFamilies.joinToString(", ") { it.cssFamilyToken() }
+            }
         }
+        roleFamilyCache[key] = resolved
+        return resolved
+    }
+
+    /**
+     * Canvas occasionally accepts a webfont as the selected face even when that
+     * face intentionally maps an unsupported character to zero advance. DOM text
+     * continues through the CSS stack in that case, so measurement must probe the
+     * same suffixes instead of hard-coding a family name to exclude.
+     */
+    fun fallbackStacks(role: FontRole, preferredFamilies: List<String> = emptyList()): List<String> {
+        if (preferredFamilies.size <= 1) return listOf(forRole(role, preferredFamilies))
+        return preferredFamilies.indices
+            .map { index -> preferredFamilies.subList(index, preferredFamilies.size) }
+            .map { families -> families.joinToString(", ") { it.cssFamilyToken() } }
+            .distinct()
     }
 
     /** Ruby defaults to the application-provided Latin stack; explicit families override it. */
@@ -74,6 +100,13 @@ class WebFontFamilies(
     }
 
 }
+
+/** A CSSOM-resolved HarfBuzz session prepared asynchronously by `@tiqian/web`. */
+data class WebCjkDashCapability(
+    val status: String,
+    val sessionId: String? = null,
+    val detail: String? = null,
+)
 
 private val BOPOMOFO_FALLBACK_FAMILIES = listOf(
     // Traditional Chinese system sans first: they carry the vertical tone glyphs.
@@ -119,6 +152,8 @@ class WebCanvasFontMetricsResolver(
 ) : FontMetricsResolver {
 
     private val fallback = StubFontMetricsResolver()
+    private val cache = mutableMapOf<FontMetricsRequest, RawFontMetrics>()
+    private var currentCanvasFont: String? = null
 
     private val ctx: CanvasRenderingContext2D by lazy {
         val canvas = document.createElement("canvas") as HTMLCanvasElement
@@ -126,37 +161,45 @@ class WebCanvasFontMetricsResolver(
     }
 
     override fun resolve(request: FontMetricsRequest): RawFontMetrics {
-        ctx.font = "normal 400 ${request.fontSize}px " + fonts.forRole(request.role, request.fontFamilies)
+        cache[request]?.let { return it }
         val cjkBox = request.role == FontRole.CjkText || request.role == FontRole.CjkPunctuation
-        val m = ctx.measureText(if (cjkBox) CJK_METRIC_PROBE_TEXT else LATIN_METRIC_PROBE_TEXT)
+        val probe = if (cjkBox) CJK_METRIC_PROBE_TEXT else LATIN_METRIC_PROBE_TEXT
+        for (family in fonts.fallbackStacks(request.role, request.fontFamilies)) {
+            val cssFont = "normal 400 ${request.fontSize}px $family"
+            if (cssFont != currentCanvasFont) {
+                ctx.font = cssFont
+                currentCanvasFont = ctx.font
+            }
+            val m = ctx.measureText(probe)
+            if (!m.width.isFinite() || m.width <= ZERO_ADVANCE_EPSILON) continue
 
-        val ascent = m.fontBoundingBoxAscent.toFloatOrNull()
-            ?: m.actualBoundingBoxAscent.toFloatOrNull()
-            ?: return fallback.resolve(request)
-        val descent = m.fontBoundingBoxDescent.toFloatOrNull()
-            ?: m.actualBoundingBoxDescent.toFloatOrNull()
-            ?: return fallback.resolve(request)
-
-        val ideographicDescent = (-m.ideographicBaseline).toFloatOrNull()
-        val typoAscent = if (cjkBox && ideographicDescent != null) {
-            (request.fontSize - ideographicDescent).coerceAtLeast(0f)
-        } else {
-            null
+            val ascent = m.fontBoundingBoxAscent.toFloatOrNull()
+                ?: m.actualBoundingBoxAscent.toFloatOrNull()
+                ?: continue
+            val descent = m.fontBoundingBoxDescent.toFloatOrNull()
+                ?: m.actualBoundingBoxDescent.toFloatOrNull()
+                ?: continue
+            val ideographicDescent = (-m.ideographicBaseline).toFloatOrNull()
+            val result = RawFontMetrics(
+                ascent = ascent,
+                descent = descent,
+                leading = 0f,
+                source = FontMetricSource.GlyphSampling,
+                typoAscent = if (cjkBox && ideographicDescent != null) {
+                    (request.fontSize - ideographicDescent).coerceAtLeast(0f)
+                } else {
+                    null
+                },
+                typoDescent = if (cjkBox && ideographicDescent != null) {
+                    ideographicDescent.coerceAtLeast(0f)
+                } else {
+                    null
+                },
+            )
+            cache[request] = result
+            return result
         }
-        val typoDescent = if (cjkBox && ideographicDescent != null) {
-            ideographicDescent.coerceAtLeast(0f)
-        } else {
-            null
-        }
-
-        return RawFontMetrics(
-            ascent = ascent,
-            descent = descent,
-            leading = 0f,
-            source = FontMetricSource.GlyphSampling,
-            typoAscent = typoAscent,
-            typoDescent = typoDescent,
-        )
+        return fallback.resolve(request).also { cache[request] = it }
     }
 
     private fun Double.toFloatOrNull(): Float? =
@@ -165,6 +208,7 @@ class WebCanvasFontMetricsResolver(
     private companion object {
         private const val CJK_METRIC_PROBE_TEXT = "中"
         private const val LATIN_METRIC_PROBE_TEXT = "Hg"
+        private const val ZERO_ADVANCE_EPSILON = 0.01
     }
 }
 
@@ -184,7 +228,18 @@ class WebCanvasFontMetricsResolver(
 @OptIn(ExperimentalWasmJsInterop::class)
 class WebCanvasTextShaper(
     private val fonts: WebFontFamilies,
+    private val cjkDashCapability: WebCjkDashCapability? = null,
 ) : TextShaper {
+
+    private data class MeasuredText(
+        val advance: Float,
+        val bounds: Rect,
+        val requestedFont: String,
+        val actualFont: String,
+    )
+
+    private val measurementCache = mutableMapOf<Pair<String, String>, MeasuredText>()
+    private var currentCanvasFont: String? = null
 
     private val ctx: CanvasRenderingContext2D by lazy {
         val canvas = document.createElement("canvas") as HTMLCanvasElement
@@ -192,24 +247,154 @@ class WebCanvasTextShaper(
     }
 
     override fun shape(input: ShapingInput): ShapingResult {
+        val source = input.text.substring(input.range.start, input.range.end)
+        if (source == CJK_DASH_SOURCE || input.displayText == TWO_EM_DASH) {
+            return shapePreparedCjkDash(input, source)
+                ?: shapeWithCanvas(input, capabilityIssue = dashCapabilityIssue())
+        }
+        return shapeWithCanvas(input)
+    }
+
+    private fun shapePreparedCjkDash(input: ShapingInput, source: String): ShapingResult? {
+        val capability = cjkDashCapability ?: return null
+        if (capability.status != "conforming") return null
+        val sessionId = capability.sessionId ?: return null
+        val shaped = preparedCjkDashShape(
+            sessionId,
+            input.style.fontSize.toDouble(),
+            input.style.fontWeight.toDouble(),
+            input.style.italic,
+        ) ?: return null
+        if (dashShapeString(shaped, "status") != "conforming") return null
+
+        val glyphCount = dashShapeGlyphCount(shaped)
+        val advance = dashShapeNumber(shaped, "advance").toFloat()
+        val display = dashShapeString(shaped, "displayText") ?: return null
+        val cssFontFamily = dashShapeString(shaped, "cssFontFamily") ?: return null
+        if (glyphCount <= 0 || !advance.isFinite() || advance <= ZERO_ADVANCE_EPSILON) return null
+        val glyphs = buildList {
+            for (index in 0 until glyphCount) {
+                val glyphAdvance = dashShapeGlyphNumber(shaped, index, "advance").toFloat()
+                val glyphId = dashShapeGlyphNumber(shaped, index, "id")
+                if (!glyphAdvance.isFinite() || glyphAdvance < 0f || !glyphId.isFinite()) return null
+                val bounds = if (dashShapeGlyphHasBounds(shaped, index)) {
+                    Rect(
+                        left = dashShapeGlyphBoundsNumber(shaped, index, "left").toFloat(),
+                        top = dashShapeGlyphBoundsNumber(shaped, index, "top").toFloat(),
+                        right = dashShapeGlyphBoundsNumber(shaped, index, "right").toFloat(),
+                        bottom = dashShapeGlyphBoundsNumber(shaped, index, "bottom").toFloat(),
+                    ).takeIf { rect ->
+                        rect.left.isFinite() && rect.top.isFinite() &&
+                            rect.right.isFinite() && rect.bottom.isFinite()
+                    }
+                } else {
+                    null
+                }
+                add(
+                    Glyph(
+                        id = glyphId.toUInt(),
+                        clusterRange = input.range,
+                        advance = glyphAdvance,
+                        x = dashShapeGlyphNumber(shaped, index, "x").toFloat(),
+                        y = dashShapeGlyphNumber(shaped, index, "y").toFloat(),
+                        renderFontKey = cssFontFamily,
+                        bounds = bounds,
+                    ),
+                )
+            }
+        }
+        val fontKey = input.fontDecision.candidate.key
+        val strategy = dashShapeString(shaped, "strategy")
+        val face = dashShapeString(shaped, "faceId")
+        val loclEvidence = dashShapeString(shaped, "loclEvidence")
+        val decision = ShapingDecisionInfo(
+            range = input.range,
+            sourceText = source,
+            displayText = display,
+            fontKey = fontKey,
+            glyphCount = glyphs.size,
+            advance = advance,
+            source = "HarfBuzzWebFontData",
+            reason = buildString {
+                append("HarfBuzzWebFontData")
+                append("; strategy=")
+                append(strategy)
+                append("; face=")
+                append(face)
+                append("; script=Hani; language=zh-Hans; locl=")
+                append(loclEvidence)
+                append("; inkCoverage=")
+                append(dashShapeNumber(shaped, "inkCoverage"))
+                append("; horizontalCenterDelta=")
+                append(dashShapeNumber(shaped, "horizontalCenterDelta"))
+                append("; verticalCenterDelta=")
+                append(dashShapeNumber(shaped, "verticalCenterDelta"))
+                append("; seamGap=")
+                append(dashShapeNumber(shaped, "seamGap"))
+            },
+            glyphsWithoutInkBounds = glyphs.count { it.bounds == null },
+            missingGlyphs = glyphs.count { it.id == 0u },
+            resolvedFace = face,
+            script = dashShapeString(shaped, "script"),
+            language = dashShapeString(shaped, "language"),
+            strategy = strategy,
+            featureEvidence = loclEvidence,
+        )
+        return ShapingResult(
+            clusters = listOf(
+                Cluster(
+                    range = input.range,
+                    text = source,
+                    displayText = display,
+                    fontKey = fontKey,
+                    advance = advance,
+                ),
+            ),
+            glyphRuns = listOf(
+                GlyphRun(
+                    range = input.range,
+                    fontKey = fontKey,
+                    glyphs = glyphs,
+                    advance = advance,
+                ),
+            ),
+            decisions = listOf(decision),
+        )
+    }
+
+    private fun dashCapabilityIssue(): Pair<String, String> {
+        val capability = cjkDashCapability
+        return "NoConformingCjkDashGlyph" to when {
+            capability == null -> "CjkDashFontShapingNotPrepared"
+            capability.detail.isNullOrBlank() -> "status=${capability.status}"
+            else -> "status=${capability.status}; ${capability.detail}"
+        }
+    }
+
+    private fun shapeWithCanvas(
+        input: ShapingInput,
+        capabilityIssue: Pair<String, String>? = null,
+    ): ShapingResult {
         val size = input.style.fontSize
         val key = input.fontDecision.candidate.key
         val source = input.text.substring(input.range.start, input.range.end)
         val display = input.displayText
 
         val style = if (input.style.italic) "italic" else "normal"
-        ctx.font = "$style ${input.style.fontWeight} ${size}px " +
-            fonts.forRole(input.fontDecision.role, input.style.fontFamilies)
-        val m = ctx.measureText(display)
-        val advance = m.width.toFloat()
-        // TextMetrics ink extents are distances from the text ORIGIN: left/ascent
-        // point back/up (positive), so negate to get an origin-relative Rect.
-        val bounds = Rect(
-            left = -m.actualBoundingBoxLeft.toFloat(),
-            top = -m.actualBoundingBoxAscent.toFloat(),
-            right = m.actualBoundingBoxRight.toFloat(),
-            bottom = m.actualBoundingBoxDescent.toFloat(),
-        )
+        val stacks = fonts.fallbackStacks(input.fontDecision.role, input.style.fontFamilies)
+        var chosenIndex = 0
+        val requiresAdvance = display.isNotEmpty() && display.none { it == '\n' || it == '\r' }
+        var measured = measure(display, "$style ${input.style.fontWeight} ${size}px ${stacks.first()}")
+        if (requiresAdvance && !measured.hasUsableAdvance()) {
+            for (index in 1 until stacks.size) {
+                val candidate = measure(display, "$style ${input.style.fontWeight} ${size}px ${stacks[index]}")
+                measured = candidate
+                chosenIndex = index
+                if (candidate.hasUsableAdvance()) break
+            }
+        }
+        val advance = measured.advance
+        val bounds = measured.bounds
 
         val cluster = Cluster(
             range = input.range,
@@ -234,9 +419,86 @@ class WebCanvasTextShaper(
             glyphCount = 1,
             advance = advance,
             source = "OffscreenMeasureTextShaping",
-            reason = "web-canvas-measureText",
+            reason = buildString {
+                append("web-canvas-measureText")
+                append("; stackIndex=")
+                append(chosenIndex)
+                append("; requestedFont=")
+                append(measured.requestedFont)
+                append("; actualFont=")
+                append(measured.actualFont)
+                capabilityIssue?.let { (_, detail) ->
+                    append("; ")
+                    append(detail)
+                }
+            },
             glyphsWithoutInkBounds = 0,
+            capabilityIssue = capabilityIssue?.first,
         )
         return ShapingResult(listOf(cluster), listOf(run), listOf(decision))
     }
+
+    private fun measure(display: String, cssFont: String): MeasuredText {
+        if (cssFont != currentCanvasFont) {
+            ctx.font = cssFont
+            currentCanvasFont = ctx.font
+        }
+        val actualFont = ctx.font
+        return measurementCache.getOrPut(actualFont to display) {
+            val m = ctx.measureText(display)
+            MeasuredText(
+                advance = m.width.toFloat(),
+                bounds = Rect(
+                    left = -m.actualBoundingBoxLeft.toFloat(),
+                    top = -m.actualBoundingBoxAscent.toFloat(),
+                    right = m.actualBoundingBoxRight.toFloat(),
+                    bottom = m.actualBoundingBoxDescent.toFloat(),
+                ),
+                requestedFont = cssFont,
+                actualFont = actualFont,
+            )
+        }
+    }
+
+    private fun MeasuredText.hasUsableAdvance(): Boolean =
+        advance.isFinite() && advance > ZERO_ADVANCE_EPSILON
+
+    private companion object {
+        private const val CJK_DASH_SOURCE = "——"
+        private const val TWO_EM_DASH = "⸺"
+        private const val ZERO_ADVANCE_EPSILON = 0.01f
+    }
 }
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(sessionId, fontSize, fontWeight, italic) => globalThis.__TiqianWebFontShaping?.shapeCjkDash?.(sessionId, fontSize, fontWeight, italic) ?? null")
+private external fun preparedCjkDashShape(
+    sessionId: String,
+    fontSize: Double,
+    fontWeight: Double,
+    italic: Boolean,
+): JsAny?
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(value, name) => value?.[name] == null ? null : String(value[name])")
+private external fun dashShapeString(value: JsAny, name: String): String?
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(value, name) => { const number = Number(value?.[name]); return Number.isFinite(number) ? number : NaN; }")
+private external fun dashShapeNumber(value: JsAny, name: String): Double
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(value) => Array.isArray(value?.glyphs) ? value.glyphs.length : 0")
+private external fun dashShapeGlyphCount(value: JsAny): Int
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(value, index, name) => { const number = Number(value?.glyphs?.[index]?.[name]); return Number.isFinite(number) ? number : NaN; }")
+private external fun dashShapeGlyphNumber(value: JsAny, index: Int, name: String): Double
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(value, index) => value?.glyphs?.[index]?.bounds != null")
+private external fun dashShapeGlyphHasBounds(value: JsAny, index: Int): Boolean
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(value, index, name) => { const number = Number(value?.glyphs?.[index]?.bounds?.[name]); return Number.isFinite(number) ? number : NaN; }")
+private external fun dashShapeGlyphBoundsNumber(value: JsAny, index: Int, name: String): Double
