@@ -68,8 +68,8 @@ include(
     ":tiqian-clreq",
     ":tiqian-layout",
     ":tiqian-compose",
-    ":tiqian-gallery-android",
+    ":tiqian-demo",
+    ":tiqian-demo-android",
     ":tiqian-android-view",
-    ":tiqian-playground",
     ":tiqian-test",
 )

@@ -3,6 +3,11 @@
 - Status: Accepted
 - Date: 2026-06-22
 
+> [!NOTE]
+> 2026-07-11：Compose 示例界面已从库模块与独立 gallery 收拢到共享的
+> `tiqian-demo`。Desktop 由该模块直接启动，`tiqian-demo-android` 只保留 Android
+> application 壳。下文的 `tiqian-gallery-android` 是本 ADR 落地时的历史名称。
+
 ## Context
 
 ADR 0017 deliberately shipped `tiqian-compose` as Desktop/JVM first: the renderer
@@ -79,6 +84,6 @@ width-specific platform choice.
 ## Verification
 
 ```shell
-./gradlew :tiqian-compose:compileAndroidMain :tiqian-gallery-android:assembleDebug
+./gradlew :tiqian-compose:compileAndroidMain :tiqian-demo-android:assembleDebug
 ./gradlew :tiqian-compose:compileKotlinJvm :tiqian-compose:jvmTest
 ```

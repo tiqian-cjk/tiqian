@@ -65,7 +65,9 @@ spacing decisions (整段共 2 处):
 整段 14 个 ASCII 空格（每个中西交界点都有一个）当前在 [`CjkFontRoleClassifier`](../../tiqian-font/src/commonMain/kotlin/org/tiqian/font/FontPolicy.kt) 里依次：
 不是 CJK 码点；不是 `isAmbiguousAsciiPunctuation`（只有 `- / ~`）；不是 curly quote；不是 CJK 标点；不是 `isLatinCodePoint`（只覆盖字母数字）；不是 `isAsciiLatinPunctuation`（刚加的括号集）；不是 emoji；`isSymbolCodePoint` 不命中（SPACE_SEPARATOR 不在 math/currency/modifier/other_symbol）。最终 → `FontRole.Unknown` → `PreferCjkForAmbiguousPunctuationResolver` 给出 `symbol-fallback`。
 
-playground HTML 里之所以**看起来正常**，是因为 [`renderGlyphBox`](../../tiqian-playground/src/jvmMain/kotlin/org/tiqian/playground/Main.kt) 的 `else` 分支默认按 `cjk-text` 上色——纯粹是 viz bug 掩盖了 model bug。
+当时的 layout report 里之所以**看起来正常**，是因为
+[`renderGlyphBox`](../../tiqian-layout/src/jvmTest/kotlin/org/tiqian/layout/tooling/LayoutReportMain.kt)
+的 `else` 分支默认按 `cjk-text` 上色——纯粹是 viz bug 掩盖了 model bug。
 
 潜在后果：
 

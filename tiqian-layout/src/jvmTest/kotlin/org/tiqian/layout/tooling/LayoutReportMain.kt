@@ -1,4 +1,4 @@
-package org.tiqian.playground
+package org.tiqian.layout.tooling
 
 import org.tiqian.core.Cluster
 import org.tiqian.core.LayoutInput
@@ -34,7 +34,7 @@ import javax.imageio.ImageIO
 fun main() {
     val shaperMode = ShaperMode.fromEnvironment()
     val textShaper = shaperMode.createShaper()
-    val reportItems = mutableListOf<PlaygroundReportItem>()
+    val reportItems = mutableListOf<LayoutReportItem>()
 
     println("shaper=${shaperMode.id} (${shaperMode.description})")
     println()
@@ -67,18 +67,18 @@ fun main() {
         val greedyResult = greedyEngine.layout(input)
         val lookaheadResult = lookaheadEngine.layout(input)
 
-        reportItems += PlaygroundReportItem(fixture, greedyResult, lookaheadResult)
+        reportItems += LayoutReportItem(fixture, greedyResult, lookaheadResult)
         printFixtureDump(fixture, greedyResult, lookaheadResult)
     }
 
-    val reportFile = File("build/reports/tiqian-layout-playground/index.html")
+    val reportFile = File("build/reports/tiqian-layout-report/index.html")
     reportFile.parentFile.mkdirs()
     reportFile.writeText(renderHtmlReport(reportItems, shaperMode))
     println()
     println("HTML report: ${reportFile.absolutePath}")
 }
 
-private data class PlaygroundReportItem(
+private data class LayoutReportItem(
     val fixture: LayoutFixture,
     val greedy: LayoutResult,
     val lookahead: LayoutResult,
@@ -86,12 +86,12 @@ private data class PlaygroundReportItem(
 
 /**
  * Picks one CJK and one Latin AWT font and uses them to actually draw the
- * engine-computed layout into a PNG. The point of the playground is to let
+ * engine-computed layout into a PNG. The point of the report is to let
  * the reader compare the engine output to the browser-default rendering;
  * everything else (overlays, boxes, ink dots, decision tags) is debug noise
  * that lives in `<details>` blocks.
  */
-private object PlaygroundFontProbe {
+private object LayoutReportFontProbe {
     val cjk: String
     val latin: String
 
@@ -203,8 +203,8 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
     val height = result.size.height.coerceAtLeast(16f)
     val fontSize = result.input.textStyle.fontSize
 
-    val cjkFont = Font(PlaygroundFontProbe.cjk, Font.PLAIN, 1).deriveFont(fontSize)
-    val latinFont = Font(PlaygroundFontProbe.latin, Font.PLAIN, 1).deriveFont(fontSize)
+    val cjkFont = Font(LayoutReportFontProbe.cjk, Font.PLAIN, 1).deriveFont(fontSize)
+    val latinFont = Font(LayoutReportFontProbe.latin, Font.PLAIN, 1).deriveFont(fontSize)
 
     // Engine lays the CJK box on the font-declared typo metrics on the real
     // baseline (ADR 0002 amendment). The wider hhea ink (≈18.6/4.6 vs typo
@@ -240,7 +240,7 @@ private fun rasterizeLayoutToPng(result: LayoutResult, fixture: LayoutFixture, s
         // Default autospace gap used by the engine when AutoSpacePolicy isn't
         // surfaced per-cluster. Matches ClreqProfile defaults; if a future
         // profile customises gapEm this rasterizer would over- or under-pad
-        // the boundary by the difference. Acceptable for the playground.
+        // the boundary by the difference. Acceptable for the diagnostic report.
         val defaultAutoSpaceGap = 0.25f * fontSize
         val leadingConsumedAwt = result.debug.geometryDecisions
             .filter { it.leadingGlueConsumed > 0f }
@@ -381,13 +381,16 @@ private enum class ShaperMode(
         }
 
     companion object {
-        fun fromEnvironment(): ShaperMode =
-            when (System.getenv("TIQIAN_PLAYGROUND_SHAPER")?.lowercase(Locale.ROOT)) {
+        fun fromEnvironment(): ShaperMode {
+            val configured = System.getenv("TIQIAN_LAYOUT_REPORT_SHAPER")
+                ?: System.getenv("TIQIAN_PLAYGROUND_SHAPER")
+            return when (configured?.lowercase(Locale.ROOT)) {
                 "stub" -> Stub
                 "skia", "skiko" -> Skia
                 "jvm", "jvm-awt", "awt", null, "" -> JvmAwt
                 else -> JvmAwt
             }
+        }
     }
 }
 
@@ -456,14 +459,14 @@ private fun SpacingDecisionInfo.compactDump(): String =
 private fun Cluster.compactDump(): String =
     "${range.start}-${range.end} '$displayText' ${advance.oneDecimal()} $fontKey"
 
-private fun renderHtmlReport(items: List<PlaygroundReportItem>, shaperMode: ShaperMode): String =
+private fun renderHtmlReport(items: List<LayoutReportItem>, shaperMode: ShaperMode): String =
     buildString {
         appendLine("<!doctype html>")
         appendLine("<html lang=\"zh-Hans\">")
         appendLine("<head>")
         appendLine("<meta charset=\"utf-8\">")
         appendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
-        appendLine("<title>提椠 layout playground</title>")
+        appendLine("<title>提椠 layout report</title>")
         appendLine(
             """
             <style>
@@ -506,19 +509,19 @@ private fun renderHtmlReport(items: List<PlaygroundReportItem>, shaperMode: Shap
         )
         appendLine("</head>")
         appendLine("<body><main>")
-        appendLine("<h1>提椠 layout playground</h1>")
+        appendLine("<h1>提椠 layout report</h1>")
         appendLine(
             "<p class=\"intro\">三栏对比：<strong>浏览器默认</strong>排版 · 提椠 <strong>greedy</strong> · 提椠 <strong>lookahead</strong>。" +
                 "中间和右侧都是用 AWT 按引擎计算出的位置直接绘制的 PNG——你看到的就是引擎实际产出的图像，跟浏览器渲染一对一可比。" +
                 "决策细节（line decisions、spacing、justification、几何账本等）折叠在每个 fixture 下方 <code>decisions</code> 块里，按需展开。" +
                 "当前 shaper：<code>${shaperMode.id.escapeHtml()}</code>（${shaperMode.description.escapeHtml()}）；" +
-                "切回 deterministic stub 用 <code>TIQIAN_PLAYGROUND_SHAPER=stub</code>。</p>",
+                "切回 deterministic stub 用 <code>TIQIAN_LAYOUT_REPORT_SHAPER=stub</code>。</p>",
         )
         items.forEach { item -> appendLine(item.renderSection(shaperMode)) }
         appendLine("</main></body></html>")
     }
 
-private fun PlaygroundReportItem.renderSection(shaperMode: ShaperMode): String {
+private fun LayoutReportItem.renderSection(shaperMode: ShaperMode): String {
     val maxWidth = fixture.constraints.maxWidth
     val spacing = greedy.debug.spacingDecisions
     val fontSize = greedy.input.textStyle.fontSize

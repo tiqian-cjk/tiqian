@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "org.tiqian.gallery.android"
+    namespace = "org.tiqian.demo.android"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "org.tiqian.gallery.android"
+        applicationId = "org.tiqian.demo.android"
         minSdk = 31
         targetSdk = 36
         versionCode = 1
@@ -17,8 +17,6 @@ android {
 }
 
 dependencies {
-    implementation(project(":tiqian-compose"))
+    implementation(project(":tiqian-demo"))
     implementation("androidx.activity:activity-compose:1.11.0")
-    implementation("androidx.compose.foundation:foundation:1.9.3")
-    implementation("androidx.compose.material3:material3:1.4.0")
 }

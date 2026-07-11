@@ -1,14 +1,18 @@
-package org.tiqian.compose
+package org.tiqian.demo
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.TextField
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,15 +28,27 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.singleWindowApplication
+import org.tiqian.compose.CjkBlock
+import org.tiqian.compose.CjkText
+import org.tiqian.compose.CjkTextStyle
+import org.tiqian.compose.ListMarker
+import org.tiqian.compose.ParagraphIndent
+import org.tiqian.compose.bookTitle
+import org.tiqian.compose.bopomofo
+import org.tiqian.compose.emphasis
+import org.tiqian.compose.mourning
+import org.tiqian.compose.properNoun
+import org.tiqian.compose.ruby
 
-fun main() = singleWindowApplication(title = "Tiqian Compose Demo") {
+@Composable
+fun TiqianDemoScreen() {
     // CjkTextStyle: `.sp` is lowered to engine px via density inside the composable.
     val textStyle = CjkTextStyle(fontSize = 15.sp)
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.White)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),

@@ -39,11 +39,3 @@ kotlin {
         }
     }
 }
-
-tasks.register<JavaExec>("runComposeDemo") {
-    group = "application"
-    description = "Opens a desktop window rendering fixtures via CjkText."
-    dependsOn("jvmJar")
-    mainClass.set("org.tiqian.compose.DemoMainKt")
-    classpath = files(tasks.named("jvmJar")) + configurations.named("jvmRuntimeClasspath").get()
-}
