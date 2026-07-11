@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.use
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -62,5 +63,53 @@ class RichColorRenderTest {
         }
         assertTrue(red > 200, "expected red ink from the 红色 span, got $red")
         assertTrue(blue > 200, "expected blue ink from the 蓝色 span, got $blue")
+    }
+
+    @Test
+    fun cjkDecorationsUseTheCoveredSpanColor() {
+        var layout: org.tiqian.core.LayoutResult? = null
+        val image = ImageComposeScene(width = 260, height = 130) {
+            Box(Modifier.fillMaxSize().background(Color.White)) {
+                CjkText(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = Color.Red)) {
+                            emphasis { append("强调") }
+                        }
+                        withStyle(SpanStyle(color = Color(0xFF0066FF))) {
+                            properNoun { append("专名") }
+                        }
+                    },
+                    modifier = Modifier.width(240.dp),
+                    textStyle = CjkTextStyle(fontSize = 40.sp),
+                    onTextLayout = { layout = it },
+                )
+            }
+        }.use { scene -> scene.render().toComposeImageBitmap().toPixelMap() }
+
+        val result = layout ?: error("onTextLayout was not called")
+        val dot = result.debug.decorationDecisions.first { it.applied && it.dotDiameter > 0f }
+        val line = result.debug.decorationSegments.single { it.kind == "ProperNoun" }
+
+        fun hasColorNear(x: Float, y: Float, predicate: (Color) -> Boolean): Boolean {
+            val centerX = x.roundToInt()
+            val centerY = y.roundToInt()
+            for (py in (centerY - 2).coerceAtLeast(0)..(centerY + 2).coerceAtMost(image.height - 1)) {
+                for (px in (centerX - 2).coerceAtLeast(0)..(centerX + 2).coerceAtMost(image.width - 1)) {
+                    if (predicate(image[px, py])) return true
+                }
+            }
+            return false
+        }
+
+        assertTrue(
+            hasColorNear(dot.anchorX, dot.anchorY) { it.red > 0.7f && it.green < 0.3f && it.blue < 0.3f },
+            "Expected the emphasis dot to inherit its red span",
+        )
+        assertTrue(
+            hasColorNear((line.left + line.right) / 2f, line.top) {
+                it.blue > 0.7f && it.red < 0.3f && it.green < 0.6f
+            },
+            "Expected the proper-noun line to inherit its blue span",
+        )
     }
 }

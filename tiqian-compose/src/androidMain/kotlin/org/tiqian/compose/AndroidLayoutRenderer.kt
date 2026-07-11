@@ -48,7 +48,7 @@ internal actual fun ContentDrawScope.drawParagraph(
         drawAndroidRichTextBackgrounds(native, richTextSegments)
         drawAndroidGlyphs(native, result, color, colorSpans, spans, AndroidRendererTypefaces)
         drawAndroidRichTextLines(native, result, color, colorSpans, richTextSegments, spans, AndroidRendererTypefaces)
-        drawAndroidDecorations(native, result, color, spans, AndroidRendererTypefaces)
+        drawAndroidDecorations(native, result, color, colorSpans, spans, AndroidRendererTypefaces)
         drawAndroidRuby(native, result, color, AndroidRendererTypefaces)
         drawAndroidBopomofo(native, result, color, AndroidRendererTypefaces)
     }
@@ -95,7 +95,9 @@ private fun drawAndroidGlyphs(
     val hyphenPaint = TextPaint(paint).apply {
         this.color = color
         textSize = result.input.textStyle.fontSize
-        typeface = typefaces.resolve(FontRole.LatinText)
+        typeface = result.input.textStyle.let { style ->
+            typefaces.resolve(FontRole.LatinText, style.fontFamilies, style.fontWeight, style.italic)
+        }
     }
     for (line in result.lines) {
         if (line.hyphenAdvance > 0f) {
@@ -140,6 +142,7 @@ private fun drawAndroidDecorations(
     canvas: android.graphics.Canvas,
     result: LayoutResult,
     color: Int,
+    colorSpans: List<ColorSpan>,
     spans: List<TextSpan>,
     typefaces: AndroidTypefaceResolver,
 ) {
@@ -150,7 +153,8 @@ private fun drawAndroidDecorations(
     }
     for (dot in result.debug.decorationDecisions) {
         if (dot.applied && dot.dotDiameter > 0f) {
-            canvas.drawCircle(dot.anchorX, dot.anchorY, dot.dotDiameter * EMPHASIS_DOT_SCALE / 2f, fillPaint)
+            fillPaint.color = colorAt(dot.clusterRange.start, color, colorSpans)
+            canvas.drawCircle(dot.anchorX, dot.anchorY, dot.dotDiameter / 2f, fillPaint)
         }
     }
 
@@ -163,6 +167,7 @@ private fun drawAndroidDecorations(
     val skipBandPad = strokePaint.strokeWidth.coerceAtLeast(1f)
     val skipClearance = browserLikeSkipInkClearance(fontSize, strokePaint.strokeWidth)
     for (seg in result.debug.decorationSegments) {
+        strokePaint.color = colorAt(seg.sourceRange.start, color, colorSpans)
         when (seg.kind) {
             DecorationKind.ProperNoun.name -> {
                 drawAndroidStraightInterlinearLine(
@@ -572,7 +577,6 @@ private fun wavyLinePath(left: Float, right: Float, y: Float, fontSize: Float): 
 }
 
 private const val INLINE_CODE_BACKGROUND_COLOR: Int = 0x1A000000
-private const val EMPHASIS_DOT_SCALE = 0.85f
 private const val INTERLINEAR_UNDERLINE_OFFSET_EM = 0.18f
 private const val GENERIC_LINE_THROUGH_OFFSET_EM = 0.30f
 private const val BROWSER_LIKE_SKIP_INK_CLEARANCE_EM = 0.10f

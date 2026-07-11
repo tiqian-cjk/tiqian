@@ -3,6 +3,7 @@ package org.tiqian.compose
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -200,6 +201,55 @@ class CjkTextRenderTest {
 
         assertEquals(64, measuredWidth)
         assertTrue(overhangInk > 0, "Expected hung punctuation ink beyond the measured 64px box")
+    }
+
+    @Test
+    fun clipOverflowDoesNotPaintOrdinaryUnwrappedTextPastWidth() {
+        val image = ImageComposeScene(width = 260, height = 100) {
+            Box(Modifier.fillMaxSize().background(Color.White).padding(8.dp)) {
+                CjkText(
+                    text = "中文中文中文中文中文中文中文中文",
+                    modifier = Modifier.width(60.dp),
+                    style = TextStyle(fontSize = 24.sp),
+                    softWrap = false,
+                    overflow = TextOverflow.Clip,
+                )
+            }
+        }.use { scene -> scene.render().toComposeImageBitmap().toPixelMap() }
+
+        var leakedInk = 0
+        for (y in 0 until image.height) {
+            for (x in 72 until image.width) {
+                val c = image[x, y]
+                if (c.red < 0.5f && c.green < 0.5f && c.blue < 0.5f) leakedInk++
+            }
+        }
+
+        assertEquals(0, leakedInk, "TextOverflow.Clip leaked ordinary unwrapped text past the width")
+    }
+
+    @Test
+    fun clipOverflowDoesNotPaintLaterLinesPastHeight() {
+        val image = ImageComposeScene(width = 140, height = 180) {
+            Box(Modifier.fillMaxSize().background(Color.White).padding(8.dp)) {
+                CjkText(
+                    text = "中文中文中文中文中文中文中文中文",
+                    modifier = Modifier.width(80.dp).height(30.dp),
+                    style = TextStyle(fontSize = 24.sp),
+                    overflow = TextOverflow.Clip,
+                )
+            }
+        }.use { scene -> scene.render().toComposeImageBitmap().toPixelMap() }
+
+        var leakedInk = 0
+        for (y in 42 until image.height) {
+            for (x in 0 until image.width) {
+                val c = image[x, y]
+                if (c.red < 0.5f && c.green < 0.5f && c.blue < 0.5f) leakedInk++
+            }
+        }
+
+        assertEquals(0, leakedInk, "TextOverflow.Clip leaked later lines past the height")
     }
 
     @Test

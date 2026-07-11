@@ -45,7 +45,6 @@ import org.tiqian.core.RubySpan
 import org.tiqian.core.TextSpan
 import org.tiqian.core.TextStyle
 import org.tiqian.core.getBoundingBoxes
-import org.tiqian.core.glyphInkBounds
 import org.tiqian.core.getOffsetForPosition
 import org.tiqian.core.positionedClusters
 import kotlin.math.ceil
@@ -454,7 +453,6 @@ private class CjkTextLayoutNode(
             .toInt().coerceIn(constraints.minHeight, constraints.maxHeight)
         drawClipWidth = w.toFloat()
         drawClipHeight = h.toFloat()
-        val ink = laidOut.glyphInkBounds()
         // LegalHangingInkClip: TextOverflow.Clip should still paint CJK hanging
         // punctuation and hanging hyphens because the engine emitted them as part
         // of the line, not as overflow text. Do not use raw visualWidth here:
@@ -468,12 +466,14 @@ private class CjkTextLayoutNode(
             maxOf(drawClipWidth, punctuationEdge, hyphenEdge)
         } ?: drawClipWidth
         val legalClipLeft = laidOut.positionedClusters().minOfOrNull { it.drawX } ?: 0f
-        drawClipLeft = minOf(0f, legalClipLeft, ink?.left ?: 0f)
-        drawClipTop = minOf(0f, ink?.top ?: 0f)
-        drawClipRight = maxOf(drawClipWidth, legalClipRight, ink?.right ?: drawClipWidth)
-        drawClipBottom = maxOf(drawClipHeight, ink?.bottom ?: drawClipHeight)
-        // Expose the first line's baseline so Row.alignByBaseline can line a 拼音 list
-        // body (first line pushed down by its ruby band) up with its marker.
+        val paintOverhang = laidOut.visiblePaintOverhang(drawClipWidth, drawClipHeight)
+        drawClipLeft = minOf(0f, legalClipLeft, -paintOverhang.left)
+        drawClipTop = -paintOverhang.top
+        drawClipRight = maxOf(drawClipWidth, legalClipRight, drawClipWidth + paintOverhang.right)
+        drawClipBottom = drawClipHeight + paintOverhang.bottom
+        // Expose the first line's resolved base-text baseline. Ruby leaves it
+        // unchanged when the existing inter-line space is sufficient; a selected
+        // line-height expansion strategy is already reflected in the LayoutResult.
         val firstBaseline = laidOut.lines.firstOrNull()?.baseline?.let { ceil(it).toInt() } ?: AlignmentLine.Unspecified
         return layout(w, h, alignmentLines = mapOf(FirstBaseline to firstBaseline)) { placeable.place(0, 0) }
     }
@@ -491,6 +491,98 @@ private class CjkTextLayoutNode(
         }
         drawContent()
     }
+}
+
+private data class PaintOverhang(
+    val left: Float = 0f,
+    val top: Float = 0f,
+    val right: Float = 0f,
+    val bottom: Float = 0f,
+)
+
+/**
+ * Paint may exceed a visible cluster's occupied box (for example an italic glyph or 着重号), but
+ * normal text whose occupied box lies beyond the node is still overflow and must remain clipped.
+ */
+private fun LayoutResult.visiblePaintOverhang(width: Float, height: Float): PaintOverhang {
+    val positions = positionedClusters()
+    val positionsByRange = positions.associateBy { it.range }
+    var left = 0f
+    var top = 0f
+    var right = 0f
+    var bottom = 0f
+
+    fun includePaint(
+        cluster: org.tiqian.core.PositionedCluster,
+        paintLeft: Float,
+        paintTop: Float,
+        paintRight: Float,
+        paintBottom: Float,
+    ) {
+        if (
+            cluster.right <= 0f || cluster.left >= width ||
+            cluster.bottom <= 0f || cluster.top >= height
+        ) {
+            return
+        }
+        left = maxOf(left, cluster.left - paintLeft)
+        top = maxOf(top, cluster.top - paintTop)
+        right = maxOf(right, paintRight - cluster.right)
+        bottom = maxOf(bottom, paintBottom - cluster.bottom)
+    }
+
+    for (run in glyphRuns) {
+        for (glyph in run.glyphs) {
+            val bounds = glyph.bounds ?: continue
+            val cluster = positionsByRange[glyph.clusterRange] ?: continue
+            includePaint(
+                cluster = cluster,
+                paintLeft = cluster.drawX + glyph.x + bounds.left,
+                paintTop = cluster.baseline + glyph.y + bounds.top,
+                paintRight = cluster.drawX + glyph.x + bounds.right,
+                paintBottom = cluster.baseline + glyph.y + bounds.bottom,
+            )
+        }
+    }
+    for (dot in debug.decorationDecisions) {
+        if (!dot.applied || dot.dotDiameter <= 0f) continue
+        val cluster = positionsByRange[dot.clusterRange] ?: continue
+        val radius = dot.dotDiameter / 2f
+        includePaint(
+            cluster = cluster,
+            paintLeft = dot.anchorX - radius,
+            paintTop = dot.anchorY - radius,
+            paintRight = dot.anchorX + radius,
+            paintBottom = dot.anchorY + radius,
+        )
+    }
+    for (ruby in debug.rubyDecisions) {
+        val base = positions.filter { positioned ->
+            positioned.lineIndex == ruby.lineIndex &&
+                positioned.range.start >= ruby.baseRange.start &&
+                positioned.range.end <= ruby.baseRange.end
+        }
+        if (base.isEmpty()) continue
+        val occupiedLeft = base.minOf { it.left }
+        val occupiedTop = base.minOf { it.top }
+        val occupiedRight = base.maxOf { it.right }
+        val occupiedBottom = base.maxOf { it.bottom }
+        if (
+            occupiedRight <= 0f || occupiedLeft >= width ||
+            occupiedBottom <= 0f || occupiedTop >= height
+        ) {
+            continue
+        }
+        val paintLeft = ruby.centerX - ruby.width / 2f
+        val paintTop = ruby.baselineY - ruby.ascent
+        val paintRight = ruby.centerX + ruby.width / 2f
+        val paintBottom = ruby.baselineY + ruby.descent
+        left = maxOf(left, occupiedLeft - paintLeft)
+        top = maxOf(top, occupiedTop - paintTop)
+        right = maxOf(right, paintRight - occupiedRight)
+        bottom = maxOf(bottom, paintBottom - occupiedBottom)
+    }
+    return PaintOverhang(left, top, right, bottom)
 }
 
 private fun validateTextControls(maxLines: Int, minLines: Int, overflow: TextOverflow) {

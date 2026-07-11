@@ -174,9 +174,21 @@ fun drawTiqianGlyphs(
     }
     // LineEndHangingHyphen (ADR 0029): a hyphen hangs just past the content at a
     // mid-word line end (content end x = indent + visualWidth).
+    val baseStyle = result.input.textStyle
+    val hyphenFamily = baseStyle.fontFamilies.firstOrNull()
+    val hyphenFont = if (baseStyle.fontWeight == 400 && !baseStyle.italic && hyphenFamily == null) {
+        latinFont
+    } else {
+        val typeface = SkiaSystemTypefaces.typeface(
+            isLatin = true,
+            family = hyphenFamily,
+            style = baseStyle.toSkiaFontStyle(),
+        ) ?: latinFont.typeface
+        Font(typeface, baseStyle.fontSize)
+    }
     for (line in result.lines) {
         if (line.hyphenAdvance > 0f) {
-            shapeTextBlob(shaper, "-", latinFont, language)?.let { blob ->
+            shapeTextBlob(shaper, "-", hyphenFont, language)?.let { blob ->
                 canvas.drawTextBlob(blob, line.indent + line.visualWidth, line.baseline + baselineOffset, paint)
             }
         }
@@ -215,12 +227,14 @@ internal inline fun LayoutResult.forEachPositionedCluster(
             }?.role
             val isLatin = fontRoleNameUsesLatinFace(role) // LatinVsCjkFaceSelection (shared rule)
             val baseFont = if (isLatin) latinFont else cjkFont
-            val style = spans.lastOrNull { cluster.range.start >= it.range.start && cluster.range.start < it.range.end }?.style
-            val size = style?.fontSize ?: baseStyle.fontSize
-            val weight = style?.fontWeight ?: 400
-            val italic = (style?.italic ?: false) ||
+            val style = spans.lastOrNull {
+                cluster.range.start >= it.range.start && cluster.range.start < it.range.end
+            }?.style ?: baseStyle
+            val size = style.fontSize
+            val weight = style.fontWeight
+            val italic = style.italic ||
                 (isLatin && emphasisRanges.any { cluster.range.start >= it.start && cluster.range.start < it.end })
-            val family = style?.fontFamilies?.firstOrNull()
+            val family = style.fontFamilies.firstOrNull()
             val font = if (size == baseStyle.fontSize && weight == 400 && !italic && family == null) {
                 baseFont
             } else {

@@ -11,7 +11,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.use
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -64,5 +66,37 @@ class CjkTextLayoutRenderTest {
                 "Expected substantial ink from the rendered paragraph, got $inkPixels dark pixels",
             )
         }
+    }
+
+    @Test
+    fun paragraphFontWeightChangesDesktopGlyphDrawing() {
+        fun inkSignature(weight: FontWeight): List<Int> {
+            val signature = mutableListOf<Int>()
+            ImageComposeScene(width = 120, height = 100) {
+                Box(Modifier.fillMaxSize().background(Color.White)) {
+                    CjkText(
+                        text = "W",
+                        fontSize = 64.sp,
+                        fontWeight = weight,
+                    )
+                }
+            }.use { scene ->
+                val pixels = scene.render().toComposeImageBitmap().toPixelMap()
+                for (y in 0 until pixels.height) {
+                    for (x in 0 until pixels.width) {
+                        val c = pixels[x, y]
+                        if (c.red < 0.8f && c.green < 0.8f && c.blue < 0.8f) {
+                            signature += y * pixels.width + x
+                        }
+                    }
+                }
+            }
+            return signature
+        }
+
+        val normal = inkSignature(FontWeight.Normal)
+        val bold = inkSignature(FontWeight.Bold)
+
+        assertTrue(normal != bold, "Paragraph-level FontWeight must affect both shaping and drawing")
     }
 }
