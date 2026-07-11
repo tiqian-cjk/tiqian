@@ -707,9 +707,15 @@ private fun renderEngineMetadata(label: String, result: LayoutResult): String =
                 val ink = decision.inkBounds?.let { " ink=${it.compactDump()}" } ?: ""
                 val inkMeasures = buildList {
                     add("floor=${decision.policyBodyFloor.oneDecimal()}")
+                    if (decision.inkContainmentApplied) {
+                        add("inkFloor=${decision.inkContainmentBodyFloor?.oneDecimal()}")
+                    }
                     decision.haltAdvance?.let { add("halt=${it.oneDecimal()}") }
                     decision.inkWidth?.let { add("inkW=${it.oneDecimal()}") }
                     decision.inkCenter?.let { add("inkC=${it.oneDecimal()}") }
+                    if (decision.advanceExpansion != 0f) add("expand=${decision.advanceExpansion.oneDecimal()}")
+                    if (decision.glyphInlineShift != 0f) add("glyphShift=${decision.glyphInlineShift.oneDecimal()}")
+                    decision.glyphPlacementReason?.let { add("placement=$it") }
                 }.joinToString(" ")
                 val sourceTag = decision.geometrySource
                 val fallback = decision.inkBoundsFallback?.let { " fallback=$it" } ?: ""
@@ -731,7 +737,43 @@ private fun renderEngineMetadata(label: String, result: LayoutResult): String =
                         "'${decision.displayText.escapeHtml()}' body=${decision.bodyWidth.oneDecimal()} " +
                         "lead=${decision.leadingGlueConsumed.oneDecimal()}/${decision.leadingGlueNatural.oneDecimal()} " +
                         "trail=${decision.trailingGlueConsumed.oneDecimal()}/${decision.trailingGlueNatural.oneDecimal()} " +
-                        "justify=+${decision.justificationDelta.oneDecimal()} resolved=${decision.resolvedAdvance.oneDecimal()}</span>",
+                        "justify=+${decision.justificationDelta.oneDecimal()}" +
+                        (if (decision.glyphInlineShift != 0f) " glyphShift=${decision.glyphInlineShift.oneDecimal()}" else "") +
+                        (decision.glyphPlacementReason?.let { " placement=$it" } ?: "") +
+                        " resolved=${decision.resolvedAdvance.oneDecimal()}</span>",
+                )
+            }
+            appendLine("</div>")
+        }
+        if (result.debug.inlineBoxDecisions.isNotEmpty()) {
+            appendLine("<div class=\"metrics\">")
+            result.debug.inlineBoxDecisions.forEach { box ->
+                appendLine(
+                    "<span class=\"metric\">inline-box ${box.range.start}-${box.range.end} " +
+                        "start=${box.inlineStart.oneDecimal()} end=${box.inlineEnd.oneDecimal()} " +
+                        "clusters=${box.firstClusterIndex}-${box.lastClusterIndex} ${box.reason}</span>",
+                )
+            }
+            appendLine("</div>")
+        }
+        if (result.debug.inlineObjectDecisions.isNotEmpty()) {
+            appendLine("<div class=\"metrics\">")
+            result.debug.inlineObjectDecisions.forEach { inlineObject ->
+                appendLine(
+                    "<span class=\"metric\">inline-object ${inlineObject.range.start}-${inlineObject.range.end} " +
+                        "advance=${inlineObject.advance.oneDecimal()} ascent=${inlineObject.ascent.oneDecimal()} " +
+                        "descent=${inlineObject.descent.oneDecimal()} cluster=${inlineObject.clusterIndex} " +
+                        "line=${inlineObject.lineIndex} ${inlineObject.reason}</span>",
+                )
+            }
+            appendLine("</div>")
+        }
+        if (result.debug.zeroWidthBreakDecisions.isNotEmpty()) {
+            appendLine("<div class=\"metrics\">")
+            result.debug.zeroWidthBreakDecisions.forEach { decision ->
+                appendLine(
+                    "<span class=\"metric\">zero-width-break ${decision.range.start}-${decision.range.end} " +
+                        "cluster=${decision.clusterIndex} ${decision.reason}</span>",
                 )
             }
             appendLine("</div>")
