@@ -9,7 +9,9 @@ Slice 0–3 把 pipeline 形状打通了，但 `ExplainableStubParagraphLayoutEn
 
 1. `LayoutDebugInfo` 里所有决策都是手写字符串（`"font:5-6:中:CjkText:src.cjk.body:..."`）。测试只能 `assertContains` 串；外部消费者（playground HTML、benchmark、未来 IDE 工具）拿不到结构化字段。
 2. `PunctuationSpacingCompressor` 直接改 `cluster.advance`。ADR 0004 的加法 glue 模型要求 glue 是资源、由 justifier 消费；提前 mutation 会让 Slice 5 (justification) 分不清「自然 advance」与「已压缩 advance」。
-3. `isRepeatableCjkPunctuation` 用 `if (cp == 0x2014 || cp == 0x2026 || cp == 0x22EF)` 写死在引擎里。这是 multi-agent-collaboration.md 点名禁止的反例，且属于 CLREQ profile 表的内容。
+3. `isRepeatableCjkPunctuation` 用 `if (cp == 0x2014 || cp == 0x2026 || cp == 0x22EF)`
+   写死在引擎里。这违反 [AGENTS.md](../../AGENTS.md) 的具名策略与模块边界约束，且属于
+   CLREQ profile 表的内容。
 4. `FontRoleClassifier` 不接 profile。Mainland / Traditional region 进来时整套 signature 要改。
 5. `QuotePairAnalyzer` 改写 cluster role 后没有进 dump，造成「dump 里看到的 role 与真实推理路径不一致」。
 

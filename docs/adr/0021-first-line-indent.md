@@ -3,6 +3,11 @@
 - Status: Accepted
 - Date: 2026-06-12
 
+> [!NOTE]
+> 本 ADR 的缩进策略仍有效；公共长度类型后来由 [ADR 0034](0034-ic-zishenkuang-unit.md)
+> 改为 `Ic`，当前字段为 `ParagraphStyle.firstLineIndent: Ic?` 与 `blockIndent: Ic`。
+> 下文 `firstLineIndentEm` 是决策落地时的历史名称。
+
 ## Context
 
 CLREQ：「段首缩排以两个汉字的空间为标准。若遇到杂志等多栏排版……时有改用

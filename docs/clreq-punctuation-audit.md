@@ -1,6 +1,8 @@
 # CLREQ 标点码点审计
 
-本文记录提椠对 CLREQ 标点表中“同类码点、推荐码点、地区差异、特殊宽度规则”的第一轮审计。原则是：source text 不改写，display text 可以按 profile 选择更合适的显示码点；分类为中文标点不等于一定要替换显示码点。
+本文记录提椠对 CLREQ 标点表中“同类码点、推荐码点、地区差异、特殊宽度规则”的审计，
+并于 2026-07-11 按当前 profile 与 Web 字体证据路径复核。原则是：source text 不改写，
+display text 可以按 profile 选择更合适的显示码点；分类为中文标点不等于一定替换显示码点。
 
 参考：W3C CLREQ 附录 A 标点符号表，以及正文中破折号、省略号、连接号、间隔号、分隔号相关说明。
 
@@ -15,6 +17,10 @@ source "・" -> display "·"
 source "‧" -> display "·"
 source "•" -> display "·"
 ```
+
+这些是候选 display 替换，不是无条件保证。目标字体缺字、advance 或 ink 无法满足规范几何时，
+引擎会记录具名原因并回滚为 source text；Web 的两字破折号还需要 ADR 0039 规定的真实 face / glyph
+证据，不能只凭 Canvas 画出了正宽字符就宣称候选成立。
 
 理由：
 
@@ -46,8 +52,9 @@ source "•" -> display "·"
 ## 行首禁则的范围
 
 CLREQ 行首行尾禁则分四档（`KinsokuLevel`，命名对齐第六节原文：不处理 /
-基本处理 / GB 法 / 严格处理），默认 **基本处理**（CLREQ「最推荐」）。
-基本处理禁于行首：点号（PauseOrStop）、结束引号括号（Closing）、
+基本处理 / GB 法 / 严格处理）。`KinsokuMode.Fixed` 可以固定任一档；默认
+`KinsokuMode.MeasureAdaptive` 按版心行长在基本处理、GB 法与严格处理间解析，并在窄行
+启用顿逗句悬挂。基本处理禁于行首：点号（PauseOrStop）、结束引号括号（Closing）、
 间隔号/中点/连接号/分隔号（居中分隔类，行首观感破碎）。
 
 破折号与省略号在 **基本处理 / GB 法** 下**允许**行首——CLREQ 对它们的

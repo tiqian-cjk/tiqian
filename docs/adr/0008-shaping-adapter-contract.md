@@ -4,6 +4,12 @@
 
 Accepted.
 
+> [!NOTE]
+> 本 ADR 中“当前 JVM 使用 stub、Android / Skia 后续接入”是建立 contract 时的实施状态。
+> AWT、Skia、Android 与 Web adapter 现均已接入；`ExplainableStubTextShaper` 只保留为确定性
+> 测试实现。见 [ADR 0013–0016](README.md#平台-shaping-与绘制)、
+> [ADR 0039](0039-web-rendering-path.md) 与 [architecture.md](../architecture.md)。
+
 ## Context
 
 Slice 6 开始前，`tiqian-shaping-api` 只有极薄的 `TextShaper` 接口，layout 仍直接构造 `Cluster` 和 nominal advance。这会让 pipeline 看起来已经有 shaping 模块，但实际上排版核心没有经过 shaping boundary，也无法在 playground / tests 中解释 shaping 来源。

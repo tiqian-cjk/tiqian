@@ -3,6 +3,11 @@
 - Status: Accepted
 - Date: 2026-06-07
 
+> [!NOTE]
+> 文末“bodyWidth 仍为 policy-derived、真实 shaping 后续接入”是当时状态。当前 ledger
+> 已消费真实 shaped advance 与 ink bounds，并按 [ADR 0014](0014-ink-bounds-calibrated-punctuation-geometry.md)
+> 做安全校准；无法取得证据时才走具名 policy fallback。
+
 ## Context
 
 ADR 0004 定义了加法标点模型：

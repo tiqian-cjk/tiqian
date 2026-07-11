@@ -3,6 +3,12 @@
 - Status: Accepted
 - Date: 2026-06-06
 
+> [!NOTE]
+> 文末 Slice 3 的 placeholder / follow-up 描述保留为历史。真实 shaping 与 ink-bounds
+> 标点几何已经由 [ADR 0013–0016](README.md#平台-shaping-与绘制) 和
+> [ADR 0014](0014-ink-bounds-calibrated-punctuation-geometry.md) 落地；当前实现状态见
+> [architecture.md](../architecture.md)。
+
 ## Context
 
 中文标点传统实现常用「减法模型」：把全角标点视为 1em 的 glyph，行尾再削掉一半、连续标点之间再削掉重叠。结果是规则散落、连续标点之间会出现 1em 空洞、justification 难以参与、调试无法解释。
