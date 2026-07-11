@@ -5,6 +5,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle as ComposeTextStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -157,6 +158,60 @@ class CjkTextCompatibilityTest {
         val issues = text.cjkTextCompatibility().issues
 
         assertEquals(emptySet(), issues)
+    }
+
+    @Test
+    fun baseLinkStyleIsSupportedButInteractionStylesAreReported() {
+        val baseOnly = buildAnnotatedString {
+            withLink(
+                LinkAnnotation.Url(
+                    url = "https://example.com",
+                    styles = TextLinkStyles(
+                        style = SpanStyle(color = Color.Blue, fontWeight = FontWeight.Bold),
+                    ),
+                ),
+            ) {
+                append("链接")
+            }
+        }
+        val stateful = buildAnnotatedString {
+            withLink(
+                LinkAnnotation.Url(
+                    url = "https://example.com",
+                    styles = TextLinkStyles(
+                        style = SpanStyle(color = Color.Blue),
+                        hoveredStyle = SpanStyle(color = Color.Red),
+                    ),
+                ),
+            ) {
+                append("链接")
+            }
+        }
+
+        assertEquals(emptySet(), baseOnly.cjkTextCompatibility().issues)
+        assertEquals(
+            setOf(CjkTextCapabilityIssue.LinkInteractionStyles),
+            stateful.cjkTextCompatibility().issues,
+        )
+    }
+
+    @Test
+    fun unsupportedBaseLinkStyleFieldsAreReported() {
+        val text = buildAnnotatedString {
+            withLink(
+                LinkAnnotation.Url(
+                    url = "https://example.com",
+                    styles = TextLinkStyles(style = SpanStyle(letterSpacing = 0.1.em)),
+                ),
+            ) {
+                append("链接")
+            }
+        }
+
+        assertEquals(
+            setOf(CjkTextCapabilityIssue.LetterSpacing),
+            text.cjkTextCompatibility().issues,
+        )
     }
 
     @Test

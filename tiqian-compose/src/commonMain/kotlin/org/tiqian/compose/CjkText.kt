@@ -182,19 +182,20 @@ fun CjkText(
     onTextLayout: (LayoutResult) -> Unit = {},
 ) {
     val density = LocalDensity.current
+    val renderText = text.withBaseLinkStyles()
     val coreStyle = textStyle.toCoreTextStyle(density)
     CjkTextLayout(
-        text = text.text,
+        text = renderText.text,
         semanticsText = text,
         modifier = modifier,
         textStyle = coreStyle,
         paragraphStyle = paragraphStyle.withCjkTextStyleLineHeight(textStyle, density),
         color = textStyle.colorArgbOrNull() ?: DEFAULT_TEXT_COLOR,
-        decorations = text.cjkDecorations(),
-        colorSpans = text.cjkColorSpans(),
-        richTextSpans = text.cjkRichTextSpans(),
-        spans = text.cjkStyleSpans(coreStyle, density),
-        rubySpans = text.cjkRubySpans(),
+        decorations = renderText.cjkDecorations(),
+        colorSpans = renderText.cjkColorSpans(),
+        richTextSpans = renderText.cjkRichTextSpans(),
+        spans = renderText.cjkStyleSpans(coreStyle, density),
+        rubySpans = renderText.cjkRubySpans(),
         softWrap = softWrap,
         overflow = overflow,
         maxLines = maxLines,

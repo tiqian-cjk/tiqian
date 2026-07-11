@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -102,6 +103,30 @@ class CjkAnnotatedTextTest {
         assertEquals(1, spans[0].start)
         assertEquals(3, spans[0].end)
         assertEquals(Color.Red.toArgb(), spans[0].argb)
+    }
+
+    @Test
+    fun baseLinkStyleOverridesAuthoredSpansForRendering() {
+        val text = buildAnnotatedString {
+            withStyle(SpanStyle(color = Color.Red)) {
+                withLink(
+                    LinkAnnotation.Url(
+                        url = "https://example.com",
+                        styles = TextLinkStyles(
+                            style = SpanStyle(color = Color.Blue, fontWeight = FontWeight.Bold),
+                        ),
+                    ),
+                ) {
+                    append("链接")
+                }
+            }
+        }
+
+        val renderText = text.withBaseLinkStyles()
+
+        assertEquals(Color.Blue.toArgb(), renderText.cjkColorSpans().last().argb)
+        assertEquals(700, renderText.cjkStyleSpans(TextStyle(), Density(1f)).single().style.fontWeight)
+        assertEquals(1, renderText.getLinkAnnotations(0, renderText.length).size)
     }
 
     @Test

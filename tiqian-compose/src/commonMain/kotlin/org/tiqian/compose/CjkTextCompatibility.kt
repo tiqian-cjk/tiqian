@@ -39,6 +39,8 @@ enum class CjkTextCapabilityIssue {
     ParagraphStyleRanges,
     /** Retained for callers compiled against older reports; current `LinkAnnotation` ranges and clicks are supported. */
     LinkAnnotations,
+    /** Always-on link styles are supported; focus, hover, and press styles still need stateful rendering. */
+    LinkInteractionStyles,
     UrlAnnotations,
     TtsAnnotations,
     InlinePlaceholders,
@@ -97,6 +99,17 @@ fun AnnotatedString.cjkTextCompatibility(
         issues += CjkTextCapabilityIssue.OverflowEllipsis
     }
     spanStyles.forEach { it.item.collectCapabilityIssues(issues) }
+    getLinkAnnotations(0, length).forEach { link ->
+        val linkStyles = link.item.styles ?: return@forEach
+        linkStyles.style?.collectCapabilityIssues(issues)
+        if (
+            linkStyles.focusedStyle != null ||
+            linkStyles.hoveredStyle != null ||
+            linkStyles.pressedStyle != null
+        ) {
+            issues += CjkTextCapabilityIssue.LinkInteractionStyles
+        }
+    }
 
     return CjkTextCompatibility(issues)
 }

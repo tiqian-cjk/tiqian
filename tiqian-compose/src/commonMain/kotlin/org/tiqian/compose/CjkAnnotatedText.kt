@@ -52,6 +52,17 @@ private const val RubyFontSeparator = "\u001F"
 
 private const val InlineCodeRoleItem = "InlineCode"
 
+/** Applies the always-on part of Compose link styling after authored spans so it wins on overlap. */
+internal fun AnnotatedString.withBaseLinkStyles(): AnnotatedString {
+    val links = getLinkAnnotations(0, length).mapNotNull { link ->
+        link.item.styles?.style?.let { style -> AnnotatedString.Range(style, link.start, link.end) }
+    }
+    if (links.isEmpty()) return this
+    return AnnotatedString.Builder(this).apply {
+        links.forEach { addStyle(it.item, it.start, it.end) }
+    }.toAnnotatedString()
+}
+
 /**
  * 行间注 (拼音/ruby, ADR 0032): appends [base] and annotates it with the [ruby]
  * reading placed above it. The reading is NOT part of the source string
@@ -264,16 +275,17 @@ fun ParagraphMeasurer.measure(
     textStyle: CjkTextStyle = CjkTextStyle(),
     paragraphStyle: ParagraphStyle = ComposeTextParagraphStyle,
 ): LayoutResult {
+    val renderText = text.withBaseLinkStyles()
     val core = textStyle.toCoreTextStyle(density)
     return measure(
-        text = text.text,
+        text = renderText.text,
         constraints = constraints,
         textStyle = core,
         paragraphStyle = paragraphStyle.withCjkTextStyleLineHeight(textStyle, density),
-        decorations = text.cjkDecorations(),
-        spans = text.cjkStyleSpans(core, density),
-        rubySpans = text.cjkRubySpans(),
-        sourceBoundaries = text.cjkSourceBoundaries(),
+        decorations = renderText.cjkDecorations(),
+        spans = renderText.cjkStyleSpans(core, density),
+        rubySpans = renderText.cjkRubySpans(),
+        sourceBoundaries = renderText.cjkSourceBoundaries(),
     )
 }
 
@@ -288,16 +300,17 @@ fun ParagraphMeasurer.measure(
     paragraphStyle: ParagraphStyle = ComposeTextParagraphStyle,
 ): LayoutResult {
     val lowered = lowerComposeText(text, style, paragraphStyle)
+    val renderText = lowered.text.withBaseLinkStyles()
     val core = lowered.textStyle.toCoreTextStyle(density)
     return measure(
-        text = lowered.text.text,
+        text = renderText.text,
         constraints = constraints,
         textStyle = core,
         paragraphStyle = lowered.paragraphStyle.withCjkTextStyleLineHeight(lowered.textStyle, density),
-        decorations = lowered.text.cjkDecorations(),
-        spans = lowered.text.cjkStyleSpans(core, density),
-        rubySpans = lowered.text.cjkRubySpans(),
-        sourceBoundaries = lowered.text.cjkSourceBoundaries(),
+        decorations = renderText.cjkDecorations(),
+        spans = renderText.cjkStyleSpans(core, density),
+        rubySpans = renderText.cjkRubySpans(),
+        sourceBoundaries = renderText.cjkSourceBoundaries(),
     )
 }
 
