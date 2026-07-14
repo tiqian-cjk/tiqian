@@ -5,7 +5,9 @@ import org.tiqian.clreq.AutoSpacePolicy
 import org.tiqian.clreq.BuiltInClreqProfileResolver
 import org.tiqian.clreq.ClreqProfile
 import org.tiqian.clreq.ClreqProfileResolver
+import org.tiqian.clreq.ClreqPunctuationPolicies
 import org.tiqian.clreq.HangingPunctuationStyle
+import org.tiqian.clreq.KinsokuLevel
 import org.tiqian.clreq.LineAdjustmentStrategy
 import org.tiqian.clreq.LineEndPunctuationStyle
 import org.tiqian.clreq.NumberSymbolCohesion
@@ -15,6 +17,7 @@ import org.tiqian.clreq.ClreqPunctuationGlyphSubstitutor
 import org.tiqian.core.AutoSpaceDecisionInfo
 import org.tiqian.core.Cluster
 import org.tiqian.core.ClusterGeometryDecisionInfo
+import org.tiqian.core.ContextualKinsokuDecisionInfo
 import org.tiqian.core.DecorationDecisionInfo
 import org.tiqian.core.RubyDecisionInfo
 import org.tiqian.clreq.BopomofoParser
@@ -355,6 +358,30 @@ class ExplainableStubParagraphLayoutEngine(
                 )
             }
         }
+        fun shapeSegmentWithPointMarkPrefix(
+            decision: FontDecision,
+            segmentRange: TextRange,
+        ): List<ShapingResult> {
+            var prefixEnd = segmentRange.start
+            while (
+                prefixEnd < segmentRange.end &&
+                ClreqPunctuationPolicies.isAsciiPointMark(text[prefixEnd])
+            ) {
+                prefixEnd += 1
+            }
+            return if (prefixEnd in (segmentRange.start + 1) until segmentRange.end) {
+                // `PostCutAsciiPointMarkPrefixSegmentation`: opaque-token and
+                // hard-cut passes can create a fresh `,A` piece after the
+                // initial role segmentation. Re-shape its point-mark prefix
+                // separately so kinsoku binds only the comma, not its suffix.
+                listOf(
+                    shapeSegment(decision, TextRange(segmentRange.start, prefixEnd)),
+                    shapeSegment(decision, TextRange(prefixEnd, segmentRange.end)),
+                )
+            } else {
+                listOf(shapeSegment(decision, segmentRange))
+            }
+        }
         // LatinWordSegmentation (gap audit 缺口 2): Latin runs are shaped per
         // word/space segment so each word and each space run becomes its own
         // cluster — line breaks happen at word boundaries, word spaces become
@@ -583,8 +610,11 @@ class ExplainableStubParagraphLayoutEngine(
                         }
                     }
                     val bounds = listOf(segmentRange.start) + allCuts + listOf(segmentRange.end)
-                    (0 until bounds.size - 1).map { k ->
-                        shapeSegment(decision, TextRange(bounds[k], bounds[k + 1]))
+                    (0 until bounds.size - 1).flatMap { k ->
+                        shapeSegmentWithPointMarkPrefix(
+                            decision,
+                            TextRange(bounds[k], bounds[k + 1]),
+                        )
                     }
                 }
             }
@@ -595,6 +625,16 @@ class ExplainableStubParagraphLayoutEngine(
             .flatMap { it.glyphRuns }
             .flatMap { it.glyphs }
             .groupBy { it.clusterRange }
+        val openTypeFeaturesByClusterRange = buildMap<TextRange, List<String>> {
+            shapingResults.flatMap { it.glyphRuns }.forEach { run ->
+                run.glyphs.map { it.clusterRange }.distinct().forEach { range ->
+                    val previous = put(range, run.openTypeFeatures)
+                    require(previous == null || previous == run.openTypeFeatures) {
+                        "Conflicting OpenType features for shaped cluster $range"
+                    }
+                }
+            }
+        }
         val shapingDecisions = shapingResults.flatMap { it.decisions }
         rawNaturalClusters.requireCoveredBy(fontDecisions)
 
@@ -657,7 +697,18 @@ class ExplainableStubParagraphLayoutEngine(
                 widthPolicy = clreqProfile.punctuationWidth,
             )
         }
-        val spacingPlan = punctuationSpacingCompressor.compress(punctuationAtoms, em = fontSize)
+        val adjacentPunctuationSpacingPlan =
+            punctuationSpacingCompressor.compress(punctuationAtoms, em = fontSize)
+        val cjkClosingBeforeAsciiPointMarkPlan =
+            punctuationSpacingCompressor.compressCjkClosingBeforeAsciiPointMark(
+                atoms = punctuationAtoms,
+                text = text,
+                em = fontSize,
+            )
+        val spacingPlan = PunctuationSpacingCompressionResult(
+            adjustments = adjacentPunctuationSpacingPlan.adjustments +
+                cjkClosingBeforeAsciiPointMarkPlan.adjustments,
+        )
         // Shape each注文 once in ITS OWN font for horizontal width. Vertical fit
         // deliberately uses that Latin face's declared ascent/descent, not glyph
         // ink: changing hé to p or g must not change the line-height decision.
@@ -680,6 +731,9 @@ class ExplainableStubParagraphLayoutEngine(
                     fontSize = rubyFontSize,
                     role = FontRole.LatinText,
                     locale = input.textStyle.locale,
+                    fontWeight = rubyFontWeight,
+                    italic = input.textStyle.italic,
+                    faceSelectionText = metricText,
                     fontFamilies = preferredFamilies,
                 ),
             )
@@ -871,11 +925,18 @@ class ExplainableStubParagraphLayoutEngine(
         }
 
         val metricDecisions = fontDecisions.map { decision ->
+            val displayedFaceSelectionText = naturalClusters
+                .filter { cluster -> cluster.range.isInside(decision.range) }
+                .joinToString(separator = "") { cluster -> cluster.displayText }
+                .ifEmpty { text.substring(decision.range.start, decision.range.end) }
             val request = FontMetricsRequest(
                 fontKey = decision.candidate.key,
                 fontSize = fontSizeAt(decision.range.start),
                 role = decision.role,
                 locale = input.textStyle.locale,
+                fontWeight = styleAt(decision.range.start).fontWeight,
+                italic = styleAt(decision.range.start).italic,
+                faceSelectionText = displayedFaceSelectionText,
                 fontFamilies = styleAt(decision.range.start).fontFamilies,
             )
             val rawMetrics = fontMetricsResolver.resolve(request)
@@ -1004,13 +1065,23 @@ class ExplainableStubParagraphLayoutEngine(
         // 行首/行尾禁则按解析出的 KinsokuLevel（CLREQ 四档）；空集 = 不处理档.
         val kinsokuRule = ClreqKinsokuRule(resolvedKinsoku.level)
         val asciiBracketKinsoku = naturalClusters.cjkContextAsciiBracketKinsoku(clusterRoles)
+        val asciiPointMarkKinsoku = naturalClusters.attachedAsciiPointMarkKinsoku(
+            clusterRoles = clusterRoles,
+            lineBreakClusters = clusters,
+            level = resolvedKinsoku.level,
+            bodyLineWidth = measure - blockIndent,
+            firstLineWidth = measure - firstLineIndent,
+        )
+        val resolvedHangableClusters =
+            hangableClusters + asciiPointMarkKinsoku.impossibleMeasureHangEligibleClusters
         val forbiddenLineStartClusters: Set<Int> = naturalClusters.indices.filterTo(mutableSetOf()) { idx ->
             idx in zeroWidthBreakClusters ||
                 (
                 clusterRoles.getOrNull(idx).isCjkKinsokuRole() &&
                     kinsokuRule.forbiddenAtLineStart(naturalClusters[idx])
                 ) ||
-                idx in asciiBracketKinsoku.forbiddenLineStartClusters
+                idx in asciiBracketKinsoku.forbiddenLineStartClusters ||
+                idx in asciiPointMarkKinsoku.forbiddenLineStartClusters
         }
         val forbiddenLineEndClusters: Set<Int> = naturalClusters.indices.filterTo(mutableSetOf()) { idx ->
             (
@@ -1075,9 +1146,16 @@ class ExplainableStubParagraphLayoutEngine(
                             }
                             .filter { idxRange ->
                                 idxRange.sumOf { naturalClusters[it].advance.toDouble() } <= measure
-                            }
+                            } +
+                        // `AttachedAsciiPointMarkKinsoku`: the preceding visible
+                        // cluster and its attached point mark form a hard
+                        // no-break boundary. This lets greedy reflow the next
+                        // line instead of falling back to LeaveRagged when a
+                        // post-hoc CarryPrevious would overflow it.
+                        asciiPointMarkKinsoku.unbreakableRanges
                     ),
-                hangableClusters = hangableClusters,
+                hangableClusters = resolvedHangableClusters,
+                extendableHangRanges = asciiPointMarkKinsoku.extendableHangRanges,
                 forbiddenLineStartClusters = forbiddenLineStartClusters,
                 forbiddenLineEndClusters = forbiddenLineEndClusters,
                 hyphenBreakClusters = hyphenBreakClusters,
@@ -1097,6 +1175,19 @@ class ExplainableStubParagraphLayoutEngine(
                 hardBreakAfterClusters = mandatoryBreakClusters,
                 nonRenderingControlClusters = zeroWidthBreakClusters,
             )
+        }
+        val appliedHangingClusters = lineSolution.lines
+            .flatMap { it.hangingClusterIndices }
+            .toSet()
+        val contextualKinsokuDecisions = asciiPointMarkKinsoku.decisions.map { decision ->
+            if (
+                decision.clusterIndex in asciiPointMarkKinsoku.impossibleMeasureHangEligibleClusters &&
+                decision.clusterIndex in appliedHangingClusters
+            ) {
+                decision.copy(impossibleMeasureFallback = "AttachedAsciiPointMarkImpossibleMeasureHang")
+            } else {
+                decision
+            }
         }
         val pushInAllocations = lineSolution.lines
             .mapNotNull { it.repair as? RepairOption.PushIn }
@@ -1263,15 +1354,10 @@ class ExplainableStubParagraphLayoutEngine(
             } else {
                 // A hung mark sits beyond the measure: justify fills the
                 // CONTENT (range minus the hanging mark) to maxWidth.
-                val justifyRange = if (lineCandidate.hangingClusterIndex != null) {
-                    lineCandidate.clusterRange.first until lineCandidate.clusterRange.last
-                } else {
-                    lineCandidate.clusterRange
-                }
                 justifier.justify(
                     adjustedClusters = trimmedClusters,
                     clusterRoles = clusterRoles,
-                    lineClusterRange = justifyRange,
+                    lineClusterRange = lineCandidate.inMeasureClusterRange,
                     maxWidth = (if (lineCandidate.clusterRange.first == 0) {
                         measure - firstLineIndent
                     } else {
@@ -1320,25 +1406,29 @@ class ExplainableStubParagraphLayoutEngine(
             if (inset <= 0.5f) return this
             return listOf(glyph.copy(x = glyph.x + inset))
         }
-        val glyphRuns = finalClusters.renderableGlyphRunClusters().map { runClusters ->
-            GlyphRun(
-                range = TextRange(runClusters.first().range.start, runClusters.last().range.end),
-                fontKey = runClusters.first().fontKey,
-                glyphs = runClusters.flatMapIndexed { fallbackGlyphId, cluster ->
-                    shapedGlyphsByClusterRange[cluster.range]
-                        ?.mapToClusterRange(cluster)
-                        ?.centerDashInk(cluster)
-                        ?: listOf(
-                            Glyph(
-                                id = fallbackGlyphId.toUInt(),
-                                clusterRange = cluster.range,
-                                advance = cluster.advance,
-                            ),
-                        )
-                },
-                advance = runClusters.sumOf { it.advance.toDouble() }.toFloat(),
-            )
-        }
+        val glyphRuns = finalClusters
+            .renderableGlyphRunClusters(openTypeFeaturesByClusterRange)
+            .map { runClusters ->
+                val openTypeFeatures = openTypeFeaturesByClusterRange[runClusters.first().range].orEmpty()
+                GlyphRun(
+                    range = TextRange(runClusters.first().range.start, runClusters.last().range.end),
+                    fontKey = runClusters.first().fontKey,
+                    glyphs = runClusters.flatMapIndexed { fallbackGlyphId, cluster ->
+                        shapedGlyphsByClusterRange[cluster.range]
+                            ?.mapToClusterRange(cluster)
+                            ?.centerDashInk(cluster)
+                            ?: listOf(
+                                Glyph(
+                                    id = fallbackGlyphId.toUInt(),
+                                    clusterRange = cluster.range,
+                                    advance = cluster.advance,
+                                ),
+                            )
+                    },
+                    advance = runClusters.sumOf { it.advance.toDouble() }.toFloat(),
+                    openTypeFeatures = openTypeFeatures,
+                )
+            }
 
         // Per-line annotation/object extents. Ruby consumes existing inter-line
         // space first; a deficit is added before annotated lines by default, or
@@ -1411,15 +1501,15 @@ class ExplainableStubParagraphLayoutEngine(
             // it overflows the measure (突出版心).
             val adjustedWidth = lineCandidate.clusterRange
                 .sumOf { idx ->
-                    if (idx == lineCandidate.hangingClusterIndex) 0.0 else trimmedClusters[idx].advance.toDouble()
+                    if (idx in lineCandidate.hangingClusterIndices) 0.0 else trimmedClusters[idx].advance.toDouble()
                 }
                 .toFloat()
             val visualWidth = lineCandidate.clusterRange
                 .sumOf { finalClusters[it].advance.toDouble() }
                 .toFloat()
-            val hangingPunctuationAdvance = lineCandidate.hangingClusterIndex
-                ?.let { finalClusters[it].advance }
-                ?: 0f
+            val hangingPunctuationAdvance = lineCandidate.hangingClusterIndices
+                .sumOf { finalClusters[it].advance.toDouble() }
+                .toFloat()
             val hasDrawableContent = !lineCandidate.clusterRange.isEmptyClusterRange() &&
                 lineCandidate.clusterRange.any { finalClusters[it].displayText.isNotEmpty() }
             val baseIndent = when {
@@ -1711,6 +1801,7 @@ class ExplainableStubParagraphLayoutEngine(
                 lineSpacingDecision = lineSpacingDecision,
                 rubyLineHeightDecision = rubyLineHeightDecision,
                 kinsokuDecision = kinsokuDecision,
+                contextualKinsokuDecisions = contextualKinsokuDecisions,
                 lineLengthGridDecision = lineLengthGridDecision,
                 firstLineIndentDecision = firstLineIndentDecision,
                 inlineBoxDecisions = inlineBoxResult.decisions,
@@ -1969,6 +2060,112 @@ class ExplainableStubParagraphLayoutEngine(
         val forbiddenLineEndClusters: Set<Int>,
     )
 
+    private data class ContextualKinsoku(
+        val forbiddenLineStartClusters: Set<Int>,
+        val unbreakableRanges: List<IntRange>,
+        val impossibleMeasureHangEligibleClusters: Set<Int>,
+        val extendableHangRanges: List<IntRange>,
+        val decisions: List<ContextualKinsokuDecisionInfo>,
+    )
+
+    /**
+     * `AttachedAsciiPointMarkKinsoku`: directly attached ASCII `, . : ; ! ?`
+     * keep their Latin face and proportional advance, but cannot begin an
+     * automatically wrapped line. This covers their non-typical use in Chinese
+     * prose and hard-broken Latin tokens alike. `KinsokuLevel.None` remains an
+     * explicit opt-out.
+     *
+     * The leading point-mark run is split from following Latin text by
+     * `AttachedAsciiPointMarkSegmentation`, so `中文,anyway` does not make the
+     * whole `,anyway` token an indivisible kinsoku offender. Consecutive point
+     * clusters remain one logical protected run across style/shaping boundaries;
+     * impossible-width eligibility uses the exact post-geometry breaker advances.
+     */
+    private fun List<Cluster>.attachedAsciiPointMarkKinsoku(
+        clusterRoles: List<FontRole>,
+        lineBreakClusters: List<Cluster>,
+        level: KinsokuLevel,
+        bodyLineWidth: Float,
+        firstLineWidth: Float,
+    ): ContextualKinsoku {
+        if (level == KinsokuLevel.None) {
+            return ContextualKinsoku(emptySet(), emptyList(), emptySet(), emptyList(), emptyList())
+        }
+        require(size == lineBreakClusters.size) {
+            "Contextual kinsoku requires cluster-for-cluster line-break geometry"
+        }
+
+        val forbiddenLineStart = mutableSetOf<Int>()
+        val unbreakableRanges = mutableListOf<IntRange>()
+        val forcedHangable = mutableSetOf<Int>()
+        val extendableHangRanges = mutableListOf<IntRange>()
+        val decisions = mutableListOf<ContextualKinsokuDecisionInfo>()
+        var index = 1
+        while (index < size) {
+            val cluster = this[index]
+            val previous = this[index - 1]
+            val startsAttachedPointMarkRun =
+                clusterRoles.getOrNull(index) == FontRole.LatinText &&
+                    cluster.text.firstOrNull()?.let(ClreqPunctuationPolicies::isAsciiPointMark) == true &&
+                    previous.displayText.isNotEmpty() &&
+                    previous.text.lastOrNull()?.isWhitespace() == false &&
+                    previous.range.end == cluster.range.start
+            if (!startsAttachedPointMarkRun) {
+                index += 1
+                continue
+            }
+
+            val runStart = index
+            var runEnd = index
+            while (runEnd + 1 < size) {
+                val next = this[runEnd + 1]
+                val continuesRun =
+                    clusterRoles.getOrNull(runEnd + 1) == FontRole.LatinText &&
+                        next.text.firstOrNull()?.let(ClreqPunctuationPolicies::isAsciiPointMark) == true &&
+                        this[runEnd].range.end == next.range.start
+                if (!continuesRun) break
+                runEnd += 1
+            }
+
+            forbiddenLineStart += runStart..runEnd
+            unbreakableRanges += (runStart - 1)..runEnd
+            // `AttachedAsciiPointMarkRunCohesion`: eligibility follows the
+            // exact geometry consumed by the breaker, including ruby/Bopomofo
+            // spread. If the whole base+run cannot fit, every shaped/style
+            // cluster in the run may extend the same last-resort hang.
+            val runLineWidth = if (runStart - 1 == 0) firstLineWidth else bodyLineWidth
+            val runWidth = (runStart - 1..runEnd)
+                .sumOf { lineBreakClusters[it].advance.toDouble() }
+                .toFloat()
+            if (runWidth > runLineWidth) {
+                forcedHangable += runStart..runEnd
+                // The protected group includes its base cluster. If that base
+                // is itself a profile-hangable point mark, provenance remains
+                // inside this same contextual group when the ASCII run extends
+                // the hang; unrelated ordinary hangs still cannot chain.
+                extendableHangRanges += (runStart - 1)..runEnd
+            }
+            for (pointMarkIndex in runStart..runEnd) {
+                val pointMark = this[pointMarkIndex]
+                decisions += ContextualKinsokuDecisionInfo(
+                    range = pointMark.range,
+                    sourceText = pointMark.text,
+                    clusterIndex = pointMarkIndex,
+                    forbiddenPosition = "LineStart",
+                    reason = "AttachedAsciiPointMarkKinsoku",
+                )
+            }
+            index = runEnd + 1
+        }
+        return ContextualKinsoku(
+            forbiddenLineStart,
+            unbreakableRanges,
+            forcedHangable,
+            extendableHangRanges,
+            decisions,
+        )
+    }
+
     private fun List<Cluster>.cjkContextAsciiBracketKinsoku(
         clusterRoles: List<FontRole>,
     ): AsciiBracketKinsoku {
@@ -2097,17 +2294,36 @@ class ExplainableStubParagraphLayoutEngine(
             }
             val firstRange = TextRange(start, start + charCount)
             val role = classifier.classify(text, firstRange, context)
+            val previousRange = ranges.lastOrNull()
+            val attachedAsciiPointMark =
+                role == FontRole.LatinText &&
+                    codePoint.isAsciiPointMarkCodePoint() &&
+                    previousRange != null &&
+                    previousRange.role != FontRole.Unknown &&
+                    text.getOrNull(previousRange.range.end - 1)?.isWhitespace() == false &&
+                    previousRange.range.end == start
 
             index += charCount
             if (role == FontRole.LatinText) {
-                // A sized-span edge inside a Latin run / coalesced 标点 run ends the
-                // cluster there so each cluster carries a single font size (ADR 0030).
-                while (index < text.length && index !in spanBoundaries) {
-                    val nextCodePoint = text.codePointAtCompat(index)
-                    val nextCharCount = nextCodePoint.charCount()
-                    val nextRange = TextRange(index, index + nextCharCount)
-                    if (classifier.classify(text, nextRange, context) != FontRole.LatinText) break
-                    index += nextCharCount
+                if (attachedAsciiPointMark) {
+                    // `AttachedAsciiPointMarkSegmentation`: keep the leading
+                    // point-mark run independent from following Latin text so
+                    // kinsoku never has to move an entire `,anyway` token.
+                    while (index < text.length && index !in spanBoundaries) {
+                        val nextCodePoint = text.codePointAtCompat(index)
+                        if (!nextCodePoint.isAsciiPointMarkCodePoint()) break
+                        index += nextCodePoint.charCount()
+                    }
+                } else {
+                    // A sized-span edge inside a Latin run / coalesced 标点 run ends the
+                    // cluster there so each cluster carries a single font size (ADR 0030).
+                    while (index < text.length && index !in spanBoundaries) {
+                        val nextCodePoint = text.codePointAtCompat(index)
+                        val nextCharCount = nextCodePoint.charCount()
+                        val nextRange = TextRange(index, index + nextCharCount)
+                        if (classifier.classify(text, nextRange, context) != FontRole.LatinText) break
+                        index += nextCharCount
+                    }
                 }
             } else if (role == FontRole.CjkPunctuation && codePoint in coalesceSet) {
                 while (index < text.length && index !in spanBoundaries) {
@@ -2115,6 +2331,18 @@ class ExplainableStubParagraphLayoutEngine(
                     if (nextCodePoint != codePoint) break
                     index += nextCodePoint.charCount()
                 }
+            }
+
+            // `VariationSelectorStaysWithBaseCluster`: U+FE0E/U+FE0F and the
+            // supplementary variation selectors modify the preceding scalar;
+            // shaping them as an independent Unknown run produces a legitimate
+            // zero advance which the web capability gate then mistakes for a
+            // broken visible glyph. Keep the source range intact and send the
+            // base plus selector through one font decision and shaping call.
+            while (index < text.length && index !in spanBoundaries) {
+                val selector = text.codePointAtCompat(index)
+                if (!selector.isVariationSelectorCodePoint()) break
+                index += selector.charCount()
             }
 
             ranges.add(ResolvedClusterRange(TextRange(start, index), role))
@@ -2138,6 +2366,12 @@ class ExplainableStubParagraphLayoutEngine(
 
     private fun Int.charCount(): Int =
         if (this > 0xFFFF) 2 else 1
+
+    private fun Int.isVariationSelectorCodePoint(): Boolean =
+        this in 0xFE00..0xFE0F || this in 0xE0100..0xE01EF
+
+    private fun Int.isAsciiPointMarkCodePoint(): Boolean =
+        this in 0..0xFFFF && ClreqPunctuationPolicies.isAsciiPointMark(toChar())
 
     private fun mandatoryBreakShapingResult(text: String, range: TextRange): ShapingResult {
         val sourceText = text.substring(range.start, range.end)
@@ -2783,9 +3017,14 @@ class ExplainableStubParagraphLayoutEngine(
         )
     }
 
-    private fun List<Cluster>.renderableGlyphRunClusters(): List<List<Cluster>> =
+    private fun List<Cluster>.renderableGlyphRunClusters(
+        openTypeFeaturesByClusterRange: Map<TextRange, List<String>>,
+    ): List<List<Cluster>> =
         filter { it.displayText.isNotEmpty() && !it.isInlineObjectCluster() }.groupAdjacentBy { previous, current ->
-            previous.fontKey == current.fontKey && previous.range.end == current.range.start
+            previous.fontKey == current.fontKey &&
+                previous.range.end == current.range.start &&
+                openTypeFeaturesByClusterRange[previous.range].orEmpty() ==
+                openTypeFeaturesByClusterRange[current.range].orEmpty()
         }
 
     private inline fun <T> List<T>.groupAdjacentBy(sameGroup: (previous: T, current: T) -> Boolean): List<List<T>> {

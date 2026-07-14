@@ -20,6 +20,7 @@ import org.tiqian.shaping.ShapingResult
 import org.tiqian.shaping.TextShaper
 import org.w3c.dom.CanvasRenderingContext2D
 import org.w3c.dom.HTMLCanvasElement
+import org.w3c.dom.HTMLElement
 
 /**
  * The CJK and Latin CSS font stacks, supplied by the APPLICATION — Tiqian does
@@ -101,7 +102,7 @@ class WebFontFamilies(
 
 }
 
-/** A CSSOM-resolved HarfBuzz session prepared asynchronously by `@tiqian/web`. */
+/** A CSSOM-resolved HarfBuzz session prepared asynchronously by `@tiqian/prose`. */
 data class WebCjkDashCapability(
     val status: String,
     val sessionId: String? = null,
@@ -161,11 +162,16 @@ class WebCanvasFontMetricsResolver(
     }
 
     override fun resolve(request: FontMetricsRequest): RawFontMetrics {
-        cache[request]?.let { return it }
+        // Canvas selects metrics from the role probe and CSS stack, not from
+        // the source cluster. Excluding faceSelectionText keeps the cache at
+        // one entry per actual typography instance instead of per ideograph.
+        val cacheKey = request.copy(faceSelectionText = "")
+        cache[cacheKey]?.let { return it }
         val cjkBox = request.role == FontRole.CjkText || request.role == FontRole.CjkPunctuation
         val probe = if (cjkBox) CJK_METRIC_PROBE_TEXT else LATIN_METRIC_PROBE_TEXT
         for (family in fonts.fallbackStacks(request.role, request.fontFamilies)) {
-            val cssFont = "normal 400 ${request.fontSize}px $family"
+            val cssStyle = if (request.italic) "italic" else "normal"
+            val cssFont = "$cssStyle ${request.fontWeight} ${request.fontSize}px $family"
             if (cssFont != currentCanvasFont) {
                 ctx.font = cssFont
                 currentCanvasFont = ctx.font
@@ -196,10 +202,10 @@ class WebCanvasFontMetricsResolver(
                     null
                 },
             )
-            cache[request] = result
+            cache[cacheKey] = result
             return result
         }
-        return fallback.resolve(request).also { cache[request] = it }
+        return fallback.resolve(request).also { cache[cacheKey] = it }
     }
 
     private fun Double.toFloatOrNull(): Float? =
@@ -238,12 +244,35 @@ class WebCanvasTextShaper(
         val actualFont: String,
     )
 
-    private val measurementCache = mutableMapOf<Pair<String, String>, MeasuredText>()
+    private data class MeasurementKey(
+        val actualFont: String,
+        val display: String,
+        val featureSignature: String,
+    )
+
+    private val measurementCache = mutableMapOf<MeasurementKey, MeasuredText>()
     private var currentCanvasFont: String? = null
 
     private val ctx: CanvasRenderingContext2D by lazy {
         val canvas = document.createElement("canvas") as HTMLCanvasElement
         canvas.getContext("2d") as CanvasRenderingContext2D
+    }
+
+    private val featureMeasureProbe: HTMLElement by lazy {
+        (document.createElement("span") as HTMLElement).also { probe ->
+            probe.setAttribute("aria-hidden", "true")
+            probe.style.apply {
+                setProperty("position", "absolute", "important")
+                setProperty("left", "-100000px", "important")
+                setProperty("top", "0", "important")
+                setProperty("visibility", "hidden", "important")
+                setProperty("white-space", "pre", "important")
+                setProperty("margin", "0", "important")
+                setProperty("padding", "0", "important")
+                setProperty("border", "0", "important")
+            }
+            document.body?.appendChild(probe)
+        }
     }
 
     override fun shape(input: ShapingInput): ShapingResult {
@@ -382,12 +411,24 @@ class WebCanvasTextShaper(
 
         val style = if (input.style.italic) "italic" else "normal"
         val stacks = fonts.fallbackStacks(input.fontDecision.role, input.style.fontFamilies)
+        val openTypeFeatures = contextualWebOpenTypeFeatures(
+            role = input.fontDecision.role,
+            display = display,
+        )
         var chosenIndex = 0
         val requiresAdvance = display.isNotEmpty() && display.none { it == '\n' || it == '\r' }
-        var measured = measure(display, "$style ${input.style.fontWeight} ${size}px ${stacks.first()}")
+        var measured = measure(
+            display,
+            "$style ${input.style.fontWeight} ${size}px ${stacks.first()}",
+            openTypeFeatures,
+        )
         if (requiresAdvance && !measured.hasUsableAdvance()) {
             for (index in 1 until stacks.size) {
-                val candidate = measure(display, "$style ${input.style.fontWeight} ${size}px ${stacks[index]}")
+                val candidate = measure(
+                    display,
+                    "$style ${input.style.fontWeight} ${size}px ${stacks[index]}",
+                    openTypeFeatures,
+                )
                 measured = candidate
                 chosenIndex = index
                 if (candidate.hasUsableAdvance()) break
@@ -410,7 +451,13 @@ class WebCanvasTextShaper(
             x = 0f,
             bounds = bounds,
         )
-        val run = GlyphRun(range = input.range, fontKey = key, glyphs = listOf(glyph), advance = advance)
+        val run = GlyphRun(
+            range = input.range,
+            fontKey = key,
+            glyphs = listOf(glyph),
+            advance = advance,
+            openTypeFeatures = openTypeFeatures,
+        )
         val decision = ShapingDecisionInfo(
             range = input.range,
             sourceText = source,
@@ -427,6 +474,11 @@ class WebCanvasTextShaper(
                 append(measured.requestedFont)
                 append("; actualFont=")
                 append(measured.actualFont)
+                if (openTypeFeatures.isNotEmpty()) {
+                    append("; features=")
+                    append(openTypeFeatures.joinToString(","))
+                    append("; featureMeasure=HiddenDomRange")
+                }
                 capabilityIssue?.let { (_, detail) ->
                     append("; ")
                     append(detail)
@@ -434,20 +486,31 @@ class WebCanvasTextShaper(
             },
             glyphsWithoutInkBounds = 0,
             capabilityIssue = capabilityIssue?.first,
+            featureEvidence = openTypeFeatures.takeIf { it.isNotEmpty() }?.joinToString(","),
         )
         return ShapingResult(listOf(cluster), listOf(run), listOf(decision))
     }
 
-    private fun measure(display: String, cssFont: String): MeasuredText {
+    private fun measure(
+        display: String,
+        cssFont: String,
+        openTypeFeatures: List<String> = emptyList(),
+    ): MeasuredText {
         if (cssFont != currentCanvasFont) {
             ctx.font = cssFont
             currentCanvasFont = ctx.font
         }
         val actualFont = ctx.font
-        return measurementCache.getOrPut(actualFont to display) {
+        val featureSignature = openTypeFeatures.joinToString(",")
+        return measurementCache.getOrPut(MeasurementKey(actualFont, display, featureSignature)) {
             val m = ctx.measureText(display)
+            val advance = if (featureSignature == PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE) {
+                measureProportionalCurlyQuote(display, cssFont)
+            } else {
+                m.width
+            }
             MeasuredText(
-                advance = m.width.toFloat(),
+                advance = advance.toFloat(),
                 bounds = Rect(
                     left = -m.actualBoundingBoxLeft.toFloat(),
                     top = -m.actualBoundingBoxAscent.toFloat(),
@@ -460,6 +523,18 @@ class WebCanvasTextShaper(
         }
     }
 
+    private fun measureProportionalCurlyQuote(display: String, cssFont: String): Double {
+        val probe = featureMeasureProbe
+        if (probe.parentNode == null) document.body?.appendChild(probe)
+        probe.textContent = display
+        probe.style.apply {
+            setProperty("font", cssFont, "important")
+            setProperty("font-variant-east-asian", "proportional-width", "important")
+            setProperty("font-feature-settings", "\"palt\" 1", "important")
+        }
+        return probe.getBoundingClientRect().width
+    }
+
     private fun MeasuredText.hasUsableAdvance(): Boolean =
         advance.isFinite() && advance > ZERO_ADVANCE_EPSILON
 
@@ -467,8 +542,22 @@ class WebCanvasTextShaper(
         private const val CJK_DASH_SOURCE = "——"
         private const val TWO_EM_DASH = "⸺"
         private const val ZERO_ADVANCE_EPSILON = 0.01f
+        private const val PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE = "pwid,palt"
     }
 }
+
+/**
+ * ContextualWebCurlyQuoteFeatures: the common classifier has already resolved
+ * whether a shared curly quote belongs to Latin or CJK context. The browser
+ * adapter requests proportional forms only for the Latin decision and reports
+ * that feature list in GlyphRun so DOM paint can replay the same measurement.
+ */
+private fun contextualWebOpenTypeFeatures(role: FontRole, display: String): List<String> =
+    if (role == FontRole.LatinText && display.any { it in '\u2018'..'\u201D' }) {
+        listOf("pwid", "palt")
+    } else {
+        emptyList()
+    }
 
 @OptIn(ExperimentalWasmJsInterop::class)
 @JsFun("(sessionId, fontSize, fontWeight, italic) => globalThis.__TiqianWebFontShaping?.shapeCjkDash?.(sessionId, fontSize, fontWeight, italic) ?? null")

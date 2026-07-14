@@ -400,6 +400,18 @@ data class PunctuationPolicy(
 )
 
 object ClreqPunctuationPolicies {
+    /**
+     * `AsciiPointMark`: unambiguous Western point marks. They keep their Latin
+     * font face and natural advance; this predicate only exposes punctuation
+     * semantics to line breaking, including their non-typical use in Chinese
+     * horizontal prose.
+     *
+     * Straight quotes are deliberately absent because U+0022/U+0027 do not
+     * identify opening versus closing direction.
+     */
+    fun isAsciiPointMark(char: Char): Boolean =
+        char in AsciiPointMarks
+
     fun classify(char: Char): PunctuationClass =
         when (char) {
             '“', '‘', '（', '《', '〈', '「', '『', '【', '〔', '〖', '〘', '〚' -> PunctuationClass.Opening
@@ -504,6 +516,8 @@ object ClreqPunctuationPolicies {
      * 浪纹线 ～（一字）区别。U+002D HYPHEN-MINUS、U+2013 EN DASH。
      */
     private val ShortHyphenConnectors = setOf('-', '–')
+
+    private val AsciiPointMarks = setOf(',', '.', ':', ';', '!', '?')
 
     private fun Char.defaultPunctuationBodyEm(punctuationClass: PunctuationClass): Float =
         when {

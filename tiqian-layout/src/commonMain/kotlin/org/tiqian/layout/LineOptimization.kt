@@ -83,13 +83,40 @@ data class LineCandidate(
     val repair: RepairOption? = null,
     val repairCandidates: List<RepairCandidate> = emptyList(),
     /**
-     * `LineEndHangingPunctuation`: when set, this cluster (the line's last)
-     * hangs past the measure — it is excluded from the line's measure-fill
-     * width so justification fills the content to `maxWidth` and the mark
-     * sits beyond (突出版心). Null on non-hanging lines.
+     * `LineEndHangingPunctuation`: the contiguous trailing suffix excluded
+     * from the measure. It contains the hung mark(s), plus any zero-width
+     * mandatory-break control structurally attached after them. The ordinary
+     * profile path still hangs at most one mark; an impossible-width contextual
+     * point-mark run may extend the same hang so none of its styled/shaped
+     * clusters is left at line start.
      */
-    val hangingClusterIndex: Int? = null,
-)
+    val hangingClusterIndices: Set<Int> = emptySet(),
+) {
+    init {
+        if (hangingClusterIndices.isNotEmpty()) {
+            val firstHanging = hangingClusterIndices.minOrNull()!!
+            require(firstHanging in clusterRange && hangingClusterIndices.maxOrNull() == clusterRange.last) {
+                "Hanging clusters must be a trailing line suffix: line=$clusterRange hanging=$hangingClusterIndices"
+            }
+            require(hangingClusterIndices.size == clusterRange.last - firstHanging + 1) {
+                "Hanging clusters must be contiguous: line=$clusterRange hanging=$hangingClusterIndices"
+            }
+        }
+    }
+
+    /**
+     * Compatibility/convenience view of the last actual hanging mark. A
+     * mandatory-break control may follow it inside [hangingClusterIndices],
+     * so prefer the selected Hang offender over the suffix's final index.
+     */
+    val hangingClusterIndex: Int?
+        get() = (repair as? RepairOption.Hang)?.offenderClusterIndex
+            ?: hangingClusterIndices.maxOrNull()
+
+    /** Clusters that remain inside the measure and participate in fill scoring/justification. */
+    val inMeasureClusterRange: IntRange
+        get() = hangingClusterIndices.minOrNull()?.let { clusterRange.first until it } ?: clusterRange
+}
 
 data class RepairCandidate(
     val kind: String,

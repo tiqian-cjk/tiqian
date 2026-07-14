@@ -196,6 +196,47 @@ class PunctuationSpacingCompressor {
 
         return PunctuationSpacingCompressionResult(adjustments)
     }
+
+    /**
+     * Named heuristic: `CollapseCjkClosingBeforeAsciiPointMark`.
+     *
+     * ASCII point marks are deliberately shaped by the Latin face and therefore
+     * do not become [PunctuationAtom]s. They still form a punctuation boundary
+     * with an immediately preceding CJK closing mark: in `」,` the closing
+     * mark's trailing half-em must be consumed instead of appearing as a blank
+     * between the two glyph bodies. Only the CJK mark's own glue is reduced;
+     * the ASCII point mark keeps its source character, role, glyph and advance.
+     */
+    fun compressCjkClosingBeforeAsciiPointMark(
+        atoms: List<PunctuationAtom>,
+        text: String,
+        em: Float,
+    ): PunctuationSpacingCompressionResult {
+        val emHalf = em / 2f
+        val adjustments = atoms.mapNotNull { left ->
+            if (left.punctuationClass != PunctuationClass.Closing) return@mapNotNull null
+            val rightChar = text.getOrNull(left.range.end) ?: return@mapNotNull null
+            if (!ClreqPunctuationPolicies.isAsciiPointMark(rightChar)) return@mapNotNull null
+
+            val naturalInnerGlue = left.trailingGlue.natural
+            if (naturalInnerGlue <= 0f) return@mapNotNull null
+            val adjustedInnerGlue = (naturalInnerGlue - emHalf).coerceAtLeast(0f)
+            val reduction = naturalInnerGlue - adjustedInnerGlue
+            if (reduction <= 0f) return@mapNotNull null
+
+            PunctuationSpacingAdjustment(
+                range = TextRange(left.range.start, left.range.end + 1),
+                reductionTargetRange = left.range,
+                leftChar = left.char,
+                rightChar = rightChar,
+                naturalInnerGlue = naturalInnerGlue,
+                adjustedInnerGlue = adjustedInnerGlue,
+                reduction = reduction,
+                reason = "collapse-cjk-closing-before-ascii-point-mark",
+            )
+        }
+        return PunctuationSpacingCompressionResult(adjustments)
+    }
 }
 
 class PunctuationAtomBuilder(

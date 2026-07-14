@@ -7,6 +7,7 @@ import org.tiqian.font.FontRole
 import org.tiqian.font.RawFontMetrics
 import org.tiqian.font.usesLatinFace
 import org.jetbrains.skia.Font
+import org.jetbrains.skia.FontSlant
 import org.jetbrains.skia.FontStyle
 import org.jetbrains.skia.Typeface
 
@@ -32,16 +33,25 @@ class SkiaFontMetricsResolver(
 
     override fun resolve(request: FontMetricsRequest): RawFontMetrics {
         val isLatin = request.role.usesLatinFace() // LatinVsCjkFaceSelection (shared rule)
+        val requestedStyle = FontStyle(
+            request.fontWeight,
+            FontStyle.NORMAL.width,
+            if (request.italic) FontSlant.ITALIC else FontSlant.UPRIGHT,
+        )
         // Per-span family (rich text): measure the requested serif/mono face's OWN 字身框
         // so mixed fonts align by their ideographic box. Empty → the role default below.
         val familyTypeface = request.fontFamilies.firstOrNull()?.let {
-            SkiaSystemTypefaces.typeface(isLatin, it, FontStyle.NORMAL)
+            SkiaSystemTypefaces.typeface(isLatin, it, requestedStyle)
         }
-        val typeface = familyTypeface ?: when (request.role) {
+        val defaultTypeface = when (request.role) {
             FontRole.CjkText, FontRole.CjkPunctuation -> cjkTypeface
             FontRole.LatinText -> latinTypeface ?: cjkTypeface
             FontRole.Symbol, FontRole.Emoji, FontRole.Unknown -> cjkTypeface ?: latinTypeface
-        } ?: return fallback(request)
+        }
+        val styledDefaultTypeface = defaultTypeface?.let { base ->
+            SkiaSystemTypefaces.typeface(isLatin, base.familyName, requestedStyle) ?: base
+        }
+        val typeface = familyTypeface ?: styledDefaultTypeface ?: return fallback(request)
 
         val size = request.fontSize
         val font = Font(typeface, size)

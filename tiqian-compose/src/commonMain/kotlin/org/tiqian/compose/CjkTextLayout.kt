@@ -39,6 +39,7 @@ import org.tiqian.core.ColorSpan
 import org.tiqian.core.DecorationSpan
 import org.tiqian.core.LayoutConstraints
 import org.tiqian.core.LayoutResult
+import org.tiqian.core.LineBox
 import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.RichTextSpan
 import org.tiqian.core.RubySpan
@@ -455,12 +456,13 @@ private class CjkTextLayoutNode(
         drawClipHeight = h.toFloat()
         // LegalHangingInkClip: TextOverflow.Clip should still paint CJK hanging
         // punctuation and hanging hyphens because the engine emitted them as part
-        // of the line, not as overflow text. Do not use raw visualWidth here:
-        // an over-long unwrapped run may also be wider than the node and should
-        // stay clipped. Only the explicit hanging fields are allowed past the edge.
+        // of the line, not as overflow text. `visualWidth` is legal only when the
+        // explicit punctuation-hang field is present: it includes justification
+        // before the mark and also covers the impossible-measure case where the
+        // preceding cluster itself exceeds the node. Ordinary over-long unwrapped
+        // runs still stay clipped.
         val legalClipRight = laidOut.lines.maxOfOrNull { line ->
-            val punctuationEdge = minOf(drawClipWidth, line.indent + line.adjustedWidth) +
-                line.hangingPunctuationAdvance
+            val punctuationEdge = legalHangingPunctuationClipEdge(line, drawClipWidth)
             val hyphenEdge = minOf(drawClipWidth, line.indent + line.visualWidth) +
                 line.hyphenAdvance
             maxOf(drawClipWidth, punctuationEdge, hyphenEdge)
@@ -492,6 +494,20 @@ private class CjkTextLayoutNode(
         drawContent()
     }
 }
+
+/**
+ * Right clip edge authorized by an engine-selected punctuation hang. Using
+ * [LineBox.visualWidth] is essential because it is the mark's actual final x:
+ * it includes justification before the mark and an over-wide predecessor in
+ * the impossible-measure fallback. Without an explicit hang, ordinary visual
+ * overflow remains clipped to [drawClipWidth].
+ */
+internal fun legalHangingPunctuationClipEdge(line: LineBox, drawClipWidth: Float): Float =
+    if (line.hangingPunctuationAdvance > 0f) {
+        line.indent + line.visualWidth
+    } else {
+        drawClipWidth
+    }
 
 private data class PaintOverhang(
     val left: Float = 0f,

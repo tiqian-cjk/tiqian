@@ -771,6 +771,19 @@ private fun renderEngineMetadata(label: String, result: LayoutResult): String =
             }
             appendLine("</div>")
         }
+        if (result.debug.contextualKinsokuDecisions.isNotEmpty()) {
+            appendLine("<div class=\"metrics\">")
+            result.debug.contextualKinsokuDecisions.forEach { decision ->
+                appendLine(
+                    "<span class=\"metric\">context-kinsoku ${decision.range.start}-${decision.range.end} " +
+                        "'${decision.sourceText.escapeHtml()}' cluster=${decision.clusterIndex} " +
+                        "forbid=${decision.forbiddenPosition} ${decision.reason}" +
+                        (decision.impossibleMeasureFallback?.let { " fallback=${it.escapeHtml()}" } ?: "") +
+                        "</span>",
+                )
+            }
+            appendLine("</div>")
+        }
         if (result.debug.zeroWidthBreakDecisions.isNotEmpty()) {
             appendLine("<div class=\"metrics\">")
             result.debug.zeroWidthBreakDecisions.forEach { decision ->

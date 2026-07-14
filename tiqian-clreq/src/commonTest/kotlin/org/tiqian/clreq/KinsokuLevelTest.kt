@@ -77,6 +77,16 @@ class KinsokuLevelTest {
     }
 
     @Test
+    fun exposesUnambiguousAsciiPointMarksWithoutGuessingQuotesOrConnectors() {
+        for (c in listOf(',', '.', ':', ';', '!', '?')) {
+            assertTrue(ClreqPunctuationPolicies.isAsciiPointMark(c), "$c point mark")
+        }
+        for (c in listOf('"', '\'', '-', '/', '~', '%')) {
+            assertFalse(ClreqPunctuationPolicies.isAsciiPointMark(c), "$c excluded")
+        }
+    }
+
+    @Test
     fun measureAdaptiveResolvesPerLineWidth() {
         val m = KinsokuMode.MeasureAdaptive()
         // < 14 字：基本处理 + 悬挂.

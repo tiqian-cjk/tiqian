@@ -1,0 +1,45 @@
+fixture: ascii-point-mark-in-cjk
+text: 中文中文,中文
+maxWidth: 64.0
+== greedy ==
+size 64.0x48.0
+kinsoku measure=4.0字 level=Basic hang=Disabled reason=Fixed:Basic
+context-kinsoku 4-5 source=',' cluster=4 forbid=LineStart reason=AttachedAsciiPointMarkKinsoku
+line[0] 0-3 natural=48.0 adjusted=48.0 visual=64.0 repair=- candidates=- justify=deficit=16.0->0.0 CjkInterChar@0+8.0,CjkInterChar@1+8.0
+line[1] 3-7 natural=64.0 adjusted=64.0 visual=64.0 repair=- candidates=- justify=-
+cluster 0-1 '中' adv=24.0
+cluster 1-2 '文' adv=24.0
+cluster 2-3 '中' adv=16.0
+cluster 3-4 '文' adv=16.0
+cluster 4-5 ',' adv=16.0
+cluster 5-6 '中' adv=16.0
+cluster 6-7 '文' adv=16.0
+font 0-1 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=LatinText key=latin-primary display=',' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 6-7 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== lookahead ==
+size 64.0x48.0
+kinsoku measure=4.0字 level=Basic hang=Disabled reason=Fixed:Basic
+context-kinsoku 4-5 source=',' cluster=4 forbid=LineStart reason=AttachedAsciiPointMarkKinsoku
+line[0] 0-3 natural=48.0 adjusted=48.0 visual=64.0 repair=PushIn(LineAdjustmentPushIn shrink=0.0) candidates=PushIn+ justify=deficit=16.0->0.0 CjkInterChar@0+8.0,CjkInterChar@1+8.0
+line[1] 3-7 natural=64.0 adjusted=64.0 visual=64.0 repair=PushIn(LineAdjustmentPushIn shrink=0.0) candidates=PushIn+ justify=-
+cluster 0-1 '中' adv=24.0
+cluster 1-2 '文' adv=24.0
+cluster 2-3 '中' adv=16.0
+cluster 3-4 '文' adv=16.0
+cluster 4-5 ',' adv=16.0
+cluster 5-6 '中' adv=16.0
+cluster 6-7 '文' adv=16.0
+font 0-1 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=LatinText key=latin-primary display=',' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 6-7 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

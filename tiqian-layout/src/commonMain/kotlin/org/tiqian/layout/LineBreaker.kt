@@ -41,6 +41,14 @@ interface LineBreaker {
          */
         hangableClusters: Set<Int> = emptySet(),
         /**
+         * Protected cluster ranges whose members share provenance for an
+         * extendable trailing hang. A range can include the point-mark run's
+         * base cluster; an offender must still belong to [hangableClusters].
+         * Keeping ranges distinct prevents adjacent contextual groups from
+         * accidentally chaining. Empty preserves the ordinary one-mark rule.
+         */
+        extendableHangRanges: List<IntRange> = emptyList(),
+        /**
          * Forbidden-at-line-start cluster indices, resolved by the caller
          * from the profile's [org.tiqian.clreq.KinsokuLevel]. When
          * non-null this overrides the breaker's own [KinsokuRule] (so the
@@ -242,6 +250,7 @@ class GreedyLineBreaker(
         unbreakableRanges: List<IntRange>,
         firstLineIndent: Float,
         hangableClusters: Set<Int>,
+        extendableHangRanges: List<IntRange>,
         forbiddenLineStartClusters: Set<Int>?,
         forbiddenLineEndClusters: Set<Int>,
         hyphenBreakClusters: Set<Int>,
@@ -279,6 +288,7 @@ class GreedyLineBreaker(
             unbreakableRanges = unbreakableRanges,
             firstLineIndent = firstLineIndent,
             hangableClusters = hangableClusters,
+            extendableHangRanges = extendableHangRanges,
             forbiddenLineStartClusters = forbiddenLineStartClusters,
         )
         return repaired.withFillPushIn(
@@ -432,6 +442,7 @@ class LookaheadLineBreaker(
         unbreakableRanges: List<IntRange>,
         firstLineIndent: Float,
         hangableClusters: Set<Int>,
+        extendableHangRanges: List<IntRange>,
         forbiddenLineStartClusters: Set<Int>?,
         forbiddenLineEndClusters: Set<Int>,
         hyphenBreakClusters: Set<Int>,
@@ -549,6 +560,7 @@ class LookaheadLineBreaker(
                     shrinkOpportunities = shrinkOpportunities,
                     firstLineIndent = firstLineIndent,
                     hangableClusters = hangableClusters,
+                    extendableHangRanges = extendableHangRanges,
                     forbiddenLineStartClusters = forbiddenLineStartClusters,
                     hyphenBreakClusters = hyphenBreakClusters,
                     cjkInterCharBoundaries = cjkInterCharBoundaries,
@@ -623,6 +635,7 @@ class LookaheadLineBreaker(
             unbreakableRanges = unbreakableRanges,
             firstLineIndent = firstLineIndent,
             hangableClusters = hangableClusters,
+            extendableHangRanges = extendableHangRanges,
             forbiddenLineStartClusters = forbiddenLineStartClusters,
         ).withFillPushIn(
             lineAdjustmentPushIn, naturalClusters, adjustedClusters, maxWidth,
@@ -641,6 +654,7 @@ class LookaheadLineBreaker(
         shrinkOpportunities: List<ShrinkOpportunity>,
         firstLineIndent: Float,
         hangableClusters: Set<Int>,
+        extendableHangRanges: List<IntRange>,
         forbiddenLineStartClusters: Set<Int>?,
         hyphenBreakClusters: Set<Int>,
         cjkInterCharBoundaries: Set<Int>,
@@ -686,6 +700,7 @@ class LookaheadLineBreaker(
             unbreakableRanges = unbreakableRanges,
             firstLineIndent = firstLineIndent,
             hangableClusters = hangableClusters,
+            extendableHangRanges = extendableHangRanges,
             forbiddenLineStartClusters = forbiddenLineStartClusters,
         ).lines
 
@@ -794,13 +809,14 @@ class LookaheadLineBreaker(
         // standalone breaker use, where no gap sets are provided).
         val limit = lineLimit(maxWidth, firstLineIndent, line.clusterRange.first)
         val ragged = if (isLast) 0f else (limit - line.adjustedWidth).coerceAtLeast(0f)
-        val gaps = lineGapCount(line.clusterRange, gapBoundaries)
+        val inMeasureRange = line.inMeasureClusterRange
+        val gaps = lineGapCount(inMeasureRange, gapBoundaries)
         val residual = if (gaps == 0) ragged else 0f
         val d = lineAdjustmentDensity(line, limit, isLast, gapBoundaries)
         // SingleClusterLinePenalty: 孤字行(非末行单 cluster)是排版忌讳——在
         // 窄测下它可能只比「密拉伸」便宜几分,显式罚分让它只作最后手段。
-        val orphan = if (!isLast && !line.clusterRange.isEmptyClusterRange() &&
-            line.clusterRange.first == line.clusterRange.last
+        val orphan = if (!isLast && !inMeasureRange.isEmptyClusterRange() &&
+            inMeasureRange.first == inMeasureRange.last
         ) {
             leaveRaggedPenalty.toFloat()
         } else {
@@ -830,6 +846,7 @@ internal fun applyKinsokuRepairs(
     unbreakableRanges: List<IntRange> = emptyList(),
     firstLineIndent: Float = 0f,
     hangableClusters: Set<Int> = emptySet(),
+    extendableHangRanges: List<IntRange> = emptyList(),
     hangPenalty: Int = 5,
     forbiddenLineStartClusters: Set<Int>? = null,
 ): LineSolution {
@@ -882,9 +899,20 @@ internal fun applyKinsokuRepairs(
         // LineEndHangingPunctuation (CLREQ 行尾点号悬挂, ADR 0006): when
         // PushIn cannot fit the 顿/逗/句 offender, hang it past the measure
         // on the previous line instead of carrying a whole character down.
-        // 行尾只悬挂一个 — never chain onto a line that already hangs.
+        // 普通 profile 仍只悬挂一个；具名的不可能宽度点号 run
+        // 才可通过 extendableHangRanges 延伸已有 hang。
         val offenderIndex = curr.clusterRange.first
-        if (offenderIndex in hangableClusters && prev.hangingClusterIndex == null) {
+        val existingHanging = prev.hangingClusterIndices
+        val extendsContextualHang =
+            existingHanging.isNotEmpty() &&
+                prev.clusterRange.last + 1 == offenderIndex &&
+                extendableHangRanges.any { protectedGroup ->
+                    offenderIndex in protectedGroup && existingHanging.all { it in protectedGroup }
+                }
+        if (
+            offenderIndex in hangableClusters &&
+            (existingHanging.isEmpty() || extendsContextualHang)
+        ) {
             val mergeEndIndex = mandatoryBreakTailEnd(curr, offenderIndex, adjustedClusters)
             val hangCandidate = RepairCandidate(
                 kind = "Hang",
@@ -915,7 +943,11 @@ internal fun applyKinsokuRepairs(
                     offenderClusterIndex = offenderIndex,
                 ),
                 repairCandidates = prev.repairCandidates + pushIn.candidate + hangCandidate,
-                hangingClusterIndex = offenderIndex,
+                // Keep the out-of-measure suffix contiguous. A source-authored
+                // mandatory-break control immediately after the mark has zero
+                // advance/display but still belongs to this line's trailing
+                // structural suffix.
+                hangingClusterIndices = existingHanging + (offenderIndex..mergeEndIndex),
                 endReason = if (mergeEndIndex == curr.clusterRange.last) curr.endReason else prev.endReason,
             )
             if (mergeEndIndex == curr.clusterRange.last) {
@@ -1462,7 +1494,7 @@ internal fun lineAdjustmentDensity(
     // A line with ZERO stretchable gaps has density 0 — its deficit is plain
     // raggedness (priced linearly), not visible spacing; max(1,…) here would
     // fabricate a huge density that poisons neighbors into matching it.
-    val gaps = lineGapCount(line.clusterRange, gapBoundaries)
+    val gaps = lineGapCount(line.inMeasureClusterRange, gapBoundaries)
     if (gaps == 0) return 0f
     val delta = (limit - line.adjustedWidth).coerceAtLeast(0f)
     return delta / gaps

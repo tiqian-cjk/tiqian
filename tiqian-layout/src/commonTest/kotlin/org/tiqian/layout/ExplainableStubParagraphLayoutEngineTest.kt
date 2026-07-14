@@ -634,6 +634,70 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun mixedQuoteContextsReachTheFontAndPunctuationPipeline() {
+        val text = "中“文”中；that’s；（如 ‘O’, ‘Q’）；他说：“She said ‘hello’.”"
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent(text),
+                constraints = LayoutConstraints(maxWidth = 1_000f),
+            ),
+        )
+
+        val cjkQuoteIndices = setOf(
+            text.indexOf('“'),
+            text.indexOf('”'),
+            text.lastIndexOf('“'),
+            text.lastIndexOf('”'),
+        )
+        val allQuoteIndices = text.indices.filterTo(mutableSetOf()) { text[it].isCurlyQuoteForTest() }
+        val latinQuoteIndices = allQuoteIndices - cjkQuoteIndices
+
+        fun roleAt(index: Int): String = result.debug.fontDecisions
+            .single { index >= it.range.start && index < it.range.end }
+            .role
+
+        assertTrue(cjkQuoteIndices.all { roleAt(it) == FontRole.CjkPunctuation.name })
+        assertTrue(latinQuoteIndices.all { roleAt(it) == FontRole.LatinText.name })
+        assertEquals(
+            cjkQuoteIndices,
+            result.debug.punctuationDecisions
+                .filter { it.char.isCurlyQuoteForTest() }
+                .mapTo(mutableSetOf()) { it.range.start },
+        )
+        assertEquals(
+            allQuoteIndices.associateWith { if (it in cjkQuoteIndices) "CjkPunctuation" else "LatinText" },
+            result.debug.roleOverrides.associate { it.range.start to it.overriddenRole },
+        )
+        assertEquals(text, result.input.content.text)
+    }
+
+    @Test
+    fun quoteRolesSurviveStyleAndSourceBoundaries() {
+        val text = "中‘that’s’中"
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent(
+                    text = text,
+                    spans = listOf(
+                        TextSpan(TextRange(2, 7), TextStyle(fontWeight = 700)),
+                    ),
+                    sourceBoundaries = setOf(1, 2, 6, 7, 8, 9),
+                ),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val rolesByIndex = result.debug.roleOverrides.associate { it.range.start to it.overriddenRole }
+        assertEquals("CjkPunctuation", rolesByIndex[1])
+        assertEquals("LatinText", rolesByIndex[6])
+        assertEquals("CjkPunctuation", rolesByIndex[8])
+        assertEquals("latin-primary", result.clusters.single { it.range.start == 6 }.fontKey)
+        assertEquals(text, result.clusters.joinToString(separator = "") { it.text })
+    }
+
+    @Test
     fun skipsNeutralDashBeforeLatinQuotePairInLayout() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
@@ -786,6 +850,97 @@ class ExplainableStubParagraphLayoutEngineTest {
 
         assertTrue(result.debug.punctuationDecisions.none { it.char == '“' || it.char == '”' })
         assertTrue(result.clusters.all { it.glyphInlineShift == 0f })
+    }
+
+    @Test
+    fun keepsContractionApostropheLatinInsideCjkSingleQuotes() {
+        val text = "中‘that’s’中"
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent(text),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val opening = result.debug.fontDecisions.single { it.range == TextRange(1, 2) }
+        val contraction = result.debug.fontDecisions.single { it.range == TextRange(2, 8) }
+        val closing = result.debug.fontDecisions.single { it.range == TextRange(8, 9) }
+        assertEquals(FontRole.CjkPunctuation.name, opening.role)
+        assertEquals(FontRole.LatinText.name, contraction.role)
+        assertEquals("that’s", contraction.sourceText)
+        assertEquals("latin-primary", contraction.fontKey)
+        assertEquals(FontRole.CjkPunctuation.name, closing.role)
+
+        val latinCluster = result.clusters.single { it.text == "that’s" }
+        assertEquals("latin-primary", latinCluster.fontKey)
+        assertTrue(result.debug.punctuationDecisions.none { it.range == TextRange(6, 7) })
+    }
+
+    @Test
+    fun preservesOpenTypeFeaturesAsFinalGlyphRunBoundaries() {
+        val proportionalQuoteFeatures = listOf("pwid", "palt")
+        val engine = ExplainableStubParagraphLayoutEngine(
+            textShaper = object : TextShaper {
+                private val delegate = ExplainableStubTextShaper()
+
+                override fun shape(input: ShapingInput): ShapingResult {
+                    if (input.displayText != "A’B") return delegate.shape(input)
+                    val clusters = (input.range.start until input.range.end).map { index ->
+                        val range = TextRange(index, index + 1)
+                        Cluster(
+                            range = range,
+                            text = input.text.substring(range.start, range.end),
+                            displayText = input.displayText.substring(
+                                range.start - input.range.start,
+                                range.end - input.range.start,
+                            ),
+                            fontKey = input.fontDecision.candidate.key,
+                            advance = 16f,
+                        )
+                    }
+                    return ShapingResult(
+                        clusters = clusters,
+                        glyphRuns = clusters.mapIndexed { glyphId, cluster ->
+                            GlyphRun(
+                                range = cluster.range,
+                                fontKey = cluster.fontKey,
+                                glyphs = listOf(
+                                    Glyph(
+                                        id = glyphId.toUInt(),
+                                        clusterRange = cluster.range,
+                                        advance = cluster.advance,
+                                    ),
+                                ),
+                                advance = cluster.advance,
+                                openTypeFeatures = if (cluster.text == "’") {
+                                    proportionalQuoteFeatures
+                                } else {
+                                    emptyList()
+                                },
+                            )
+                        },
+                    )
+                }
+            },
+        )
+
+        val result = engine.layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("A’B"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        assertEquals(
+            listOf(TextRange(0, 1), TextRange(1, 2), TextRange(2, 3)),
+            result.glyphRuns.map { it.range },
+        )
+        assertEquals(
+            listOf(emptyList(), proportionalQuoteFeatures, emptyList()),
+            result.glyphRuns.map { it.openTypeFeatures },
+        )
     }
 
     @Test
@@ -1030,6 +1185,59 @@ class ExplainableStubParagraphLayoutEngineTest {
         assertEquals(2, spacing.reductionTargetRange.start)
         assertEquals(3, spacing.reductionTargetRange.end)
         assertEquals("collapse-adjacent-punctuation-inner-glue", spacing.reason)
+    }
+
+    @Test
+    fun compressesAdjacentCjkSingleQuoteCommaSequence() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("’，‘"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        assertTrue(
+            result.debug.fontDecisions.all { it.role == FontRole.CjkPunctuation.name },
+            result.debug.fontDecisions.toString(),
+        )
+        assertEquals(3, result.debug.punctuationDecisions.size)
+        assertEquals(2, result.debug.spacingDecisions.size)
+        assertTrue(
+            result.debug.spacingDecisions.all {
+                it.reason == "collapse-adjacent-punctuation-inner-glue" &&
+                    it.reduction == 8f
+            },
+            result.debug.spacingDecisions.toString(),
+        )
+        assertEquals(32f, result.lines.single().visualWidth)
+        assertEquals(32f, result.size.width)
+        assertEquals(
+            listOf(0f, 8f, 16f),
+            result.positionedClusters().map { it.drawX },
+        )
+    }
+
+    @Test
+    fun compressesCjkClosingBeforeAsciiPointMarkWithoutReclassifyingAscii() {
+        val result = ExplainableStubParagraphLayoutEngine().layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("中」,next"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        val closing = result.clusters.single { it.text == "」" }
+        val commaDecision = result.debug.fontDecisions.single { it.range.start == 2 }
+        val spacing = result.debug.spacingDecisions.single {
+            it.reason == "collapse-cjk-closing-before-ascii-point-mark"
+        }
+        assertEquals(FontRole.LatinText.name, commaDecision.role)
+        assertEquals(8f, closing.advance)
+        assertEquals('」', spacing.leftChar)
+        assertEquals(',', spacing.rightChar)
+        assertEquals(8f, spacing.reduction)
     }
 
     @Test
@@ -3020,6 +3228,9 @@ class ExplainableStubParagraphLayoutEngineTest {
         }
     }
 }
+
+private fun Char.isCurlyQuoteForTest(): Boolean =
+    this == '\u2018' || this == '\u2019' || this == '\u201C' || this == '\u201D'
 
 private fun LayoutResult.lineText(index: Int): String {
     val line = lines[index]

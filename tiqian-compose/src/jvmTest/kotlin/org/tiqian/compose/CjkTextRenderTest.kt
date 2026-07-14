@@ -204,6 +204,31 @@ class CjkTextRenderTest {
     }
 
     @Test
+    fun hangingPunctuationClipUsesItsFinalVisualEdgeOnlyWhenExplicitlyAuthorized() {
+        val hanging = LineBox(
+            range = TextRange(0, 2),
+            clusterRange = 0..1,
+            baseline = 18f,
+            top = 0f,
+            bottom = 24f,
+            naturalWidth = 111f,
+            adjustedWidth = 95f,
+            visualWidth = 116f,
+            hangingPunctuationAdvance = 16f,
+        )
+
+        assertEquals(116f, legalHangingPunctuationClipEdge(hanging, drawClipWidth = 100f))
+        assertEquals(
+            100f,
+            legalHangingPunctuationClipEdge(
+                hanging.copy(hangingPunctuationAdvance = 0f),
+                drawClipWidth = 100f,
+            ),
+            "ordinary over-wide text must remain clipped",
+        )
+    }
+
+    @Test
     fun clipOverflowDoesNotPaintOrdinaryUnwrappedTextPastWidth() {
         val image = ImageComposeScene(width = 260, height = 100) {
             Box(Modifier.fillMaxSize().background(Color.White).padding(8.dp)) {

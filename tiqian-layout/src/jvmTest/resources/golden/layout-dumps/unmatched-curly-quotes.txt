@@ -1,0 +1,73 @@
+fixture: unmatched-curly-quotes
+text: ’90s James’； “truncated；中文“未闭
+maxWidth: 240.0
+== greedy ==
+size 240.0x72.0
+kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
+line[0] 0-13 natural=192.0 adjusted=184.0 visual=184.0 repair=- candidates=- justify=deficit=56.0->56.0
+line[1] 13-28 natural=240.0 adjusted=240.0 visual=240.0 repair=- candidates=- justify=-
+line[2] 28-29 natural=16.0 adjusted=16.0 visual=16.0 repair=- candidates=- justify=-
+cluster 0-4 '’90s' adv=64.0
+cluster 4-5 ' ' adv=8.0
+cluster 5-11 'James’' adv=96.0
+cluster 11-12 '；' adv=16.0
+cluster 12-13 ' ' adv=0.0
+cluster 13-23 '“truncated' adv=160.0
+cluster 23-24 '；' adv=16.0
+cluster 24-25 '中' adv=16.0
+cluster 25-26 '文' adv=16.0
+cluster 26-27 '“' adv=16.0
+cluster 27-28 '未' adv=16.0
+cluster 28-29 '闭' adv=16.0
+font 0-11 role=LatinText key=latin-primary display='’90s James’' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-12 role=CjkPunctuation key=cjk-primary display='；' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 12-23 role=LatinText key=latin-primary display=' “truncated' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 23-24 role=CjkPunctuation key=cjk-primary display='；' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 24-25 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 25-26 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 26-27 role=CjkPunctuation key=cjk-primary display='“' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 27-28 role=CjkText key=cjk-primary display='未' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 28-29 role=CjkText key=cjk-primary display='闭' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 11-12 '；' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 23-24 '；' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 26-27 '“' class=Opening adv=16.0 body=8.0 lead=8.0 trail=0.0 anchor=Trailing source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 11-12 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 23-24 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 26-27 body=8.0 lead=0.0/8.0 trail=0.0/0.0 justify=0.0 resolved=16.0
+edgetrim 12-13 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== lookahead ==
+size 240.0x72.0
+kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
+line[0] 0-13 natural=192.0 adjusted=184.0 visual=184.0 repair=- candidates=- justify=deficit=56.0->56.0
+line[1] 13-28 natural=240.0 adjusted=240.0 visual=240.0 repair=- candidates=- justify=-
+line[2] 28-29 natural=16.0 adjusted=16.0 visual=16.0 repair=- candidates=- justify=-
+cluster 0-4 '’90s' adv=64.0
+cluster 4-5 ' ' adv=8.0
+cluster 5-11 'James’' adv=96.0
+cluster 11-12 '；' adv=16.0
+cluster 12-13 ' ' adv=0.0
+cluster 13-23 '“truncated' adv=160.0
+cluster 23-24 '；' adv=16.0
+cluster 24-25 '中' adv=16.0
+cluster 25-26 '文' adv=16.0
+cluster 26-27 '“' adv=16.0
+cluster 27-28 '未' adv=16.0
+cluster 28-29 '闭' adv=16.0
+font 0-11 role=LatinText key=latin-primary display='’90s James’' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-12 role=CjkPunctuation key=cjk-primary display='；' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 12-23 role=LatinText key=latin-primary display=' “truncated' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 23-24 role=CjkPunctuation key=cjk-primary display='；' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 24-25 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 25-26 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 26-27 role=CjkPunctuation key=cjk-primary display='“' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 27-28 role=CjkText key=cjk-primary display='未' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 28-29 role=CjkText key=cjk-primary display='闭' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 11-12 '；' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 23-24 '；' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 26-27 '“' class=Opening adv=16.0 body=8.0 lead=8.0 trail=0.0 anchor=Trailing source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 11-12 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 23-24 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 26-27 body=8.0 lead=0.0/8.0 trail=0.0/0.0 justify=0.0 resolved=16.0
+edgetrim 12-13 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

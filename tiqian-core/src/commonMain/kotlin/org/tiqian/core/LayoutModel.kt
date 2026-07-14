@@ -36,6 +36,12 @@ data class GlyphRun(
     val fontKey: String,
     val glyphs: List<Glyph>,
     val advance: Float,
+    /**
+     * OpenType features that must be replayed when a frontend draws this run
+     * from source text instead of glyph ids. This is shaping output, not a
+     * renderer-side guess: measurement and DOM paint must use the same list.
+     */
+    val openTypeFeatures: List<String> = emptyList(),
 )
 
 data class Glyph(
@@ -99,10 +105,12 @@ data class LineBox(
     val adjustedWidth: Float,
     val visualWidth: Float,
     /**
-     * Legal end-edge overhang from `LineEndHangingPunctuation` (CLREQ 行尾点号悬挂).
-     * It is part of the emitted line's paint, not overflow text: frontends that clip
-     * `TextOverflow.Clip` must still leave this much room beyond the measure edge.
-     * 0 when no punctuation hangs at this line end.
+     * Total advance of the one or more trailing marks selected by
+     * `LineEndHangingPunctuation` (CLREQ 行尾点号悬挂). It is part of the emitted
+     * line's paint, not overflow text: frontends that clip `TextOverflow.Clip`
+     * must allow the line's final [visualWidth] when this is non-zero. The
+     * ordinary profile path hangs one mark; only a named impossible-measure
+     * contextual run may contain more. 0 when no punctuation hangs.
      */
     val hangingPunctuationAdvance: Float = 0f,
     /**
@@ -169,6 +177,7 @@ data class LayoutDebugInfo(
     val lineSpacingDecision: LineSpacingDecisionInfo? = null,
     val rubyLineHeightDecision: RubyLineHeightDecisionInfo? = null,
     val kinsokuDecision: KinsokuDecisionInfo? = null,
+    val contextualKinsokuDecisions: List<ContextualKinsokuDecisionInfo> = emptyList(),
     val lineLengthGridDecision: LineLengthGridDecisionInfo? = null,
     val firstLineIndentDecision: FirstLineIndentDecisionInfo? = null,
     val inlineBoxDecisions: List<InlineBoxDecisionInfo> = emptyList(),
@@ -260,6 +269,25 @@ data class KinsokuDecisionInfo(
     val level: String,
     val hanging: String,
     val reason: String,
+)
+
+/**
+ * A source-context rule that contributes a cluster to the resolved kinsoku
+ * set without changing its font role or punctuation geometry.
+ *
+ * This is distinct from [KinsokuDecisionInfo], which records the paragraph's
+ * profile level. For example, an ASCII comma can keep its Latin face and
+ * natural proportional advance while Chinese context still makes it a
+ * line-start nonstarter.
+ */
+data class ContextualKinsokuDecisionInfo(
+    val range: TextRange,
+    val sourceText: String,
+    val clusterIndex: Int,
+    val forbiddenPosition: String,
+    val reason: String,
+    /** Named last-resort geometry only when that fallback was actually selected for this cluster. */
+    val impossibleMeasureFallback: String? = null,
 )
 
 /**

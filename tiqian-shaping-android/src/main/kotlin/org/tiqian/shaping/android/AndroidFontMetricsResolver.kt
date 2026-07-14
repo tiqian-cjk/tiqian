@@ -28,8 +28,8 @@ class AndroidFontMetricsResolver(
             typeface = typefaceResolver.resolve(
                 role = request.role,
                 fontFamilies = request.fontFamilies,
-                fontWeight = 400,
-                italic = false,
+                fontWeight = request.fontWeight,
+                italic = request.italic,
             )
         }
         val metrics = paint.fontMetrics

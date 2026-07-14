@@ -114,6 +114,34 @@ class PunctuationSpacingRuleTest {
         assertEquals(0, plan.adjustments.size)
     }
 
+    @Test
+    fun cjkClosingBeforeAsciiPointMarkConsumesOnlyClosingGlue() {
+        val text = "」,"
+        val plan = compressor.compressCjkClosingBeforeAsciiPointMark(
+            atoms = listOf(atom('」', 0)),
+            text = text,
+            em = em,
+        )
+
+        val adjustment = plan.adjustments.single()
+        assertEquals(8f, adjustment.naturalInnerGlue)
+        assertEquals(0f, adjustment.adjustedInnerGlue)
+        assertEquals(8f, adjustment.reduction)
+        assertEquals(org.tiqian.core.TextRange(0, 1), adjustment.reductionTargetRange)
+        assertEquals("collapse-cjk-closing-before-ascii-point-mark", adjustment.reason)
+    }
+
+    @Test
+    fun cjkClosingDoesNotCompressAcrossWhitespaceBeforeAsciiPointMark() {
+        val plan = compressor.compressCjkClosingBeforeAsciiPointMark(
+            atoms = listOf(atom('」', 0)),
+            text = "」 ,",
+            em = em,
+        )
+
+        assertEquals(emptyList(), plan.adjustments)
+    }
+
     private fun atom(char: Char, index: Int): PunctuationAtom {
         val range = org.tiqian.core.TextRange(index, index + 1)
         return builder.build(char = char, range = range, em = em)!!

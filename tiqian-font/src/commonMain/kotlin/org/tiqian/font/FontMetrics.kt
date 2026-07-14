@@ -11,6 +11,16 @@ data class FontMetricsRequest(
      * Empty = the role default.
      */
     val fontFamilies: List<String> = emptyList(),
+    /** The exact OpenType weight instance whose declared metrics are requested. */
+    val fontWeight: Int = 400,
+    /** Whether the italic/oblique face instance, rather than the upright face, is requested. */
+    val italic: Boolean = false,
+    /**
+     * Source text used only to resolve which concrete face in [fontFamilies]
+     * owns this metric decision. Metrics remain face-level; the text is part of
+     * the fallback-selection evidence, not a glyph-bounds sample.
+     */
+    val faceSelectionText: String = "",
 )
 
 interface FontMetricsResolver {
@@ -142,4 +152,3 @@ enum class FontMetricSource {
     ManualOverride,
     SynthesizedIdeographicBox,
 }
-

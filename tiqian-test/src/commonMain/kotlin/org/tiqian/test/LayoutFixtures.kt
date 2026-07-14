@@ -66,6 +66,22 @@ object EarlyLayoutFixtures {
             notes = "Shows punctuation atoms and adjacent punctuation spacing compression.",
         ),
         LayoutFixture(
+            id = "contextual-curly-quotes",
+            text = "中‘that’s’中’，‘",
+            constraints = LayoutConstraints(maxWidth = 192f),
+            notes = "LatinInWordApostropheExclusion keeps the apostrophe in that’s on the Latin run " +
+                "while the surrounding single quotes retain CJK punctuation geometry; the trailing " +
+                "’，‘ sequence exercises both adjacent-punctuation compression boundaries.",
+        ),
+        LayoutFixture(
+            id = "unmatched-curly-quotes",
+            text = "’90s James’； “truncated；中文“未闭",
+            constraints = LayoutConstraints(maxWidth = 240f),
+            notes = "UnmatchedCurlyQuoteDirectionalContext keeps leading elisions, trailing " +
+                "possessives, and spaced truncated Latin quotations proportional while an " +
+                "unspaced truncated quote in Chinese remains CJK punctuation.",
+        ),
+        LayoutFixture(
             id = "fallback-roles",
             text = "提椠……Hello——世界。",
             constraints = LayoutConstraints(maxWidth = 240f),
@@ -122,6 +138,20 @@ object EarlyLayoutFixtures {
             text = "中文段落(English)和[mixed]说明。",
             constraints = LayoutConstraints(maxWidth = 240f),
             notes = "ASCII (, ), [, ] do not share code points with the CJK fullwidth forms （）【】, so they always classify as Latin. (English) and [mixed] cluster as Latin runs and render in latin-primary even when surrounded by CJK content.",
+        ),
+        LayoutFixture(
+            id = "ascii-point-mark-in-cjk",
+            text = "中文中文,中文",
+            constraints = LayoutConstraints(maxWidth = 64f),
+            notes = "AttachedAsciiPointMarkKinsoku: a directly attached ASCII comma keeps its Latin face and proportional advance, but cannot start a wrapped Chinese line. The structured contextual-kinsoku decision explains the exception without creating CJK punctuation glue.",
+            pinBasicNoHang = true,
+        ),
+        LayoutFixture(
+            id = "ascii-point-mark-impossible-measure",
+            text = "中,文",
+            constraints = LayoutConstraints(maxWidth = 15f),
+            notes = "AttachedAsciiPointMarkImpossibleMeasureHang: when even the preceding character plus its attached Latin comma cannot fit, the applied contextual fallback hangs the comma instead of accepting it at line start. The ordinary profile hanging policy remains disabled.",
+            pinBasicNoHang = true,
         ),
         LayoutFixture(
             id = "real-paragraph-1",

@@ -33,8 +33,11 @@ data class QuoteRoleDecision(
  * can choose the face. If there is no meaningful outer context, the quoted
  * content is used as a fallback.
  *
- * Unmatched quotes (e.g. apostrophes in "it's") are not included in the result
- * and fall back to the delegate classifier's per-character heuristic.
+ * Pair matching and role classification are deliberately separate. [analyze]
+ * returns only structurally paired quotes. [classifyQuoteRoles] additionally
+ * classifies unmatched curly quotes from their directional paragraph context,
+ * covering contractions, possessives, elisions and truncated quotations
+ * without rewriting source text.
  */
 class QuotePairAnalyzer {
 
@@ -53,7 +56,16 @@ class QuotePairAnalyzer {
                     }
                 }
                 0x2019 -> {
-                    if (stack.isNotEmpty() && stack.last().second == QuoteType.Single) {
+                    // `LatinInWordApostropheExclusion`: an apostrophe inside a
+                    // Latin word is not the closing mark of an outer single-quote
+                    // pair. Without this guard, `‘that’s’` pairs the outer opener
+                    // with the contraction apostrophe, forces that apostrophe onto
+                    // the CJK punctuation face, and leaves the real closer unmatched.
+                    if (
+                        !text.isLatinInWordApostrophe(i) &&
+                        stack.isNotEmpty() &&
+                        stack.last().second == QuoteType.Single
+                    ) {
                         val match = stack.removeLast()
                         pairs.add(QuotePair(match.first, i, QuoteType.Single))
                     }
@@ -63,6 +75,16 @@ class QuotePairAnalyzer {
 
         return pairs
     }
+
+    private fun String.isLatinInWordApostrophe(index: Int): Boolean =
+        getOrNull(index - 1)?.isLatinWordCharacter() == true &&
+            getOrNull(index + 1)?.isLatinWordCharacter() == true
+
+    private fun Char.isLatinWordCharacter(): Boolean =
+        this in 'A'..'Z' ||
+            this in 'a'..'z' ||
+            this in '0'..'9' ||
+            code in 0x00C0..0x024F
 
     fun classifyPairs(
         text: String,
@@ -98,7 +120,78 @@ class QuotePairAnalyzer {
                 ),
             )
         }
+        val pairedIndices = pairs
+            .flatMapTo(mutableSetOf()) { pair -> listOf(pair.openIndex, pair.closeIndex) }
+        for (index in text.indices) {
+            if (index in pairedIndices || !text[index].isAmbiguousCurlyQuote()) continue
+            val decision = resolveUnmatchedCurlyQuoteContext(
+                text = text,
+                index = index,
+                classifier = fontRoleClassifier,
+                context = context,
+            )
+            result += QuoteRoleDecision(
+                index = index,
+                role = decision.role,
+                source = decision.source,
+                reason = decision.reason,
+            )
+        }
         return result
+    }
+
+    /**
+     * `UnmatchedCurlyQuoteDirectionalContext`: malformed/truncated quotes and
+     * apostrophes still need a stable face. Immediate Western spacing plus
+     * following Latin content wins for an embedded `’90s` / `‘Hello` fragment;
+     * otherwise the preceding meaningful run wins, followed by the following
+     * run and finally the existing CJK default.
+     */
+    private fun resolveUnmatchedCurlyQuoteContext(
+        text: String,
+        index: Int,
+        classifier: FontRoleClassifier,
+        context: FontRoleContext,
+    ): ResolvedQuotePairContext {
+        if (text[index] == '\u2019' && text.isLatinInWordApostrophe(index)) {
+            return ResolvedQuotePairContext(
+                role = FontRole.LatinText,
+                source = "LatinInWordApostropheExclusion",
+                reason = "latin-in-word-apostrophe",
+            )
+        }
+
+        val leftRole = scanLeftForMeaningfulRole(text, index - 1, classifier, context)
+        val followingRole = scanRightForMeaningfulRole(text, index + 1, text.length, classifier, context)
+        if (
+            text.getOrNull(index - 1)?.isAsciiSpaceOrTab() == true &&
+            followingRole == FontRole.LatinText
+        ) {
+            return ResolvedQuotePairContext(
+                role = FontRole.LatinText,
+                source = "WhitespaceDelimitedUnmatchedLatinQuote",
+                reason = "whitespace-delimited-unmatched-latin-quote",
+            )
+        }
+        if (leftRole != null) {
+            return ResolvedQuotePairContext(
+                role = leftRole,
+                source = "UnmatchedCurlyQuoteOuterContext",
+                reason = "unmatched-curly-quote-left-context",
+            )
+        }
+        if (followingRole != null) {
+            return ResolvedQuotePairContext(
+                role = followingRole,
+                source = "UnmatchedCurlyQuoteFollowingContext",
+                reason = "unmatched-curly-quote-following-context",
+            )
+        }
+        return ResolvedQuotePairContext(
+            role = FontRole.CjkPunctuation,
+            source = "UnmatchedCurlyQuoteDefaultCjkContext",
+            reason = "unmatched-curly-quote-default-cjk-context",
+        )
     }
 
     /**
@@ -128,6 +221,29 @@ class QuotePairAnalyzer {
             classifier = classifier,
             context = context,
         )
+
+        // `WhitespaceDelimitedLatinQuotePair`: a space before a curly quote is
+        // meaningful typography, not merely context to skip. In CJK prose it
+        // marks an embedded Western quotation such as `（如 ‘O’, ‘Q’）`; when
+        // every textual code point inside the pair is Latin, both quotes must
+        // stay on the Latin face even though the nearest word to the left is
+        // CJK. Without this rule, skipping the space makes `如` win and turns
+        // the pair into full-width CJK punctuation.
+        //
+        // Requiring whitespace plus wholly Latin quoted content preserves the
+        // native CJK case (`他说‘hello’` remains CJK) and does not let an
+        // accidentally spaced Chinese quotation switch faces.
+        if (
+            text.getOrNull(pair.openIndex - 1)?.isAsciiSpaceOrTab() == true &&
+            quotedRole == FontRole.LatinText &&
+            quotedContentIsEntirelyLatin(text, pair, classifier, context)
+        ) {
+            return ResolvedQuotePairContext(
+                role = FontRole.LatinText,
+                source = "WhitespaceDelimitedLatinQuotePair",
+                reason = "whitespace-delimited-latin-quoted-content",
+            )
+        }
 
         // `NumberedCjkQuotePrefix`: a paragraph/list ordinal such as `1.` is
         // structure, not Latin prose. Let the quoted text decide the quote face
@@ -263,6 +379,35 @@ class QuotePairAnalyzer {
         return null
     }
 
+    private fun quotedContentIsEntirelyLatin(
+        text: String,
+        pair: QuotePair,
+        classifier: FontRoleClassifier,
+        context: FontRoleContext,
+    ): Boolean {
+        var sawLatin = false
+        var i = pair.openIndex + 1
+        while (i < pair.closeIndex) {
+            val codePoint = text.codePointAtCompat(i, pair.closeIndex)
+            val charCount = if (codePoint > 0xFFFF) 2 else 1
+            when (classifier.classify(text, TextRange(i, i + charCount), context)) {
+                FontRole.LatinText -> sawLatin = true
+                FontRole.CjkText, FontRole.CjkPunctuation -> return false
+                else -> Unit
+            }
+            i += charCount
+        }
+        return sawLatin
+    }
+
+    private fun String.codePointAtCompat(index: Int, endIndex: Int): Int {
+        val high = this[index].code
+        if (high !in 0xD800..0xDBFF || index + 1 >= endIndex) return high
+        val low = this[index + 1].code
+        if (low !in 0xDC00..0xDFFF) return high
+        return 0x10000 + ((high - 0xD800) shl 10) + (low - 0xDC00)
+    }
+
     private fun Int.isNeutralQuoteContextCodePoint(): Boolean =
         this == 0x0009 ||
             this == 0x000A ||
@@ -302,6 +447,9 @@ class QuotePairAnalyzer {
     private fun Char.isAsciiSpaceOrTab(): Boolean =
         this == ' ' || this == '\t'
 
+    private fun Char.isAmbiguousCurlyQuote(): Boolean =
+        this == '\u2018' || this == '\u2019' || this == '\u201C' || this == '\u201D'
+
     private fun Char.isNumberedPrefixSuffix(): Boolean =
         this == '.' ||
             this == ')' ||
@@ -324,8 +472,10 @@ class QuotePairAnalyzer {
  * Wraps a delegate [FontRoleClassifier] and overrides classification for
  * quote characters that have been resolved by [QuotePairAnalyzer].
  *
- * Characters not in [quoteRoles] are classified by the delegate as usual,
- * preserving per-character heuristics for unmatched quotes.
+ * Characters not in [quoteRoles] are classified by the delegate as usual.
+ * The role map may contain both paired and directionally classified unmatched
+ * curly quotes, so every ambiguous quote decision still has one explainable
+ * source in the paragraph pipeline.
  */
 class QuotePairAwareFontRoleClassifier(
     private val delegate: FontRoleClassifier,

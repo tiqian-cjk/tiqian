@@ -4,8 +4,59 @@ import org.tiqian.core.Cluster
 import org.tiqian.core.TextRange
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class LookaheadLineBreakerTest {
+    @Test
+    fun hangingTailIsExcludedFromFillDensityGeometry() {
+        val line = LineCandidate(
+            clusterRange = 0..2,
+            sourceRange = TextRange(0, 3),
+            naturalWidth = 48f,
+            adjustedWidth = 16f,
+            hangingClusterIndices = setOf(1, 2),
+        )
+
+        assertEquals(0..0, line.inMeasureClusterRange)
+        assertEquals(0, lineGapCount(line.inMeasureClusterRange, setOf(1, 2)))
+        assertEquals(
+            0f,
+            lineAdjustmentDensity(line, limit = 48f, isLast = false, gapBoundaries = setOf(1, 2)),
+            "hung point-mark boundaries are not justification gaps",
+        )
+    }
+
+    @Test
+    fun hangingClustersMustBeAContiguousTrailingSuffix() {
+        assertFailsWith<IllegalArgumentException> {
+            LineCandidate(
+                clusterRange = 0..2,
+                sourceRange = TextRange(0, 3),
+                naturalWidth = 48f,
+                adjustedWidth = 32f,
+                hangingClusterIndices = setOf(1),
+            )
+        }
+    }
+
+    @Test
+    fun compatibilityHangingIndexSkipsATrailingMandatoryBreakControl() {
+        val line = LineCandidate(
+            clusterRange = 0..2,
+            sourceRange = TextRange(0, 3),
+            naturalWidth = 32f,
+            adjustedWidth = 16f,
+            repair = RepairOption.Hang(
+                penalty = 5,
+                reason = "test",
+                offenderClusterIndex = 1,
+            ),
+            hangingClusterIndices = setOf(1, 2),
+        )
+
+        assertEquals(1, line.hangingClusterIndex)
+    }
+
 
     @Test
     fun emptyInputProducesNoLines() {

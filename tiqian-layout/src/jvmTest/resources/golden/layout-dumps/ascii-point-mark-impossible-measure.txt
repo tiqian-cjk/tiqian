@@ -1,0 +1,29 @@
+fixture: ascii-point-mark-impossible-measure
+text: 中,文
+maxWidth: 15.0
+== greedy ==
+size 15.0x48.0
+kinsoku measure=0.9字 level=Basic hang=Disabled reason=Fixed:Basic
+context-kinsoku 1-2 source=',' cluster=1 forbid=LineStart reason=AttachedAsciiPointMarkKinsoku fallback=AttachedAsciiPointMarkImpossibleMeasureHang
+line[0] 0-2 natural=32.0 adjusted=16.0 visual=32.0 repair=Hang(ForbiddenAtLineStart shrink=0.0) candidates=PushIn-,Hang+ justify=-
+line[1] 2-3 natural=16.0 adjusted=16.0 visual=16.0 repair=- candidates=- justify=-
+cluster 0-1 '中' adv=16.0
+cluster 1-2 ',' adv=16.0
+cluster 2-3 '文' adv=16.0
+font 0-1 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=LatinText key=latin-primary display=',' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== lookahead ==
+size 15.0x48.0
+kinsoku measure=0.9字 level=Basic hang=Disabled reason=Fixed:Basic
+context-kinsoku 1-2 source=',' cluster=1 forbid=LineStart reason=AttachedAsciiPointMarkKinsoku fallback=AttachedAsciiPointMarkImpossibleMeasureHang
+line[0] 0-2 natural=32.0 adjusted=16.0 visual=32.0 repair=Hang(ForbiddenAtLineStart shrink=0.0) candidates=PushIn-,Hang+ justify=-
+line[1] 2-3 natural=16.0 adjusted=16.0 visual=16.0 repair=- candidates=- justify=-
+cluster 0-1 '中' adv=16.0
+cluster 1-2 ',' adv=16.0
+cluster 2-3 '文' adv=16.0
+font 0-1 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=LatinText key=latin-primary display=',' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

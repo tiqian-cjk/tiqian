@@ -129,6 +129,14 @@ class LayoutDumpGoldenTest {
         debug.kinsokuDecision?.let { k ->
             appendLine("kinsoku measure=${k.measureEm.fmt()}字 level=${k.level} hang=${k.hanging} reason=${k.reason}")
         }
+        debug.contextualKinsokuDecisions.forEach { k ->
+            appendLine(
+                "context-kinsoku ${k.range.start}-${k.range.end} " +
+                    "source='${k.sourceText.escapeDumpText()}' cluster=${k.clusterIndex} " +
+                    "forbid=${k.forbiddenPosition} reason=${k.reason}" +
+                    (k.impossibleMeasureFallback?.let { " fallback=$it" } ?: ""),
+            )
+        }
         lines.forEachIndexed { i, line ->
             val decision = debug.lineDecisions.getOrNull(i)
             val repair = decision?.repairDecision?.let { r ->
