@@ -241,12 +241,14 @@ class WebCanvasTextShaper(
         val bounds: Rect,
         val requestedFont: String,
         val actualFont: String,
+        val boundsAdjustment: String?,
     )
 
     private data class MeasurementKey(
         val actualFont: String,
         val display: String,
         val featureSignature: String,
+        val role: FontRole,
     )
 
     private val measurementCache = mutableMapOf<MeasurementKey, MeasuredText>()
@@ -420,6 +422,7 @@ class WebCanvasTextShaper(
             display,
             "$style ${input.style.fontWeight} ${size}px ${stacks.first()}",
             openTypeFeatures,
+            input.fontDecision.role,
         )
         if (requiresAdvance && !measured.hasUsableAdvance()) {
             for (index in 1 until stacks.size) {
@@ -427,6 +430,7 @@ class WebCanvasTextShaper(
                     display,
                     "$style ${input.style.fontWeight} ${size}px ${stacks[index]}",
                     openTypeFeatures,
+                    input.fontDecision.role,
                 )
                 measured = candidate
                 chosenIndex = index
@@ -473,6 +477,10 @@ class WebCanvasTextShaper(
                 append(measured.requestedFont)
                 append("; actualFont=")
                 append(measured.actualFont)
+                measured.boundsAdjustment?.let { adjustment ->
+                    append("; inkBounds=")
+                    append(adjustment)
+                }
                 if (openTypeFeatures.isNotEmpty()) {
                     append("; features=")
                     append(openTypeFeatures.joinToString(","))
@@ -494,6 +502,7 @@ class WebCanvasTextShaper(
         display: String,
         cssFont: String,
         openTypeFeatures: List<String> = emptyList(),
+        role: FontRole,
     ): MeasuredText {
         if (cssFont != currentCanvasFont) {
             ctx.font = cssFont
@@ -501,23 +510,30 @@ class WebCanvasTextShaper(
         }
         val actualFont = ctx.font
         val featureSignature = openTypeFeatures.joinToString(",")
-        return measurementCache.getOrPut(MeasurementKey(actualFont, display, featureSignature)) {
+        return measurementCache.getOrPut(MeasurementKey(actualFont, display, featureSignature, role)) {
             val m = ctx.measureText(display)
             val advance = if (featureSignature == PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE) {
                 measureProportionalCurlyQuote(display, cssFont)
             } else {
                 m.width
             }
+            val canvasBounds = Rect(
+                left = -m.actualBoundingBoxLeft.toFloat(),
+                top = -m.actualBoundingBoxAscent.toFloat(),
+                right = m.actualBoundingBoxRight.toFloat(),
+                bottom = m.actualBoundingBoxDescent.toFloat(),
+            )
+            val normalizedBounds = if (role == FontRole.CjkPunctuation) {
+                normalizeSubpixelCanvasInkOverhang(canvasBounds, advance.toFloat())
+            } else {
+                NormalizedCanvasInkBounds(canvasBounds, null)
+            }
             MeasuredText(
                 advance = advance.toFloat(),
-                bounds = Rect(
-                    left = -m.actualBoundingBoxLeft.toFloat(),
-                    top = -m.actualBoundingBoxAscent.toFloat(),
-                    right = m.actualBoundingBoxRight.toFloat(),
-                    bottom = m.actualBoundingBoxDescent.toFloat(),
-                ),
+                bounds = normalizedBounds.bounds,
                 requestedFont = cssFont,
                 actualFont = actualFont,
+                boundsAdjustment = normalizedBounds.adjustment,
             )
         }
     }
@@ -544,6 +560,50 @@ class WebCanvasTextShaper(
         private const val PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE = "pwid,palt"
     }
 }
+
+internal data class NormalizedCanvasInkBounds(
+    val bounds: Rect,
+    val adjustment: String?,
+)
+
+/**
+ * `SubpixelCanvasInkOverhangClamp`: Canvas `actualBoundingBox*` is rasterizer
+ * evidence rather than an outline bound. Firefox can offset the reported CJK
+ * punctuation box by one CSS pixel even when Canvas and DOM advances are
+ * identical, leaving a subpixel edge as a false glyph overhang. Feeding that
+ * noise into `InkContainmentGlyphShift` moves opening and closing punctuation
+ * in opposite directions and makes the DOM replay over-compress their gap.
+ *
+ * Keep real overhangs of one CSS pixel or more (italic and synthetic-slant
+ * safety still applies). Only clamp smaller excursions back to the measured
+ * advance box; the named adjustment is copied into the shaping decision.
+ */
+internal fun normalizeSubpixelCanvasInkOverhang(
+    bounds: Rect,
+    advance: Float,
+): NormalizedCanvasInkBounds {
+    val leftOverhang = (-bounds.left).coerceAtLeast(0f)
+    val rightOverhang = (bounds.right - advance).coerceAtLeast(0f)
+    val clampLeft = leftOverhang > 0f && leftOverhang < CANVAS_INK_OVERHANG_EVIDENCE_THRESHOLD_PX
+    val clampRight = rightOverhang > 0f && rightOverhang < CANVAS_INK_OVERHANG_EVIDENCE_THRESHOLD_PX
+    if (!clampLeft && !clampRight) return NormalizedCanvasInkBounds(bounds, null)
+
+    return NormalizedCanvasInkBounds(
+        bounds = Rect(
+            left = if (clampLeft) 0f else bounds.left,
+            top = bounds.top,
+            right = if (clampRight) advance else bounds.right,
+            bottom = bounds.bottom,
+        ),
+        adjustment = buildString {
+            append("SubpixelCanvasInkOverhangClamp")
+            if (clampLeft) append("(left=$leftOverhang)")
+            if (clampRight) append("(right=$rightOverhang)")
+        },
+    )
+}
+
+private const val CANVAS_INK_OVERHANG_EVIDENCE_THRESHOLD_PX = 1f
 
 /**
  * ContextualWebCurlyQuoteFeatures: the common classifier has already resolved
