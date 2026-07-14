@@ -43,6 +43,15 @@ npm install @tiqian/prose@alpha
 请把 `display: block` 放进网站自己的首屏 CSS。这样即使 JavaScript 还没加载或不可用，
 `<tiqian-prose>` 也不会按浏览器默认的行内元素显示。
 
+提椠默认让原生列表标记保留在正文外侧，并用 `2ic` 作为列表正文缩进。已有站点需要延续自己的
+列表几何时，可以在正文根节点覆盖 `--tq-list-indent`：
+
+```css
+tiqian-prose {
+  --tq-list-indent: 40px;
+}
+```
+
 Markdown 的加粗会保留为原生 `<strong>` 粗体，不会默认改成着重号。只有站点明确把
 `<strong>` 当作中文着重语义时才显式开启转换：
 
