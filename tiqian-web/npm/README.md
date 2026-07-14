@@ -1,10 +1,16 @@
 # `@tiqian/prose`
 
-`@tiqian/prose` 用提椠的 CJK 段落布局引擎渐进增强中文正文。服务器仍然输出普通 HTML；
-浏览器支持且加载成功时，提椠接管可保真处理的段落。没有 JavaScript、运行时加载失败或正文
-超出当前能力范围时，原文继续由浏览器原生排版。
+提椠是一个中日韩段落书写器。`@tiqian/prose` 是提椠的 Web 前端，目前用于简体中文横排。
 
-这是 alpha 版本。目前承诺简体中文横排，不承诺竖排或 JLREQ。
+它适合已经用 Markdown、静态站点生成器或 SSR 输出文章的网站。网站继续生成普通 HTML，
+`@tiqian/prose` 在浏览器支持时接管能够保真处理的段落。你不需要重写现有内容管线，字体、颜色、
+链接和交互样式也仍由网站自己控制。
+
+提椠会按整段正文计算字体、标点空间和断行，再把结果呈现为普通 DOM 文字，而不是 Canvas 或图片；
+排版后的文章仍然可以正常选择、复制、搜索和访问。
+
+没有 JavaScript、包加载失败或某段内容暂不支持时，原文会继续由浏览器正常排版。这个包目前是
+alpha 版本，不承诺稳定 API，也还不支持竖排、日文 JLREQ 或所有复杂富文本结构。
 
 ## 安装
 
@@ -14,7 +20,7 @@ npm install @tiqian/prose@alpha
 
 ## 自定义元素
 
-静态博客和 SSR 网站推荐使用 light-DOM `<tiqian-prose>`：
+静态博客和 SSR 网站推荐使用 `<tiqian-prose>`：
 
 ```html
 <tiqian-prose class="prose">
@@ -30,10 +36,12 @@ npm install @tiqian/prose@alpha
 </script>
 ```
 
-原有的字体、颜色、链接、选择与复制语义保留在宿主 DOM 中。容器宽度或排版样式改变时，
-自定义元素会重新排版；暂时无法保真处理的段落不会被接管。
-`display: block` 应放进宿主自己的首屏 CSS，而不是只依赖 JavaScript 加载后的包内样式，避免
-no-JS 或模块尚未加载时 custom element 按默认 inline 显示。
+`<tiqian-prose>` 直接使用页面原有的 DOM，不会用 Shadow DOM 隔开正文。原有字体、颜色、链接、
+选择与复制语义都会保留；容器宽度或排版样式改变时，组件会重新排版。暂时不能保真处理的段落
+不会被接管。
+
+请把 `display: block` 放进网站自己的首屏 CSS。这样即使 JavaScript 还没加载或不可用，
+`<tiqian-prose>` 也不会按浏览器默认的行内元素显示。
 
 Markdown 的加粗会保留为原生 `<strong>` 粗体，不会默认改成着重号。只有站点明确把
 `<strong>` 当作中文着重语义时才显式开启转换：
@@ -61,10 +69,13 @@ await enhance(article);
 await destroy(article);
 ```
 
-## 构建期快照
+## 构建期预排（可选）
 
-固定 web font 和最大版心的 SSR 网站可以在 Node 构建阶段预排纯文本段落，不需要启动
-Headless Chromium：
+默认情况下，`@tiqian/prose` 会等页面字体准备好后再排版。如果网站使用固定的 web font，桌面正文
+也有固定的最大版心，可以在 Node 构建阶段提前排好纯文本段落，减少首屏从原生排版切换到提椠排版
+时的变化。普通接入不需要使用这项能力。
+
+构建期预排直接读取字体文件，不需要启动 Headless Chromium：
 
 ```js
 import {
@@ -96,8 +107,8 @@ const snapshot = renderSnapshotTemplate([paragraph], { id: "tq-post-snapshot" })
 precomputer.close();
 ```
 
-把 `snapshot` 原样写入 SSR HTML 的 inert template 位置，并让 live 正文以相同 id 和 paragraph key
-引用它；live `<p>` 仍是 no-JS、搜索与失配回退的事实来源：
+把 `snapshot` 原样写入 SSR HTML 中的 inert template，并让页面正文使用相同的 id 和 paragraph key
+引用它。原始 `<p>` 始终保留，负责无 JavaScript 显示、站内搜索和快照失效后的回退：
 
 ```html
 <head>
@@ -108,11 +119,13 @@ precomputer.close();
 </tiqian-prose>
 ```
 
-浏览器只在 source、宽度、排版参数与字体证据全部命中时采用快照；失配时保持或恢复 SSR
-正文，再进入浏览器排版路径。字体 URL 应当内容寻址。完整契约见
+浏览器只在正文内容、版心宽度、排版参数和字体全部匹配时采用快照；任何一项不匹配都会忽略快照，
+使用页面原文重新排版。字体的公开 URL 应包含内容 hash，以便浏览器确认它仍是构建时的版本。
+完整契约见
 [ADR 0040](https://github.com/tiqian-cjk/tiqian/blob/main/docs/adr/0040-build-time-web-font-snapshots.md)。
 
-希望首次绘制就是预排结果时，使用 `renderSnapshotBundle()`。服务端需要：
+上面的 inert template 不会改变浏览器首次绘制。如果希望首屏直接使用预排结果，可以改用
+`renderSnapshotBundle()`。服务端需要：
 
 1. 把 `entries[].html` 写入对应的 keyed `<p>`；
 2. 把 `rootAttributes` 应用到 `<tiqian-prose>`；
@@ -120,7 +133,7 @@ precomputer.close();
 
 客户端导航仍应传递原始正文 HTML。创建新的 `<tiqian-prose>` 前，可以用
 `@tiqian/prose/snapshot-client` 的 `registerSnapshotBundle()` 注册 `clientTemplate`，复用同一份
-快照证据而不重复携带 prepared HTML。用于精确绘制的 `@font-face` 必须使用默认
+快照而不重复传输整篇预排 HTML。用于精确绘制的 `@font-face` 必须使用默认
 `font-display: auto` 或显式 `block`，不能使用 `optional` 或 `swap`。
 
 ## 运行环境
@@ -131,9 +144,13 @@ precomputer.close();
   正文仍然可读。
 - 直接部署包内 Wasm 时，服务器应以 `application/wasm` 返回 `.wasm` 文件。
 
-项目说明、支持边界与开发命令见
-[Tiqian 仓库](https://github.com/tiqian-cjk/tiqian)。
+## 了解提椠
 
-## License
+- [项目主页](https://github.com/tiqian-cjk/tiqian)介绍当前能力、Compose 前端与本地体验方式。
+- [Roadmap](https://github.com/tiqian-cjk/tiqian/blob/main/docs/roadmap.md)记录正在推进和已经完成的工作。
+- [当前架构](https://github.com/tiqian-cjk/tiqian/blob/main/docs/architecture.md)说明排版 pipeline 与模块边界。
+- [ADR 索引](https://github.com/tiqian-cjk/tiqian/blob/main/docs/adr/README.md)记录重要设计取舍。
+
+## 许可证
 
 [Mozilla Public License 2.0](./LICENSE)

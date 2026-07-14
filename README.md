@@ -1,5 +1,7 @@
 # 提椠 Tíqiàn
 
+[![npm version](https://img.shields.io/npm/v/%40tiqian%2Fprose?label=npm)](https://www.npmjs.com/package/@tiqian/prose)
+
 提椠是一个中日韩段落书写器。
 
 它复用各个平台已有的字体、文字测量与绘制能力，统一处理中文正文里的字体选择、
