@@ -111,7 +111,7 @@ test("the custom element validates a snapshot before dynamically loading the bro
   assert.doesNotMatch(initialSnapshotSource, /#lastTypography = this\.#typographySignature\(\)/u);
   assert.match(
     initialSnapshotSource,
-    /this\.hasAttribute\("snapshot-ref"\) && !strongEmphasisRuntimeRequired[\s\S]*?\? undefined[\s\S]*?: waitForTypographyFonts/u,
+    /if \(this\.hasAttribute\("snapshot-ref"\) && !strongEmphasisRuntimeRequired\) return true;[\s\S]*?waitForTypographyFonts/u,
   );
   assert.ok(runtimeLoad > adoption);
   assert.match(
@@ -155,7 +155,7 @@ test("the custom element validates a snapshot before dynamically loading the bro
   assert.match(apiDeclarations, /strongAsEmphasisMarks\?: boolean/u);
   assert.match(
     elementSource,
-    /UpgradeAttributeReactionGuard[\s\S]*?if \(this\.#connected\) this\.#restartForSnapshotReference\(\)/u,
+    /UpgradeAttributeReactionGuard[\s\S]*?if \(this\.#connected\) this\.#restartConnectedLifecycle\(\)/u,
   );
   assert.match(
     elementSource,
@@ -169,7 +169,7 @@ test("the custom element validates a snapshot before dynamically loading the bro
     elementSource,
     /#exactFontRejectedAttempt === this\.#exactFontAttemptSignature\(reference\)/u,
   );
-  assert.match(elementSource, /#restartForSnapshotReference\(\)/u);
+  assert.match(elementSource, /#restartConnectedLifecycle\(\)/u);
   assert.match(elementSource, /this\.querySelector\("ol > li, ul > li"\)/u);
   assert.match(elementSource, /paragraphSelector:\s*"li"/u);
   assert.match(elementSource, /runtimeCoversSnapshotParagraphs:\s*false/u);
@@ -256,6 +256,23 @@ test("the custom element validates a snapshot before dynamically loading the bro
   assert.doesNotMatch(elementSource, /addEventListener\("DOMContentLoaded"/u);
   assert.doesNotMatch(elementSource, /\.then\(\(\) => document\.fonts\?\.ready/u);
   assert.match(elementSource, /\.then\(nextFrame\)[\s\S]*?waitForTypographyFonts/u);
+  assert.match(lazyCapabilitiesSource, /DEFAULT_TYPOGRAPHY_FONT_WAIT_MS = 3_000/u);
+  assert.match(
+    elementSource,
+    /fontWait\.status !== "timeout"[\s\S]*?tiqianFontWait = "timeout"[\s\S]*?#deferInitialEnhancementUntilFontsSettle/u,
+  );
+  assert.match(
+    elementSource,
+    /#deferInitialEnhancementUntilFontsSettle\([\s\S]*?"loadingdone"[\s\S]*?"loadingerror"[\s\S]*?Promise\.resolve\(completion\)\.then\(restart\)/u,
+  );
+  assert.match(
+    elementSource,
+    /LatestObservedAttributeGeneration[\s\S]*?if \(!this\.#hasDispatched\) \{[\s\S]*?this\.#restartConnectedLifecycle\(\)/u,
+  );
+  assert.match(
+    elementSource,
+    /disconnectedCallback\(\)[\s\S]*?\+\+this\.#generation[\s\S]*?this\.#clearInitialFontRetry\(\)/u,
+  );
   assert.match(stylesSource, /\[data-tq-geometry="true"\]::before/u);
   assert.match(
     stylesSource,

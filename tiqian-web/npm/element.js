@@ -1,6 +1,7 @@
 import { loadTiqianRuntime } from "./runtime.js";
 import { installTiqianCopyHandler } from "./copy.js";
 import {
+  DEFAULT_TYPOGRAPHY_FONT_WAIT_MS,
   fontLoadingAffectsTypography,
   isLoadedSnapshotAdopted,
   lineLengthGridMeasure,
@@ -116,6 +117,9 @@ class TiqianProseElement extends HTMLElementBase {
   #geometryRevision = 0;
   #generation = 0;
   #hasDispatched = false;
+  #initialFontRetryListener = null;
+  #initialFontRetryObserver = null;
+  #initialFontRetryToken = 0;
   #layoutWorkInFlight = false;
   #layoutWorkSignaturesCaptured = false;
   #layoutWorkGeometrySignature = "";
@@ -184,6 +188,7 @@ class TiqianProseElement extends HTMLElementBase {
     this.#connected = true;
     this.#exactFontRejectedAttempt = "";
     const generation = ++this.#generation;
+    this.#clearInitialFontRetry();
     this.#acceptLayoutCompletion = false;
     this.#hasDispatched = false;
     this.#snapshotAdopted = isLoadedSnapshotAdopted(this);
@@ -206,6 +211,7 @@ class TiqianProseElement extends HTMLElementBase {
     delete this.dataset.tiqianDashRetryMs;
     delete this.dataset.tiqianRelayoutMs;
     delete this.dataset.tiqianRelayoutMaxSliceMs;
+    delete this.dataset.tiqianFontWait;
     this.#removeReadyListener();
     this.#stopTypographyObservation();
     this.#readyListener = (event) => {
@@ -267,11 +273,28 @@ class TiqianProseElement extends HTMLElementBase {
       // Snapshot validation loads and probes the exact declared faces itself.
       // Repeating a per-paragraph computed-style scan here delayed the first
       // layout read and did no additional validation work.
-      .then(() => this.hasAttribute("snapshot-ref") && !strongEmphasisRuntimeRequired
-        ? undefined
-        : waitForTypographyFonts(document.fonts, this.#typographyElements()))
-      .then(nextFrame)
       .then(async () => {
+        if (!this.isConnected || generation !== this.#generation) return false;
+        if (this.hasAttribute("snapshot-ref") && !strongEmphasisRuntimeRequired) return true;
+        const fontWait = await waitForTypographyFonts(
+          document.fonts,
+          this.#typographyElements(),
+          globalThis.getComputedStyle,
+          { timeoutMs: DEFAULT_TYPOGRAPHY_FONT_WAIT_MS },
+        );
+        if (!this.isConnected || generation !== this.#generation) return false;
+        if (fontWait.status !== "timeout") return true;
+        // BoundedInitialFontGate: a slow or stuck FontFaceSet must not leave an
+        // invisible transition in flight. Native SSR remains authoritative;
+        // the exact completion promise and relevant font/style events restart
+        // the whole gate against the latest host state.
+        this.dataset.tiqianFontWait = "timeout";
+        this.#deferInitialEnhancementUntilFontsSettle(generation, fontWait.completion);
+        return false;
+      })
+      .then((fontGateOpen) => fontGateOpen ? nextFrame().then(() => true) : false)
+      .then(async (fontGateOpen) => {
+        if (!fontGateOpen) return;
         if (!this.isConnected || generation !== this.#generation) return;
         const enhanceStartedAt = performance.now();
         const operation = this.#beginLayoutWork({ captureSignatures: false });
@@ -357,6 +380,8 @@ class TiqianProseElement extends HTMLElementBase {
     this.#responsiveCommitRequired = false;
     this.#responsiveRelayoutRequired = false;
     this.#clearResponsiveRetarget();
+    this.#clearInitialFontRetry();
+    delete this.dataset.tiqianFontWait;
     this.#removeReadyListener();
     this.#removeCapabilityRetryListener();
     this.#stopTypographyObservation();
@@ -385,11 +410,18 @@ class TiqianProseElement extends HTMLElementBase {
       // before connectedCallback. `isConnected` is already true at that point,
       // but this is not a client navigation and must not discard the server's
       // exact-font marker.
-      if (this.#connected) this.#restartForSnapshotReference();
+      if (this.#connected) this.#restartConnectedLifecycle();
       return;
     }
     if (name !== "emphasis-dot-gap-em" && name !== "strong-as-emphasis-marks") return;
-    if (!this.isConnected || !this.#hasDispatched) return;
+    if (!this.isConnected) return;
+    // LatestObservedAttributeGeneration: strong emphasis controls snapshot
+    // eligibility, while all public options belong to the same connection
+    // generation. An initial async gate must never commit captured old values.
+    if (!this.#hasDispatched) {
+      this.#restartConnectedLifecycle();
+      return;
+    }
     if (this.#snapshotAdopted || isLoadedSnapshotAdopted(this)) {
       this.#invalidateSnapshotAndEnhance();
       return;
@@ -410,7 +442,49 @@ class TiqianProseElement extends HTMLElementBase {
     };
   }
 
-  #restartForSnapshotReference() {
+  #deferInitialEnhancementUntilFontsSettle(generation, completion) {
+    this.#clearInitialFontRetry();
+    const token = this.#initialFontRetryToken;
+    const restart = () => {
+      if (
+        token !== this.#initialFontRetryToken || !this.isConnected ||
+        generation !== this.#generation
+      ) return;
+      this.#restartConnectedLifecycle();
+    };
+    this.#initialFontRetryListener = (event) => {
+      if (fontLoadingAffectsTypography(event, this.#typographyElements())) restart();
+    };
+    document.fonts?.addEventListener?.("loadingdone", this.#initialFontRetryListener);
+    document.fonts?.addEventListener?.("loadingerror", this.#initialFontRetryListener);
+
+    if (typeof MutationObserver === "function") {
+      this.#initialFontRetryObserver = new MutationObserver(restart);
+      this.#initialFontRetryObserver.observe(this, {
+        attributes: true,
+        subtree: true,
+        attributeFilter: ["class", "style", "data-theme", "data-color-mode"],
+      });
+      for (let ancestor = this.parentElement; ancestor; ancestor = ancestor.parentElement) {
+        this.#initialFontRetryObserver.observe(ancestor, { attributes: true });
+      }
+    }
+
+    Promise.resolve(completion).then(restart);
+  }
+
+  #clearInitialFontRetry() {
+    this.#initialFontRetryToken += 1;
+    this.#initialFontRetryObserver?.disconnect();
+    this.#initialFontRetryObserver = null;
+    if (this.#initialFontRetryListener) {
+      document.fonts?.removeEventListener?.("loadingdone", this.#initialFontRetryListener);
+      document.fonts?.removeEventListener?.("loadingerror", this.#initialFontRetryListener);
+      this.#initialFontRetryListener = null;
+    }
+  }
+
+  #restartConnectedLifecycle() {
     ++this.#generation;
     this.#enhanceRequest += 1;
     this.#hasDispatched = false;
@@ -418,6 +492,7 @@ class TiqianProseElement extends HTMLElementBase {
     this.#snapshotAdopted = false;
     this.#removeReadyListener();
     this.#removeCapabilityRetryListener();
+    this.#clearInitialFontRetry();
     this.#stopTypographyObservation();
     this.#stopLayoutWorkInputObservation();
     this.#stopWidthObservation();

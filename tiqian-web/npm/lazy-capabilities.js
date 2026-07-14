@@ -1,5 +1,6 @@
 const CJK_DASH_SOURCE = "——";
 const TWO_EM_DASH = "⸺";
+export const DEFAULT_TYPOGRAPHY_FONT_WAIT_MS = 3_000;
 
 let precomputedModule;
 let precomputedPromise;
@@ -127,8 +128,11 @@ export async function waitForTypographyFonts(
   fonts,
   elements,
   getStyle = globalThis.getComputedStyle,
+  { timeoutMs = DEFAULT_TYPOGRAPHY_FONT_WAIT_MS } = {},
 ) {
-  if (typeof fonts?.load !== "function" || typeof getStyle !== "function") return;
+  if (typeof fonts?.load !== "function" || typeof getStyle !== "function") {
+    return { status: "unsupported", completion: Promise.resolve() };
+  }
   const requests = new Map();
   for (const element of elements ?? []) {
     const descriptor = typographyFontDescriptor(getStyle(element));
@@ -140,12 +144,35 @@ export async function waitForTypographyFonts(
     }
     for (const character of element?.textContent ?? "") sample.add(character);
   }
-  await Promise.all(Array.from(requests, ([descriptor, characters]) => {
+  const completion = Promise.all(Array.from(requests, ([descriptor, characters]) => {
     if (characters.size === 0) return Promise.resolve();
     // TypographyFontReadyGate: wait only for faces and unicode-range subsets
     // used by the prose instead of unrelated document fonts.
-    return Promise.resolve(fonts.load(descriptor, Array.from(characters).join(""))).catch(() => []);
+    return Promise.resolve()
+      .then(() => fonts.load(descriptor, Array.from(characters).join("")))
+      // A rejected face has settled on its CSS fallback. The fallback is a
+      // stable layout input; only a still-pending load may race measurement.
+      .catch(() => []);
   }));
+  if (requests.size === 0) return { status: "settled", completion };
+
+  const boundedTimeout = Number(timeoutMs);
+  if (!Number.isFinite(boundedTimeout) || boundedTimeout < 0) {
+    await completion;
+    return { status: "settled", completion };
+  }
+
+  let timer = 0;
+  const status = await Promise.race([
+    completion.then(() => "settled"),
+    new Promise((resolve) => {
+      timer = setTimeout(() => resolve("timeout"), boundedTimeout);
+    }),
+  ]);
+  if (timer) clearTimeout(timer);
+  // BoundedTypographyFontReadyGate: callers can keep native SSR after the
+  // deadline while retaining `completion` as a race-free eventual retry seam.
+  return { status, completion };
 }
 
 export function loadPrecomputedSnapshots() {

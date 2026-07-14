@@ -102,7 +102,7 @@ test("initial font readiness waits only for prose font descriptors and subsets",
     },
   });
 
-  await waitForTypographyFonts(fonts, elements, getStyle);
+  const outcome = await waitForTypographyFonts(fonts, elements, getStyle);
 
   assert.deepEqual(calls, [
     {
@@ -114,6 +114,57 @@ test("initial font readiness waits only for prose font descriptors and subsets",
       sample: "code",
     },
   ]);
+  assert.equal(outcome.status, "settled");
   assert.equal(await Promise.race([bodyFont.then(() => "ready"), Promise.resolve("not-awaited")]), "not-awaited");
   releaseBodyFont();
+});
+
+test("initial font readiness times out without abandoning eventual completion", async () => {
+  let releaseFont;
+  const font = new Promise((resolve) => { releaseFont = resolve; });
+  const fonts = { load: () => font };
+  const element = { textContent: "正文" };
+  const getStyle = () => ({
+    getPropertyValue(property) {
+      return {
+        "font-family": '"Example CJK", sans-serif',
+        "font-size": "16px",
+        "font-style": "normal",
+        "font-weight": "400",
+        "font-stretch": "100%",
+      }[property] ?? "";
+    },
+  });
+
+  const outcome = await waitForTypographyFonts(
+    fonts,
+    [element],
+    getStyle,
+    { timeoutMs: 0 },
+  );
+
+  assert.equal(outcome.status, "timeout");
+  releaseFont([]);
+  await outcome.completion;
+});
+
+test("a rejected face settles on the browser fallback instead of timing out", async () => {
+  const fonts = { load: () => Promise.reject(new Error("font unavailable")) };
+  const getStyle = () => ({
+    getPropertyValue(property) {
+      return {
+        "font-family": "sans-serif",
+        "font-size": "16px",
+      }[property] ?? "";
+    },
+  });
+
+  const outcome = await waitForTypographyFonts(
+    fonts,
+    [{ textContent: "正文" }],
+    getStyle,
+    { timeoutMs: 0 },
+  );
+
+  assert.equal(outcome.status, "settled");
 });
