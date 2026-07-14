@@ -140,9 +140,10 @@ precomputer.close();
 
 - 包是 ESM-only；CommonJS 宿主需要使用动态 `import()`。
 - `@tiqian/prose/precompute` 需要 Node.js 22 或更高版本。
-- 浏览器增强路径需要 Wasm GC、Exception Handling 与 JS string builtins；不支持时原始 SSR
-  正文仍然可读。
-- 直接部署包内 Wasm 时，服务器应以 `application/wasm` 返回 `.wasm` 文件。
+- 布局、断行、行调整与 DOM 增强发布为 Kotlin/JS；生成 runtime 不需要 WebAssembly GC、
+  Exception Handling 或 `application/wasm` MIME 配置。可选的 exact-font / 破折号字体证据会懒加载
+  `harfbuzzjs` 自带的基础 WebAssembly；普通 host-font 路径与已命中的构建期快照不加载它。
+  JavaScript 或可选字体能力加载失败时，原始 SSR 正文仍然可读。
 
 ## 了解提椠
 

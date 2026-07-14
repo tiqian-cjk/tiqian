@@ -23,7 +23,8 @@
 
 ## Build 与验证
 
-项目使用 Gradle Kotlin Multiplatform，JVM toolchain 为 25；同时包含 Android 与 wasmJs target。
+项目使用 Gradle Kotlin Multiplatform，JVM toolchain 为 25；同时包含 Android、浏览器 Kotlin/JS
+与 Node Kotlin/JS target。
 
 ```shell
 ./gradlew build
@@ -37,7 +38,8 @@
 ./gradlew :tiqian-demo-android:assembleDebug
 ./gradlew runComposeDemo
 
-./gradlew :tiqian-web:wasmJsBrowserTest
+./gradlew :tiqian-web:jsBrowserTest
+./gradlew :tiqian-web-precompute:jsNodeTest
 ./gradlew :tiqian-web:assembleNpmPackage
 (cd tiqian-web/npm && npm test)
 ```
