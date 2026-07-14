@@ -11,8 +11,10 @@ kotlin {
         minSdk = 31
         withHostTest {}
     }
-    // ADR 0039 web port: pure-model modules gain a browser (Wasm) target.
-    wasmJs { browser() }
+    js {
+        browser()
+        useEsModules()
+    }
 
     sourceSets {
         commonTest.dependencies {

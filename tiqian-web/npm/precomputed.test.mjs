@@ -476,7 +476,7 @@ function fixture({
   return { documentObject, root, paragraph, originalText, entry, measuredProbeStyles };
 }
 
-test("exact Wasm fallback accepts a width miss only while every live input still matches", async () => {
+test("exact runtime fallback accepts a width miss only while every live input still matches", async () => {
   const previousGetComputedStyle = globalThis.getComputedStyle;
   globalThis.getComputedStyle = fixtureComputedStyle;
   try {
@@ -578,7 +578,7 @@ test("an unreadable stylesheet makes the exact font source contract unverifiable
   }
 });
 
-test("a compact client font contract enables exact Wasm without claiming snapshot layout", async () => {
+test("a compact client font contract enables the exact runtime without claiming snapshot layout", async () => {
   const previousGetComputedStyle = globalThis.getComputedStyle;
   globalThis.getComputedStyle = fixtureComputedStyle;
   try {

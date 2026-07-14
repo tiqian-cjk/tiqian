@@ -1,5 +1,3 @@
-@file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
-
 import org.gradle.api.tasks.Sync
 
 plugins {
@@ -7,19 +5,21 @@ plugins {
 }
 
 kotlin {
-    wasmJs {
+    js {
         browser()
-        binaries.executable() // ADR 0039 web demo entry
+        useEsModules()
+        binaries.executable()
     }
     sourceSets {
-        wasmJsMain.dependencies {
-            api(project(":tiqian-core"))
-            api(project(":tiqian-layout"))
-            api(project(":tiqian-clreq"))
-            implementation(project(":tiqian-shaping-web"))
-            implementation("org.jetbrains.kotlinx:kotlinx-browser:0.3")
+        jsMain {
+            dependencies {
+                api(project(":tiqian-core"))
+                api(project(":tiqian-layout"))
+                api(project(":tiqian-clreq"))
+                implementation(project(":tiqian-shaping-web"))
+            }
         }
-        wasmJsTest.dependencies {
+        jsTest.dependencies {
             implementation(kotlin("test"))
         }
     }
@@ -28,9 +28,9 @@ kotlin {
 tasks.register<Sync>("assembleNpmPackage") {
     group = "distribution"
     description = "Builds the @tiqian/prose ESM package runtime."
-    dependsOn("wasmJsProductionExecutableCompileSync", "assemblePrecomputeNpmRuntime")
-    from(layout.buildDirectory.dir("compileSync/wasmJs/main/productionExecutable/optimized")) {
-        include("*.mjs", "*.wasm")
+    dependsOn("jsBrowserProductionWebpack", "assemblePrecomputeNpmRuntime")
+    from(layout.buildDirectory.dir("kotlin-webpack/js/productionExecutable")) {
+        include("tiqian-web.js")
     }
     into(layout.projectDirectory.dir("npm/runtime"))
 }
@@ -38,12 +38,12 @@ tasks.register<Sync>("assembleNpmPackage") {
 tasks.register<Sync>("assemblePrecomputeNpmRuntime") {
     group = "distribution"
     description = "Builds the Node-only @tiqian/prose/precompute runtime."
-    dependsOn(":tiqian-web-precompute:wasmJsProductionExecutableCompileSync")
+    dependsOn(":tiqian-web-precompute:jsProductionExecutableCompileSync")
     from(
         project(":tiqian-web-precompute")
-            .layout.buildDirectory.dir("compileSync/wasmJs/main/productionExecutable/optimized"),
+            .layout.buildDirectory.dir("compileSync/js/main/productionExecutable/kotlin"),
     ) {
-        include("*.mjs", "*.wasm")
+        include("*.mjs")
     }
     into(layout.projectDirectory.dir("npm/precompute-runtime"))
 }

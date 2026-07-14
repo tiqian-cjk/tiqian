@@ -407,7 +407,7 @@ test("article-sized prepared markup keeps inline style payload to dynamic line v
     declaration.startsWith("--tq-line-"))));
 });
 
-test("global Wasm bridge delegates to the canonical lowering and browser replay", () => {
+test("global runtime bridge delegates to the canonical lowering and browser replay", () => {
   const bridge = globalThis[PREPARED_DOM_BRIDGE_NAME];
   const plan = fixturePlan();
   const expected = renderPreparedParagraphArtifact(plan, "zh-Hans");

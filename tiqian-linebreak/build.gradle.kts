@@ -4,11 +4,11 @@ plugins {
 }
 
 // Web has no synchronous resource loading, so the bundled en-US TeX patterns are
-// embedded into wasm as a generated Kotlin constant, built from the SAME .tex the
+// embedded into JavaScript as a generated Kotlin constant, built from the SAME .tex the
 // JVM/Android resource path reads (single source of truth). ADR 0039.
-val generateWasmHyphenationPatterns = tasks.register("generateWasmHyphenationPatterns") {
+val generateJsHyphenationPatterns = tasks.register("generateJsHyphenationPatterns") {
     val patternFile = layout.projectDirectory.file("src/commonMain/resources/hyphenation/hyph-en-us.tex")
-    val outputDir = layout.buildDirectory.dir("generated/hyphenation-wasm/kotlin")
+    val outputDir = layout.buildDirectory.dir("generated/hyphenation-js/kotlin")
     inputs.file(patternFile)
     outputs.dir(outputDir)
     doLast {
@@ -39,7 +39,10 @@ kotlin {
         minSdk = 31
         withHostTest {}
     }
-    wasmJs { browser() } // ADR 0039 web port
+    js {
+        browser()
+        useEsModules()
+    }
 
     sourceSets {
         commonMain.dependencies {
@@ -50,8 +53,8 @@ kotlin {
             implementation(kotlin("test"))
         }
 
-        named("wasmJsMain") {
-            kotlin.srcDir(generateWasmHyphenationPatterns)
+        jsMain {
+            kotlin.srcDir(generateJsHyphenationPatterns)
         }
     }
 }

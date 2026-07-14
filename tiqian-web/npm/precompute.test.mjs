@@ -60,7 +60,7 @@ test("CSS weight matching lets a requested regular weight use the nearest medium
   assert.ok(cssWeightPreference([300, 300], 400)[0] > cssWeightPreference([500, 500], 400)[0]);
 });
 
-test("Node Wasm precompute runs the real layout pipeline through a synchronous font session", async () => {
+test("Node Kotlin/JS precompute runs the real layout pipeline through a synchronous font session", async () => {
   const shapes = new Map();
   const metrics = new Map();
   const shapeCalls = [];

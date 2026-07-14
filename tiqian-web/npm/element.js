@@ -787,7 +787,7 @@ class TiqianProseElement extends HTMLElementBase {
       // RuntimeSnapshotBackingRestore: the first runtime enhancement retains
       // the exact server-rendered nodes as its teardown backing. Snapshot
       // validation must inspect that immutable SSR artifact, never the current
-      // Wasm rendering whose structure and digest are intentionally different.
+      // runtime rendering whose structure and digest are intentionally different.
       // DOM event dispatch is synchronous, so restoration and the validation
       // start stay in one task and cannot expose unvalidated SSR as a settled
       // state. A miss below immediately starts a fresh runtime enhancement.

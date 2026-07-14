@@ -635,7 +635,7 @@ function renderedFlowContractMatches(style) {
 
 /**
  * Replays the same post-render geometry gate for an adopted SSR artifact and
- * for the canonical DOM freshly emitted by browser Wasm.
+ * for the canonical DOM freshly emitted by the browser runtime.
  */
 export function renderedPreparedParagraphIssue(
   paragraph,

@@ -1,22 +1,21 @@
 #!/usr/bin/env node
 
-import { readFile, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const EXPECTED_NAME = "@tiqian/prose";
 const EXPECTED_VERSION = "0.1.0-alpha.0";
-const WASM_MAGIC = "0061736d";
 const RUNTIMES = [
   {
     directory: "runtime/",
-    module: "runtime/Tiqian-tiqian-web.mjs",
-    path: "runtime/Tiqian-tiqian-web.wasm",
+    path: "runtime/tiqian-web.js",
+    marker: "TiqianWeb",
   },
   {
     directory: "precompute-runtime/",
-    module: "precompute-runtime/Tiqian-tiqian-web-precompute.mjs",
-    path: "precompute-runtime/Tiqian-tiqian-web-precompute.wasm",
+    path: "precompute-runtime/Tiqian-tiqian-web-precompute.mjs",
+    marker: "precomputePlainParagraph",
   },
 ];
 
@@ -51,16 +50,16 @@ export async function verifyPackage(packageRoot = new URL("./", import.meta.url)
     if (!manifest.files.includes(runtime.directory)) {
       fail(`${runtime.directory} is absent from files`);
     }
-    const bytes = await readFile(new URL(runtime.path, packageRoot));
-    if (bytes.length <= 8 || bytes.subarray(0, 4).toString("hex") !== WASM_MAGIC) {
-      fail(`${runtime.path} is not a non-empty WebAssembly module`);
+    const source = await readFile(new URL(runtime.path, packageRoot), "utf8");
+    if (source.length <= 100 || !source.includes(runtime.marker)) {
+      fail(`${runtime.path} is not a non-empty Kotlin/JS runtime`);
     }
-    const moduleSource = await readFile(new URL(runtime.module, packageRoot), "utf8");
-    const wasmFileName = runtime.path.slice(runtime.path.lastIndexOf("/") + 1);
-    if (!moduleSource.includes(`./${wasmFileName}`)) {
-      fail(`${runtime.module} does not reference ${wasmFileName}`);
+    const runtimeEntries = await readdir(new URL(runtime.directory, packageRoot));
+    const wasmEntry = runtimeEntries.find((entry) => entry.endsWith(".wasm"));
+    if (wasmEntry) {
+      fail(`${runtime.directory}${wasmEntry} must not be published`);
     }
-    verified.push({ path: runtime.path, size: bytes.length });
+    verified.push({ path: runtime.path, size: Buffer.byteLength(source) });
   }
   return verified;
 }

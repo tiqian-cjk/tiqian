@@ -5,7 +5,7 @@ tiqian-prose {
 
 /* WebNativeTwoIcListIndent: Web keeps the browser's marker semantics and gives
    every list level a stable two-character body indent. This is present in the
-   static stylesheet, so list geometry never waits for Wasm marker shaping. */
+   static stylesheet, so list geometry never waits for runtime marker shaping. */
 :is(tiqian-prose, [data-tiqian-root]) :where(ol, ul):not(.footnotes-list) {
   padding-inline-start: 2ic !important;
   margin-inline-start: 0 !important;
@@ -80,7 +80,7 @@ tiqian-prose [data-tq-rendered="true"] {
   line-height: 0 !important;
   /* ExactPreparedShapingCss: HarfBuzz enables normal kerning while the CSS
      `auto` value lets the browser choose a size-dependent policy. Force the
-     same stable shaping inputs used by build-time and browser Wasm probes. */
+     same stable shaping inputs used by build-time and browser runtime probes. */
   font-kerning: normal !important;
   font-optical-sizing: none !important;
 }

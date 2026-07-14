@@ -1,7 +1,7 @@
 let runtimePromise;
 
 export function loadTiqianRuntime() {
-  runtimePromise ??= import("./runtime/Tiqian-tiqian-web.mjs");
+  runtimePromise ??= import("./runtime/tiqian-web.js");
   return runtimePromise;
 }
 

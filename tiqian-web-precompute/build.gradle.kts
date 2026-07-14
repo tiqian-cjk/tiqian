@@ -1,17 +1,16 @@
-@file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
-
 plugins {
     kotlin("multiplatform")
 }
 
 kotlin {
-    wasmJs {
+    js {
         nodejs()
+        useEsModules()
         binaries.executable()
     }
 
     sourceSets {
-        wasmJsMain.dependencies {
+        jsMain.dependencies {
             implementation(project(":tiqian-core"))
             implementation(project(":tiqian-font"))
             implementation(project(":tiqian-shaping-api"))
@@ -19,7 +18,7 @@ kotlin {
             implementation(project(":tiqian-clreq"))
             implementation(project(":tiqian-layout"))
         }
-        wasmJsTest.dependencies {
+        jsTest.dependencies {
             implementation(kotlin("test"))
         }
     }

@@ -1208,7 +1208,7 @@ private fun tryPushIn(
         repair = RepairOption.PushIn(
             penalty = pushInPenalty,
             reason = if (shrink > 0f) {
-                "$reasonCode:${offender.text}:pushed-in=$shrink/$totalCapacity"
+                "$reasonCode:${offender.text}:pushed-in=${shrink.toPortableDebugString()}/${totalCapacity.toPortableDebugString()}"
             } else {
                 "$reasonCode:${offender.text}:fits-no-shrink"
             },
@@ -1233,6 +1233,11 @@ private fun tryPushIn(
         )
     }
     return PushInResult(repairedPrevious, repairedCurrent, candidate)
+}
+
+private fun Float.toPortableDebugString(): String {
+    val text = toString()
+    return if ('.' !in text && !text.contains('e', ignoreCase = true)) "$text.0" else text
 }
 
 private fun mandatoryBreakTailEnd(

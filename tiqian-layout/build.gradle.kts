@@ -1,5 +1,3 @@
-@file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
-
 plugins {
     kotlin("multiplatform")
     id("com.android.kotlin.multiplatform.library")
@@ -13,7 +11,10 @@ kotlin {
         minSdk = 31
         withHostTest {}
     }
-    wasmJs { browser() } // ADR 0039 web port
+    js {
+        browser()
+        useEsModules()
+    }
 
     sourceSets {
         commonMain.dependencies {

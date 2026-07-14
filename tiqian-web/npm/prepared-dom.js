@@ -320,7 +320,7 @@ function renderRun(run, styleClassFor) {
 
 /**
  * Lowers the canonical prepared-layout wire format to the sparse DOM wire used
- * by both build-time snapshots and browser Wasm rendering.
+ * by both build-time snapshots and browser runtime rendering.
  */
 export function renderPreparedParagraphArtifact(
   planOrJson,

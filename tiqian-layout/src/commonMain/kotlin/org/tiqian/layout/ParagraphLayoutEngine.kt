@@ -3572,10 +3572,10 @@ private fun TextRange.isInside(other: TextRange): Boolean =
     start >= other.start && end <= other.end
 
 /**
- * Common-stdlib port of `java.util.Map.merge` (absent from the Wasm/JS common
+ * Common-stdlib port of `java.util.Map.merge` (absent from the JS common
  * stdlib): absent key → [value]; present → `remap(old, value)`. On JVM the
  * `java.util.Map.merge` member wins over this extension, so behavior — and the
- * goldens — are unchanged there; on Wasm this is the resolved implementation.
+ * goldens — are unchanged there; on JS this is the resolved implementation.
  */
 private fun <K, V : Any> MutableMap<K, V>.merge(key: K, value: V, remap: (V, V) -> V) {
     this[key] = this[key]?.let { remap(it, value) } ?: value

@@ -11,7 +11,10 @@ kotlin {
         minSdk = 31
         withHostTest {}
     }
-    wasmJs { browser() } // ADR 0039 web port
+    js {
+        browser()
+        useEsModules()
+    }
 
     sourceSets {
         commonMain.dependencies {

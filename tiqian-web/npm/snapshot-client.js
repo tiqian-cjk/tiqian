@@ -63,7 +63,7 @@ function installFontPreloads(documentObject, urls) {
 /**
  * Registers the compact exact-font manifest before a client-routed article
  * creates its <tiqian-prose>. Client navigation keeps native source DOM and
- * uses the manifest-backed exact-font Wasm path instead of duplicating the
+ * uses the manifest-backed exact-font runtime path instead of duplicating the
  * prepared paragraph HTML in page data.
  */
 export function registerSnapshotBundle(bundle, documentObject = globalThis.document) {

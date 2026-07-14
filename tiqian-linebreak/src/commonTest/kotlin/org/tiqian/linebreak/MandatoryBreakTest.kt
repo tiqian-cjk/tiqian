@@ -26,7 +26,7 @@ class MandatoryBreakTest {
         }
     }
 
-    // Common-stdlib codepoint label (no JVM String.format, so this test compiles on wasmJs too).
+    // Common-stdlib codepoint label (no JVM String.format, so this test compiles on JS too).
     private fun u(cp: Int): String = "U+" + cp.toString(16).uppercase().padStart(4, '0')
 
     @Test

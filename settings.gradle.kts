@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // Kotlin/Wasm (ADR 0039) downloads a Node toolchain for webpack; under
+        // Kotlin/JS downloads a Node toolchain for webpack; under
         // FAIL_ON_PROJECT_REPOS the download source must be declared here. These
         // exclusive-content ivy repos serve ONLY org.nodejs:node / com.yarnpkg:yarn.
         exclusiveContent {
@@ -38,17 +38,6 @@ dependencyResolutionManagement {
                 }
             }
             filter { includeGroup("com.yarnpkg") }
-        }
-        exclusiveContent {
-            forRepository {
-                ivy("https://github.com/WebAssembly/binaryen/releases/download") {
-                    name = "Binaryen Distributions"
-                    patternLayout { artifact("version_[revision]/[module]-version_[revision]-[classifier].[ext]") }
-                    metadataSources { artifact() }
-                    content { includeModule("com.github.webassembly", "binaryen") }
-                }
-            }
-            filter { includeGroup("com.github.webassembly") }
         }
     }
 }

@@ -39,21 +39,21 @@ test("published package includes the generated runtime and no repository-only bi
   assert.equal(manifest.files.includes("verify-release.mjs"), false);
 });
 
-test("the release verifier accepts both assembled Wasm runtimes", async () => {
+test("the release verifier accepts both assembled Kotlin/JS runtimes", async () => {
   const { verifyPackage } = await import("./verify-package.mjs");
   const artifacts = await verifyPackage();
 
   assert.deepEqual(
     artifacts.map((artifact) => artifact.path),
     [
-      "runtime/Tiqian-tiqian-web.wasm",
-      "precompute-runtime/Tiqian-tiqian-web-precompute.wasm",
+      "runtime/tiqian-web.js",
+      "precompute-runtime/Tiqian-tiqian-web-precompute.mjs",
     ],
   );
   assert.ok(artifacts.every((artifact) => artifact.size > 8));
 });
 
-test("the release build clears both Wasm package targets and bypasses build cache", async () => {
+test("the release build clears both Kotlin/JS package targets and bypasses build cache", async () => {
   const source = await readFile(new URL("./build-runtime.mjs", import.meta.url), "utf8");
 
   assert.match(source, /":tiqian-web-precompute:clean"/u);
@@ -80,7 +80,7 @@ test("the precompute public surface matches its declarations", async () => {
   assert.doesNotMatch(declarations, /renderPreparedParagraphInto/u);
 });
 
-test("the custom element validates a snapshot before dynamically loading browser Wasm", async () => {
+test("the custom element validates a snapshot before dynamically loading the browser runtime", async () => {
   const elementSource = await readFile(new URL("./element.js", import.meta.url), "utf8");
   const elementDeclarations = await readFile(new URL("./element.d.ts", import.meta.url), "utf8");
   const apiSource = await readFile(new URL("./api.js", import.meta.url), "utf8");
@@ -126,8 +126,8 @@ test("the custom element validates a snapshot before dynamically loading browser
     elementSource,
     /if \(!strongEmphasisRuntimeRequired\) \{[\s\S]*?tryAdoptRequestedSnapshot\(/u,
   );
-  assert.match(runtimeSource, /import\("\.\/runtime\/Tiqian-tiqian-web\.mjs"\)/u);
-  assert.doesNotMatch(elementSource, /from "\.\/runtime\/Tiqian-tiqian-web\.mjs"/u);
+  assert.match(runtimeSource, /import\("\.\/runtime\/tiqian-web\.js"\)/u);
+  assert.doesNotMatch(elementSource, /from "\.\/runtime\/tiqian-web\.js"/u);
   assert.match(elementSource, /import\("\.\/browser-fonts\.js"\)/u);
   assert.match(elementSource, /import\("\.\/prepared-dom\.js"\)/u);
   assert.match(elementSource, /preparedDom\.installPreparedDomRendererBridge\(\)/u);

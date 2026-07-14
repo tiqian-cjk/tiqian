@@ -48,7 +48,7 @@ async function withTiqianWeb(root, options, action) {
   try {
     // Finish installing the runtime and shared CSS before swapping the session
     // retained by an already-enhanced root. This keeps a rejected preparation
-    // from stranding a closed session inside the Wasm root state.
+    // from stranding a closed session inside the Kotlin/JS root state.
     await Promise.all([loadTiqianRuntime(), ensureTiqianStyles()]);
     cjkDashCapability = await prepareCjkDashShapingIfNeeded(root, options);
     fontSession = await prepareRootFontSession(root, generation, options);

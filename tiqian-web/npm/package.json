@@ -9,7 +9,7 @@
     "prose",
     "layout",
     "web-component",
-    "wasm"
+    "kotlin-js"
   ],
   "homepage": "https://github.com/tiqian-cjk/tiqian#readme",
   "bugs": {
