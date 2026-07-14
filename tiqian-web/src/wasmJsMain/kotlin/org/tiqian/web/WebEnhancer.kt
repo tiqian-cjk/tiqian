@@ -16,6 +16,8 @@ import org.tiqian.core.InlineObjectSpan
 import org.tiqian.core.INLINE_OBJECT_REPLACEMENT_CHAR
 import org.tiqian.core.LayoutConstraints
 import org.tiqian.core.LayoutInput
+import org.tiqian.core.LayoutResult
+import org.tiqian.core.LineLengthGrid
 import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.TextRange
 import org.tiqian.core.TextSpan
@@ -23,6 +25,9 @@ import org.tiqian.core.TextStyle
 import org.tiqian.core.TiqianTextContent
 import org.tiqian.layout.ExplainableStubParagraphLayoutEngine
 import org.tiqian.layout.LookaheadLineBreaker
+import org.tiqian.layout.toPreparedParagraphJson
+import org.tiqian.shaping.HarfBuzzSessionFontMetricsResolver
+import org.tiqian.shaping.HarfBuzzSessionTextShaper
 import org.tiqian.font.CjkFontRoleClassifier
 import org.tiqian.font.FontRole
 import org.tiqian.font.FontRoleContext
@@ -46,13 +51,14 @@ import org.w3c.dom.events.Event
 @OptIn(ExperimentalWasmJsInterop::class)
 object TiqianWeb {
     private const val ROOT_SELECTOR = "tiqian-prose, [data-tiqian-root]"
-    private const val DEFAULT_PARAGRAPH_SELECTOR = "p"
+    private const val DEFAULT_PARAGRAPH_SELECTOR = "p, li"
     private const val SKIPPED_ANCESTOR_SELECTOR =
         ".not-prose, pre, table, .katex, .katex-display, .expressive-code, .tq-paragraph, [data-tiqian-skip]"
 
     private var installed = false
     private val states = LinkedHashMap<HTMLElement, RootState>()
     private val progressiveJobs = LinkedHashMap<HTMLElement, ProgressiveJob>()
+    private val pendingCjkDashRetries = LinkedHashMap<HTMLElement, EnhanceOptions>()
 
     fun install() {
         if (installed) return
@@ -67,6 +73,14 @@ object TiqianWeb {
             val root = eventRoot(event) ?: document.body ?: return@listener
             enhanceProgressively(root, optionsFromJs(eventOptions(event)))
         })
+        document.addEventListener("tiqian:enhance-atomically", listener@{ event: Event ->
+            val root = eventRoot(event) ?: document.body ?: return@listener
+            enhanceAtomically(root, optionsFromJs(eventOptions(event)))
+        })
+        document.addEventListener("tiqian:retry-cjk-dash", listener@{ event: Event ->
+            val root = eventRoot(event) ?: return@listener
+            retryCjkDashCapability(root, optionsFromJs(eventOptions(event)))
+        })
         document.addEventListener("tiqian:destroy", listener@{ event: Event ->
             val root = eventRoot(event) ?: document.body ?: return@listener
             destroy(root)
@@ -77,6 +91,10 @@ object TiqianWeb {
         document.addEventListener("tiqian:relayout", listener@{ event: Event ->
             val root = eventRoot(event) ?: return@listener
             relayout(root)
+        })
+        document.addEventListener("tiqian:cancel-layout-work", listener@{ event: Event ->
+            val root = eventRoot(event) ?: return@listener
+            cancelProgressiveJob(root)
         })
         document.addEventListener("tiqian:refresh", listener@{ event: Event ->
             val root = eventRoot(event) ?: return@listener
@@ -113,23 +131,63 @@ object TiqianWeb {
         installTiqianCopyHandler()
         destroy(root)
         val state = createRootState(root, options)
+        val candidates = paragraphCandidates(root, state.options.paragraphSelector)
         val job = ProgressiveJob(
             state = state,
-            candidates = paragraphCandidates(root, state.options.paragraphSelector),
+            kind = ProgressiveJobKind.Enhance,
+            itemCount = candidates.size,
+            processItem = { index -> processParagraph(candidates[index], state) },
             startedAt = performanceNow(),
         )
         states[root] = state
-        progressiveJobs[root] = job
         publishState(state, keepEmpty = true)
-        if (job.candidates.isEmpty()) {
-            finishProgressiveJob(job)
-        } else {
-            scheduleProgressiveSlice(job)
+        startProgressiveJob(job)
+    }
+
+    /**
+     * ResponsiveTypographyAtomicRefresh: an already rendered root must not be
+     * restored and rebuilt across multiple paints when a resize breakpoint
+     * changes shaping inputs. Re-lower and render synchronously in one event
+     * callback; the reported max slice is the full long-task cost so callers can
+     * distinguish this safety boundary from ordinary progressive loading.
+     */
+    private fun enhanceAtomically(root: HTMLElement, options: EnhanceOptions) {
+        val startedAt = performanceNow()
+        try {
+            val enhancedCount = enhance(root, options)
+            val duration = performanceNow() - startedAt
+            dispatchTiqianRelayoutReady(
+                root = root,
+                enhancedCount = enhancedCount,
+                issueCount = states[root]?.issues?.size ?: 0,
+                durationMs = duration,
+                maxSliceMs = duration,
+                failed = false,
+                error = null,
+                stale = false,
+            )
+        } catch (error: Throwable) {
+            val detail = (error.message ?: error.toString()).take(CAPABILITY_DETAIL_LIMIT)
+            destroy(root)
+            root.setAttribute(RELAYOUT_ERROR_ATTRIBUTE, detail)
+            val duration = performanceNow() - startedAt
+            dispatchTiqianProgressiveError(root, ProgressiveJobKind.Relayout.name, detail, duration, duration)
+            dispatchTiqianRelayoutReady(
+                root = root,
+                enhancedCount = 0,
+                issueCount = 1,
+                durationMs = duration,
+                maxSliceMs = duration,
+                failed = true,
+                error = detail,
+                stale = false,
+            )
         }
     }
 
     fun destroy(root: HTMLElement) {
-        progressiveJobs.remove(root)?.frameId?.let { window.cancelAnimationFrame(it) }
+        pendingCjkDashRetries.remove(root)
+        cancelProgressiveJob(root)
         val state = states.remove(root)
         if (state != null) {
             for (paragraph in state.paragraphs) {
@@ -138,20 +196,49 @@ object TiqianWeb {
             for (issue in state.issues) {
                 clearIssue(issue)
             }
+            // A precomputed snapshot may be live without a Kotlin runtime
+            // state while list-only enhancement starts. Its compact value CSS
+            // belongs to the snapshot owner and must survive that no-op destroy.
+            releasePreparedRootDomStyles(root)
         }
         root.removeAttribute("data-tiqian-enhanced")
         root.removeAttribute("data-tiqian-enhanced-count")
         root.removeAttribute("data-tiqian-issue-count")
+        root.removeAttribute(RELAYOUT_ERROR_ATTRIBUTE)
+        root.removeAttribute(EXACT_PREPARED_FALLBACK_ATTRIBUTE)
     }
 
     private fun createRootState(root: HTMLElement, options: EnhanceOptions): RootState {
-        val resolved = options.withRootDefaults(root)
-        val engine = ExplainableStubParagraphLayoutEngine(
+        root.removeAttribute(EXACT_PREPARED_FALLBACK_ATTRIBUTE)
+        val exactEligibleOptions = if (options.allowsSnapshotExactLayout()) {
+            options
+        } else {
+            options.copy(exactFontSession = null)
+        }
+        val resolved = exactEligibleOptions.withRootDefaults(root)
+        val exactSessionId = resolved.conformingExactFontSessionId()
+        val browserEngine = ExplainableStubParagraphLayoutEngine(
             lineBreaker = LookaheadLineBreaker(),
             fontMetricsResolver = WebCanvasFontMetricsResolver(resolved.fonts),
             textShaper = WebCanvasTextShaper(resolved.fonts, resolved.cjkDashCapability),
         )
-        return RootState(root, resolved, engine, mutableListOf(), mutableListOf())
+        val engine = if (exactSessionId != null) {
+            ExplainableStubParagraphLayoutEngine(
+                lineBreaker = LookaheadLineBreaker(),
+                fontMetricsResolver = HarfBuzzSessionFontMetricsResolver(exactSessionId),
+                textShaper = HarfBuzzSessionTextShaper(exactSessionId),
+            )
+        } else {
+            browserEngine
+        }
+        return RootState(
+            root = root,
+            options = resolved,
+            engine = engine,
+            browserFallbackEngine = browserEngine.takeIf { exactSessionId != null },
+            paragraphs = mutableListOf(),
+            issues = mutableListOf(),
+        )
     }
 
     private fun paragraphCandidates(root: HTMLElement, selector: String): List<HTMLElement> {
@@ -190,6 +277,9 @@ object TiqianWeb {
         }
 
         val originalRenderedAttribute = paragraph.getAttribute("data-tq-rendered")
+        val originalPreparedFlowAttribute = paragraph.getAttribute("data-tq-canonical-plain")
+        val originalCanonicalSourceAttribute = paragraph.getAttribute(CANONICAL_SOURCE_ATTRIBUTE)
+        val originalLangAttribute = paragraph.getAttribute("lang")
         val originalStyleAttribute = paragraph.getAttribute("style")
         val originalPosition = paragraph.style.getPropertyValue("position")
         val originalPositionPriority = paragraph.style.getPropertyPriority("position")
@@ -203,12 +293,21 @@ object TiqianWeb {
             originalContent = originalContent,
             lowered = lowered,
             originalRenderedAttribute = originalRenderedAttribute,
+            originalPreparedFlowAttribute = originalPreparedFlowAttribute,
+            originalCanonicalSourceAttribute = originalCanonicalSourceAttribute,
+            originalLangAttribute = originalLangAttribute,
             originalStyleAttribute = originalStyleAttribute,
             originalPosition = originalPosition,
             originalPositionPriority = originalPositionPriority,
         )
         val layoutIssue = try {
-            layoutParagraph(item, state.options, state.engine)
+            layoutParagraph(
+                paragraph = item,
+                options = state.activeOptions(),
+                engine = state.activeEngine(),
+                browserFallbackEngine = state.activeExactFallbackEngine(),
+                onExactPreparedDomFallback = state::disableExactPreparedDom,
+            )
         } catch (error: Throwable) {
             CapabilityIssue(
                 "WebEnhancementFailure",
@@ -250,22 +349,58 @@ object TiqianWeb {
         }
     }
 
+    private fun startProgressiveJob(job: ProgressiveJob) {
+        cancelProgressiveJob(job.state.root)
+        job.state.root.removeAttribute(RELAYOUT_ERROR_ATTRIBUTE)
+        progressiveJobs[job.state.root] = job
+        if (job.itemCount == 0) {
+            try {
+                job.onItemsFinished?.invoke()
+                finishProgressiveJob(job)
+            } catch (error: Throwable) {
+                job.onFailure?.invoke()
+                failProgressiveJob(job, error)
+            }
+        } else {
+            scheduleProgressiveSlice(job)
+        }
+    }
+
+    private fun cancelProgressiveJob(root: HTMLElement) {
+        progressiveJobs.remove(root)?.frameId?.let { window.cancelAnimationFrame(it) }
+    }
+
     private fun runProgressiveSlice(job: ProgressiveJob) {
         if (progressiveJobs[job.state.root] !== job) return
         job.frameId = null
         val sliceStartedAt = performanceNow()
-        do {
-            processParagraph(job.candidates[job.nextIndex], job.state)
-            job.nextIndex += 1
-        } while (
-            job.nextIndex < job.candidates.size &&
-            performanceNow() - sliceStartedAt < MAX_PROGRESSIVE_SLICE_MS
-        )
+        var processedInSlice = 0
+        try {
+            do {
+                job.processItem(job.nextIndex)
+                job.nextIndex += 1
+                processedInSlice += 1
+            } while (
+                job.nextIndex < job.itemCount &&
+                processedInSlice < MAX_PROGRESSIVE_ITEMS_PER_SLICE &&
+                performanceNow() - sliceStartedAt < MAX_PROGRESSIVE_SLICE_MS
+            )
+        } catch (error: Throwable) {
+            job.onFailure?.invoke()
+            failProgressiveJob(job, error)
+            return
+        }
         val sliceDuration = performanceNow() - sliceStartedAt
         job.maxSliceDuration = maxOf(job.maxSliceDuration, sliceDuration)
         publishState(job.state, keepEmpty = true)
-        if (job.nextIndex >= job.candidates.size) {
-            finishProgressiveJob(job)
+        if (job.nextIndex >= job.itemCount) {
+            try {
+                job.onItemsFinished?.invoke()
+                finishProgressiveJob(job)
+            } catch (error: Throwable) {
+                job.onFailure?.invoke()
+                failProgressiveJob(job, error)
+            }
         } else {
             scheduleProgressiveSlice(job)
         }
@@ -273,34 +408,186 @@ object TiqianWeb {
 
     private fun finishProgressiveJob(job: ProgressiveJob) {
         if (progressiveJobs.remove(job.state.root) !== job) return
+        job.state.root.removeAttribute(RELAYOUT_ERROR_ATTRIBUTE)
         publishState(job.state)
-        dispatchTiqianReady(
+        if (job.kind == ProgressiveJobKind.Relayout) {
+            dispatchTiqianRelayoutReady(
+                root = job.state.root,
+                enhancedCount = job.state.paragraphs.size,
+                issueCount = job.state.issues.size,
+                durationMs = performanceNow() - job.startedAt,
+                maxSliceMs = job.maxSliceDuration,
+                failed = false,
+                error = null,
+                stale = job.commitSkipped || job.stale?.invoke() == true,
+            )
+        } else {
+            dispatchTiqianReady(
+                root = job.state.root,
+                enhancedCount = job.state.paragraphs.size,
+                issueCount = job.state.issues.size,
+                durationMs = performanceNow() - job.startedAt,
+                maxSliceMs = job.maxSliceDuration,
+                capabilityRetry = job.kind == ProgressiveJobKind.CjkDashRetry,
+            )
+        }
+        pendingCjkDashRetries.remove(job.state.root)?.let { options ->
+            retryCjkDashCapability(job.state.root, options)
+        }
+    }
+
+    private fun failProgressiveJob(job: ProgressiveJob, error: Throwable) {
+        if (progressiveJobs.remove(job.state.root) !== job) return
+        val detail = (error.message ?: error.toString()).take(CAPABILITY_DETAIL_LIMIT)
+        job.state.root.setAttribute(RELAYOUT_ERROR_ATTRIBUTE, detail)
+        publishState(job.state, keepEmpty = true)
+        dispatchTiqianProgressiveError(
             root = job.state.root,
-            enhancedCount = job.state.paragraphs.size,
-            issueCount = job.state.issues.size,
+            kind = job.kind.name,
+            detail = detail,
             durationMs = performanceNow() - job.startedAt,
             maxSliceMs = job.maxSliceDuration,
+        )
+        if (job.kind == ProgressiveJobKind.Relayout) {
+            dispatchTiqianRelayoutReady(
+                root = job.state.root,
+                enhancedCount = job.state.paragraphs.size,
+                issueCount = job.state.issues.size,
+                durationMs = performanceNow() - job.startedAt,
+                maxSliceMs = job.maxSliceDuration,
+                failed = true,
+                error = detail,
+                stale = false,
+            )
+        } else {
+            dispatchTiqianReady(
+                root = job.state.root,
+                enhancedCount = job.state.paragraphs.size,
+                issueCount = job.state.issues.size,
+                durationMs = performanceNow() - job.startedAt,
+                maxSliceMs = job.maxSliceDuration,
+                capabilityRetry = job.kind == ProgressiveJobKind.CjkDashRetry,
+            )
+        }
+    }
+
+    internal fun retryCjkDashCapability(root: HTMLElement, options: EnhanceOptions) {
+        if (progressiveJobs[root] != null) {
+            pendingCjkDashRetries[root] = options
+            return
+        }
+        val state = states[root] ?: return
+        val retriable = state.issues.filter { it.name == CJK_DASH_CAPABILITY_ISSUE }
+        if (retriable.isEmpty()) return
+        dispatchTiqianCapabilityRetryStart(root)
+        val replacement = createRootState(root, options)
+        state.options = replacement.options
+        state.engine = replacement.engine
+        state.browserFallbackEngine = replacement.browserFallbackEngine
+        state.exactPreparedDomEnabled = replacement.exactPreparedDomEnabled
+        state.exactPreparedDomFallback = replacement.exactPreparedDomFallback
+        val candidates = retriable.map { it.element }.distinct()
+        for (issue in retriable) {
+            clearIssue(issue)
+            state.issues.remove(issue)
+        }
+        startProgressiveJob(
+            ProgressiveJob(
+                state = state,
+                kind = ProgressiveJobKind.CjkDashRetry,
+                itemCount = candidates.size,
+                processItem = { index -> processParagraph(candidates[index], state) },
+                startedAt = performanceNow(),
+            ),
         )
     }
 
     private fun relayout(root: HTMLElement) {
+        val runningJob = progressiveJobs[root]
+        if (runningJob?.kind == ProgressiveJobKind.Enhance) {
+            // Responsive changes are normally observed only after tiqian:ready,
+            // but a manual relayout can still arrive during initial enhancement.
+            // Restart from native source at the latest width so candidates that
+            // have not been reached by the old job are not stranded.
+            enhanceProgressively(root, runningJob.state.options)
+            return
+        }
         val state = states[root] ?: return
-        if (state.issues.isNotEmpty()) {
-            // CapabilityTransitionRetry: some capabilities (notably
-            // box-decoration-break:clone) depend on the current line count.
-            // A later width can make a native paragraph eligible again.
-            enhance(root, state.options)
+        val activeOptions = state.activeOptions()
+        val activeEngine = state.activeEngine()
+        val activeExactFallbackEngine = state.activeExactFallbackEngine()
+        cancelProgressiveJob(root)
+        if (state.issues.any { it.name in WIDTH_DEPENDENT_CAPABILITY_ISSUES }) {
+            // WidthDependentCapabilityTransitionRetry: only named
+            // capabilities whose eligibility depends on line count need to be
+            // lowered again at the new width. Stable shaping/capability issues
+            // remain native while the already enhanced paragraphs relayout.
+            // An already enhanced root must not expose every paragraph's SSR
+            // source across animation frames while that eligibility is retried.
+            // Rebuild synchronously in this event task and terminate the
+            // responsive operation with the relayout completion event emitted
+            // by enhanceAtomically().
+            enhanceAtomically(root, state.options)
             return
         }
         val paragraphs = state.paragraphs.toList()
-        for (paragraph in paragraphs) {
-            val issue = layoutParagraph(paragraph, state.options, state.engine) ?: continue
-            restoreParagraph(paragraph)
-            state.paragraphs.remove(paragraph)
-            state.issues += issue
-            reportIssue(issue)
-        }
-        publishState(state)
+        // ViewportPriorityRelayout: capture the priority before any live DOM is
+        // changed. A paragraph intersecting the viewport has distance zero;
+        // the remaining paragraphs follow by proximity and document order.
+        val workOrder = paragraphs.indices
+            .map { index -> index to paragraphViewportDistance(paragraphs[index].source) }
+            .sortedWith(compareBy<Pair<Int, Double>> { it.second }.thenBy { it.first })
+            .map { it.first }
+        // WidthSnapshotPerRelayoutJob: every paragraph is prepared against the
+        // geometry seen when the job starts. If the host changes again while
+        // slices are running, element.js schedules one latest-width follow-up
+        // instead of allowing a queue of obsolete widths to replay.
+        val widths = paragraphs.map { paragraphWidth(it, activeOptions) }
+        val previousMeasures = paragraphs.map { it.lastMeasure }
+        val commitSession = ProgressiveRelayoutSession(
+            paragraphs = paragraphs,
+            state = state,
+        )
+        startProgressiveJob(
+            ProgressiveJob(
+                state = state,
+                kind = ProgressiveJobKind.Relayout,
+                itemCount = paragraphs.size,
+                processItem = { index ->
+                    val paragraphIndex = workOrder[index]
+                    val paragraph = paragraphs[paragraphIndex]
+                    val preparation = prepareParagraphLayout(
+                        paragraph = paragraph,
+                        options = activeOptions,
+                        engine = activeEngine,
+                        browserFallbackEngine = activeExactFallbackEngine,
+                        widthOverride = widths[paragraphIndex],
+                    )
+                    // ParagraphAtomicResponsiveCatchUp: each paragraph keeps
+                    // its previous Tiqian DOM until its new result is ready.
+                    // Validate the captured width immediately before replacing
+                    // that paragraph. A stale off-screen tail is skipped and
+                    // the custom element schedules one latest-width follow-up.
+                    val currentWidth = paragraphWidth(paragraph, activeOptions)
+                    if (
+                        isBoundedResponsiveCatchUp(
+                            previousMeasure = previousMeasures[paragraphIndex],
+                            preparedWidth = widths[paragraphIndex],
+                            currentWidth = currentWidth,
+                            fontSize = paragraph.lowered.textStyle.fontSize,
+                        )
+                    ) {
+                        commitSession.processItem(paragraphIndex, preparation)
+                    } else {
+                        commitSession.stale = true
+                    }
+                },
+                onItemsFinished = commitSession::finish,
+                onFailure = commitSession::rollback,
+                stale = { commitSession.stale },
+                startedAt = performanceNow(),
+            ),
+        )
     }
 
     /**
@@ -322,42 +609,117 @@ object TiqianWeb {
         paragraph: EnhancedParagraph,
         options: EnhanceOptions,
         engine: ExplainableStubParagraphLayoutEngine,
+        browserFallbackEngine: ExplainableStubParagraphLayoutEngine? = null,
+        onExactPreparedDomFallback: (String) -> Unit = {},
     ): CapabilityIssue? {
-        val width = elementWidth(paragraph.source).toFloat()
+        return when (
+            val preparation = prepareParagraphLayout(
+                paragraph = paragraph,
+                options = options,
+                engine = engine,
+                browserFallbackEngine = browserFallbackEngine,
+            )
+        ) {
+            ParagraphLayoutPreparation.Unchanged -> null
+            is ParagraphLayoutPreparation.Unsupported -> preparation.issue
+            is ParagraphLayoutPreparation.Ready -> when (
+                val commit = commitPreparedParagraph(
+                    paragraph = paragraph,
+                    preparation = preparation,
+                    options = options,
+                    browserFallbackEngine = browserFallbackEngine,
+                    onExactPreparedDomFallback = onExactPreparedDomFallback,
+                )
+            ) {
+                is ParagraphCommitResult.Success -> {
+                    paragraph.lastMeasure = commit.measure
+                    null
+                }
+                is ParagraphCommitResult.Unsupported -> commit.issue
+            }
+        }
+    }
+
+    private fun paragraphWidth(paragraph: EnhancedParagraph, options: EnhanceOptions): Float {
+        val exactFontLayout = options.conformingExactFontSessionId() != null
+        return (if (exactFontLayout) {
+            elementContentWidth(paragraph.source)
+        } else {
+            elementWidth(paragraph.source)
+        }).toFloat()
             .takeIf { it > 0f }
-            ?: elementWidth(paragraph.source.parentElement as? HTMLElement ?: paragraph.source).toFloat()
+            ?: (if (exactFontLayout) {
+                elementContentWidth(paragraph.source.parentElement as? HTMLElement ?: paragraph.source)
+            } else {
+                elementWidth(paragraph.source.parentElement as? HTMLElement ?: paragraph.source)
+        }).toFloat()
                 .takeIf { it > 0f }
             ?: 320f
-        if (paragraph.lastWidth != null && kotlin.math.abs(paragraph.lastWidth!! - width) < 0.5f) return null
-        paragraph.lastWidth = width
-        val result = engine.layout(
-            LayoutInput(
-                content = TiqianTextContent(
-                    text = paragraph.lowered.text,
-                    spans = paragraph.lowered.spans,
-                    sourceBoundaries = paragraph.lowered.sourceBoundaries,
-                ),
-                textStyle = paragraph.lowered.textStyle,
-                constraints = LayoutConstraints(maxWidth = width),
-                paragraphStyle = ParagraphStyle(
-                    lineHeight = paragraph.lowered.lineHeight,
-                    firstLineIndent = Ic(options.firstLineIndentIc),
-                    emphasisDotGapEm = options.emphasisDotGapEm,
-                ),
-                decorations = paragraph.lowered.decorations,
-                rubySpans = emptyList(),
-                inlineBoxes = paragraph.lowered.inlineBoxes,
-                inlineObjects = paragraph.lowered.inlineObjects,
+    }
+
+    private fun prepareParagraphLayout(
+        paragraph: EnhancedParagraph,
+        options: EnhanceOptions,
+        engine: ExplainableStubParagraphLayoutEngine,
+        browserFallbackEngine: ExplainableStubParagraphLayoutEngine? = null,
+        widthOverride: Float? = null,
+        ignoreUnchangedMeasure: Boolean = false,
+    ): ParagraphLayoutPreparation {
+        val width = widthOverride ?: paragraphWidth(paragraph, options)
+        // LineLengthGridResponsiveInvalidation: the Web adapter currently
+        // exposes the default Start-aligned body, so widths within the same
+        // floor(width / fontSize) cell count produce identical layout and a
+        // zero body offset. Compare the actual engine measure instead of a raw
+        // pixel tolerance, which could hide a grid crossing at fractional font
+        // sizes.
+        val fontSize = paragraph.lowered.textStyle.fontSize
+        val measure = effectiveLineMeasure(width, fontSize)
+        if (!ignoreUnchangedMeasure && paragraph.lastMeasure == measure) {
+            return ParagraphLayoutPreparation.Unchanged
+        }
+        val input = LayoutInput(
+            content = TiqianTextContent(
+                text = paragraph.lowered.text,
+                spans = paragraph.lowered.spans,
+                sourceBoundaries = paragraph.lowered.sourceBoundaries,
             ),
+            textStyle = paragraph.lowered.textStyle,
+            constraints = LayoutConstraints(maxWidth = width),
+            paragraphStyle = ParagraphStyle(
+                lineHeight = paragraph.lowered.lineHeight,
+                firstLineIndent = if (
+                    paragraph.source.tagName.uppercase() == "LI"
+                ) Ic.Zero else Ic(options.firstLineIndentIc),
+                emphasisDotGapEm = options.emphasisDotGapEm,
+            ),
+            decorations = paragraph.lowered.decorations,
+            rubySpans = emptyList(),
+            inlineBoxes = paragraph.lowered.inlineBoxes,
+            inlineObjects = paragraph.lowered.inlineObjects,
         )
+        var exactPreparedDom = browserFallbackEngine != null &&
+            paragraph.lowered.isCanonicalPlainParagraph()
+        val result = if (exactPreparedDom) {
+            try {
+                engine.layout(input)
+            } catch (error: Throwable) {
+                if (!isExactFontSessionCapabilityFailure(error)) throw error
+                exactPreparedDom = false
+                browserFallbackEngine!!.layout(input)
+            }
+        } else {
+            (browserFallbackEngine ?: engine).layout(input)
+        }
         val shapingCapabilityIssue = result.debug.shapingDecisions.firstOrNull {
             it.capabilityIssue != null
         }
         if (shapingCapabilityIssue != null) {
-            return CapabilityIssue(
-                name = shapingCapabilityIssue.capabilityIssue!!,
-                detail = shapingCapabilityIssue.reason,
-                element = paragraph.source,
+            return ParagraphLayoutPreparation.Unsupported(
+                CapabilityIssue(
+                    name = shapingCapabilityIssue.capabilityIssue!!,
+                    detail = shapingCapabilityIssue.reason,
+                    element = paragraph.source,
+                ),
             )
         }
         val invalidShaping = result.debug.shapingDecisions.firstOrNull { decision ->
@@ -366,17 +728,19 @@ object TiqianWeb {
                 (!decision.advance.isFinite() || decision.advance <= ZERO_ADVANCE_EPSILON)
         }
         if (invalidShaping != null) {
-            return CapabilityIssue(
-                name = "InvalidWebShapingAdvance",
-                detail = buildString {
-                    append("text=")
-                    append(invalidShaping.displayText)
-                    append("; advance=")
-                    append(invalidShaping.advance)
-                    append("; ")
-                    append(invalidShaping.reason)
-                },
-                element = paragraph.source,
+            return ParagraphLayoutPreparation.Unsupported(
+                CapabilityIssue(
+                    name = "InvalidWebShapingAdvance",
+                    detail = buildString {
+                        append("text=")
+                        append(invalidShaping.displayText)
+                        append("; advance=")
+                        append(invalidShaping.advance)
+                        append("; ")
+                        append(invalidShaping.reason)
+                    },
+                    element = paragraph.source,
+                ),
             )
         }
         val clonedDecoration = paragraph.lowered.sourceSpans.firstOrNull { span ->
@@ -388,34 +752,295 @@ object TiqianWeb {
                 } > 1
         }
         if (clonedDecoration != null) {
-            return CapabilityIssue(
-                name = "InlineCloneDecorationBreakUnsupported",
-                detail = clonedDecoration.element.tagName.lowercase(),
-                element = paragraph.source,
+            return ParagraphLayoutPreparation.Unsupported(
+                CapabilityIssue(
+                    name = "InlineCloneDecorationBreakUnsupported",
+                    detail = clonedDecoration.element.tagName.lowercase(),
+                    element = paragraph.source,
+                ),
             )
         }
-        ensureHostFlowStyles(paragraph)
-        ensureContainingBlock(paragraph)
-        DomParagraphRenderer.render(
-            paragraph.source,
-            result,
-            options.fonts,
-            sourceSpans = paragraph.lowered.sourceSpans,
-            inlineObjects = paragraph.lowered.domInlineObjects,
+        return ParagraphLayoutPreparation.Ready(
+            result = result,
+            width = width,
+            measure = measure,
+            exactPreparedDom = exactPreparedDom,
         )
-        DomParagraphRenderer.verifyCjkDashRuns(paragraph.source)?.let { detail ->
-            return CapabilityIssue(
-                name = "DomDashFaceGeometryMismatch",
-                detail = detail,
-                element = paragraph.source,
-            )
+    }
+
+    private fun effectiveLineMeasure(width: Float, fontSize: Float): Float {
+        val gridCells = kotlin.math.floor(width / fontSize).toInt().coerceAtLeast(1)
+        return (gridCells * fontSize).coerceAtMost(width)
+    }
+
+    private fun isBoundedResponsiveCatchUp(
+        previousMeasure: Float?,
+        preparedWidth: Float,
+        currentWidth: Float,
+        fontSize: Float,
+    ): Boolean {
+        val preparedMeasure = effectiveLineMeasure(preparedWidth, fontSize)
+        val currentMeasure = effectiveLineMeasure(currentWidth, fontSize)
+        if (preparedMeasure == currentMeasure) return true
+        if (
+            previousMeasure == null || preparedMeasure == previousMeasure ||
+            preparedWidth < fontSize || currentWidth < fontSize
+        ) return false
+        val monotonicCatchUp = if (previousMeasure <= currentMeasure) {
+            preparedMeasure >= previousMeasure && preparedMeasure <= currentMeasure
+        } else {
+            preparedMeasure <= previousMeasure && preparedMeasure >= currentMeasure
         }
-        return null
+        if (!monotonicCatchUp) return false
+        val preparedCells = kotlin.math.floor(preparedWidth / fontSize).toInt()
+        val currentCells = kotlin.math.floor(currentWidth / fontSize).toInt()
+        return kotlin.math.abs(preparedCells - currentCells) <= MAX_RESPONSIVE_STALE_COMMIT_CELLS
+    }
+
+    private fun commitPreparedParagraph(
+        paragraph: EnhancedParagraph,
+        preparation: ParagraphLayoutPreparation.Ready,
+        options: EnhanceOptions,
+        browserFallbackEngine: ExplainableStubParagraphLayoutEngine?,
+        onExactPreparedDomFallback: (String) -> Unit = {},
+    ): ParagraphCommitResult {
+        val result = preparation.result
+        if (preparation.exactPreparedDom) {
+            paragraph.source.setAttribute("data-tq-canonical-plain", "true")
+            paragraph.source.setAttribute(CANONICAL_SOURCE_ATTRIBUTE, "true")
+            paragraph.source.setAttribute("lang", paragraph.lowered.textStyle.locale)
+            renderPreparedParagraphDom(
+                paragraph.source,
+                result.toPreparedParagraphJson(),
+                paragraph.lowered.textStyle.locale,
+            )
+            val preparedDomIssue = validatePreparedParagraphDom(
+                paragraph.source,
+                preparation.width.toDouble(),
+            )
+            if (preparedDomIssue != null) {
+                onExactPreparedDomFallback(preparedDomIssue)
+                restoreAttribute(
+                    paragraph.source,
+                    "data-tq-canonical-plain",
+                    paragraph.originalPreparedFlowAttribute,
+                )
+                restoreAttribute(
+                    paragraph.source,
+                    CANONICAL_SOURCE_ATTRIBUTE,
+                    paragraph.originalCanonicalSourceAttribute,
+                )
+                restoreAttribute(paragraph.source, "lang", paragraph.originalLangAttribute)
+                val fallbackOptions = options.withoutExactFontSession()
+                val fallbackPreparation = prepareParagraphLayout(
+                    paragraph = paragraph,
+                    options = fallbackOptions,
+                    engine = browserFallbackEngine!!,
+                    browserFallbackEngine = null,
+                    widthOverride = preparation.width,
+                    ignoreUnchangedMeasure = true,
+                )
+                return when (fallbackPreparation) {
+                    ParagraphLayoutPreparation.Unchanged -> error(
+                        "Exact prepared DOM fallback unexpectedly skipped relayout",
+                    )
+                    is ParagraphLayoutPreparation.Unsupported ->
+                        ParagraphCommitResult.Unsupported(fallbackPreparation.issue)
+                    is ParagraphLayoutPreparation.Ready -> commitPreparedParagraph(
+                        paragraph = paragraph,
+                        preparation = fallbackPreparation,
+                        options = fallbackOptions,
+                        browserFallbackEngine = null,
+                        onExactPreparedDomFallback = onExactPreparedDomFallback,
+                    )
+                }
+            }
+        } else {
+            releasePreparedParagraphDomStyles(paragraph.source)
+            restoreAttribute(
+                paragraph.source,
+                "data-tq-canonical-plain",
+                paragraph.originalPreparedFlowAttribute,
+            )
+            restoreAttribute(paragraph.source, "lang", paragraph.originalLangAttribute)
+            ensureContainingBlock(paragraph)
+            DomParagraphRenderer.render(
+                paragraph.source,
+                result,
+                options.fonts,
+                sourceSpans = paragraph.lowered.sourceSpans,
+                inlineObjects = paragraph.lowered.domInlineObjects,
+            )
+            DomParagraphRenderer.verifyCjkDashRuns(paragraph.source)?.let { detail ->
+                return ParagraphCommitResult.Unsupported(
+                    CapabilityIssue(
+                        name = "DomDashFaceGeometryMismatch",
+                        detail = detail,
+                        element = paragraph.source,
+                    ),
+                )
+            }
+            if (paragraph.lowered.isCanonicalPlainParagraph()) {
+                paragraph.source.setAttribute(CANONICAL_SOURCE_ATTRIBUTE, "true")
+            } else {
+                restoreAttribute(
+                    paragraph.source,
+                    CANONICAL_SOURCE_ATTRIBUTE,
+                    paragraph.originalCanonicalSourceAttribute,
+                )
+            }
+        }
+        return ParagraphCommitResult.Success(preparation.measure)
+    }
+
+    private class ProgressiveRelayoutSession(
+        paragraphs: List<EnhancedParagraph>,
+        private val state: RootState,
+    ) {
+        private val paragraphs = paragraphs.toList()
+        private val snapshots = LinkedHashMap<EnhancedParagraph, LiveParagraphSnapshot>()
+        private val successful = mutableListOf<Pair<EnhancedParagraph, Float>>()
+        private val unsupported = mutableListOf<Pair<EnhancedParagraph, CapabilityIssue>>()
+        private val stateParagraphsBefore = state.paragraphs.toList()
+        private val stateIssuesBefore = state.issues.toList()
+        var stale: Boolean = false
+
+        fun processItem(index: Int, preparation: ParagraphLayoutPreparation) {
+            val paragraph = paragraphs[index]
+            when (preparation) {
+                ParagraphLayoutPreparation.Unchanged -> Unit
+                is ParagraphLayoutPreparation.Unsupported -> {
+                    snapshots[paragraph] = TiqianWeb.captureLiveParagraph(paragraph)
+                    unsupported += paragraph to preparation.issue
+                    TiqianWeb.restoreParagraph(paragraph)
+                }
+                is ParagraphLayoutPreparation.Ready -> {
+                    snapshots[paragraph] = TiqianWeb.captureLiveParagraph(paragraph)
+                    when (
+                        val result = TiqianWeb.commitPreparedParagraph(
+                            paragraph = paragraph,
+                            preparation = preparation,
+                            options = state.options,
+                            browserFallbackEngine = state.browserFallbackEngine,
+                            onExactPreparedDomFallback = state::disableExactPreparedDom,
+                        )
+                    ) {
+                        is ParagraphCommitResult.Success -> {
+                            paragraph.lastMeasure = result.measure
+                            successful += paragraph to result.measure
+                        }
+                        is ParagraphCommitResult.Unsupported -> {
+                            unsupported += paragraph to result.issue
+                            TiqianWeb.restoreParagraph(paragraph)
+                        }
+                    }
+                }
+            }
+        }
+
+        fun finish() {
+            for ((paragraph, measure) in successful) {
+                if (unsupported.none { (unsupportedParagraph, _) -> unsupportedParagraph === paragraph }) {
+                    paragraph.lastMeasure = measure
+                }
+            }
+            for ((paragraph, issue) in unsupported) {
+                state.paragraphs.remove(paragraph)
+                state.issues += issue
+                TiqianWeb.reportIssue(issue)
+            }
+        }
+
+        fun rollback() {
+            state.paragraphs.clear()
+            state.paragraphs.addAll(stateParagraphsBefore)
+            state.issues.clear()
+            state.issues.addAll(stateIssuesBefore)
+            TiqianWeb.rollbackRelayoutSnapshots(snapshots.values.toList())
+        }
+    }
+
+    private fun captureLiveParagraph(paragraph: EnhancedParagraph): LiveParagraphSnapshot {
+        val content = document.createDocumentFragment()
+        val snapshot = LiveParagraphSnapshot(
+            paragraph = paragraph,
+            content = content,
+            renderedAttribute = paragraph.source.getAttribute("data-tq-rendered"),
+            preparedFlowAttribute = paragraph.source.getAttribute("data-tq-canonical-plain"),
+            canonicalSourceAttribute = paragraph.source.getAttribute(CANONICAL_SOURCE_ATTRIBUTE),
+            langAttribute = paragraph.source.getAttribute("lang"),
+            styleAttribute = paragraph.source.getAttribute("style"),
+            capabilityNameAttribute = paragraph.source.getAttribute("data-tiqian-capability-issue"),
+            capabilityDetailAttribute = paragraph.source.getAttribute("data-tiqian-capability-detail"),
+            lastMeasure = paragraph.lastMeasure,
+            containingBlockApplied = paragraph.containingBlockApplied,
+            originalContentHadChildren = paragraph.originalContent.firstChild != null,
+        )
+        while (paragraph.source.firstChild != null) {
+            content.appendChild(paragraph.source.firstChild!!)
+        }
+        return snapshot
+    }
+
+    private fun rollbackRelayoutSnapshots(snapshots: List<LiveParagraphSnapshot>) {
+        for (snapshot in snapshots.asReversed()) {
+            val paragraph = snapshot.paragraph
+            if (snapshot.originalContentHadChildren && paragraph.originalContent.firstChild == null) {
+                // restoreParagraph() handed the semantic source fragment back
+                // to the live DOM; move those exact nodes into source custody
+                // again before replaying the previous rendered fragment.
+                while (paragraph.source.firstChild != null) {
+                    paragraph.originalContent.appendChild(paragraph.source.firstChild!!)
+                }
+            } else {
+                while (paragraph.source.firstChild != null) {
+                    paragraph.source.removeChild(paragraph.source.firstChild!!)
+                }
+            }
+            paragraph.source.appendChild(snapshot.content)
+            restoreAttribute(paragraph.source, "data-tq-rendered", snapshot.renderedAttribute)
+            restoreAttribute(
+                paragraph.source,
+                "data-tq-canonical-plain",
+                snapshot.preparedFlowAttribute,
+            )
+            restoreAttribute(
+                paragraph.source,
+                CANONICAL_SOURCE_ATTRIBUTE,
+                snapshot.canonicalSourceAttribute,
+            )
+            restoreAttribute(paragraph.source, "lang", snapshot.langAttribute)
+            restoreAttribute(paragraph.source, "style", snapshot.styleAttribute)
+            restoreAttribute(
+                paragraph.source,
+                "data-tiqian-capability-issue",
+                snapshot.capabilityNameAttribute,
+            )
+            restoreAttribute(
+                paragraph.source,
+                "data-tiqian-capability-detail",
+                snapshot.capabilityDetailAttribute,
+            )
+            paragraph.lastMeasure = snapshot.lastMeasure
+            paragraph.containingBlockApplied = snapshot.containingBlockApplied
+        }
     }
 
     private fun shouldTryParagraph(paragraph: HTMLElement): Boolean {
         if (hasClosest(paragraph, SKIPPED_ANCESTOR_SELECTOR)) return false
         if (paragraph.getAttribute("data-tiqian-skip") != null) return false
+        // `LeafListItemParagraph`: Markdown commonly emits list text directly
+        // inside <li>, so a list item is a paragraph-shaped flow owner and must
+        // enter the same pipeline. An outer item that owns a nested block stays
+        // native as a container; its leaf descendants are still independent
+        // candidates. This avoids replacing a nested <ul>/<ol> while preserving
+        // list markers and host list semantics.
+        if (
+            paragraph.tagName.uppercase() == "LI" &&
+            paragraph.querySelector(":scope > p, :scope > ul, :scope > ol, :scope > blockquote, :scope > pre, :scope > table") != null
+        ) {
+            return false
+        }
         if (paragraph.textContent?.isBlank() != false && !hasOpaqueInlineCandidate(paragraph)) return false
         return true
     }
@@ -455,10 +1080,19 @@ object TiqianWeb {
         val firstLineIndent = optionFloat(options, "firstLineIndentIc") ?: 0f
         val emphasisDotGapEm = optionFloat(options, "emphasisDotGapEm")
             ?: DEFAULT_EMPHASIS_DOT_GAP_EM
+        val strongAsEmphasisMarks = optionBoolean(options, "strongAsEmphasisMarks") ?: false
         val paragraphSelector = optionString(options, "paragraphSelector") ?: DEFAULT_PARAGRAPH_SELECTOR
         val dashCapabilityObject = optionObject(options, "cjkDashCapability")
         val dashCapability = dashCapabilityObject?.let { capability ->
             WebCjkDashCapability(
+                status = optionString(capability, "status") ?: "unavailable",
+                sessionId = optionString(capability, "sessionId"),
+                detail = optionString(capability, "detail"),
+            )
+        }
+        val exactFontSessionObject = optionObject(options, "exactFontSession")
+        val exactFontSession = exactFontSessionObject?.let { capability ->
+            ExactFontSessionCapability(
                 status = optionString(capability, "status") ?: "unavailable",
                 sessionId = optionString(capability, "sessionId"),
                 detail = optionString(capability, "detail"),
@@ -470,8 +1104,10 @@ object TiqianWeb {
             lineHeight = lineHeight,
             firstLineIndentIc = firstLineIndent,
             emphasisDotGapEm = emphasisDotGapEm,
+            strongAsEmphasisMarks = strongAsEmphasisMarks,
             paragraphSelector = paragraphSelector,
             cjkDashCapability = dashCapability,
+            exactFontSession = exactFontSession,
         )
     }
 
@@ -486,8 +1122,10 @@ object TiqianWeb {
         val lineHeight: Float? = null,
         val firstLineIndentIc: Float = 0f,
         val emphasisDotGapEm: Float = DEFAULT_EMPHASIS_DOT_GAP_EM,
+        val strongAsEmphasisMarks: Boolean = false,
         val paragraphSelector: String = DEFAULT_PARAGRAPH_SELECTOR,
         val cjkDashCapability: WebCjkDashCapability? = null,
+        val exactFontSession: ExactFontSessionCapability? = null,
     ) {
         lateinit var fonts: WebFontFamilies
             private set
@@ -514,6 +1152,24 @@ object TiqianWeb {
             )
             return resolved
         }
+
+        internal fun conformingExactFontSessionId(): String? = exactFontSession
+            ?.takeIf { it.status == "conforming" }
+            ?.sessionId
+            ?.takeIf(String::isNotBlank)
+
+        internal fun allowsSnapshotExactLayout(): Boolean =
+            fontSize == null &&
+                lineHeight == null &&
+                firstLineIndentIc == 0f &&
+                fontFamilies.cjk == null &&
+                fontFamilies.latin == null &&
+                fontFamilies.monospace == null &&
+                fontFamilies.cjkSerif == null &&
+                fontFamilies.latinSerif == null
+
+        internal fun withoutExactFontSession(): EnhanceOptions =
+            copy(exactFontSession = null).also { fallback -> fallback.fonts = fonts }
     }
 
     data class FontFamilyOptions(
@@ -524,41 +1180,107 @@ object TiqianWeb {
         val latinSerif: String? = null,
     )
 
-    private data class RootState(
-        val root: HTMLElement,
-        val options: EnhanceOptions,
-        val engine: ExplainableStubParagraphLayoutEngine,
-        val paragraphs: MutableList<EnhancedParagraph>,
-        val issues: MutableList<CapabilityIssue>,
+    data class ExactFontSessionCapability(
+        val status: String = "unavailable",
+        val sessionId: String? = null,
+        val detail: String? = null,
     )
 
-    private data class ProgressiveJob(
+    private data class RootState(
+        val root: HTMLElement,
+        var options: EnhanceOptions,
+        var engine: ExplainableStubParagraphLayoutEngine,
+        var browserFallbackEngine: ExplainableStubParagraphLayoutEngine?,
+        val paragraphs: MutableList<EnhancedParagraph>,
+        val issues: MutableList<CapabilityIssue>,
+        var exactPreparedDomEnabled: Boolean = browserFallbackEngine != null,
+        var exactPreparedDomFallback: String? = null,
+    ) {
+        fun activeOptions(): EnhanceOptions =
+            if (exactPreparedDomEnabled) options else options.withoutExactFontSession()
+
+        fun activeEngine(): ExplainableStubParagraphLayoutEngine =
+            if (exactPreparedDomEnabled) engine else browserFallbackEngine ?: engine
+
+        fun activeExactFallbackEngine(): ExplainableStubParagraphLayoutEngine? =
+            browserFallbackEngine.takeIf { exactPreparedDomEnabled }
+
+        fun disableExactPreparedDom(detail: String) {
+            if (!exactPreparedDomEnabled) return
+            exactPreparedDomEnabled = false
+            exactPreparedDomFallback = detail.take(CAPABILITY_DETAIL_LIMIT)
+            root.setAttribute(EXACT_PREPARED_FALLBACK_ATTRIBUTE, exactPreparedDomFallback!!)
+        }
+    }
+
+    private enum class ProgressiveJobKind {
+        Enhance,
+        Relayout,
+        CjkDashRetry,
+    }
+
+    private class ProgressiveJob(
         val state: RootState,
-        val candidates: List<HTMLElement>,
+        val kind: ProgressiveJobKind,
+        val itemCount: Int,
+        val processItem: (Int) -> Unit,
+        val onItemsFinished: (() -> Unit)? = null,
+        val onFailure: (() -> Unit)? = null,
+        val stale: (() -> Boolean)? = null,
         val startedAt: Double,
         var nextIndex: Int = 0,
         var frameId: Int? = null,
         var maxSliceDuration: Double = 0.0,
+        var commitSkipped: Boolean = false,
     )
+
+
+    private sealed class ParagraphLayoutPreparation {
+        data object Unchanged : ParagraphLayoutPreparation()
+
+        data class Ready(
+            val result: LayoutResult,
+            val width: Float,
+            val measure: Float,
+            val exactPreparedDom: Boolean,
+        ) : ParagraphLayoutPreparation()
+
+        data class Unsupported(val issue: CapabilityIssue) : ParagraphLayoutPreparation()
+    }
+
+    private sealed class ParagraphCommitResult {
+        data class Success(val measure: Float) : ParagraphCommitResult()
+        data class Unsupported(val issue: CapabilityIssue) : ParagraphCommitResult()
+    }
 
     private data class EnhancedParagraph(
         val source: HTMLElement,
         val originalContent: DocumentFragment,
         val lowered: LoweredParagraph,
         val originalRenderedAttribute: String?,
+        val originalPreparedFlowAttribute: String?,
+        val originalCanonicalSourceAttribute: String?,
+        val originalLangAttribute: String?,
         val originalStyleAttribute: String?,
         val originalPosition: String,
         val originalPositionPriority: String,
-        var lastWidth: Float? = null,
+        var lastMeasure: Float? = null,
         var containingBlockApplied: Boolean = false,
-        val hostStyleOverrides: MutableList<HostStyleOverride> = mutableListOf(),
     )
 
-    private data class HostStyleOverride(
-        val property: String,
-        val appliedValue: String,
-        val originalValue: String,
-        val originalPriority: String,
+    private data class LiveParagraphSnapshot(
+        val paragraph: EnhancedParagraph,
+        val content: DocumentFragment,
+        val renderedAttribute: String?,
+        val preparedFlowAttribute: String?,
+        val canonicalSourceAttribute: String?,
+        val langAttribute: String?,
+        val styleAttribute: String?,
+        val capabilityNameAttribute: String?,
+        val capabilityDetailAttribute: String?,
+        val lastMeasure: Float?,
+        val containingBlockApplied: Boolean,
+        val originalContentHadChildren: Boolean,
     )
 
     data class CapabilityIssue(
@@ -578,25 +1300,24 @@ object TiqianWeb {
         paragraph.containingBlockApplied = true
     }
 
-    private fun ensureHostFlowStyles(paragraph: EnhancedParagraph) {
-        if (paragraph.hostStyleOverrides.isNotEmpty()) return
-        for ((property, value) in HOST_FLOW_STYLE_OVERRIDES) {
-            paragraph.hostStyleOverrides += HostStyleOverride(
-                property = property,
-                appliedValue = value,
-                originalValue = paragraph.source.style.getPropertyValue(property),
-                originalPriority = paragraph.source.style.getPropertyPriority(property),
-            )
-            paragraph.source.style.setProperty(property, value, "important")
-        }
-    }
-
     private fun restoreParagraph(paragraph: EnhancedParagraph) {
+        releasePreparedParagraphDomStyles(paragraph.source)
         while (paragraph.source.firstChild != null) {
             paragraph.source.removeChild(paragraph.source.firstChild!!)
         }
         paragraph.source.appendChild(paragraph.originalContent)
         restoreAttribute(paragraph.source, "data-tq-rendered", paragraph.originalRenderedAttribute)
+        restoreAttribute(
+            paragraph.source,
+            "data-tq-canonical-plain",
+            paragraph.originalPreparedFlowAttribute,
+        )
+        restoreAttribute(
+            paragraph.source,
+            CANONICAL_SOURCE_ATTRIBUTE,
+            paragraph.originalCanonicalSourceAttribute,
+        )
+        restoreAttribute(paragraph.source, "lang", paragraph.originalLangAttribute)
         if (paragraph.containingBlockApplied &&
             paragraph.source.style.getPropertyValue("position") == "relative" &&
             paragraph.source.style.getPropertyPriority("position") == "important"
@@ -611,23 +1332,6 @@ object TiqianWeb {
                 )
             }
         }
-        for (override in paragraph.hostStyleOverrides.asReversed()) {
-            if (paragraph.source.style.getPropertyValue(override.property) != override.appliedValue ||
-                paragraph.source.style.getPropertyPriority(override.property) != "important"
-            ) {
-                continue
-            }
-            if (override.originalValue.isEmpty()) {
-                paragraph.source.style.removeProperty(override.property)
-            } else {
-                paragraph.source.style.setProperty(
-                    override.property,
-                    override.originalValue,
-                    override.originalPriority,
-                )
-            }
-        }
-        paragraph.hostStyleOverrides.clear()
         if (paragraph.originalStyleAttribute == null) {
             removeEmptyStyleAttribute(paragraph.source)
         }
@@ -661,6 +1365,23 @@ private object MarkdownParagraphLowerer {
 
     fun lower(paragraph: HTMLElement, options: TiqianWeb.EnhanceOptions): LoweredParagraph? {
         lastIssue = null
+        val canonicalPrepared =
+            paragraph.getAttribute("data-tq-rendered") == "true" &&
+                paragraph.getAttribute("data-tq-canonical-plain") == "true"
+        return if (canonicalPrepared) {
+            withCanonicalPreparedHostStyleProbe(paragraph) {
+                lowerWithCurrentStyles(paragraph, options, canonicalPrepared = true)
+            }
+        } else {
+            lowerWithCurrentStyles(paragraph, options, canonicalPrepared = false)
+        }
+    }
+
+    private fun lowerWithCurrentStyles(
+        paragraph: HTMLElement,
+        options: TiqianWeb.EnhanceOptions,
+        canonicalPrepared: Boolean,
+    ): LoweredParagraph? {
         val fallbackStyle = TextStyle(fontSize = DEFAULT_FONT_SIZE)
         val computedParagraphStyle = computedTextStyle(paragraph, fallbackStyle)
         val fontSize = options.fontSize ?: computedParagraphStyle.fontSize
@@ -672,7 +1393,31 @@ private object MarkdownParagraphLowerer {
             textStyle = baseStyle,
             whiteSpace = cssWhiteSpaceMode(computedStyle(paragraph, "white-space")),
         )
-        val builder = LoweringBuilder(paragraph, baseInlineStyle, lineHeight)
+        if (canonicalPrepared) {
+            val source = canonicalPreparedPlainSource(paragraph)
+            if (source.isBlank()) {
+                lastIssue = TiqianWeb.CapabilityIssue("EmptyParagraph", "paragraph has no text", paragraph)
+                return null
+            }
+            return LoweredParagraph(
+                text = source,
+                textStyle = baseStyle,
+                lineHeight = lineHeight,
+                spans = emptyList(),
+                decorations = emptyList(),
+                inlineBoxes = emptyList(),
+                inlineObjects = emptyList(),
+                domInlineObjects = emptyList(),
+                sourceSpans = emptyList(),
+                sourceBoundaries = emptySet(),
+            )
+        }
+        val builder = LoweringBuilder(
+            sourceElement = paragraph,
+            baseInlineStyle = baseInlineStyle,
+            baseLineHeight = lineHeight,
+            strongAsEmphasisMarks = options.strongAsEmphasisMarks,
+        )
         if (!builder.appendChildren(paragraph, baseInlineStyle, depth = 0)) {
             return null
         }
@@ -684,10 +1429,37 @@ private object MarkdownParagraphLowerer {
         return lowered
     }
 
+    /**
+     * CanonicalPreparedHostStyleProbe: a direct-SSR prepared paragraph carries
+     * `data-tq-rendered`, so the public replay CSS intentionally gives it
+     * `line-height: 0` and `white-space: pre`. When a width miss falls back to
+     * runtime layout, those are renderer-owned values rather than host
+     * typography. Suppress the replay selector only while sampling computed
+     * paragraph styles, then restore the attribute synchronously before any
+     * layout mutation can be painted.
+     */
+    private fun <T> withCanonicalPreparedHostStyleProbe(
+        paragraph: HTMLElement,
+        block: () -> T,
+    ): T {
+        val rendered = paragraph.getAttribute("data-tq-rendered")
+        paragraph.removeAttribute("data-tq-rendered")
+        return try {
+            block()
+        } finally {
+            if (rendered == null) {
+                paragraph.removeAttribute("data-tq-rendered")
+            } else {
+                paragraph.setAttribute("data-tq-rendered", rendered)
+            }
+        }
+    }
+
     private class LoweringBuilder(
         private val sourceElement: HTMLElement,
         private val baseInlineStyle: InlineStyle,
         private val baseLineHeight: Float,
+        private val strongAsEmphasisMarks: Boolean,
     ) {
         val text = StringBuilder()
         private val spans = mutableListOf<TextSpan>()
@@ -750,13 +1522,13 @@ private object MarkdownParagraphLowerer {
                 )
             }
             val inheritedStrongWeight = style.cjkStrongBaseWeight
-            val strongBaseWeight = if (tag == "STRONG") {
+            val strongBaseWeight = if (tag == "STRONG" && strongAsEmphasisMarks) {
                 inheritedStrongWeight ?: style.textStyle.fontWeight
             } else {
                 null
             }
             val elementStyle = computedInlineStyle(element, style).let { computed ->
-                if (tag == "STRONG") {
+                if (tag == "STRONG" && strongAsEmphasisMarks) {
                     computed.copy(cjkStrongBaseWeight = strongBaseWeight)
                 } else {
                     computed
@@ -967,6 +1739,34 @@ private object MarkdownParagraphLowerer {
     }
 }
 
+private fun canonicalPreparedPlainSource(parent: Node): String = buildString {
+    fun appendNode(node: Node) {
+        if (node.nodeType == Node.TEXT_NODE) {
+            append(node.textContent.orEmpty())
+            return
+        }
+        if (node.nodeType != Node.ELEMENT_NODE) return
+        val element = node as Element
+        if (element.hasAttribute("data-tq-copy-ignore")) return
+        if (element.hasAttribute("data-tq-src")) {
+            val following = element.nextSibling as? Element
+            val pairedMandatoryBreak = element.hasAttribute("data-tq-hard-break") &&
+                following?.tagName?.uppercase() == "BR" &&
+                following.getAttribute("data-tq-engine-break") == "MandatoryBreak"
+            if (!pairedMandatoryBreak) append(element.getAttribute("data-tq-src").orEmpty())
+            return
+        }
+        if (element.tagName.uppercase() == "BR") {
+            if (element.getAttribute("data-tq-engine-break") == "MandatoryBreak") append('\n')
+            return
+        }
+        val children = element.childNodes
+        for (index in 0 until children.length) children.item(index)?.let(::appendNode)
+    }
+    val children = parent.childNodes
+    for (index in 0 until children.length) children.item(index)?.let(::appendNode)
+}
+
 data class LoweredParagraph(
     val text: String,
     val textStyle: TextStyle,
@@ -979,6 +1779,19 @@ data class LoweredParagraph(
     val sourceSpans: List<DomSourceSpan>,
     val sourceBoundaries: Set<Int>,
 )
+
+private fun LoweredParagraph.isCanonicalPlainParagraph(): Boolean =
+    spans.isEmpty() &&
+        decorations.isEmpty() &&
+        inlineBoxes.isEmpty() &&
+        inlineObjects.isEmpty() &&
+        domInlineObjects.isEmpty() &&
+        sourceSpans.isEmpty()
+
+private fun isExactFontSessionCapabilityFailure(error: Throwable): Boolean {
+    val detail = error.message.orEmpty()
+    return EXACT_FONT_SESSION_CAPABILITY_FAILURES.any(detail::contains)
+}
 
 data class DomInlineObject(
     val range: TextRange,
@@ -1328,12 +2141,51 @@ private external fun optionString(options: JsAny?, name: String): String?
 private external fun optionNumber(options: JsAny?, name: String): Double
 
 @OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(options, name) => options && typeof options[name] === 'boolean' ? options[name] : null")
+private external fun optionBoolean(options: JsAny?, name: String): Boolean?
+
+@OptIn(ExperimentalWasmJsInterop::class)
 @JsFun("(options, name) => options && options[name] && typeof options[name] === 'object' ? options[name] : null")
 private external fun optionObject(options: JsAny?, name: String): JsAny?
 
 @OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(host, planJson, locale) => globalThis.__TiqianPreparedDomRenderer.render(host, planJson, locale)")
+private external fun renderPreparedParagraphDom(
+    host: HTMLElement,
+    planJson: String,
+    locale: String,
+): JsAny?
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(host) => globalThis.__TiqianPreparedDomRenderer?.release?.(host) === true")
+private external fun releasePreparedParagraphDomStyles(host: HTMLElement): Boolean
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(root) => globalThis.__TiqianPreparedDomRenderer?.releaseRoot?.(root) === true")
+private external fun releasePreparedRootDomStyles(root: HTMLElement): Boolean
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(host, width) => globalThis.__TiqianPreparedDomValidator && typeof globalThis.__TiqianPreparedDomValidator.issue === 'function' ? globalThis.__TiqianPreparedDomValidator.issue(host, width) : 'PreparedDomValidatorUnavailable'")
+private external fun validatePreparedParagraphDom(host: HTMLElement, width: Double): String?
+
+@OptIn(ExperimentalWasmJsInterop::class)
 @JsFun("(element) => element.getBoundingClientRect().width")
 private external fun elementWidth(element: HTMLElement): Double
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun(
+    """(element) => {
+      const rect = element.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+      if (rect.bottom >= 0 && rect.top <= viewportHeight) return 0;
+      return rect.bottom < 0 ? -rect.bottom : rect.top - viewportHeight;
+    }""",
+)
+private external fun paragraphViewportDistance(element: HTMLElement): Double
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(element) => { const style = getComputedStyle(element); const number = (value) => Number.parseFloat(value) || 0; return element.getBoundingClientRect().width - number(style.paddingLeft) - number(style.paddingRight) - number(style.borderLeftWidth) - number(style.borderRightWidth); }")
+private external fun elementContentWidth(element: HTMLElement): Double
 
 @OptIn(ExperimentalWasmJsInterop::class)
 @JsFun(
@@ -1485,14 +2337,42 @@ private external fun consoleWarn(message: String)
 private external fun performanceNow(): Double
 
 @OptIn(ExperimentalWasmJsInterop::class)
-@JsFun("(root, enhancedCount, issueCount, durationMs, maxSliceMs) => root.dispatchEvent(new CustomEvent('tiqian:ready', { detail: { enhancedCount, issueCount, durationMs, maxSliceMs } }))")
+@JsFun("(root, enhancedCount, issueCount, durationMs, maxSliceMs, capabilityRetry) => root.dispatchEvent(new CustomEvent('tiqian:ready', { detail: { enhancedCount, issueCount, durationMs, maxSliceMs, capabilityRetry } }))")
 private external fun dispatchTiqianReady(
     root: HTMLElement,
     enhancedCount: Int,
     issueCount: Int,
     durationMs: Double,
     maxSliceMs: Double,
+    capabilityRetry: Boolean,
 )
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(root, enhancedCount, issueCount, durationMs, maxSliceMs, failed, error, stale) => root.dispatchEvent(new CustomEvent('tiqian:relayout-ready', { detail: { enhancedCount, issueCount, durationMs, maxSliceMs, capabilityRetry: false, relayout: true, failed, error, stale } }))")
+private external fun dispatchTiqianRelayoutReady(
+    root: HTMLElement,
+    enhancedCount: Int,
+    issueCount: Int,
+    durationMs: Double,
+    maxSliceMs: Double,
+    failed: Boolean,
+    error: String?,
+    stale: Boolean,
+)
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(root, kind, detail, durationMs, maxSliceMs) => root.dispatchEvent(new CustomEvent(kind === 'Relayout' ? 'tiqian:relayout-error' : 'tiqian:error', { detail: { kind, error: detail, durationMs, maxSliceMs } }))")
+private external fun dispatchTiqianProgressiveError(
+    root: HTMLElement,
+    kind: String,
+    detail: String,
+    durationMs: Double,
+    maxSliceMs: Double,
+)
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(root) => root.dispatchEvent(new CustomEvent('tiqian:capability-retry-start'))")
+private external fun dispatchTiqianCapabilityRetryStart(root: HTMLElement)
 
 @OptIn(ExperimentalWasmJsInterop::class)
 private fun installTiqianGlobalApiBridge() {
@@ -1529,50 +2409,135 @@ private fun installTiqianGlobalApiBridge() {
     )
 }
 
+/**
+ * Package entrypoints install `SourceFaithfulSemanticClipboard` from copy.js.
+ * This fallback mirrors that contract for direct Wasm runtime consumers.
+ */
 @OptIn(ExperimentalWasmJsInterop::class)
 private fun installTiqianCopyHandler() {
     js(
         """
-        if (!globalThis.__tiqianCopyHandlerInstalled) {
-          globalThis.__tiqianCopyHandlerInstalled = true;
-          document.addEventListener("copy", function (e) {
-            var sel = window.getSelection();
-            if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
-            var range = sel.getRangeAt(0);
-            var renderedAncestor = function (node) {
-              var element = node && node.nodeType === 1 ? node : node && node.parentElement;
-              return element && element.closest ? element.closest("[data-tq-rendered]") : null;
-            };
-            var touchesRendered = !!renderedAncestor(range.startContainer) ||
-              !!renderedAncestor(range.endContainer);
-            if (!touchesRendered) {
-              var common = range.commonAncestorContainer;
-              var commonElement = common && common.nodeType === 1 ? common : common && common.parentElement;
-              var candidates = commonElement && commonElement.querySelectorAll
-                ? Array.from(commonElement.querySelectorAll("[data-tq-rendered]"))
-                : [];
-              if (commonElement && commonElement.matches && commonElement.matches("[data-tq-rendered]")) {
-                candidates.unshift(commonElement);
+        if (globalThis.__TiqianInstallCopyHandler) {
+          globalThis.__TiqianInstallCopyHandler(document);
+        } else if (!globalThis.__tiqianCopyHandlerInstalled) {
+          var blockElements = new Set([
+            "ADDRESS", "ARTICLE", "ASIDE", "BLOCKQUOTE", "DD", "DIV", "DL", "DT",
+            "FIELDSET", "FIGCAPTION", "FIGURE", "FOOTER", "FORM", "H1", "H2", "H3",
+            "H4", "H5", "H6", "HEADER", "HR", "LI", "MAIN", "NAV", "OL", "P", "PRE",
+            "SECTION", "TABLE", "TR", "UL"
+          ]);
+          var engineFlowStyleProperties = [
+            "white-space-collapse", "overflow-wrap", "text-autospace", "text-spacing-trim",
+            "text-wrap-mode", "-webkit-hyphens", "hyphens", "word-break"
+          ];
+          var clipboardTextForNode;
+          var clipboardTextForChildren = function (parent) {
+            var children = Array.from(parent.childNodes || []);
+            var containsBlock = children.some(function (child) {
+              return child.nodeType === 1 && blockElements.has(child.tagName);
+            });
+            var result = "";
+            var previous = null;
+            children.forEach(function (child) {
+              if (containsBlock && child.nodeType === 3 && !(child.data || "").trim()) return;
+              var item = clipboardTextForNode(child);
+              if (previous && (previous.block || item.block) && result && item.text &&
+                  !result.endsWith("\n") && !item.text.startsWith("\n")) {
+                result += "\n";
               }
-              touchesRendered = candidates.some(function (candidate) {
-                try { return range.intersectsNode(candidate); } catch (_) { return false; }
-              });
-            }
-            if (!touchesRendered) return;
-            var frag = range.cloneContents();
-            if (!frag.querySelectorAll) return;
-            frag.querySelectorAll("[data-tq-copy-ignore]").forEach(function (el) {
-              el.remove();
+              result += item.text;
+              previous = item;
             });
+            return result;
+          };
+          clipboardTextForNode = function (node) {
+            if (node.nodeType === 3) return { block: false, text: node.data || "" };
+            if (node.nodeType !== 1) return { block: false, text: "" };
+            if (node.tagName === "BR") return { block: false, text: "\n" };
+            return {
+              block: blockElements.has(node.tagName),
+              text: clipboardTextForChildren(node)
+            };
+          };
+          globalThis.__TiqianCreateClipboardPayload = function (frag, documentObject) {
+            if (!frag || !frag.querySelectorAll || !documentObject || !documentObject.createElement) {
+              return { text: "", html: "" };
+            }
+            frag.querySelectorAll("[data-tq-copy-ignore]").forEach(function (el) { el.remove(); });
             frag.querySelectorAll("[data-tq-src]").forEach(function (el) {
-              el.textContent = el.getAttribute("data-tq-src");
+              if (el.hasAttribute("data-tq-hard-break")) {
+                var semanticBreak = el.nextElementSibling;
+                if (semanticBreak && semanticBreak.matches &&
+                    semanticBreak.matches("br[data-tq-engine-break='MandatoryBreak']")) {
+                  el.remove();
+                } else {
+                  el.replaceWith(documentObject.createElement("br"));
+                }
+              } else {
+                el.replaceWith(documentObject.createTextNode(el.getAttribute("data-tq-src") || ""));
+              }
             });
-            var text = frag.textContent;
-            if (text && e.clipboardData) {
-              e.clipboardData.setData("text/plain", text);
-              e.preventDefault();
-            }
-          });
+            frag.querySelectorAll(
+              "[data-tq-engine-break]:not([data-tq-engine-break='MandatoryBreak'])"
+            ).forEach(function (el) { el.remove(); });
+            Array.from(frag.querySelectorAll("[data-tq-geometry]")).reverse().forEach(function (el) {
+              el.replaceWith.apply(el, Array.from(el.childNodes));
+            });
+            frag.querySelectorAll("*").forEach(function (el) {
+              var rendered = el.hasAttribute("data-tq-rendered");
+              var sourceSemantic = el.hasAttribute("data-tq-source-semantic");
+              var cjkStrong = el.hasAttribute("data-tq-cjk-emphasis");
+              if (el.style && (rendered || sourceSemantic)) {
+                engineFlowStyleProperties.forEach(function (property) { el.style.removeProperty(property); });
+                if (rendered) el.style.removeProperty("position");
+                if (!(el.getAttribute("style") || "").trim()) el.removeAttribute("style");
+              }
+              if (cjkStrong && el.style) {
+                el.style.removeProperty("font-weight");
+                if (!(el.getAttribute("style") || "").trim()) el.removeAttribute("style");
+              }
+              Array.from(el.attributes).forEach(function (attribute) {
+                if (attribute.name.startsWith("data-tq-")) el.removeAttribute(attribute.name);
+              });
+            });
+            var wrapper = documentObject.createElement("div");
+            wrapper.appendChild(frag);
+            return { text: clipboardTextForChildren(wrapper), html: wrapper.innerHTML };
+          };
+          if (!globalThis.__tiqianCopyHandlerInstalled) {
+            globalThis.__tiqianCopyHandlerInstalled = true;
+            document.addEventListener("copy", function (e) {
+              var sel = window.getSelection();
+              if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+              var range = sel.getRangeAt(0);
+              var renderedAncestor = function (node) {
+                var element = node && node.nodeType === 1 ? node : node && node.parentElement;
+                return element && element.closest ? element.closest("[data-tq-rendered]") : null;
+              };
+              var touchesRendered = !!renderedAncestor(range.startContainer) ||
+                !!renderedAncestor(range.endContainer);
+              if (!touchesRendered) {
+                var common = range.commonAncestorContainer;
+                var commonElement = common && common.nodeType === 1 ? common : common && common.parentElement;
+                var candidates = commonElement && commonElement.querySelectorAll
+                  ? Array.from(commonElement.querySelectorAll("[data-tq-rendered]"))
+                  : [];
+                if (commonElement && commonElement.matches && commonElement.matches("[data-tq-rendered]")) {
+                  candidates.unshift(commonElement);
+                }
+                touchesRendered = candidates.some(function (candidate) {
+                  try { return range.intersectsNode(candidate); } catch (_) { return false; }
+                });
+              }
+              if (!touchesRendered) return;
+              var payload = globalThis.__TiqianCreateClipboardPayload(range.cloneContents(), document);
+              if ((payload.text || payload.html) && e.clipboardData) {
+                e.clipboardData.setData("text/plain", payload.text);
+                if (payload.html) e.clipboardData.setData("text/html", payload.html);
+                e.preventDefault();
+              }
+            });
+          }
         }
         """,
     )
@@ -1583,6 +2548,12 @@ private const val INLINE_EDGE_EPSILON = 0.01f
 private const val ZERO_ADVANCE_EPSILON = 0.01f
 private const val CAPABILITY_DETAIL_LIMIT = 512
 private const val MAX_PROGRESSIVE_SLICE_MS = 8.0
+private const val MAX_PROGRESSIVE_ITEMS_PER_SLICE = 8
+private const val MAX_RESPONSIVE_STALE_COMMIT_CELLS = 1
+private const val CANONICAL_SOURCE_ATTRIBUTE = "data-tq-canonical-source"
+private const val RELAYOUT_ERROR_ATTRIBUTE = "data-tiqian-relayout-error"
+private const val EXACT_PREPARED_FALLBACK_ATTRIBUTE = "data-tiqian-exact-layout-fallback"
+private const val CJK_DASH_CAPABILITY_ISSUE = "NoConformingCjkDashGlyph"
 private const val DEFAULT_LINE_HEIGHT_MULTIPLIER = 1.75f
 private const val DEFAULT_CJK_FONT_FAMILY = "\"MiSans VF\", \"PingFang SC\", \"Noto Sans CJK SC\", sans-serif"
 private const val DEFAULT_LATIN_FONT_FAMILY = "\"InterVariable\", \"Inter\", \"MiSans VF\", sans-serif"
@@ -1591,14 +2562,15 @@ private const val DEFAULT_MONOSPACE_FONT_FAMILY =
 private const val DEFAULT_CJK_SERIF_FONT_FAMILY = "\"MetroSungPlus-SC\", \"Songti SC\", serif"
 private const val DEFAULT_LATIN_SERIF_FONT_FAMILY = "Georgia, \"Times New Roman\", serif"
 
-private val HOST_FLOW_STYLE_OVERRIDES = listOf(
-    "white-space-collapse" to "preserve",
-    "overflow-wrap" to "normal",
-    "text-autospace" to "no-autospace",
-    "text-wrap-mode" to "nowrap",
-    "-webkit-hyphens" to "manual",
-    "hyphens" to "manual",
-    "word-break" to "normal",
+private val EXACT_FONT_SESSION_CAPABILITY_FAILURES = listOf(
+    "NoExactFontFace",
+    "MissingGlyph",
+    "NoExactMetricFace",
+    "NonUniformUnicodeRangeMetrics",
+)
+
+private val WIDTH_DEPENDENT_CAPABILITY_ISSUES = setOf(
+    "InlineCloneDecorationBreakUnsupported",
 )
 
 private val NON_TEXT_INLINE_TAGS = setOf(

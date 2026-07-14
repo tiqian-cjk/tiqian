@@ -1,9 +1,145 @@
 tiqian-prose {
   display: block;
+  --tq-styles-ready: 1;
+}
+
+/* WebNativeTwoIcListIndent: Web keeps the browser's marker semantics and gives
+   every list level a stable two-character body indent. This is present in the
+   static stylesheet, so list geometry never waits for Wasm marker shaping. */
+:is(tiqian-prose, [data-tiqian-root]) :where(ol, ul):not(.footnotes-list) {
+  padding-inline-start: 2ic !important;
+  margin-inline-start: 0 !important;
+  margin-inline-end: 0 !important;
+  list-style-position: outside !important;
 }
 
 tiqian-prose [data-tq-rendered="true"] {
   position: relative;
+}
+
+/* ExactRenderFontContract: prepared DOM and exact-browser fallback render
+   through the same CSS family aliases used by build/runtime HarfBuzz. The
+   root marker is applied only after the corresponding font contract has been
+   accepted; a core capability fallback returns font ownership to the host. */
+:is(tiqian-prose, [data-tiqian-root])[data-tiqian-exact-render-font="true"]:not([data-tiqian-exact-layout-fallback]) [data-tq-rendered="true"] {
+  font-family: var(--tq-exact-render-font-family) !important;
+}
+
+/* SharedRuntimeGeometryCss: runtime geometry leaves need the same host-CSS
+   isolation as prepared nodes, but the invariant reset belongs here instead
+   of being expanded by CSSOM into every element's style attribute. */
+[data-tq-rendered="true"] span[data-tq-geometry="true"] {
+  all: unset !important;
+  display: inline !important;
+  text-spacing-trim: space-all !important;
+}
+
+/* SharedDecorationOverlayCss: decoration geometry carries only measured
+   dimensions and color/stroke values inline. The invariant SVG isolation is
+   shared across every paragraph instead of repeated in serialized style. */
+[data-tq-rendered="true"] svg[data-tq-geometry="true"] {
+  all: unset !important;
+  display: block !important;
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  width: var(--tq-overlay-width) !important;
+  height: var(--tq-overlay-height) !important;
+  overflow: visible !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+[data-tq-rendered="true"] svg[data-tq-geometry="true"] line[data-tq-decoration-line] {
+  stroke: var(--tq-decoration-color) !important;
+  stroke-width: var(--tq-decoration-stroke-width) !important;
+  stroke-linecap: butt !important;
+}
+
+[data-tq-rendered="true"] svg[data-tq-geometry="true"] path[data-tq-decoration-wave] {
+  fill: none !important;
+  stroke: var(--tq-decoration-color) !important;
+  stroke-width: var(--tq-decoration-stroke-width) !important;
+  stroke-linecap: butt !important;
+  stroke-linejoin: round !important;
+}
+
+[data-tq-rendered="true"] svg[data-tq-geometry="true"] circle[data-tq-decoration-dot] {
+  fill: var(--tq-decoration-color) !important;
+}
+
+[data-tq-rendered="true"] br[data-tq-engine-break] {
+  all: unset !important;
+}
+
+/* CanonicalPreparedLineBox: the shared line marker is the sole owner of the
+   exact LayoutResult ascent/descent. The paragraph's inherited strut must not
+   add a second browser-derived vertical metric. */
+[data-tq-rendered="true"][data-tq-canonical-plain="true"] {
+  line-height: 0 !important;
+  /* ExactPreparedShapingCss: HarfBuzz enables normal kerning while the CSS
+     `auto` value lets the browser choose a size-dependent policy. Force the
+     same stable shaping inputs used by build-time and browser Wasm probes. */
+  font-kerning: normal !important;
+  font-optical-sizing: none !important;
+}
+
+/* SharedLineMetricStrutCss: prepared and runtime paragraphs keep only per-line
+   measurements in custom properties. The fixed line-box replay contract is
+   identical even when a rich paragraph nests the strut in a semantic clone. */
+[data-tq-rendered="true"] .tq-line[data-tq-geometry="true"] {
+  all: unset !important;
+  display: inline-block !important;
+  width: 0 !important;
+  height: var(--tq-line-height) !important;
+  line-height: var(--tq-line-height) !important;
+  vertical-align: var(--tq-line-baseline-offset) !important;
+  overflow: visible !important;
+  pointer-events: none !important;
+  margin-left: 0 !important;
+}
+
+[data-tq-rendered="true"][data-tq-canonical-plain="true"] > .tq-line[data-tq-line-shift="true"] {
+  margin-left: var(--tq-line-flow-start) !important;
+}
+
+[data-tq-rendered="true"][data-tq-canonical-plain="true"] > [data-tq-line-end-sentinel] {
+  all: unset !important;
+  display: inline-block !important;
+  width: 0 !important;
+  height: 0 !important;
+  line-height: 0 !important;
+  vertical-align: baseline !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+/* ParagraphSelectionEndSentinel: a selected zero-width character makes
+   Chromium paint the same small block-end strip as native paragraphs even
+   when the final punctuation run has negative letter-spacing. */
+[data-tq-rendered="true"] [data-tq-selection-end] {
+  all: unset !important;
+  display: inline !important;
+  pointer-events: none !important;
+}
+
+[data-tq-rendered="true"][data-tq-canonical-plain="true"] > [data-tq-hard-break] {
+  all: unset !important;
+  display: none !important;
+}
+
+[data-tq-rendered="true"][data-tq-canonical-plain="true"] > br[data-tq-engine-break] {
+  all: unset !important;
+}
+
+[data-tq-rendered="true"][data-tq-canonical-plain="true"] > [data-tq-engine-hyphen] {
+  all: unset !important;
+  display: inline-block !important;
+  white-space: pre !important;
+  vertical-align: baseline !important;
+  direction: ltr !important;
+  unicode-bidi: isolate !important;
 }
 
 [data-tq-rendered="true"],
@@ -11,8 +147,67 @@ tiqian-prose [data-tq-rendered="true"] {
   white-space-collapse: preserve !important;
   overflow-wrap: normal !important;
   text-autospace: no-autospace !important;
+  /* EngineOwnedPunctuationSpacing: LayoutResult already owns adjacent CJK
+     punctuation compression; keep CSS Text from trimming the same space. */
+  text-spacing-trim: space-all !important;
   text-wrap-mode: nowrap !important;
   -webkit-hyphens: manual !important;
   hyphens: manual !important;
   word-break: normal !important;
+}
+
+[data-tq-rendered="true"] [data-tq-geometry="true"]::before,
+[data-tq-rendered="true"] [data-tq-shaping-boundary]::before,
+[data-tq-rendered="true"] [data-tq-geometry="true"]::after,
+[data-tq-rendered="true"] [data-tq-shaping-boundary]::after {
+  content: none !important;
+  display: none !important;
+}
+
+[data-tq-rendered="true"] span[data-tq-shaping-boundary] {
+  all: unset !important;
+  display: inline-block !important;
+  white-space: pre !important;
+  text-spacing-trim: space-all !important;
+  vertical-align: baseline !important;
+  direction: ltr !important;
+  unicode-bidi: isolate !important;
+}
+
+/* SharedCurlyQuoteProportionalForms: the browser replays the same named
+   OpenType features used by the build-time HarfBuzz backend for curly quotes
+   classified as Latin text. The attribute is emitted from LayoutResult, not
+   inferred again by the renderer. */
+[data-tq-rendered="true"] span[data-tq-shaping-boundary][data-tq-open-type-features="pwid,palt"] {
+  font-variant-east-asian: proportional-width !important;
+  font-feature-settings: "palt" 1 !important;
+}
+
+/* BrowserFallbackCurlyQuoteFeatures: runtime DOM runs receive the same
+   GlyphRun feature contract as prepared shaping. The span qualifier ties the
+   shared geometry reset on specificity, and this later rule wins. */
+[data-tq-rendered="true"] span[data-tq-open-type-features="pwid,palt"] {
+  font-variant-east-asian: proportional-width !important;
+  font-feature-settings: "palt" 1 !important;
+}
+
+[data-tq-rendered="true"] [data-tq-shaping-boundary]::first-letter,
+[data-tq-rendered="true"] [data-tq-shaping-boundary]::first-line {
+  all: unset !important;
+  font: inherit !important;
+  font-feature-settings: inherit !important;
+  font-kerning: inherit !important;
+  font-language-override: inherit !important;
+  font-optical-sizing: inherit !important;
+  font-size-adjust: inherit !important;
+  font-stretch: inherit !important;
+  font-variant: inherit !important;
+  font-variation-settings: inherit !important;
+  letter-spacing: inherit !important;
+  line-height: inherit !important;
+  text-transform: inherit !important;
+  word-spacing: inherit !important;
+  direction: inherit !important;
+  unicode-bidi: inherit !important;
+  float: none !important;
 }

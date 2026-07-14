@@ -64,6 +64,7 @@ include(
     ":tiqian-shaping-android",
     ":tiqian-shaping-web",
     ":tiqian-web",
+    ":tiqian-web-precompute",
     ":tiqian-linebreak",
     ":tiqian-clreq",
     ":tiqian-layout",

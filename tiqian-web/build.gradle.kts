@@ -27,10 +27,23 @@ kotlin {
 
 tasks.register<Sync>("assembleNpmPackage") {
     group = "distribution"
-    description = "Builds the @tiqian/web ESM package runtime."
-    dependsOn("wasmJsProductionExecutableCompileSync")
+    description = "Builds the @tiqian/prose ESM package runtime."
+    dependsOn("wasmJsProductionExecutableCompileSync", "assemblePrecomputeNpmRuntime")
     from(layout.buildDirectory.dir("compileSync/wasmJs/main/productionExecutable/optimized")) {
         include("*.mjs", "*.wasm")
     }
     into(layout.projectDirectory.dir("npm/runtime"))
+}
+
+tasks.register<Sync>("assemblePrecomputeNpmRuntime") {
+    group = "distribution"
+    description = "Builds the Node-only @tiqian/prose/precompute runtime."
+    dependsOn(":tiqian-web-precompute:wasmJsProductionExecutableCompileSync")
+    from(
+        project(":tiqian-web-precompute")
+            .layout.buildDirectory.dir("compileSync/wasmJs/main/productionExecutable/optimized"),
+    ) {
+        include("*.mjs", "*.wasm")
+    }
+    into(layout.projectDirectory.dir("npm/precompute-runtime"))
 }

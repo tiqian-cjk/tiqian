@@ -8,6 +8,7 @@ export interface TiqianWebOptions {
   lineHeight?: number;
   firstLineIndentIc?: number;
   emphasisDotGapEm?: number;
+  strongAsEmphasisMarks?: boolean;
   paragraphSelector?: string;
 }
 

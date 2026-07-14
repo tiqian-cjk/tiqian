@@ -11,8 +11,10 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.tiqian.shaping.web.WebCjkDashCapability
 import org.w3c.dom.Element
 import org.w3c.dom.HTMLElement
+import org.w3c.dom.events.Event
 
 class TiqianWebEnhancerTest {
     private val mounted = mutableListOf<HTMLElement>()
@@ -24,6 +26,253 @@ class TiqianWebEnhancerTest {
             root.parentNode?.removeChild(root)
         }
         mounted.clear()
+        restoreTestAnimationFrames()
+    }
+
+    @Test
+    fun exactFontSessionUsesSharedBackendAndCanonicalPreparedDomBridge() {
+        installExactFontSessionFixture(failShaping = false)
+        try {
+            val root = mount(
+                """
+                <div data-tiqian-root="true" style="width: 220px">
+                  <p data-tq-snapshot-key="plain" style="font-family: 'Fixture CJK'; font-size: 18px; line-height: 30px">中文正文。</p>
+                </div>
+                """.trimIndent(),
+            )
+
+            val count = TiqianWeb.enhance(root, exactTestOptions())
+
+            assertEquals(1, count)
+            val paragraph = root.querySelector("p") as HTMLElement
+            assertEquals("true", paragraph.getAttribute("data-tq-canonical-plain"))
+            assertEquals("true", paragraph.getAttribute("data-tq-canonical-source"))
+            assertEquals("zh-Hans", paragraph.getAttribute("lang"))
+            assertNotNull(paragraph.querySelector("[data-tq-exact-rendered]"))
+            assertTrue(exactPreparedPlan().contains("\"layoutRevision\":\"tiqian-layout-v2\""))
+            assertTrue(exactPreparedPlan().contains("\"height\":"))
+        } finally {
+            clearExactFontSessionFixture()
+        }
+    }
+
+    @Test
+    fun exactBrowserFallbackCarriesLatinQuoteFeaturesIntoPreparedDomPlan() {
+        installExactFontSessionFixture(failShaping = false)
+        try {
+            val root = mount(
+                """
+                <div data-tiqian-root="true" style="width: 220px">
+                  <p data-tq-snapshot-key="plain" style="font-family: 'Fixture CJK'; font-size: 18px; line-height: 30px">that’s James’ ’90s</p>
+                </div>
+                """.trimIndent(),
+            )
+
+            val count = TiqianWeb.enhance(root, exactTestOptions())
+
+            assertEquals(1, count)
+            assertTrue(
+                exactPreparedPlan().contains("\"openTypeFeatures\":[\"pwid\",\"palt\"]"),
+                exactPreparedPlan(),
+            )
+        } finally {
+            clearExactFontSessionFixture()
+        }
+    }
+
+    @Test
+    fun browserFontFallbackMeasuresAndReplaysLatinCurlyQuoteFeatures() {
+        val source = "that’s；（如 ‘O’, ‘Q’）"
+        val root = mount(
+            "<div data-tiqian-root='true' style='width: 500px'><p>$source</p></div>",
+        )
+
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+
+        val paragraph = root.querySelector("p") as HTMLElement
+        val featureRuns = paragraph.querySelectorAll(
+            "span[data-tq-open-type-features='pwid,palt']",
+        )
+        assertEquals(3, featureRuns.length, paragraph.innerHTML)
+        var quotedCodePoints = 0
+        for (index in 0 until featureRuns.length) {
+            val run = featureRuns.item(index) as HTMLElement
+            quotedCodePoints += run.textContent.orEmpty().count { it in '\u2018'..'\u201D' }
+        }
+        assertEquals(5, quotedCodePoints, paragraph.innerHTML)
+        assertEquals(source, copySelection(paragraph))
+    }
+
+    @Test
+    fun browserQuoteContextMatrixReplaysOnlyLatinQuoteFeatures() {
+        data class QuoteCase(
+            val source: String,
+            val html: String = source,
+            val proportionalQuoteCount: Int,
+        )
+
+        val cases = listOf(
+            QuoteCase(source = "中“文”中", proportionalQuoteCount = 0),
+            QuoteCase(source = "“Hello”", proportionalQuoteCount = 2),
+            QuoteCase(source = "that’s James’ ’90s", proportionalQuoteCount = 3),
+            QuoteCase(source = "中文 ‘don’t’", proportionalQuoteCount = 3),
+            QuoteCase(source = "他说：“She said ‘hello’.”", proportionalQuoteCount = 2),
+            QuoteCase(
+                source = "中文 ‘don’t’",
+                html = "中文 <strong>‘don’t’</strong>",
+                proportionalQuoteCount = 3,
+            ),
+        )
+        val root = mount(
+            "<div data-tiqian-root='true' style='width: 520px'>" +
+                cases.joinToString(separator = "") { "<p>${it.html}</p>" } +
+                "</div>",
+        )
+
+        TiqianWeb.install()
+        assertEquals(cases.size, TiqianWeb.enhance(root, testOptions()))
+
+        fun assertCases() {
+            val paragraphs = root.querySelectorAll("p")
+            for ((index, case) in cases.withIndex()) {
+                val paragraph = paragraphs.item(index) as HTMLElement
+                val featureRuns = paragraph.querySelectorAll(
+                    "span[data-tq-open-type-features='pwid,palt']",
+                )
+                var actualQuoteCount = 0
+                for (runIndex in 0 until featureRuns.length) {
+                    actualQuoteCount += featureRuns.item(runIndex)!!
+                        .textContent
+                        .orEmpty()
+                        .count { it.isCurlyQuoteForWebTest() }
+                }
+                assertEquals(case.proportionalQuoteCount, actualQuoteCount, case.source)
+                assertEquals(case.source, copySelection(paragraph), case.source)
+            }
+        }
+        assertCases()
+
+        installTestAnimationFrames()
+        root.style.width = "180px"
+        dispatchRelayout(root)
+        flushAllTestAnimationFrames()
+        assertCases()
+    }
+
+    @Test
+    fun unavailableExactFaceFallsBackToTheBrowserPipeline() {
+        installExactFontSessionFixture(failShaping = true)
+        try {
+            val root = mount(
+                """
+                <div data-tiqian-root="true" style="width: 220px">
+                  <p data-tq-snapshot-key="plain" style="font-size: 18px; line-height: 30px">中文正文。</p>
+                </div>
+                """.trimIndent(),
+            )
+
+            val count = TiqianWeb.enhance(root, exactTestOptions())
+
+            assertEquals(1, count)
+            val paragraph = root.querySelector("p") as HTMLElement
+            assertNull(paragraph.getAttribute("data-tq-canonical-plain"))
+            assertEquals("true", paragraph.getAttribute("data-tq-canonical-source"))
+            assertNotNull(paragraph.querySelector(".tq-line"))
+            assertNull(paragraph.querySelector("[data-tq-exact-rendered]"))
+        } finally {
+            clearExactFontSessionFixture()
+        }
+    }
+
+    @Test
+    fun exactPreparedDomGeometryMismatchDisablesRepeatedExactAttemptsForTheRoot() {
+        installExactFontSessionFixture(failShaping = false)
+        failExactPreparedDomValidation("fixture-line-drift")
+        try {
+            val root = mount(
+                """
+                <div data-tiqian-root="true" style="width: 220px">
+                  <p data-tq-snapshot-key="plain" style="font-family: 'Fixture CJK'; font-size: 18px; line-height: 30px">中文正文。</p>
+                  <p data-tq-snapshot-key="second" style="font-family: 'Fixture CJK'; font-size: 18px; line-height: 30px">第二段正文。</p>
+                </div>
+                """.trimIndent(),
+            )
+            val paragraph = root.querySelector("p") as HTMLElement
+
+            val count = TiqianWeb.enhance(root, exactTestOptions())
+
+            assertEquals(2, count)
+            assertNull(paragraph.getAttribute("data-tq-canonical-plain"))
+            assertNull(paragraph.querySelector("[data-tq-exact-rendered]"))
+            assertNotNull(paragraph.querySelector(".tq-line"))
+            assertNull(paragraph.getAttribute("data-tiqian-capability-issue"))
+            assertEquals(1, exactPreparedRenderCount())
+            assertEquals(
+                "fixture-line-drift",
+                root.getAttribute("data-tiqian-exact-layout-fallback"),
+            )
+            val second = root.querySelector("p[data-tq-snapshot-key='second']") as HTMLElement
+            assertNull(second.querySelector("[data-tq-exact-rendered]"))
+            assertNotNull(second.querySelector(".tq-line"))
+        } finally {
+            clearExactFontSessionFixture()
+        }
+    }
+
+    @Test
+    fun layoutOptionOverrideCannotReuseTheSnapshotExactSession() {
+        installExactFontSessionFixture(failShaping = false)
+        try {
+            val root = mount(
+                """
+                <div data-tiqian-root="true" style="width: 220px">
+                  <p data-tq-snapshot-key="plain" style="font-family: 'Fixture CJK'; font-size: 18px; line-height: 30px">中文正文。</p>
+                </div>
+                """.trimIndent(),
+            )
+
+            val count = TiqianWeb.enhance(root, exactTestOptions().copy(fontSize = 24f))
+
+            assertEquals(1, count)
+            val paragraph = root.querySelector("p") as HTMLElement
+            assertNull(paragraph.getAttribute("data-tq-canonical-plain"))
+            assertNull(paragraph.querySelector("[data-tq-exact-rendered]"))
+            assertNotNull(paragraph.querySelector(".tq-line"))
+        } finally {
+            clearExactFontSessionFixture()
+        }
+    }
+
+    @Test
+    fun plainRuntimeFlowUsesTextNodesUntilGeometryActuallyNeedsASpan() {
+        val source = "很长时间没写"
+        val root = mount(
+            "<div data-tiqian-root='true' style='width: 320px'><p>$source</p></div>",
+        )
+
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+
+        val paragraph = root.querySelector("p") as HTMLElement
+        assertEquals(source, directTextContent(paragraph), paragraph.innerHTML)
+        val selectionEnd = assertNotNull(paragraph.querySelector("span[data-tq-selection-end='true']"))
+        assertEquals("\u200B", selectionEnd.textContent)
+        assertEquals("true", selectionEnd.getAttribute("data-tq-copy-ignore"))
+        assertEquals("true", selectionEnd.getAttribute("aria-hidden"))
+        assertEquals(
+            0,
+            paragraph.querySelectorAll(
+                "span[data-tq-geometry]:not(.tq-line):not([data-tq-line-end-sentinel])",
+            ).length,
+        )
+        val generated = paragraph.querySelectorAll("[data-tq-geometry][style]")
+        for (index in 0 until generated.length) {
+            val style = (generated.item(index) as? HTMLElement)?.getAttribute("style").orEmpty()
+            assertFalse(style.contains("all:"), style)
+            assertFalse(style.contains("text-spacing-trim:"), style)
+        }
+        assertFalse(paragraph.getAttribute("style").orEmpty().contains("white-space"))
+        assertFalse(paragraph.getAttribute("style").orEmpty().contains("text-autospace"))
+        assertEquals(source, copySelection(paragraph))
     }
 
     @Test
@@ -53,7 +302,225 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
-    fun rendersOnlyCjkContentInStrongAsEmphasisMarks() {
+    fun enhancesLeafListItemsWithoutReplacingListContainers() {
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 220px">
+              <ul>
+                <li id="outer">外层<ul><li id="inner">内层<strong>正文</strong>。</li></ul></li>
+                <li id="plain">普通列表项。</li>
+              </ul>
+            </div>
+            """.trimIndent(),
+        )
+
+        val count = TiqianWeb.enhance(root, testOptions())
+
+        assertEquals(2, count)
+        val outer = root.querySelector("#outer") as HTMLElement
+        val inner = root.querySelector("#inner") as HTMLElement
+        val plain = root.querySelector("#plain") as HTMLElement
+        val outerList = root.querySelector("ul") as HTMLElement
+        val innerList = outer.querySelector(":scope > ul") as HTMLElement
+        assertNull(outer.getAttribute("data-tq-rendered"))
+        assertNotNull(outer.querySelector(":scope > ul"))
+        assertNull(outerList.getAttribute("data-tq-list-layout"))
+        assertNull(innerList.getAttribute("data-tq-list-layout"))
+        assertEquals("true", inner.getAttribute("data-tq-rendered"))
+        assertEquals("true", plain.getAttribute("data-tq-rendered"))
+        assertNotNull(inner.querySelector("strong"))
+        assertEquals("list-item", computedStyleValue(inner, "display"))
+        assertEquals("内层正文。", copySelection(inner))
+    }
+
+    @Test
+    fun orderedListKeepsNativeMarkersOnATwoIcBodyIndent() {
+        val tenthSource = "第十项正文足够长，换行以后仍然沿着同一正文列继续排列。"
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 230px; font-size: 18px; line-height: 30px">
+              <style>
+                ol { box-sizing: border-box; padding-inline-start: 36px; margin-inline: 0; }
+              </style>
+              <p id="body">正文足够长，第一行应当填满与列表相同的版心网格，然后继续换行。</p>
+              <ol start="8">
+                <li id="eight">第八项。</li>
+                <li id="nine">第九项。</li>
+                <li id="ten">$tenthSource</li>
+              </ol>
+            </div>
+            """.trimIndent(),
+        )
+
+        assertEquals(4, TiqianWeb.enhance(root, testOptions()))
+
+        val list = root.querySelector("ol") as HTMLElement
+        val body = root.querySelector("#body") as HTMLElement
+        val tenth = root.querySelector("#ten") as HTMLElement
+        assertNull(tenth.querySelector(":scope > [data-tq-list-marker]"))
+        assertNull(list.getAttribute("data-tq-list-layout"))
+        assertNull(list.getAttribute("data-tq-list-gutter-ic"))
+        assertNull(list.getAttribute("role"))
+        assertFalse(tenth.textContent.orEmpty().contains("10."))
+        assertEquals("36px", computedStyleValue(list, "padding-inline-start"))
+        assertEquals("list-item", computedStyleValue(tenth, "display"))
+
+        val proseLine = body.querySelector("[data-tq-line-width]") as HTMLElement
+        val listLine = tenth.querySelector(":scope > [data-tq-line-width]") as HTMLElement
+        val proseMeasure = proseLine.getAttribute("data-tq-line-width")!!.toDouble()
+        val listMeasure = listLine.getAttribute("data-tq-line-width")!!.toDouble()
+        assertTrue(kotlin.math.abs((36.0 + listMeasure) - proseMeasure) < 0.5)
+        assertEquals(tenthSource, copySelection(tenth))
+
+        val wideLines = renderedLineSignature(tenth)
+        TiqianWeb.install()
+        installTestAnimationFrames()
+        root.style.width = "176px"
+        dispatchRelayout(root)
+        flushAllTestAnimationFrames()
+        assertNotEquals(wideLines, renderedLineSignature(tenth))
+        assertNull(tenth.querySelector(":scope > [data-tq-list-marker]"))
+        assertEquals(tenthSource, copySelection(tenth))
+
+        TiqianWeb.destroy(root)
+        assertNull(list.getAttribute("data-tq-list-layout"))
+        assertNull(list.getAttribute("data-tq-list-gutter-ic"))
+        assertNull(list.getAttribute("role"))
+        assertNull(tenth.getAttribute("data-tq-list-item"))
+        assertNull(tenth.querySelector("[data-tq-list-marker]"))
+        assertEquals(tenthSource, tenth.textContent)
+    }
+
+    @Test
+    fun unorderedListUsesTwoIcNativeMarkerColumnAndNoParagraphIndent() {
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 216px; font-size: 18px; line-height: 30px">
+              <style>
+                ul { box-sizing: border-box; padding-inline-start: 36px; margin-inline: 0; }
+              </style>
+              <p>普通正文保留显式的两字段首缩进，用于证明列表没有继承它。</p>
+              <ul><li id="bullet">项目正文不会再叠加段首缩进，续行只服从共享标记列。</li></ul>
+            </div>
+            """.trimIndent(),
+        )
+        val options = TiqianWeb.EnhanceOptions(
+            fontSize = 18f,
+            lineHeight = 30f,
+            firstLineIndentIc = 2f,
+        )
+
+        assertEquals(2, TiqianWeb.enhance(root, options))
+
+        val list = root.querySelector("ul") as HTMLElement
+        val paragraph = root.querySelector("p") as HTMLElement
+        val item = root.querySelector("#bullet") as HTMLElement
+        val paragraphLine = paragraph.querySelector(":scope > .tq-line") as HTMLElement
+        val itemLine = item.querySelector(":scope > .tq-line") as HTMLElement
+        assertNull(list.getAttribute("data-tq-list-gutter-ic"))
+        assertNull(item.querySelector(":scope > [data-tq-list-marker]"))
+        assertEquals("36px", computedStyleValue(list, "padding-inline-start"))
+        assertEquals("list-item", computedStyleValue(item, "display"))
+        assertEquals("36px", paragraphLine.style.getPropertyValue("margin-left"))
+        assertTrue(itemLine.style.getPropertyValue("margin-left").isEmpty())
+    }
+
+    @Test
+    fun canonicalPreparedParagraphCanFallBackIntoRuntimeWithoutTreatingGeometryAsHostObjects() {
+        val source = "甲’乙\n丙"
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 180px; font-size: 18px; line-height: 30px">
+              <p data-tq-rendered="true" data-tq-canonical-plain="true" data-tq-canonical-source="true"><span data-tq-geometry="true">甲</span><span data-tq-src="’" data-tq-geometry="true">＇</span><br data-tq-engine-break="AutoWrap"><span data-tq-geometry="true">乙</span><span data-tq-src="&#10;" data-tq-hard-break="true"></span><br data-tq-engine-break="MandatoryBreak"><span data-tq-geometry="true">丙</span></p>
+            </div>
+            """.trimIndent(),
+        )
+
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+
+        val paragraph = root.querySelector("p") as HTMLElement
+        assertNull(paragraph.getAttribute("data-tiqian-capability-issue"))
+        assertEquals(source, copySelection(paragraph))
+    }
+
+    @Test
+    fun canonicalPreparedFallbackSamplesHostLineHeightBeforeRuntimeLowering() {
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 180px">
+              <style>
+                #prepared-fallback { font-size: 18px; line-height: 30px; white-space: normal; }
+                #prepared-fallback[data-tq-rendered="true"][data-tq-canonical-plain="true"] {
+                  line-height: 0 !important;
+                  white-space: pre !important;
+                }
+              </style>
+              <p id="prepared-fallback" data-tq-rendered="true" data-tq-canonical-plain="true" data-tq-canonical-source="true"><span data-tq-geometry="true">第一行正文</span><br data-tq-engine-break="AutoWrap"><span data-tq-geometry="true">第二行正文</span></p>
+            </div>
+            """.trimIndent(),
+        )
+
+        assertEquals(1, TiqianWeb.enhance(root))
+
+        val paragraph = root.querySelector("#prepared-fallback") as HTMLElement
+        val line = paragraph.querySelector(":scope > .tq-line") as HTMLElement
+        assertEquals(30f, cssPx(line.style.getPropertyValue("--tq-line-height")))
+        assertEquals("第一行正文第二行正文", copySelection(paragraph))
+    }
+
+    @Test
+    fun variationSelectorStaysWithItsVisibleBaseDuringWebShaping() {
+        val source = "返回正文 ↩︎"
+        val root = mount(
+            "<div data-tiqian-root='true' style='width: 220px'><p>$source</p></div>",
+        )
+
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+        val paragraph = root.querySelector("p") as HTMLElement
+        assertNull(paragraph.getAttribute("data-tiqian-capability-issue"))
+        assertEquals(source, copySelection(paragraph))
+    }
+
+    @Test
+    fun leavesStrongAsBoldByDefault() {
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 320px">
+              <p style="font-weight: 430">前<strong style="font-weight: 700">强调，CSharp</strong>后。</p>
+            </div>
+            """.trimIndent(),
+        )
+
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+
+        val paragraph = root.querySelector("p") as HTMLElement
+        val strong = assertNotNull(paragraph.querySelector("strong") as? HTMLElement)
+        assertNull(strong.getAttribute("data-tq-cjk-emphasis"))
+        assertEquals(0, paragraph.querySelectorAll("circle").length)
+        assertEquals("700", computedStyleValue(strong, "font-weight"))
+        assertEquals("前强调，CSharp后。", copySelection(paragraph))
+    }
+
+    @Test
+    fun jsOptionsCanExplicitlyMapStrongToEmphasisMarks() {
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 320px">
+              <p style="font-size: 18px; line-height: 30px">前<strong>强调</strong>后。</p>
+            </div>
+            """.trimIndent(),
+        )
+        TiqianWeb.install()
+
+        dispatchEnhanceWithStrongAsEmphasisMarks(root)
+
+        val paragraph = root.querySelector("p") as HTMLElement
+        assertNotNull(paragraph.querySelector("strong[data-tq-cjk-emphasis]"))
+        assertEquals(2, paragraph.querySelectorAll("circle").length)
+    }
+
+    @Test
+    fun explicitlyRendersOnlyCjkContentInStrongAsEmphasisMarks() {
         val root = mount(
             """
             <div data-tiqian-root="true" style="width: 320px">
@@ -62,14 +529,25 @@ class TiqianWebEnhancerTest {
             """.trimIndent(),
         )
 
-        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+        assertEquals(
+            1,
+            TiqianWeb.enhance(
+                root,
+                testOptions().copy(strongAsEmphasisMarks = true),
+            ),
+        )
 
         val paragraph = root.querySelector("p") as HTMLElement
         val strong = paragraph.querySelector("strong[data-tq-cjk-emphasis]") as? HTMLElement
         assertNotNull(strong)
         assertEquals("430", computedStyleValue(strong, "font-weight"))
         assertEquals(2, paragraph.querySelectorAll("circle").length)
-        assertEquals("rgb(1, 2, 3)", paragraph.querySelector("circle")?.getAttribute("fill"))
+        val overlay = assertNotNull(paragraph.querySelector("svg[data-tq-geometry='true']"))
+        val firstDot = assertNotNull(paragraph.querySelector("circle"))
+        assertEquals("rgb(1, 2, 3)", firstDot.getAttribute("fill"))
+        assertFalse(overlay.getAttribute("style")?.contains("position:absolute") == true)
+        assertTrue(overlay.getAttribute("style")?.startsWith("--tq-overlay-width:") == true)
+        assertEquals("--tq-decoration-color:rgb(1, 2, 3)", firstDot.getAttribute("style"))
 
         val descendants = strong.querySelectorAll("span")
         var cjkRun: HTMLElement? = null
@@ -101,7 +579,10 @@ class TiqianWebEnhancerTest {
                 1,
                 TiqianWeb.enhance(
                     root,
-                    testOptions().copy(emphasisDotGapEm = gap),
+                    testOptions().copy(
+                        emphasisDotGapEm = gap,
+                        strongAsEmphasisMarks = true,
+                    ),
                 ),
             )
             return root.querySelector("circle")!!.getAttribute("cy")!!.toFloat()
@@ -128,7 +609,7 @@ class TiqianWebEnhancerTest {
         val paragraph = root.querySelector("p") as HTMLElement
         val line = paragraph.querySelector(".tq-line") as? HTMLElement
         assertNotNull(line)
-        assertEquals("32px", line.style.getPropertyValue("line-height"))
+        assertEquals(32f, cssPx(line.style.getPropertyValue("--tq-line-height")))
         assertNull(paragraph.getAttribute("data-tiqian-capability-issue"))
     }
 
@@ -144,7 +625,13 @@ class TiqianWebEnhancerTest {
 
         assertEquals(1, TiqianWeb.enhance(root))
         var paragraph = root.querySelector("p") as HTMLElement
-        assertEquals("28px", (paragraph.querySelector(".tq-line") as HTMLElement).style.lineHeight)
+        assertEquals(
+            28f,
+            cssPx(
+                (paragraph.querySelector(".tq-line") as HTMLElement)
+                    .style.getPropertyValue("--tq-line-height"),
+            ),
+        )
 
         paragraph.style.fontSize = "18px"
         paragraph.style.lineHeight = "32px"
@@ -154,7 +641,7 @@ class TiqianWebEnhancerTest {
         paragraph = root.querySelector("p") as HTMLElement
         val line = paragraph.querySelector(".tq-line") as? HTMLElement
         assertNotNull(line)
-        assertEquals("32px", line.style.lineHeight)
+        assertEquals(32f, cssPx(line.style.getPropertyValue("--tq-line-height")))
         assertEquals("18px", computedStyleValue(paragraph, "font-size"))
         assertEquals("460", computedStyleValue(paragraph, "font-weight"))
     }
@@ -232,13 +719,13 @@ class TiqianWebEnhancerTest {
         assertNotNull(paragraph.querySelector("span.badge[data-tq-inline-object]"))
         assertNotNull(paragraph.querySelector("img.icon[data-tq-inline-object][alt='icon']"))
         assertNotNull(paragraph.querySelector("svg.raw-svg[data-tq-inline-object] circle"))
-        assertEquals("前badge后。", paragraph.textContent)
+        assertEquals("前badge后。", copySelection(paragraph))
         assertTrue(paragraph.textContent?.contains('\uFFFC') == false)
         assertNull(paragraph.getAttribute("data-tiqian-capability-issue"))
 
         val objectLine = paragraph.querySelector(".tq-line") as? HTMLElement
         assertNotNull(objectLine)
-        assertTrue(cssPx(objectLine.style.height) >= 30f)
+        assertTrue(cssPx(objectLine.style.getPropertyValue("--tq-line-height")) >= 30f)
     }
 
     @Test
@@ -319,6 +806,77 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
+    fun preparedDashCapabilityRetriesOnlyNativeDashParagraphs() {
+        TiqianWeb.install()
+        installTestAnimationFrames()
+        installTestCjkDashBridge()
+        try {
+            val root = mount(
+                """
+                <div data-tiqian-root="true" style="width: 420px">
+                  <p class="plain" style="font-family: Arial, sans-serif">普通中文正文。</p>
+                  <p class="dash" style="font-family: Arial, sans-serif">中文——中文。</p>
+                </div>
+                """.trimIndent(),
+            )
+            val plain = root.querySelector(".plain") as HTMLElement
+            val dash = root.querySelector(".dash") as HTMLElement
+            var readyCount = 0
+            root.addEventListener("tiqian:ready", { readyCount += 1 })
+
+            TiqianWeb.enhanceProgressively(
+                root,
+                testOptions().copy(
+                    cjkDashCapability = WebCjkDashCapability(
+                        status = "pending",
+                        detail = "CjkDashFontShapingPending",
+                    ),
+                ),
+            )
+            flushAllTestAnimationFrames()
+
+            assertEquals("true", plain.getAttribute("data-tq-rendered"))
+            assertNull(dash.getAttribute("data-tq-rendered"))
+            assertEquals(
+                "NoConformingCjkDashGlyph",
+                dash.getAttribute("data-tiqian-capability-issue"),
+            )
+            val renderedPlainChild = plain.firstChild
+            assertNotNull(renderedPlainChild)
+
+            // The fixture deliberately cannot reproduce a real HarfBuzz/DOM face
+            // match. Reaching DomDashFaceGeometryMismatch proves the targeted
+            // retry ran through layout and the final DOM gate without touching
+            // the already enhanced ordinary paragraph.
+            TiqianWeb.retryCjkDashCapability(
+                root,
+                testOptions().copy(
+                    cjkDashCapability = WebCjkDashCapability(
+                        status = "conforming",
+                        sessionId = "fixture-dash-session",
+                        detail = "test",
+                    ),
+                ),
+            )
+            flushAllTestAnimationFrames()
+
+            assertTrue(plain.firstChild === renderedPlainChild)
+            assertNull(dash.getAttribute("data-tq-rendered"))
+            assertEquals(
+                "DomDashFaceGeometryMismatch",
+                dash.getAttribute("data-tiqian-capability-issue"),
+            )
+            assertEquals("1", root.getAttribute("data-tiqian-enhanced-count"))
+            assertEquals("1", root.getAttribute("data-tiqian-issue-count"))
+            assertEquals(2, readyCount)
+            assertEquals("普通中文正文。", copySelection(plain))
+            assertEquals("中文——中文。", copySelection(dash))
+        } finally {
+            clearTestCjkDashBridge()
+        }
+    }
+
+    @Test
     fun expandsCjkContextCurlyQuotesButKeepsLatinPairsProportional() {
         val root = mount(
             """
@@ -359,6 +917,19 @@ class TiqianWebEnhancerTest {
         val paragraph = root.querySelector("p") as HTMLElement
         assertTrue(paragraph.querySelectorAll(".tq-line").length > 2)
 
+        val visualBreaks = paragraph.querySelectorAll(
+            "br[data-tq-engine-break]:not([data-tq-engine-break='MandatoryBreak'])",
+        )
+        assertTrue(visualBreaks.length > 0)
+        for (index in 0 until visualBreaks.length) {
+            val visualBreak = visualBreaks.item(index) as HTMLElement
+            assertEquals("true", visualBreak.getAttribute("aria-hidden"))
+            assertEquals("true", visualBreak.getAttribute("data-tq-copy-ignore"))
+        }
+        val sourceBreak = paragraph.querySelector("br[data-tq-engine-break='MandatoryBreak']") as HTMLElement
+        assertNull(sourceBreak.getAttribute("aria-hidden"))
+        assertNull(sourceBreak.getAttribute("data-tq-copy-ignore"))
+
         assertEquals("$source\n显式换行之后。", copySelection(paragraph))
     }
 
@@ -381,13 +952,18 @@ class TiqianWebEnhancerTest {
         assertNotNull(paragraph.querySelector("strong[data-tq-source-semantic]"))
 
         val initial = renderedLineSignature(paragraph)
+        installTestAnimationFrames()
         root.style.width = "120px"
         dispatchRelayout(root)
+        assertEquals(initial, renderedLineSignature(paragraph), "relayout must wait for an animation frame")
+        assertEquals(1, pendingTestAnimationFrameCount())
+        flushAllTestAnimationFrames()
         val narrow = renderedLineSignature(paragraph)
         assertNotEquals(initial, narrow, "narrow width must exercise a real reflow")
 
         root.style.width = "220px"
         dispatchRelayout(root)
+        flushAllTestAnimationFrames()
         assertEquals(initial, renderedLineSignature(paragraph))
         assertEquals(expected, copySelection(paragraph))
         assertEquals(0, emptyRenderedLineCount(paragraph))
@@ -409,38 +985,102 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
-    fun widthDependentCapabilityFallsBackAtomicallyAndCanRecover() {
+    fun widthDependentCapabilityRetriesWholeRootWithoutCrossFrameNativeExposure() {
         val root = mount(
             """
             <div data-tiqian-root="true" style="width: 520px">
-              <p><span style="box-decoration-break: clone; -webkit-box-decoration-break: clone; padding: 0 6px">跨行复制盒模型只在窄行失去保真能力</span></p>
+              <p class="clone"><span style="box-decoration-break: clone; -webkit-box-decoration-break: clone; padding: 0 6px">跨行复制盒模型只在窄行失去保真能力</span></p>
+              <p class="plain">普通段落在 capability retry 时不能跨帧暴露原生正文。</p>
             </div>
             """.trimIndent(),
         )
-        val paragraph = root.querySelector("p") as HTMLElement
-        val originalHtml = paragraph.innerHTML
+        val cloneParagraph = root.querySelector("p.clone") as HTMLElement
+        val plainParagraph = root.querySelector("p.plain") as HTMLElement
+        val originalHtml = cloneParagraph.innerHTML
+        var relayoutReadyCount = 0
+        root.addEventListener("tiqian:relayout-ready", { relayoutReadyCount += 1 })
         TiqianWeb.install()
 
-        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
-        assertEquals("true", paragraph.getAttribute("data-tq-rendered"))
+        assertEquals(2, TiqianWeb.enhance(root, testOptions()))
+        assertEquals("true", cloneParagraph.getAttribute("data-tq-rendered"))
+        assertEquals("true", plainParagraph.getAttribute("data-tq-rendered"))
 
+        installTestAnimationFrames()
         root.style.width = "90px"
         dispatchRelayout(root)
+        flushAllTestAnimationFrames()
 
-        assertEquals(originalHtml, paragraph.innerHTML)
-        assertNull(paragraph.getAttribute("data-tq-rendered"))
+        assertEquals(originalHtml, cloneParagraph.innerHTML)
+        assertNull(cloneParagraph.getAttribute("data-tq-rendered"))
         assertEquals(
             "InlineCloneDecorationBreakUnsupported",
-            paragraph.getAttribute("data-tiqian-capability-issue"),
+            cloneParagraph.getAttribute("data-tiqian-capability-issue"),
         )
-        assertEquals("0", root.getAttribute("data-tiqian-enhanced-count"))
+        assertEquals("true", plainParagraph.getAttribute("data-tq-rendered"))
+        assertEquals("1", root.getAttribute("data-tiqian-enhanced-count"))
+        assertEquals(1, relayoutReadyCount)
+        val narrowRenderedChild = assertNotNull(plainParagraph.firstChild)
 
         root.style.width = "520px"
+        probeRenderedParagraphCountAtNextFrame(root, 2)
         dispatchRelayout(root)
 
-        assertEquals("true", paragraph.getAttribute("data-tq-rendered"))
-        assertNull(paragraph.getAttribute("data-tiqian-capability-issue"))
+        assertEquals(1, pendingTestAnimationFrameCount(), "only the exposure probe may remain queued")
+        assertEquals(2, relayoutReadyCount, "atomic retry must terminate the responsive operation")
+        assertEquals("true", cloneParagraph.getAttribute("data-tq-rendered"))
+        assertEquals("true", plainParagraph.getAttribute("data-tq-rendered"))
+        assertFalse(plainParagraph.firstChild === narrowRenderedChild)
+        assertNull(cloneParagraph.getAttribute("data-tiqian-capability-issue"))
+        assertEquals("2", root.getAttribute("data-tiqian-enhanced-count"))
+
+        flushAllTestAnimationFrames()
+
+        assertEquals(
+            "false",
+            root.getAttribute("data-test-native-exposure"),
+            "no animation frame may observe the whole root restored to native source",
+        )
+    }
+
+    @Test
+    fun stableCapabilityIssueStaysNativeWhileEnhancedParagraphsRelayoutNormally() {
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 320px">
+              <p class="issue" style="font-size: 0px">零 advance 是稳定 capability issue。</p>
+              <p class="plain" style="font-size: 18px; line-height: 30px">普通正文仍应走 off-DOM 响应式重排。</p>
+            </div>
+            """.trimIndent(),
+        )
+        val issueParagraph = root.querySelector("p.issue") as HTMLElement
+        val plainParagraph = root.querySelector("p.plain") as HTMLElement
+        val issueSourceChild = assertNotNull(issueParagraph.firstChild)
+        TiqianWeb.install()
+
+        assertEquals(1, TiqianWeb.enhance(root))
+        assertEquals("InvalidWebShapingAdvance", issueParagraph.getAttribute("data-tiqian-capability-issue"))
+        val renderedChild = assertNotNull(plainParagraph.firstChild)
+        val initial = renderedLineSignature(plainParagraph)
+        var relayoutReadyCount = 0
+        root.addEventListener("tiqian:relayout-ready", { relayoutReadyCount += 1 })
+
+        installTestAnimationFrames()
+        root.style.width = "120px"
+        dispatchRelayout(root)
+
+        assertTrue(plainParagraph.firstChild === renderedChild, "relayout preparation must keep rendered DOM live")
+        assertTrue(issueParagraph.firstChild === issueSourceChild)
+        assertEquals(1, pendingTestAnimationFrameCount())
+
+        flushAllTestAnimationFrames()
+
+        assertFalse(plainParagraph.firstChild === renderedChild)
+        assertNotEquals(initial, renderedLineSignature(plainParagraph))
+        assertTrue(issueParagraph.firstChild === issueSourceChild)
+        assertNull(issueParagraph.getAttribute("data-tq-rendered"))
+        assertEquals("InvalidWebShapingAdvance", issueParagraph.getAttribute("data-tiqian-capability-issue"))
         assertEquals("1", root.getAttribute("data-tiqian-enhanced-count"))
+        assertEquals(1, relayoutReadyCount)
     }
 
     @Test
@@ -456,6 +1096,24 @@ class TiqianWebEnhancerTest {
         assertEquals("true", paragraph.getAttribute("data-tq-rendered"))
         assertNull(paragraph.getAttribute("data-tiqian-capability-issue"))
         assertTrue(paragraph.querySelectorAll(".tq-line").length > 1)
+        assertEquals(source, copySelection(paragraph))
+    }
+
+    @Test
+    fun copyOmitsEngineOwnedHyphenGlyphs() {
+        val source = "中Network"
+        val root = mount(
+            "<div data-tiqian-root='true' style='width: 64px'><p>$source</p></div>",
+        )
+
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+
+        val paragraph = root.querySelector("p") as HTMLElement
+        val hyphen = paragraph.querySelector(
+            "span[data-tq-copy-ignore][aria-hidden='true']:not(.tq-line)",
+        )
+        assertNotNull(hyphen)
+        assertEquals("-", hyphen.textContent)
         assertEquals(source, copySelection(paragraph))
     }
 
@@ -560,7 +1218,7 @@ class TiqianWebEnhancerTest {
         assertTrue(paragraph.style.fontFamily.contains("HostFace"))
         val line = paragraph.querySelector(".tq-line") as? HTMLElement
         assertNotNull(line)
-        assertEquals("33px", line.style.getPropertyValue("line-height"))
+        assertEquals(33f, cssPx(line.style.getPropertyValue("--tq-line-height")))
         assertEquals(computedStyleValue(paragraph, "font-family"), computedStyleValue(line, "font-family"))
         assertEquals("21px", computedStyleValue(line, "font-size"))
 
@@ -671,7 +1329,14 @@ class TiqianWebEnhancerTest {
         val root = mount(
             """
             <div class="host" data-tiqian-root="true" style="width: 320px">
-              <style>.host p span { display: block !important; padding: 19px !important; font-size: 40px !important; }</style>
+              <style>
+                .host p span { display: block !important; padding: 19px !important; font-size: 40px !important; }
+                [data-tq-rendered="true"] span[data-tq-geometry="true"] {
+                  all: unset !important;
+                  display: inline !important;
+                  text-spacing-trim: space-all !important;
+                }
+              </style>
               <p style="font-size: 18px; line-height: 30px">引擎生成的几何节点不能继承宿主对真实 span 的盒模型。</p>
             </div>
             """.trimIndent(),
@@ -694,6 +1359,13 @@ class TiqianWebEnhancerTest {
             """
             <div class="host" data-tiqian-root="true" style="width: 320px">
               <style>
+                [data-tq-rendered="true"] svg[data-tq-geometry="true"] {
+                  all: unset !important;
+                  display: block !important;
+                }
+                [data-tq-rendered="true"] svg[data-tq-geometry="true"] circle[data-tq-decoration-dot] {
+                  fill: var(--tq-decoration-color) !important;
+                }
                 .host p span { display: block !important; padding: 19px !important; }
                 .host p svg { display: none !important; }
                 .host p svg circle { fill: rgb(255, 0, 255) !important; }
@@ -703,7 +1375,10 @@ class TiqianWebEnhancerTest {
             """.trimIndent(),
         )
 
-        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+        assertEquals(
+            1,
+            TiqianWeb.enhance(root, testOptions().copy(strongAsEmphasisMarks = true)),
+        )
 
         val paragraph = root.querySelector("p") as HTMLElement
         val svg = paragraph.querySelector("svg[data-tq-geometry]")
@@ -731,8 +1406,15 @@ class TiqianWebEnhancerTest {
         assertTrue(lines.length > 1)
         for (index in 0 until lines.length) {
             val line = lines.item(index) as HTMLElement
-            assertEquals("visible", line.style.getPropertyValue("overflow"))
-            assertEquals("0px", line.style.width)
+            assertTrue(line.style.getPropertyValue("--tq-line-height").isNotEmpty())
+            assertTrue(line.style.getPropertyValue("--tq-line-baseline-offset").isNotEmpty())
+            assertEquals("", line.style.getPropertyValue("display"))
+            assertEquals("", line.style.getPropertyValue("width"))
+            assertEquals("", line.style.getPropertyValue("height"))
+            assertEquals("", line.style.getPropertyValue("line-height"))
+            assertEquals("", line.style.getPropertyValue("vertical-align"))
+            assertEquals("", line.style.getPropertyValue("overflow"))
+            assertEquals("", line.style.getPropertyValue("pointer-events"))
             assertNotNull(line.getAttribute("data-tq-line-width"))
         }
 
@@ -741,6 +1423,38 @@ class TiqianWebEnhancerTest {
             cssPx(computedStyleValue(last, "letter-spacing")) < -0.1,
             "expected final-cluster compression: ${paragraph.innerHTML}",
         )
+    }
+
+    @Test
+    fun browserPunctuationTrimDoesNotDoubleCompressClosingCommaOpeningSequence() {
+        val source = "前句「甲」、「乙」后句。"
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 700px">
+              <style>[data-tq-rendered="true"] [data-tq-geometry] { text-spacing-trim: space-all !important; }</style>
+              <p style="font-size: 18px; line-height: 30px">$source</p>
+            </div>
+            """.trimIndent(),
+        )
+
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+
+        val paragraph = root.querySelector("p") as HTMLElement
+        val closingCommaRun = assertNotNull(geometryLeafWithText(paragraph, "」、"))
+        assertEquals("space-all", computedStyleValue(closingCommaRun, "text-spacing-trim"))
+        val characterWidths = textNodeCharacterWidths(closingCommaRun)
+            .split(',')
+            .mapNotNull(String::toDoubleOrNull)
+        assertEquals(2, characterWidths.size)
+        assertTrue(
+            characterWidths.all { it >= 8.25 },
+            "browser punctuation trimming consumed a second half-em: $characterWidths; ${paragraph.innerHTML}",
+        )
+        assertTrue(
+            kotlin.math.abs(elementWidth(closingCommaRun) - 18.0) < 0.75,
+            "closing-comma run must replay one em, was ${elementWidth(closingCommaRun)}; ${paragraph.innerHTML}",
+        )
+        assertEquals(source, copySelection(paragraph))
     }
 
     @Test
@@ -817,6 +1531,7 @@ class TiqianWebEnhancerTest {
         val renderedNodes = paragraph.querySelectorAll("*").length
         assertTrue(renderedNodes < text.length / 2, "renderedNodes=$renderedNodes chars=${text.length}")
         assertTrue(paragraph.querySelectorAll(".tq-line").length > 1)
+        assertEquals("true", paragraph.getAttribute("data-tq-canonical-source"))
     }
 
     @Test
@@ -824,7 +1539,7 @@ class TiqianWebEnhancerTest {
         val root = mount(
             """
             <div data-tiqian-root="true">
-              <p data-tq-rendered="host-owned" data-tq-copy-ignore="host-owned">需要<strong>增强</strong>。</p>
+              <p data-tq-rendered="host-owned" data-tq-canonical-source="host-owned" data-tq-copy-ignore="host-owned">需要<strong>增强</strong>。</p>
             </div>
             """.trimIndent(),
         )
@@ -840,6 +1555,7 @@ class TiqianWebEnhancerTest {
         assertEquals(originalHtml, paragraph.innerHTML)
         assertEquals("host-owned", paragraph.getAttribute("data-tq-copy-ignore"))
         assertEquals("host-owned", paragraph.getAttribute("data-tq-rendered"))
+        assertEquals("host-owned", paragraph.getAttribute("data-tq-canonical-source"))
         assertNull(paragraph.getAttribute("style"))
     }
 
@@ -875,6 +1591,382 @@ class TiqianWebEnhancerTest {
         assertNull(paragraph.getAttribute("data-tq-rendered"))
     }
 
+    @Test
+    fun relayoutDuringInitialProgressiveWorkRestartsWithoutStrandingCandidates() {
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 240px">
+              <p>第一段必须在重启后增强。</p>
+              <p>第二段也不能被旧 job 遗漏。</p>
+            </div>
+            """.trimIndent(),
+        )
+        var readyCount = 0
+        root.addEventListener("tiqian:ready", { readyCount += 1 })
+        TiqianWeb.install()
+        installTestAnimationFrames()
+
+        TiqianWeb.enhanceProgressively(root, testOptions())
+        root.style.width = "120px"
+        dispatchRelayout(root)
+
+        assertEquals(1, cancelledTestAnimationFrameCount())
+        assertEquals(1, pendingTestAnimationFrameCount())
+        assertEquals("0", root.getAttribute("data-tiqian-enhanced-count"))
+
+        flushAllTestAnimationFrames()
+
+        assertEquals(2, root.querySelectorAll("p[data-tq-rendered='true']").length)
+        assertEquals("2", root.getAttribute("data-tiqian-enhanced-count"))
+        assertEquals(1, readyCount)
+    }
+
+    @Test
+    fun newerRelayoutReplacesPendingWorkAndUsesTheLatestWidth() {
+        val source = "连续 resize 只应提交最新宽度的分帧重排结果。".repeat(4)
+        val root = mount("<div data-tiqian-root='true' style='width: 320px'><p>$source</p></div>")
+        val expectedRoot = mount(
+            "<div data-tiqian-root='true' style='width: 100px'><p>$source</p></div>",
+        )
+        TiqianWeb.install()
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+        assertEquals(1, TiqianWeb.enhance(expectedRoot, testOptions()))
+        val paragraph = root.querySelector("p") as HTMLElement
+        val initial = renderedLineSignature(paragraph)
+        val expected = renderedLineSignature(expectedRoot.querySelector("p") as HTMLElement)
+        assertNotEquals(initial, expected)
+        var relayoutReadyCount = 0
+        root.addEventListener("tiqian:relayout-ready", { relayoutReadyCount += 1 })
+
+        installTestAnimationFrames()
+        root.style.width = "180px"
+        dispatchRelayout(root)
+        root.style.width = "100px"
+        dispatchRelayout(root)
+
+        assertEquals(1, cancelledTestAnimationFrameCount())
+        assertEquals(1, pendingTestAnimationFrameCount())
+        assertEquals(initial, renderedLineSignature(paragraph))
+
+        flushAllTestAnimationFrames()
+
+        assertEquals(expected, renderedLineSignature(paragraph))
+        assertEquals(0, pendingTestAnimationFrameCount())
+        assertEquals(1, relayoutReadyCount)
+    }
+
+    @Test
+    fun relayoutKeepsOldTiqianDomUntilItsFirstProgressiveFrame() {
+        val root = mount(
+            "<div data-tiqian-root='true' style='width: 320px'>" +
+                "<p>第一段在所有准备完成前保持旧节点。</p>" +
+                "<p>第二段也不能提前暴露新排版。</p>" +
+                "</div>",
+        )
+        TiqianWeb.install()
+        assertEquals(2, TiqianWeb.enhance(root, testOptions()))
+        val first = root.querySelectorAll("p").item(0) as HTMLElement
+        val second = root.querySelectorAll("p").item(1) as HTMLElement
+        val firstRenderedChild = first.firstChild
+        val secondRenderedChild = second.firstChild
+        assertNotNull(firstRenderedChild)
+        assertNotNull(secondRenderedChild)
+        var relayoutReadyCount = 0
+        root.addEventListener("tiqian:relayout-ready", { relayoutReadyCount += 1 })
+
+        installTestAnimationFrames()
+        root.style.width = "120px"
+        dispatchRelayout(root)
+
+        assertTrue(first.firstChild === firstRenderedChild)
+        assertTrue(second.firstChild === secondRenderedChild)
+        assertEquals(1, pendingTestAnimationFrameCount())
+
+        flushAllTestAnimationFrames()
+
+        assertFalse(first.firstChild === firstRenderedChild)
+        assertFalse(second.firstChild === secondRenderedChild)
+        assertEquals(1, relayoutReadyCount)
+    }
+
+    @Test
+    fun longRelayoutYieldsBetweenBoundedDomCommitSlices() {
+        val markup = (0 until 18).joinToString("") { index ->
+            "<p>第${index}段在分帧提交时必须一直保持上一份提椠排版。</p>"
+        }
+        val root = mount("<div data-tiqian-root='true' style='width: 320px'>$markup</div>")
+        TiqianWeb.install()
+        assertEquals(18, TiqianWeb.enhance(root, testOptions()))
+        val paragraphs = (0 until 18).map { index ->
+            root.querySelectorAll("p").item(index) as HTMLElement
+        }
+        val previousChildren = paragraphs.map { paragraph -> assertNotNull(paragraph.firstChild) }
+        var relayoutReadyCount = 0
+        root.addEventListener("tiqian:relayout-ready", { relayoutReadyCount += 1 })
+
+        installTestAnimationFrames()
+        root.style.width = "120px"
+        dispatchRelayout(root)
+
+        var changed = 0
+        var frameCount = 0
+        while (changed == 0 && frameCount < 100) {
+            assertEquals(1, flushOneTestAnimationFrame())
+            frameCount += 1
+            changed = paragraphs.indices.count { index ->
+                paragraphs[index].firstChild !== previousChildren[index]
+            }
+        }
+
+        assertTrue(changed in 1..8, "one commit slice must replace at most eight paragraphs")
+        assertTrue(changed < paragraphs.size, "a long root must yield before replacing its tail")
+        assertEquals(0, relayoutReadyCount, "ready belongs to the final commit slice")
+        assertTrue(pendingTestAnimationFrameCount() > 0)
+
+        flushAllTestAnimationFrames()
+
+        assertTrue(paragraphs.indices.all { index ->
+            paragraphs[index].firstChild !== previousChildren[index]
+        })
+        assertEquals(1, relayoutReadyCount)
+    }
+
+    @Test
+    fun relayoutCommitsPreparedMeasureAtMostOneGridCellBehindCurrentWidth() {
+        val source = "任务执行中再次跨格时允许排版沿同一方向追赶最终宽度。".repeat(4)
+        val root = mount("<div data-tiqian-root='true' style='width: 320px'><p>$source</p></div>")
+        val intermediateRoot = mount(
+            "<div data-tiqian-root='true' style='width: 180px'><p>$source</p></div>",
+        )
+        val finalRoot = mount(
+            "<div data-tiqian-root='true' style='width: 162px'><p>$source</p></div>",
+        )
+        TiqianWeb.install()
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+        assertEquals(1, TiqianWeb.enhance(intermediateRoot, testOptions()))
+        assertEquals(1, TiqianWeb.enhance(finalRoot, testOptions()))
+        val paragraph = root.querySelector("p") as HTMLElement
+        val initialChild = assertNotNull(paragraph.firstChild)
+        val initial = renderedLineSignature(paragraph)
+        val intermediate = renderedLineSignature(intermediateRoot.querySelector("p") as HTMLElement)
+        val final = renderedLineSignature(finalRoot.querySelector("p") as HTMLElement)
+        assertNotEquals(initial, intermediate)
+        assertNotEquals(intermediate, final)
+        var readyCount = 0
+        var staleCount = 0
+        root.addEventListener("tiqian:relayout-ready", { event ->
+            readyCount += 1
+            if (relayoutEventIsStale(event)) staleCount += 1
+        })
+
+        installTestAnimationFrames()
+        root.style.width = "180px"
+        dispatchRelayout(root)
+        root.style.width = "162px"
+        flushAllTestAnimationFrames()
+
+        assertFalse(paragraph.firstChild === initialChild)
+        assertEquals(intermediate, renderedLineSignature(paragraph))
+        assertEquals(1, readyCount)
+        assertEquals(0, staleCount)
+
+        dispatchRelayout(root)
+        flushAllTestAnimationFrames()
+
+        assertEquals(final, renderedLineSignature(paragraph))
+        assertEquals(2, readyCount)
+        assertEquals(0, staleCount)
+    }
+
+    @Test
+    fun relayoutDiscardsPreparedMeasureMoreThanOneGridCellBehindCurrentWidth() {
+        val source = "长文 resize 不能把相差多个字格的历史结果逐级播放出来。".repeat(4)
+        val root = mount("<div data-tiqian-root='true' style='width: 320px'><p>$source</p></div>")
+        TiqianWeb.install()
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+        val paragraph = root.querySelector("p") as HTMLElement
+        val initialChild = assertNotNull(paragraph.firstChild)
+        val initial = renderedLineSignature(paragraph)
+        var readyCount = 0
+        var staleCount = 0
+        root.addEventListener("tiqian:relayout-ready", { event ->
+            readyCount += 1
+            if (relayoutEventIsStale(event)) staleCount += 1
+        })
+
+        installTestAnimationFrames()
+        root.style.width = "180px"
+        dispatchRelayout(root)
+        root.style.width = "144px"
+        flushAllTestAnimationFrames()
+
+        assertTrue(paragraph.firstChild === initialChild)
+        assertEquals(initial, renderedLineSignature(paragraph))
+        assertEquals(1, readyCount)
+        assertEquals(1, staleCount)
+    }
+
+    @Test
+    fun relayoutDiscardsPreparedMeasureAfterOvershootOrDirectionReversal() {
+        val source = "反向 resize 或越过当前目标时不能提交旧方向的排版。".repeat(4)
+        TiqianWeb.install()
+        installTestAnimationFrames()
+
+        fun assertStaleAt(currentWidth: String, reason: String) {
+            val root = mount(
+                "<div data-tiqian-root='true' style='width: 320px'><p>$source</p></div>",
+            )
+            assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+            val paragraph = root.querySelector("p") as HTMLElement
+            val initialChild = assertNotNull(paragraph.firstChild)
+            val initial = renderedLineSignature(paragraph)
+            var readyCount = 0
+            var staleCount = 0
+            root.addEventListener("tiqian:relayout-ready", { event ->
+                readyCount += 1
+                if (relayoutEventIsStale(event)) staleCount += 1
+            })
+
+            root.style.width = "180px"
+            dispatchRelayout(root)
+            root.style.width = currentWidth
+            flushAllTestAnimationFrames()
+
+            assertTrue(paragraph.firstChild === initialChild, reason)
+            assertEquals(initial, renderedLineSignature(paragraph), reason)
+            assertEquals(1, readyCount)
+            assertEquals(1, staleCount)
+        }
+
+        assertStaleAt("240px", "prepared measure overshot the current target")
+        assertStaleAt("360px", "viewport reversed past the previously committed measure")
+    }
+
+    @Test
+    fun responsiveTypographyRefreshRebuildsSynchronouslyWithoutProgressiveFrames() {
+        val root = mount(
+            "<div data-tiqian-root='true' style='width: 220px'>" +
+                "<p style='font-size: 18px; line-height: 30px; font-weight: 400'>" +
+                "响应式字重变化不能把长文逐段擦写。</p></div>",
+        )
+        TiqianWeb.install()
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+        val paragraph = root.querySelector("p") as HTMLElement
+        val previousRenderedChild = assertNotNull(paragraph.firstChild)
+        var readyCount = 0
+        root.addEventListener("tiqian:relayout-ready", { readyCount += 1 })
+
+        installTestAnimationFrames()
+        paragraph.style.fontWeight = "700"
+        dispatchAtomicEnhance(root)
+
+        assertEquals(0, pendingTestAnimationFrameCount())
+        assertEquals(1, readyCount)
+        assertFalse(paragraph.firstChild === previousRenderedChild)
+        assertEquals("700", computedStyleValue(paragraph, "font-weight"))
+        assertEquals("true", paragraph.getAttribute("data-tq-rendered"))
+    }
+
+    @Test
+    fun relayoutCommitFailureRollsBackRenderedNodesAndStillCompletesTheJob() {
+        installExactFontSessionFixture(failShaping = false)
+        try {
+            val root = mount(
+                "<div data-tiqian-root='true' style='width: 220px'>" +
+                    "<p data-tq-snapshot-key='plain' style=\"font-family: 'Fixture CJK'; font-size: 18px; line-height: 30px\">" +
+                    "原节点必须在异常后原样回来。</p></div>",
+            )
+            TiqianWeb.install()
+            assertEquals(1, TiqianWeb.enhance(root, exactTestOptions()))
+            val paragraph = root.querySelector("p") as HTMLElement
+            val renderedChild = paragraph.firstChild
+            val renderedHtml = paragraph.innerHTML
+            val renderedStyle = paragraph.getAttribute("style")
+            assertNotNull(renderedChild)
+            var errorCount = 0
+            var readyCount = 0
+            root.addEventListener("tiqian:relayout-error", { errorCount += 1 })
+            root.addEventListener("tiqian:relayout-ready", { readyCount += 1 })
+
+            installTestAnimationFrames()
+            failExactPreparedDomRender("fixture-commit-failure")
+            root.style.width = "180px"
+            dispatchRelayout(root)
+            flushAllTestAnimationFrames()
+
+            assertTrue(paragraph.firstChild === renderedChild)
+            assertEquals(renderedHtml, paragraph.innerHTML)
+            assertEquals(renderedStyle, paragraph.getAttribute("style"))
+            assertEquals("true", paragraph.getAttribute("data-tq-canonical-plain"))
+            assertEquals("true", paragraph.getAttribute("data-tq-canonical-source"))
+            assertTrue(
+                root.getAttribute("data-tiqian-relayout-error")?.contains("fixture-commit-failure") == true,
+            )
+            assertEquals(1, errorCount)
+            assertEquals(1, readyCount, "terminal ready must release the JS in-flight state")
+            assertEquals(0, pendingTestAnimationFrameCount())
+
+            installExactFontSessionFixture(failShaping = false)
+            root.style.width = "140px"
+            dispatchRelayout(root)
+            flushAllTestAnimationFrames()
+
+            assertNull(root.getAttribute("data-tiqian-relayout-error"))
+            assertEquals(2, readyCount)
+            assertFalse(paragraph.firstChild === renderedChild)
+        } finally {
+            clearExactFontSessionFixture()
+        }
+    }
+
+    @Test
+    fun fractionalWidthCrossingAFontSizeGridBoundaryRelayouts() {
+        val source = "小数宽度跨字格边界不能被像素容差吞掉。".repeat(20)
+        val root = mount(
+            "<div data-tiqian-root='true' style='width: 305.98px'><p>$source</p></div>",
+        )
+        val options = testOptions().copy(fontSize = 15.3f, lineHeight = 22.95f)
+        TiqianWeb.install()
+        assertEquals(1, TiqianWeb.enhance(root, options))
+        val paragraph = root.querySelector("p") as HTMLElement
+        val nineteenCells = renderedLineSignature(paragraph)
+
+        installTestAnimationFrames()
+        root.style.width = "306.02px"
+        dispatchRelayout(root)
+        flushAllTestAnimationFrames()
+
+        assertNotEquals(
+            nineteenCells,
+            renderedLineSignature(paragraph),
+            "19→20 cells is a real measure change even though the raw width delta is below 0.5px",
+        )
+    }
+
+    @Test
+    fun destroyCancelsPendingRelayoutBeforeItCanRestoreRenderedDom() {
+        val root = mount(
+            "<div data-tiqian-root='true' style='width: 260px'><p>取消 resize job 后必须保持原生正文。</p></div>",
+        )
+        val paragraph = root.querySelector("p") as HTMLElement
+        val originalHtml = paragraph.innerHTML
+        TiqianWeb.install()
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+
+        installTestAnimationFrames()
+        root.style.width = "100px"
+        dispatchRelayout(root)
+        assertEquals(1, pendingTestAnimationFrameCount())
+
+        TiqianWeb.destroy(root)
+        assertEquals(1, cancelledTestAnimationFrameCount())
+        flushAllTestAnimationFrames()
+
+        assertEquals(originalHtml, paragraph.innerHTML)
+        assertNull(root.getAttribute("data-tiqian-enhanced"))
+        assertNull(paragraph.getAttribute("data-tq-rendered"))
+    }
+
     private fun mount(html: String): HTMLElement {
         val wrapper = document.createElement("div") as HTMLElement
         wrapper.innerHTML = html
@@ -889,15 +1981,244 @@ class TiqianWebEnhancerTest {
             fontSize = 18f,
             lineHeight = 30f,
         )
+
+    private fun exactTestOptions(): TiqianWeb.EnhanceOptions = TiqianWeb.EnhanceOptions(
+        paragraphSelector = "p[data-tq-snapshot-key]",
+        exactFontSession = TiqianWeb.ExactFontSessionCapability(
+            status = "conforming",
+            sessionId = "fixture-exact-session",
+            detail = "test",
+        ),
+    )
 }
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun(
+    """() => {
+      if (globalThis.__TiqianTestAnimationFrames) return;
+      const state = {
+        originalRequest: window.requestAnimationFrame,
+        originalCancel: window.cancelAnimationFrame,
+        callbacks: new Map(),
+        nextId: 1,
+        cancelled: 0,
+      };
+      globalThis.__TiqianTestAnimationFrames = state;
+      window.requestAnimationFrame = (callback) => {
+        const id = state.nextId++;
+        state.callbacks.set(id, callback);
+        return id;
+      };
+      window.cancelAnimationFrame = (id) => {
+        if (state.callbacks.delete(id)) state.cancelled += 1;
+      };
+    }""",
+)
+private external fun installTestAnimationFrames()
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun(
+    """() => {
+      const state = globalThis.__TiqianTestAnimationFrames;
+      if (!state) return 0;
+      const callbacks = Array.from(state.callbacks.values());
+      state.callbacks.clear();
+      for (const callback of callbacks) callback(performance.now());
+      return callbacks.length;
+    }""",
+)
+private external fun flushOneTestAnimationFrame(): Int
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun(
+    """() => {
+      const state = globalThis.__TiqianTestAnimationFrames;
+      if (!state) return 0;
+      let slices = 0;
+      while (state.callbacks.size > 0) {
+        if (slices++ > 1000) throw new Error("animation frame test queue did not settle");
+        const callbacks = Array.from(state.callbacks.values());
+        state.callbacks.clear();
+        for (const callback of callbacks) callback(performance.now());
+      }
+      return slices;
+    }""",
+)
+private external fun flushAllTestAnimationFrames(): Int
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("() => globalThis.__TiqianTestAnimationFrames?.callbacks.size || 0")
+private external fun pendingTestAnimationFrameCount(): Int
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("() => globalThis.__TiqianTestAnimationFrames?.cancelled || 0")
+private external fun cancelledTestAnimationFrameCount(): Int
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun(
+    """(root, expectedCount) => {
+      requestAnimationFrame(() => {
+        const renderedCount = root.querySelectorAll("p[data-tq-rendered='true']").length;
+        root.setAttribute("data-test-native-exposure", String(renderedCount !== expectedCount));
+      });
+    }""",
+)
+private external fun probeRenderedParagraphCountAtNextFrame(root: HTMLElement, expectedCount: Int)
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(event) => event.detail?.stale === true")
+private external fun relayoutEventIsStale(event: Event): Boolean
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun(
+    """() => {
+      const state = globalThis.__TiqianTestAnimationFrames;
+      if (!state) return;
+      window.requestAnimationFrame = state.originalRequest;
+      window.cancelAnimationFrame = state.originalCancel;
+      delete globalThis.__TiqianTestAnimationFrames;
+    }""",
+)
+private external fun restoreTestAnimationFrames()
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun(
+    """(failShaping) => {
+      const shapes = new Map();
+      const metrics = new Map();
+      let nextHandle = 1;
+      globalThis.__TiqianExactPreparedPlan = "";
+      globalThis.__TiqianExactPreparedRenderCount = 0;
+      globalThis.__TiqianFontBackend = {
+        shape(_session, displayText, _families, fontSize, _fontWeight, _italic, _locale, role) {
+          if (failShaping) throw new Error("NoExactFontFace:test");
+          const handle = nextHandle++;
+          const glyphs = Array.from(displayText, (_point, index) => ({
+            id: 100 + index,
+            advance: fontSize,
+            x: index * fontSize,
+            y: 0,
+            bounds: [0, -fontSize * 0.88, fontSize, fontSize * 0.12],
+          }));
+          const features = role === "LatinText" && /[‘’“”]/u.test(displayText)
+            ? ["pwid", "palt"]
+            : [];
+          shapes.set(handle, { glyphs, advance: glyphs.length * fontSize, features });
+          return handle;
+        },
+        shapeGlyphCount: (handle) => shapes.get(handle).glyphs.length,
+        shapeGlyphId: (handle, index) => shapes.get(handle).glyphs[index].id,
+        shapeGlyphAdvance: (handle, index) => shapes.get(handle).glyphs[index].advance,
+        shapeGlyphX: (handle, index) => shapes.get(handle).glyphs[index].x,
+        shapeGlyphY: (handle, index) => shapes.get(handle).glyphs[index].y,
+        shapeGlyphBound: (handle, index, edge) => shapes.get(handle).glyphs[index].bounds[edge],
+        shapeAdvance: (handle) => shapes.get(handle).advance,
+        shapeFaceId: () => "Fixture CJK",
+        shapeFontInstanceId: () => "fixture:0:default",
+        shapeScript: () => "Hani",
+        shapeFeatureCount: (handle) => shapes.get(handle).features.length,
+        shapeFeature: (handle, index) => shapes.get(handle).features[index],
+        shapeUnsafeBreakCount: () => 0,
+        releaseShape: (handle) => shapes.delete(handle),
+        metrics(_session, _families, fontSize) {
+          const handle = nextHandle++;
+          metrics.set(handle, [fontSize, fontSize * 0.25, 0, fontSize * 0.88, fontSize * 0.12]);
+          return handle;
+        },
+        metricValue: (handle, index) => metrics.get(handle)[index],
+        releaseMetrics: (handle) => metrics.delete(handle),
+      };
+      globalThis.__TiqianPreparedDomRenderer = {
+        render(host, planJson, locale) {
+          if (failShaping) throw new Error("Exact renderer must not run after shaping failure");
+          globalThis.__TiqianExactPreparedRenderCount += 1;
+          globalThis.__TiqianExactPreparedPlan = planJson;
+          host.innerHTML = `<span data-tq-exact-rendered="${'$'}{locale}"></span>`;
+          return {};
+        },
+      };
+      globalThis.__TiqianPreparedDomValidator = { issue: () => null };
+    }""",
+)
+private external fun installExactFontSessionFixture(failShaping: Boolean)
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(detail) => { globalThis.__TiqianPreparedDomValidator = { issue: () => detail }; }")
+private external fun failExactPreparedDomValidation(detail: String)
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(detail) => { globalThis.__TiqianPreparedDomRenderer = { render() { throw new Error(detail); } }; }")
+private external fun failExactPreparedDomRender(detail: String)
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("() => globalThis.__TiqianExactPreparedPlan || ''")
+private external fun exactPreparedPlan(): String
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("() => globalThis.__TiqianExactPreparedRenderCount || 0")
+private external fun exactPreparedRenderCount(): Int
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("() => { delete globalThis.__TiqianFontBackend; delete globalThis.__TiqianPreparedDomRenderer; delete globalThis.__TiqianPreparedDomValidator; delete globalThis.__TiqianExactPreparedPlan; delete globalThis.__TiqianExactPreparedRenderCount; }")
+private external fun clearExactFontSessionFixture()
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun(
+    """() => {
+      globalThis.__TiqianWebFontShaping = {
+        shapeCjkDash(sessionId, fontSize) {
+          if (sessionId !== 'fixture-dash-session') return null;
+          const size = Number(fontSize);
+          const advance = size * 8 / 9;
+          const pairedAdvance = advance * 2;
+          return {
+            status: 'conforming',
+            strategy: 'PairedEmDash',
+            displayText: '——',
+            cssFontFamily: 'Arial',
+            faceId: 'fixture-arial',
+            sourceUrl: 'fixture://arial',
+            script: 'Hani',
+            language: 'zh-Hans',
+            loclEvidence: 'DefaultCjkConforming',
+            advance: pairedAdvance,
+            inkCoverage: 1,
+            horizontalCenterDelta: 0,
+            verticalCenterDelta: 0,
+            seamGap: 0,
+            glyphs: [0, 1].map((index) => ({
+              id: 100 + index,
+              advance,
+              x: index * advance,
+              y: 0,
+              bounds: { left: 0, top: -size * 0.55, right: size, bottom: -size * 0.45 },
+            })),
+          };
+        },
+      };
+    }""",
+)
+private external fun installTestCjkDashBridge()
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("() => { delete globalThis.__TiqianWebFontShaping; }")
+private external fun clearTestCjkDashBridge()
 
 @OptIn(ExperimentalWasmJsInterop::class)
 @JsFun("(root) => document.dispatchEvent(new CustomEvent('tiqian:enhance', { detail: { root } }))")
 private external fun dispatchEnhanceWithoutOptions(root: HTMLElement)
 
 @OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(root) => document.dispatchEvent(new CustomEvent('tiqian:enhance', { detail: { root, options: { strongAsEmphasisMarks: true } } }))")
+private external fun dispatchEnhanceWithStrongAsEmphasisMarks(root: HTMLElement)
+
+@OptIn(ExperimentalWasmJsInterop::class)
 @JsFun("(root) => document.dispatchEvent(new CustomEvent('tiqian:relayout', { detail: { root } }))")
 private external fun dispatchRelayout(root: HTMLElement)
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun("(root) => document.dispatchEvent(new CustomEvent('tiqian:enhance-atomically', { detail: { root } }))")
+private external fun dispatchAtomicEnhance(root: HTMLElement)
 
 @OptIn(ExperimentalWasmJsInterop::class)
 @JsFun("(element, type) => element.dispatchEvent(new Event(type))")
@@ -970,6 +2291,15 @@ private external fun renderedLineSignature(paragraph: HTMLElement): String
 
 @OptIn(ExperimentalWasmJsInterop::class)
 @JsFun(
+    """(paragraph) => Array.from(paragraph.childNodes)
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.data)
+      .join('')""",
+)
+private external fun directTextContent(paragraph: HTMLElement): String
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun(
     """(paragraph) => {
       const leaves = Array.from(paragraph.querySelectorAll('[data-tq-geometry]'))
         .filter((element) => !element.classList.contains('tq-line') && element.textContent.length > 0);
@@ -977,6 +2307,30 @@ private external fun renderedLineSignature(paragraph: HTMLElement): String
     }""",
 )
 private external fun lastTextLeaf(paragraph: HTMLElement): HTMLElement?
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun(
+    """(paragraph, text) => Array.from(paragraph.querySelectorAll('[data-tq-geometry]'))
+      .find((element) => element.textContent === text) ?? null""",
+)
+private external fun geometryLeafWithText(paragraph: HTMLElement, text: String): HTMLElement?
+
+@OptIn(ExperimentalWasmJsInterop::class)
+@JsFun(
+    """(element) => {
+      const node = element.firstChild;
+      if (!node || node.nodeType !== Node.TEXT_NODE) return '';
+      const widths = [];
+      for (let index = 0; index < node.data.length; index += 1) {
+        const range = document.createRange();
+        range.setStart(node, index);
+        range.setEnd(node, index + 1);
+        widths.push(range.getBoundingClientRect().width);
+      }
+      return widths.join(',');
+    }""",
+)
+private external fun textNodeCharacterWidths(element: HTMLElement): String
 
 @OptIn(ExperimentalWasmJsInterop::class)
 @JsFun("(element, property) => getComputedStyle(element).getPropertyValue(property)")
@@ -999,5 +2353,8 @@ private external fun selectionTrailingGap(element: HTMLElement): Double
 @OptIn(ExperimentalWasmJsInterop::class)
 @JsFun("(element) => element.getBoundingClientRect().width")
 private external fun elementWidth(element: HTMLElement): Double
+
+private fun Char.isCurlyQuoteForWebTest(): Boolean =
+    this == '\u2018' || this == '\u2019' || this == '\u201C' || this == '\u201D'
 
 private fun cssPx(value: String): Float = value.removeSuffix("px").toFloatOrNull() ?: 0f

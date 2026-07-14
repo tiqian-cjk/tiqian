@@ -1,7 +1,14 @@
 let stylesheetPromise;
 let stylesheetElement;
 
-export function ensureTiqianStyles() {
+export function ensureTiqianStyles(root = null) {
+  // StaticStylesheetFastPath: bundlers can include the public CSS entry in the
+  // server-rendered head. In that case its readiness marker is already in the
+  // cascade and injecting a duplicate runtime <link> would only delay takeover.
+  if (
+    root && typeof getComputedStyle === "function" &&
+    getComputedStyle(root).getPropertyValue("--tq-styles-ready").trim() === "1"
+  ) return Promise.resolve(null);
   const existing = document.querySelector("link[data-tiqian-stylesheet]");
   if (existing?.sheet) {
     stylesheetElement = existing;

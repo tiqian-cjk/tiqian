@@ -101,11 +101,15 @@ object DomParagraphRenderer {
         // that glue and would cancel the margins.
         val naturalWidth = HashMap<TextRange, Float>()
         val renderFontFamily = HashMap<TextRange, String>()
+        val openTypeFeaturesByRange = HashMap<TextRange, List<String>>()
         val glyphIdsByRange = HashMap<TextRange, MutableList<UInt>>()
         for (run in result.glyphRuns) {
             for (glyph in run.glyphs) {
                 naturalWidth[glyph.clusterRange] = (naturalWidth[glyph.clusterRange] ?: 0f) + glyph.advance
                 glyph.renderFontKey?.let { renderFontFamily[glyph.clusterRange] = it }
+                if (run.openTypeFeatures.isNotEmpty()) {
+                    openTypeFeaturesByRange[glyph.clusterRange] = run.openTypeFeatures
+                }
                 glyphIdsByRange.getOrPut(glyph.clusterRange) { mutableListOf() }.add(glyph.id)
             }
         }
@@ -199,7 +203,12 @@ object DomParagraphRenderer {
 
         fun appendRun(run: RenderRun) {
             if (run.semanticSpans.isEmpty()) {
-                semanticContainerFor(emptyList()).appendChild(renderRunElement(host, run, result.input.textStyle))
+                val container = semanticContainerFor(emptyList())
+                if (run.canRenderAsTextNode(result.input.textStyle)) {
+                    container.appendChild(document.createTextNode(run.text))
+                } else {
+                    container.appendChild(renderRunElement(host, run, result.input.textStyle))
+                }
                 return
             }
             val container = semanticContainerFor(run.semanticSpans)
@@ -236,13 +245,12 @@ object DomParagraphRenderer {
             lineMarker.setAttribute("data-tq-line-empty", "${cells.isEmpty()}")
             resetEngineInline(lineMarker)
             lineMarker.style.apply {
-                setProperty("display", "inline-block", "important")
-                setProperty("width", "0px", "important")
-                setProperty("height", "${h}px", "important")
-                setProperty("line-height", "${h}px", "important")
-                setProperty("vertical-align", "${-(line.bottom - line.baseline)}px", "important")
-                setProperty("overflow", "visible", "important")
-                setProperty("pointer-events", "none", "important")
+                setProperty("--tq-line-height", "${h}px", "important")
+                setProperty(
+                    "--tq-line-baseline-offset",
+                    "${-(line.bottom - line.baseline)}px",
+                    "important",
+                )
             }
             cells.firstOrNull()?.let { first ->
                 val firstCluster = result.clusters[first.clusterIndex]
@@ -316,6 +324,7 @@ object DomParagraphRenderer {
                     deco = deco,
                     italic = italic,
                     renderFontFamily = renderFontFamily[cluster.range],
+                    openTypeFeatures = openTypeFeaturesByRange[cluster.range].orEmpty(),
                     shapingLanguage = shapingDecision?.language,
                     resolvedFace = shapingDecision?.resolvedFace,
                     dashStrategy = shapingDecision?.strategy,
@@ -363,23 +372,24 @@ object DomParagraphRenderer {
                 } else {
                     0f
                 }
-                semanticContainerFor(activeSemanticSpans).appendChild(
-                    renderRunElement(
-                        host,
-                        RenderRun(
-                            range = TextRange(0, 0),
-                            text = "-",
-                            source = "-",
-                            spacing = DomRunSpacing.None,
-                            semanticSpans = emptyList(),
-                            textStyle = result.input.textStyle,
-                            deco = ClusterDeco(),
-                            italic = false,
-                            leadingMargin = (line.indent + line.visualWidth) - flowEnd,
-                        ),
-                        result.input.textStyle,
+                val hyphen = renderRunElement(
+                    host,
+                    RenderRun(
+                        range = TextRange(0, 0),
+                        text = "-",
+                        source = "-",
+                        spacing = DomRunSpacing.None,
+                        semanticSpans = emptyList(),
+                        textStyle = result.input.textStyle,
+                        deco = ClusterDeco(),
+                        italic = false,
+                        leadingMargin = (line.indent + line.visualWidth) - flowEnd,
                     ),
+                    result.input.textStyle,
                 )
+                hyphen.setAttribute("data-tq-copy-ignore", "true")
+                hyphen.setAttribute("aria-hidden", "true")
+                semanticContainerFor(activeSemanticSpans).appendChild(hyphen)
             }
             val boundaryContainer = semanticContainerFor(semanticSpansCrossing(line.range.end))
             if (line.endReason == LineEndReason.MandatoryBreak) {
@@ -393,11 +403,31 @@ object DomParagraphRenderer {
             if (lineIndex < result.lines.lastIndex) {
                 val softBreak = document.createElement("br") as HTMLElement
                 softBreak.setAttribute("data-tq-engine-break", line.endReason.name)
-                softBreak.style.setProperty("all", "unset", "important")
+                if (line.endReason != LineEndReason.MandatoryBreak) {
+                    // AccessibilitySoftWrapExclusion: this BR only replays an
+                    // engine-owned visual wrap. It must not become a source
+                    // newline in either the accessibility or copy contract.
+                    softBreak.setAttribute("aria-hidden", "true")
+                    softBreak.setAttribute("data-tq-copy-ignore", "true")
+                }
                 boundaryContainer.appendChild(softBreak)
             }
         }
         semanticContainerFor(emptyList())
+        if (result.lines.isNotEmpty()) {
+            // ParagraphSelectionEndSentinel: negative letter-spacing is how the
+            // renderer replays compressed closing punctuation. Without a final
+            // zero-width source-external character, Chromium paints the
+            // cross-block selection terminator inside that negative spacing and
+            // the previous paragraph appears to retract. U+200B restores the
+            // native paragraph-end selection strip without changing flow width.
+            val selectionEnd = document.createElement("span") as HTMLElement
+            selectionEnd.setAttribute("data-tq-selection-end", "true")
+            selectionEnd.setAttribute("data-tq-copy-ignore", "true")
+            selectionEnd.setAttribute("aria-hidden", "true")
+            selectionEnd.textContent = "\u200B"
+            host.appendChild(selectionEnd)
+        }
         appendInterlinearLines(host, result, colorSpans)
         appendEmphasisDots(host, result, colorSpans, sourceSpans)
     }
@@ -412,6 +442,7 @@ object DomParagraphRenderer {
         val deco: ClusterDeco,
         val italic: Boolean,
         val renderFontFamily: String? = null,
+        val openTypeFeatures: List<String> = emptyList(),
         val shapingLanguage: String? = null,
         val resolvedFace: String? = null,
         val dashStrategy: String? = null,
@@ -434,6 +465,7 @@ object DomParagraphRenderer {
                 deco == other.deco &&
                 italic == other.italic &&
                 renderFontFamily == other.renderFontFamily &&
+                openTypeFeatures == other.openTypeFeatures &&
                 shapingLanguage == other.shapingLanguage &&
                 resolvedFace == other.resolvedFace &&
                 punctuationInkFloor == other.punctuationInkFloor &&
@@ -444,6 +476,27 @@ object DomParagraphRenderer {
             text += other.text
             source += other.source
         }
+
+        /**
+         * `NecessaryGeometrySpanOnly`: a run that needs no geometry, source,
+         * feature, decoration, or semantic boundary stays a native Text node.
+         * Besides keeping the light DOM small, this preserves the browser's
+         * continuous selection surface for ordinary prose.
+         */
+        fun canRenderAsTextNode(paragraphStyle: TextStyle): Boolean =
+            spacing === DomRunSpacing.None &&
+                source == text &&
+                semanticSpans.isEmpty() &&
+                textStyle == paragraphStyle &&
+                deco == ClusterDeco() &&
+                !(italic && !textStyle.italic) &&
+                renderFontFamily == null &&
+                openTypeFeatures.isEmpty() &&
+                shapingLanguage == null &&
+                dashStrategy == null &&
+                punctuationInkFloor == null &&
+                punctuationBodyWidth == null &&
+                leadingMargin == 0f
     }
 
     private fun DomRunSpacing.approximatelyEquals(other: DomRunSpacing): Boolean = when {
@@ -492,7 +545,6 @@ object DomParagraphRenderer {
     private fun cloneSemanticElement(sourceSpan: DomSourceSpan): HTMLElement =
         (sourceSpan.element.cloneNode(false) as HTMLElement).also { clone ->
             clone.setAttribute(SOURCE_SEMANTIC_ATTRIBUTE, "true")
-            applyEngineFlowConstraints(clone)
             sourceSpan.cjkStrongBaseWeight?.let { weight ->
                 clone.setAttribute(CJK_STRONG_ATTRIBUTE, "true")
                 clone.style.setProperty("font-weight", "$weight", "important")
@@ -580,6 +632,9 @@ object DomParagraphRenderer {
             }
         }
         if (run.source != run.text) leaf.setAttribute("data-tq-src", run.source)
+        if (run.openTypeFeatures.isNotEmpty()) {
+            leaf.setAttribute("data-tq-open-type-features", run.openTypeFeatures.joinToString(","))
+        }
         run.shapingLanguage?.let { leaf.setAttribute("lang", it) }
         run.dashStrategy?.let { strategy ->
             leaf.setAttribute(DASH_STRATEGY_ATTRIBUTE, strategy)
@@ -902,10 +957,7 @@ object DomParagraphRenderer {
         svg.setAttribute(GEOMETRY_SPAN_ATTRIBUTE, "true")
         svg.setAttribute(
             "style",
-            "all:unset!important;display:block!important;position:absolute!important;" +
-                "left:0!important;top:0!important;width:${result.size.width}px!important;" +
-                "height:${result.size.height}px!important;overflow:visible!important;" +
-                "pointer-events:none!important;user-select:none!important;-webkit-user-select:none!important",
+            "--tq-overlay-width:${result.size.width}px;--tq-overlay-height:${result.size.height}px",
         )
 
         val fontSize = result.input.textStyle.fontSize
@@ -922,9 +974,10 @@ object DomParagraphRenderer {
                     line.setAttribute("stroke", stroke)
                     line.setAttribute("stroke-width", "$strokeWidth")
                     line.setAttribute("stroke-linecap", "butt")
+                    line.setAttribute("data-tq-decoration-line", "true")
                     line.setAttribute(
                         "style",
-                        "stroke:$stroke!important;stroke-width:${strokeWidth}px!important;stroke-linecap:butt!important",
+                        "--tq-decoration-color:$stroke;--tq-decoration-stroke-width:${strokeWidth}px",
                     )
                     svg.appendChild(line)
                 }
@@ -936,10 +989,10 @@ object DomParagraphRenderer {
                     path.setAttribute("stroke-width", "$strokeWidth")
                     path.setAttribute("stroke-linecap", "butt")
                     path.setAttribute("stroke-linejoin", "round")
+                    path.setAttribute("data-tq-decoration-wave", "true")
                     path.setAttribute(
                         "style",
-                        "fill:none!important;stroke:$stroke!important;stroke-width:${strokeWidth}px!important;" +
-                            "stroke-linecap:butt!important;stroke-linejoin:round!important",
+                        "--tq-decoration-color:$stroke;--tq-decoration-stroke-width:${strokeWidth}px",
                     )
                     svg.appendChild(path)
                 }
@@ -972,10 +1025,7 @@ object DomParagraphRenderer {
         svg.setAttribute(GEOMETRY_SPAN_ATTRIBUTE, "true")
         svg.setAttribute(
             "style",
-            "all:unset!important;display:block!important;position:absolute!important;" +
-                "left:0!important;top:0!important;width:${result.size.width}px!important;" +
-                "height:${result.size.height}px!important;overflow:visible!important;" +
-                "pointer-events:none!important;user-select:none!important;-webkit-user-select:none!important",
+            "--tq-overlay-width:${result.size.width}px;--tq-overlay-height:${result.size.height}px",
         )
 
         for (dot in dots) {
@@ -997,7 +1047,8 @@ object DomParagraphRenderer {
             circle.setAttribute("cy", "${dot.anchorY}")
             circle.setAttribute("r", "${dot.dotDiameter / 2f}")
             circle.setAttribute("fill", color)
-            circle.setAttribute("style", "fill:$color!important")
+            circle.setAttribute("data-tq-decoration-dot", "true")
+            circle.setAttribute("style", "--tq-decoration-color:$color")
             svg.appendChild(circle)
         }
 
@@ -1104,14 +1155,9 @@ object DomParagraphRenderer {
 
     private fun resetEngineInline(element: HTMLElement) {
         element.setAttribute(GEOMETRY_SPAN_ATTRIBUTE, "true")
-        element.style.setProperty("all", "unset", "important")
-        element.style.setProperty("display", "inline", "important")
-    }
-
-    private fun applyEngineFlowConstraints(element: HTMLElement) {
-        for ((property, value) in ENGINE_FLOW_STYLE_OVERRIDES) {
-            element.style.setProperty(property, value, "important")
-        }
+        // `SharedRuntimeGeometryCss`: the package stylesheet owns the large
+        // invariant reset. Runtime leaves retain only spacing / decoration
+        // values that actually differ from the shared rule.
     }
 
     /** ARGB Int → CSS `rgba(...)`. */
@@ -1183,15 +1229,6 @@ object DomParagraphRenderer {
     private const val DASH_DOM_ABSOLUTE_TOLERANCE_PX = 0.75f
     private const val DASH_DOM_RELATIVE_TOLERANCE = 0.03f
 
-    private val ENGINE_FLOW_STYLE_OVERRIDES = listOf(
-        "white-space-collapse" to "preserve",
-        "overflow-wrap" to "normal",
-        "text-autospace" to "no-autospace",
-        "text-wrap-mode" to "nowrap",
-        "-webkit-hyphens" to "manual",
-        "hyphens" to "manual",
-        "word-break" to "normal",
-    )
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
