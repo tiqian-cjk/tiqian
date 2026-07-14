@@ -82,6 +82,12 @@ Compose 侧作者面用 `AnnotatedString`（ADR 0030 的 `CjkParagraph(Annotated
   列宽默认 **1 字**，自动按列表中**最宽标记**升到放得下它的最小整字数（如出现 `10.` → 2 字），
   标记宽**实测**（`autoListGutterEm`，关 grid + 零缩进取裸宽，不靠数位数）；`indent` 非空则覆盖。
   marker/正文都**零段首缩进**（gutter 是唯一缩进）。嵌套/富文本项是后续。
+  Web 于 2026-07-14 接入同一模型：简单顶层 `ol/ul` 保留原生容器与 `li`，整组 marker 用当前
+  Web shaper 实测，最宽值向上取整到整数 `ic`；gutter 位于正文版心内部，item 可用行长为
+  `正文版心 - gutter`，因此续行、响应式网格与普通正文共用同一组字格。marker 是 `aria-hidden`、
+  不可选且不进入 DOM `textContent` 的 paint-only pseudo；复制、搜索和无障碍仍只看到原 item。
+  任一 item 不能保真时整组恢复原生列表。嵌套、block-rich item、`reversed` 与非 decimal / 常见
+  bullet marker 暂不冒充支持。
 
 ## Consequences
 

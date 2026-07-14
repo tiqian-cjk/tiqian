@@ -164,13 +164,50 @@ Upper→Upper-then-lower（`XML|Http`）——**不补连字符**（大写字母
   超过阈值的全大写长串不再假设是人类缩写。
 - 长 opaque token 即使单独能放进一整行，也暴露 clean 字符边界；这些断点让前一行
   能带上一部分 token，避免只剩几个 CJK 字被强行拉满。普通英文词不走这个分支。
-- 这些分隔符仍是 `LatinText` cluster 内部的 clean break，不触发 CLREQ 的 CJK 行首/
-  行尾禁则；ASCII 括号若包住 CJK 内容，仍由独立的 `CjkContextAsciiBracketKinsoku`
-  规则处理。
+- 这些分隔符仍是 `LatinText` cluster 内部的 clean break，不因此进入 CJK
+  标点几何；ASCII 括号若包住 CJK 内容，仍由独立的
+  `CjkContextAsciiBracketKinsoku` 规则处理。ASCII 点号在 hard-cut 后成为前导
+  cluster 时的狭窄行首禁则例外，见下一 amendment。
 
 这个分支和 `LatinForcedHyphenBreak` 的关系是：英文**词**仍按 hyphenator / 前二后三
 补连字符；opaque token 只提供 clean break。这样链接不会出现源文本里不存在的 `-`，
 长 id 也不会把前一行中文拉到极松后再整块下移。
+
+## Amendment (2026-07-12): AttachedAsciiPointMarkKinsoku
+
+CLREQ 明确记录了西文较多的中文横排使用 U+002C COMMA `,` 作逗号或顿号的
+非典型体例，又一般规定点号不得居行首。直接码点证据是 U+002C；提椠将同一断行
+语义保守推广到方向明确的 `, . : ; ! ?`，不声称 CLREQ 已按码点逐个列举后五者。
+
+这里保留两条独立的轴：
+
+- 字体/测量轴：它们仍是 `LatinText`，保留平台 shaping 得到的比例 advance，不建
+  `PunctuationAtom`，不获得 CJK glue、行尾半宽或相邻标点压缩。
+- 断行轴：非 `None` 禁则档下，点号直接紧随非空白可见 cluster 时，
+  `AttachedAsciiPointMarkKinsoku` 把它加入行首禁则，并与前一 cluster 形成 no-break
+  边界。段首、空白或源文强制换行之后不跨边界推断。
+
+`AttachedAsciiPointMarkSegmentation` 在初始角色分段时把前导点号 run 与后续 Latin
+文本分开；`PostCutAsciiPointMarkPrefixSegmentation` 在 opaque/hard-cut 之后再做同样的
+前缀分离。因此 `中文,anyway` 不会把整个 `,anyway` 绑成禁则单元，而超长 token
+硬拆出的 `,A` 也不会遗漏。未硬拆的 `foo,bar` / `1,234` 仍保持原 Latin cluster；
+U+0022 / U+0027 直引号无法仅凭码点判定开闭，不在本规则中猜测。
+
+若“前一 cluster + 连续点号 run”连它所在行的可用宽度都无法容纳（包括段首缩进后的
+首行），单纯 no-break 没有合法解。这个判定必须使用 breaker 实际消费的
+`baseGeometry.resolveClusters()` advance，包括 ruby/注音 structural spread，不得回看 shaping 阶段的
+natural advance。
+
+该 run 此时获得具名 `AttachedAsciiPointMarkImpossibleMeasureHang` 的候选资格，但 repair 顺序
+仍是 PushIn 在先、Hang 在后。只有最终真正 Hang 的 cluster 才在
+`contextualKinsokuDecisions.impossibleMeasureFallback` 中记录该名称；若 PushIn 已合法收进版心，
+decision 不冒充“已悬挂”。run 因样式/shaping 边界分成多个 cluster 时，这些候选 cluster 可
+连续延伸同一次 Hang；不放宽 profile 的普通“行尾只挂一个点号”。
+
+最终悬挂的 cluster 仍保留原 source range 与 glyph 几何。`LineBox.hangingPunctuationAdvance`
+累计整个悬挂 run 的 advance；Compose `TextOverflow.Clip` 只在该字段非零时把行的最终
+`visualWidth` 视为合法绘制边界。因此 justify 把前置内容拉宽，或极窄版心下前一 cluster
+自身已超宽，点号也不会被 clip 误裁。前端没有 ASCII 码点特判。
 
 ## Consequences
 

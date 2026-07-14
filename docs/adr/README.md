@@ -57,6 +57,7 @@ ADR 记录已经做出的架构与排版决定。它们按编号保留当时的 
 - [0037 Source-faithful plain text 与 mandatory breaks](0037-source-faithful-plain-text.md)
 - [0038 邻行均摊](0038-neighbor-amortized-adjustment.md)
 - [0039 Web 渲染路径与真实站点接入](0039-web-rendering-path.md)
+- [0040 构建期 Web 字体证据与最大版心快照](0040-build-time-web-font-snapshots.md)
 
 ## 早期状态说明
 
@@ -69,3 +70,4 @@ ADR 记录已经做出的架构与排版决定。它们按编号保留当时的 
 - 0021 中的 `firstLineIndentEm` / `blockIndentEm` 命名由 0034 改为 `Ic` 类型的
   `firstLineIndent` / `blockIndent`；
 - 0017 的 Desktop-only 前端由 0035 扩展到 Android，并由 0039 增加 Web 前端。
+- 0039 的客户端实时度量路径由 0040 增加 exact-font 构建期最大版心快照快路径；失配仍回到 0039。

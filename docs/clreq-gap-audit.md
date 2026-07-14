@@ -162,6 +162,17 @@ justify 延长、`AdjacentInterlinearLineShortening`（相邻侧各回缩 1/16em
 - **中西自动间距「字母 vs 数字」按边界字符接线**——已解决（`modeForWestern`：
   边界相邻西文字符是数字→`cjkDigit`、否则→`cjkLatin`，逐侧判定；默认两者相同
   Insert，`autospaceDistinguishesLetterFromDigitAtBoundary` 单测覆盖）。
+- **ASCII 点号行首禁则**——已解决（2026-07-12）：CLREQ 记录了中文横排
+  采用 U+002C `,` 作逗号/顿号的非典型体例；这是直接码点证据。项目依
+  “点号不得居行首”语义将策略保守推广到同类 `, . : ; ! ?`，不声称 CLREQ 已按
+  码点逐个列举后五者。`AttachedAsciiPointMarkKinsoku` 让直接紧随非空白可见文字的
+  这些点号在非 `None` 禁则档不得居自动折行行首，同时保持 `LatinText` 字体面、比例
+  advance，且不进入 CJK 标点 glue 或行尾半宽。普通情况用 no-break 边界；连前字与整个
+  连续点号 run 都无法共同容纳时，repair 先尝试 PushIn，确实选中后才记录
+  `AttachedAsciiPointMarkImpossibleMeasureHang` 悬挂兜底。宽度判定与 breaker 同源（含 ruby/
+  注音 spread），跨样式 cluster 的连续 run 可延伸同一次具名 Hang。前导点号 run 与后续
+  Latin 文本独立 shaping，包括二次 hard-cut 才暴露的 comma；普通
+  `foo,bar` / `1,234` 不变，直引号方向仍不猜测。
 - **GB 式固定半宽标点**——已解决（ADR 0027）：「不可调整的标点包括：GB 式
   半字连接号、间隔号、分隔号，固定半个字宽」。落为 `PunctuationWidthPolicy.
   gbFixedSeparators` opt-in（连接/间隔/分隔→0.5em、glue 0 不可调）；并顺带
@@ -207,5 +218,6 @@ justify 延长、`AdjacentInterlinearLineShortening`（相邻侧各回缩 1/16em
 
 缺口 1–7 全部已解决（Slice 10–17）；行尾禁则（ADR 0026）已落地；`cjkDigit`
 自动间距按边界字符独立接线（CLREQ 字母/数字之分）+ 数字符号分离禁则
-（`NumberSymbolCohesion`）已于 2026-06-16 补齐（见「8 杂项」前两条）。
+（`NumberSymbolCohesion`）已于 2026-06-16 补齐；ASCII 点号行首禁则于
+2026-07-12 补齐（见「8 杂项」）。
 剩下只有「8 杂项」的风格选项与远期项，不在第一阶段主线。
