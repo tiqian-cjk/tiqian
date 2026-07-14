@@ -256,10 +256,14 @@ Kotlin/JS runtime 内部的 `TiqianWeb.enhance()` 在 runtime 已安装后同步
 ### `HostCascadeReadyGate` + `HostTypographyInvalidation` —— measure 与 paint 同源
 
 light DOM 继承宿主 CSS，因此 custom element 不能把 `connectedCallback` 当成 computed style
-已经稳定的信号。初次增强要等 DOM ready、宿主与 Tiqian stylesheet、`document.fonts.ready`
-以及一个 animation frame 后再 lower；否则 Vite/Astro 的模块 CSS 仍可能把正文从浏览器默认
-`16px / normal` 改成站点的 `18px / 460`，canvas 按旧值度量而 DOM 按新值绘制，整行墨迹会
-超出 `LineBox.visualWidth` 并被宿主容器裁切。
+已经稳定的信号。初次增强先等 Tiqian stylesheet，再用一个 animation frame 让解析器与宿主
+cascade 落定；随后只对正文 computed font descriptor 与实际字符调用 `FontFaceSet.load()`，而不等
+`document.fonts.ready` 中无关的图标、代码或 widget 字体。正文字体等待以 3 秒为上限；超时后原生
+SSR 继续作为事实来源，不启动可能与 font swap 竞态的测量。对应 load promise 最终 settle、相关
+`loadingdone` / `loadingerror` 或宿主字体样式变化时，custom element 从最新一代连接状态重新走完整
+gate。构建期 snapshot 自己验证明确声明的 exact face，因此命中候选不重复执行这次通用字体扫描。
+否则 Vite/Astro 的模块 CSS 仍可能把正文从浏览器默认 `16px / normal` 改成站点的 `18px / 460`，
+canvas 按旧值度量而 DOM 按新值绘制，整行墨迹会超出 `LineBox.visualWidth` 并被宿主容器裁切。
 
 `TranslationOnlyAncestorTransformCompatibility` 只把祖先 computed `matrix()` / `matrix3d()` 中的
 纯 x/y 平移视为不改变排版几何：linear 分量保持单位矩阵，perspective 与 z 分量保持为零。它允许
@@ -279,7 +283,9 @@ mutation。宿主无需向 Tiqian 重复声明一套字体。
 `CapabilityTransitionNativeFallback` 要求 relayout 一旦发现当前宽度不能保真，就原子恢复该段 SSR
 children 并发布 issue，不能保留旧宽度的 Tiqian DOM；后续宽度变化会重新尝试，使回到单行时可以
 恢复增强。ESM 入口的字体/runtime 异步准备另由 `AsyncPreparationCancellation` 代际化：`destroy()`
-或更新的 enhance 请求必须使旧 promise 失效，不能在导航后复活已断开的正文。
+或更新的 enhance 请求必须使旧 promise 失效，不能在导航后复活已断开的正文。custom element 在首次
+接管前收到公开属性变化时也必须重启连接代际；尤其 `strong-as-emphasis-marks` 会改变 snapshot
+eligibility，不能让等待字体之前捕获的旧值在等待结束后提交。
 
 `RouterRemovedStylesheetRecovery` 要求每次 root 连接都以当前 document 为事实来源检查
 `link[data-tiqian-stylesheet]`，不能把一次已 resolve 的 module-level Promise 当成 stylesheet 永久
