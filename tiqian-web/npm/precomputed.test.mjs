@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
+  adoptedPrecomputedSnapshotLiveIssue,
   isPrecomputedSnapshotAdopted,
   precomputedSnapshotMaximumMeasureMatches,
   renderedPreparedParagraphIssue,
@@ -292,10 +293,13 @@ function fixture({
   sentinelTop = lineBaseline,
   paragraphHeight = lineBottom,
   probeFeatures = undefined,
+  fontVariantNumeric = "normal",
   boundaryFeatureSignature = null,
   shapingBoundary = true,
+  semanticGeometry = false,
   nativeText = false,
   fontDisplay = "block",
+  entrySource = undefined,
 } = {}) {
   const measuredProbeStyles = [];
   const documentObject = {
@@ -350,6 +354,7 @@ function fixture({
     letterSpacingPx: 0,
     fontFeatureSettings: "normal",
     fontVariationSettings: "normal",
+    fontVariantNumeric,
   };
   const evidence = {
     family: "Fixture CJK",
@@ -408,12 +413,20 @@ function fixture({
   sentinel.setAttribute("data-tq-line-end-sentinel", "0");
   sentinel.left = lineEnd;
   sentinel.top = sentinelTop;
-  entry.append(marker, rendered, sentinel);
+  const renderedParent = semanticGeometry
+    ? documentObject.createElement("strong")
+    : null;
+  if (renderedParent) {
+    renderedParent.setAttribute("data-tq-source-semantic", "true");
+    renderedParent.appendChild(rendered);
+  }
+  entry.append(marker, renderedParent ?? rendered, sentinel);
   const manifest = {
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
     renderRevision: "prebroken-dom-v11",
     fontSourcePolicy: "compatible-local-render-family-v2",
+    ...(entrySource === undefined ? {} : { entrySource }),
     renderFontFamilies: ["Fixture CJK"],
     paragraphSelector: "p[data-tq-snapshot-key]",
     valueStyles: [],
@@ -423,7 +436,7 @@ function fixture({
       value: typography,
     }],
     fontEvidence: {
-      backendRevision: "tiqian-shared-harfbuzz-v4",
+      backendRevision: "tiqian-shared-harfbuzz-v5",
       harfbuzzVersion: "fixture",
       faces: [{
         ...Object.fromEntries(Object.entries(evidence).filter(([key]) =>
@@ -506,6 +519,32 @@ test("exact runtime fallback accepts a width miss only while every live input st
       matches: false,
       reason: "SnapshotSourceMismatch",
     });
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
+test("exact runtime font evidence remains valid across responsive size and line-height", async () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  try {
+    const { root, paragraph, originalText } = fixture();
+    globalThis.getComputedStyle = (element, pseudo) => fixtureComputedStyle(
+      element,
+      pseudo,
+      element === paragraph ? { fontSize: "15.75px", lineHeight: "28px" } : {},
+    );
+
+    assert.deepEqual(await validatePrecomputedSnapshotExactFontContract(root), {
+      matches: true,
+      reason: null,
+      paragraphSelector: "p[data-tq-snapshot-key]",
+      compatibleLocalDeclared: false,
+    });
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), {
+      adopted: false,
+      reason: "SnapshotTypographyMismatch",
+    });
+    assert.strictEqual(paragraph.firstChild, originalText);
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;
   }
@@ -948,9 +987,35 @@ test("maximum-measure preflight is non-destructive and follows live paragraph wi
     assert.equal(precomputedSnapshotMaximumMeasureMatches(root), true);
     assert.strictEqual(paragraph.firstChild, originalText);
 
+    paragraph.width = 368;
+    assert.equal(precomputedSnapshotMaximumMeasureMatches(root), true);
+    assert.strictEqual(paragraph.firstChild, originalText);
+
+    paragraph.width = 378;
+    assert.equal(precomputedSnapshotMaximumMeasureMatches(root), false);
+    assert.strictEqual(paragraph.firstChild, originalText);
+
     paragraph.width = 240;
     assert.equal(precomputedSnapshotMaximumMeasureMatches(root), false);
     assert.strictEqual(paragraph.firstChild, originalText);
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
+test("snapshot adoption accepts a wider container in the same line-length grid cell", async () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = fixtureComputedStyle;
+  try {
+    const { root, paragraph } = fixture();
+    paragraph.width = 368;
+
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), { adopted: true, count: 1 });
+    assert.equal(root.dataset.tiqianSnapshot, "maximum-measure");
+    assert.equal(adoptedPrecomputedSnapshotLiveIssue(root), null);
+
+    paragraph.width = 378;
+    assert.equal(adoptedPrecomputedSnapshotLiveIssue(root), "SnapshotWidthMismatch");
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;
   }
@@ -977,6 +1042,47 @@ test("snapshot adoption accepts sparse inline geometry without an atomic shaping
   try {
     const { root } = fixture({ shapingBoundary: false });
     assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), { adopted: true, count: 1 });
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
+test("prepared geometry inherits shaping styles from its nearest semantic source wrapper", async () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = (element, pseudo) => fixtureComputedStyle(
+    element,
+    pseudo,
+    element.closest?.("[data-tq-source-semantic]") ? { fontWeight: "700" } : {},
+  );
+  try {
+    const { root } = fixture({ semanticGeometry: true });
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), { adopted: true, count: 1 });
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
+test("prepared geometry still rejects shaping styles that differ from its semantic source wrapper", async () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = (element, pseudo) => fixtureComputedStyle(
+    element,
+    pseudo,
+    element.hasAttribute?.("data-tq-advance")
+      ? { fontWeight: "600" }
+      : element.closest?.("[data-tq-source-semantic]")
+        ? { fontWeight: "700" }
+        : {},
+  );
+  try {
+    const { root, paragraph, originalText } = fixture({
+      semanticGeometry: true,
+      shapingBoundary: false,
+    });
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), {
+      adopted: false,
+      reason: "SnapshotAdoptionFailed:RenderedSnapshotGeometryMismatch:Geometry:fontWeight",
+    });
+    assert.strictEqual(paragraph.firstChild, originalText);
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;
   }
@@ -1057,7 +1163,7 @@ test("a compatible local face with a different probe advance is rejected", async
 });
 
 test("an optional render face cannot promise exact direct first paint", async () => {
-  const setup = fixture({ fontDisplay: "optional" });
+  const setup = fixture({ fontDisplay: "optional", entrySource: "server-dom-v1" });
   globalThis.document = setup.documentObject;
   globalThis.getComputedStyle = (element, pseudo) => fixtureComputedStyle(element, pseudo);
   try {
@@ -1065,6 +1171,18 @@ test("an optional render face cannot promise exact direct first paint", async ()
       adopted: false,
       reason: "FontFaceContractMismatch",
     });
+  } finally {
+    delete globalThis.document;
+    delete globalThis.getComputedStyle;
+  }
+});
+
+test("an inert snapshot may adopt a swap face only after its exact probe loads", async () => {
+  const setup = fixture({ fontDisplay: "swap" });
+  globalThis.document = setup.documentObject;
+  globalThis.getComputedStyle = (element, pseudo) => fixtureComputedStyle(element, pseudo);
+  try {
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(setup.root), { adopted: true, count: 1 });
   } finally {
     delete globalThis.document;
     delete globalThis.getComputedStyle;
@@ -1227,6 +1345,26 @@ test("non-default shaping CSS misses before DOM adoption", async () => {
     const adopted = await tryAdoptPrecomputedSnapshot(root);
     assert.deepEqual(adopted, { adopted: false, reason: "SnapshotTypographyMismatch" });
     assert.strictEqual(paragraph.firstChild, originalText);
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
+test("lining numeric typography validates the matching lnum font probe", async () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = (element, pseudo) => fixtureComputedStyle(element, pseudo, {
+    fontVariantNumeric: "lining-nums",
+  });
+  try {
+    const { root, paragraph, originalText, measuredProbeStyles } = fixture({
+      fontVariantNumeric: "lining-nums",
+      probeFeatures: ["lnum"],
+    });
+
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), { adopted: true, count: 1 });
+    assert.notStrictEqual(paragraph.firstChild, originalText);
+    assert.ok(measuredProbeStyles.some((style) =>
+      style.includes("font-variant-numeric:lining-nums!important")));
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;
   }

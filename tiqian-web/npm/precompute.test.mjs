@@ -251,7 +251,7 @@ test("snapshot template keeps the prepared DOM inert and Pagefind-ignored", () =
     },
     maxWidthPx: 360,
     fontEvidence: {
-      backendRevision: "tiqian-shared-harfbuzz-v4",
+      backendRevision: "tiqian-shared-harfbuzz-v5",
       harfbuzzVersion: "fixture",
       faces: [{
         family: "Fixture CJK",
@@ -297,7 +297,7 @@ test("snapshot bundle exposes compact SSR artifacts without inline geometry", ()
     },
     maxWidthPx: 360,
     fontEvidence: {
-      backendRevision: "tiqian-shared-harfbuzz-v4",
+      backendRevision: "tiqian-shared-harfbuzz-v5",
       harfbuzzVersion: "fixture",
       faces: [{
         family: "Fixture CJK",
@@ -414,6 +414,13 @@ test("v1 snapshot typography stays aligned with the browser fallback contract", 
   await assert.rejects(
     createPrecomputer({ ...base, typography: { ...base.typography, lineLengthGridEnabled: false } }),
     /UnsupportedSnapshotLineLengthGrid/u,
+  );
+  await assert.rejects(
+    createPrecomputer({
+      ...base,
+      typography: { ...base.typography, fontVariantNumeric: "oldstyle-nums" },
+    }),
+    /UnsupportedFontVariantNumeric/u,
   );
 });
 

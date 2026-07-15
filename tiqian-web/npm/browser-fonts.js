@@ -175,6 +175,18 @@ function collectManifestFaces(manifest) {
     "SnapshotManifestInvalid",
     "paragraphSelector",
   );
+  const numericVariants = new Set(
+    [...manifest.entries, ...(manifest.fontContractEntries ?? [])].map(
+      (entry) => String(entry?.typography?.fontVariantNumeric ?? "normal"),
+    ),
+  );
+  if (
+    numericVariants.size !== 1 ||
+    ![...numericVariants].every((value) => value === "normal" || value === "lining-nums")
+  ) {
+    fail("SnapshotTypographyConflict", "fontVariantNumeric");
+  }
+  const fontVariantNumeric = numericVariants.values().next().value;
   const versions = new Set();
   const backendRevisions = new Set();
   const groups = new Map();
@@ -244,6 +256,7 @@ function collectManifestFaces(manifest) {
     backendRevision,
     harfbuzzVersion: versions.values().next().value,
     faces,
+    baseFeatures: fontVariantNumeric === "lining-nums" ? ["lnum"] : [],
   };
 }
 
@@ -476,7 +489,10 @@ export function createBrowserFontSessionLoader(options = {}) {
 
     let session;
     try {
-      session = await createSession(faceSpecs, { sessionPrefix: "tq-browser-font" });
+      session = await createSession(faceSpecs, {
+        sessionPrefix: "tq-browser-font",
+        baseFeatures: context.baseFeatures,
+      });
       validateSession(session, context);
       return session;
     } catch (error) {

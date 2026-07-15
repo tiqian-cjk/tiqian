@@ -97,7 +97,7 @@ test("the custom element validates a snapshot before dynamically loading the bro
   const connectedStart = elementSource.indexOf("  connectedCallback() {");
   const initialSnapshotSource = elementSource.slice(connectedStart, adoption);
   const runtimeLoad = elementSource.indexOf("await (runtimePromise ?? loadTiqianRuntime());", adoption);
-  const invalidationStart = elementSource.indexOf("  #invalidateSnapshotAndEnhance() {");
+  const invalidationStart = elementSource.indexOf("  #invalidateSnapshotAndEnhance(");
   const invalidationEnd = elementSource.indexOf(
     "  #tryReadoptSnapshotAtMaximumMeasure()",
     invalidationStart,
@@ -235,6 +235,14 @@ test("the custom element validates a snapshot before dynamically loading the bro
     /const restoreImmediatelyBeforeDispatch = \(\) => \{[\s\S]*?restoreLoadedSnapshot\(this\)/u,
   );
   assert.match(invalidationSource, /beforeDispatch: restoreImmediatelyBeforeDispatch/u);
+  assert.match(
+    elementSource,
+    /ResponsiveSnapshotRollbackBeforePaint[\s\S]*?#invalidateSnapshotAndEnhance\(\{ restoreBeforeLoad: true \}\)/u,
+  );
+  assert.match(
+    elementSource,
+    /ResponsiveRuntimeRollbackBeforePaint[\s\S]*?#refreshRuntimeFromSource\(\)/u,
+  );
   assert.match(elementSource, /PreparedSnapshotTransition/u);
   assert.match(
     elementSource,

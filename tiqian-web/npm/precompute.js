@@ -89,6 +89,10 @@ function normalizeTypography(value = {}) {
   if (value.fontVariationSettings != null && value.fontVariationSettings !== "normal") {
     throw new Error("UnsupportedFontVariationSettings");
   }
+  const fontVariantNumeric = String(value.fontVariantNumeric ?? "normal");
+  if (fontVariantNumeric !== "normal" && fontVariantNumeric !== "lining-nums") {
+    throw new Error("UnsupportedFontVariantNumeric");
+  }
   return Object.freeze({
     fontFamilies,
     fontSizePx,
@@ -101,6 +105,7 @@ function normalizeTypography(value = {}) {
     letterSpacingPx: 0,
     fontFeatureSettings: "normal",
     fontVariationSettings: "normal",
+    fontVariantNumeric,
   });
 }
 
@@ -263,7 +268,9 @@ export { renderPreparedParagraph } from "./prepared-dom.js";
 
 export async function createPrecomputer(options = {}) {
   const typography = normalizeTypography(options.typography);
-  const fontSession = await createBuildFontSession(options.faces);
+  const fontSession = await createBuildFontSession(options.faces, {
+    baseFeatures: typography.fontVariantNumeric === "lining-nums" ? ["lnum"] : [],
+  });
   const renderFontFamilies = fontSession.renderFamilies(typography.fontFamilies);
   let runtime;
   try {

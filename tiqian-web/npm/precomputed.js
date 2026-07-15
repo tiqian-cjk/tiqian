@@ -15,6 +15,7 @@ import {
   snapshotSourceArtifactFromDom,
   snapshotSourceArtifactString,
 } from "./snapshot-source.js";
+import { lineLengthGridMeasure } from "./lazy-capabilities.js";
 
 const ROOT_SELECTOR = "tiqian-prose, [data-tiqian-root]";
 const WIDTH_TOLERANCE_PX = 0.5;
@@ -65,6 +66,18 @@ function parseFontFamilies(value) {
   }
   if (token.trim()) families.push(token.trim());
   return families;
+}
+
+function snapshotEntryWidthMatches(width, entry) {
+  if (!Number.isFinite(width) || !Number.isFinite(entry?.maxWidthPx)) return false;
+  if (entry.typography?.lineLengthGridEnabled === true) {
+    const fontSize = Number(entry.typography.fontSizePx);
+    const actualMeasure = lineLengthGridMeasure(width, fontSize);
+    const preparedMeasure = lineLengthGridMeasure(entry.maxWidthPx, fontSize);
+    return actualMeasure != null && preparedMeasure != null &&
+      Math.abs(actualMeasure - preparedMeasure) <= WIDTH_TOLERANCE_PX;
+  }
+  return Math.abs(width - entry.maxWidthPx) <= WIDTH_TOLERANCE_PX;
 }
 
 function parseUnicodeRange(value) {
@@ -394,19 +407,25 @@ function openTypeFeatureContract(features) {
       signature: "",
       fontFeatureSettings: "normal",
       fontVariantEastAsian: "normal",
+      fontVariantNumeric: "normal",
     });
   }
   if (!Array.isArray(features) || features.some((feature) => typeof feature !== "string")) {
     return null;
   }
-  const signature = features.join(",");
-  return signature === PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE
-    ? Object.freeze({
-      signature,
-      fontFeatureSettings: '"palt" 1',
-      fontVariantEastAsian: "proportional-width",
-    })
-    : null;
+  if (new Set(features).size !== features.length) return null;
+  const fontVariantNumeric = features[0] === "lnum" ? "lining-nums" : "normal";
+  const roleFeatures = fontVariantNumeric === "lining-nums" ? features.slice(1) : features;
+  const roleSignature = roleFeatures.join(",");
+  if (roleSignature !== "" && roleSignature !== PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE) {
+    return null;
+  }
+  return Object.freeze({
+    signature: features.join(","),
+    fontFeatureSettings: roleSignature ? '"palt" 1' : "normal",
+    fontVariantEastAsian: roleSignature ? "proportional-width" : "normal",
+    fontVariantNumeric,
+  });
 }
 
 function boundaryOpenTypeFeatureContract(element) {
@@ -453,8 +472,15 @@ function pseudoTypographyIssue(element, style) {
   return new Set(["", "none"]).has(firstLetter.cssFloat || "none") ? null : "FirstLetter:float";
 }
 
-function generatedGeometryIssue(element, paragraphStyle) {
+function generatedGeometryIssue(element, paragraph) {
   const style = getComputedStyle(element);
+  let inheritedStyle = getComputedStyle(paragraph);
+  for (let ancestor = element.parentElement; ancestor && ancestor !== paragraph; ancestor = ancestor.parentElement) {
+    if (ancestor.hasAttribute("data-tq-source-semantic")) {
+      inheritedStyle = getComputedStyle(ancestor);
+      break;
+    }
+  }
   if ((style.transform || "none") !== "none") return "Geometry:transform";
   if ((style.scale || "none") !== "none") return "Geometry:scale";
   const shapingBoundary = element.hasAttribute("data-tq-shaping-boundary");
@@ -480,7 +506,7 @@ function generatedGeometryIssue(element, paragraphStyle) {
         !FEATURE_OVERRIDABLE_BOUNDARY_STYLE_PROPERTIES.has(property))
       : BOUNDARY_STYLE_PROPERTIES;
     const inheritedMismatch = inheritedProperties.find((property) =>
-      String(style[property] ?? "") !== String(paragraphStyle[property] ?? ""));
+      String(style[property] ?? "") !== String(inheritedStyle[property] ?? ""));
     if (inheritedMismatch) return `Boundary:${inheritedMismatch}`;
     const featureIssue = boundaryOpenTypeFeatureIssue(element, style, featureContract);
     if (featureIssue) return featureIssue;
@@ -503,7 +529,7 @@ function generatedGeometryIssue(element, paragraphStyle) {
     }
     const inheritedMismatch = BOUNDARY_STYLE_PROPERTIES
       .filter((property) => property !== "letterSpacing")
-      .find((property) => String(style[property] ?? "") !== String(paragraphStyle[property] ?? ""));
+      .find((property) => String(style[property] ?? "") !== String(inheritedStyle[property] ?? ""));
     if (inheritedMismatch) return `Geometry:${inheritedMismatch}`;
   }
   return pseudoTypographyIssue(element, style);
@@ -689,7 +715,7 @@ export function renderedPreparedParagraphIssue(
   const geometry = Array.from(paragraph.querySelectorAll("[data-tq-geometry]"));
   const boundaries = Array.from(paragraph.querySelectorAll("[data-tq-shaping-boundary]"));
   for (const target of new Set([...geometry, ...boundaries])) {
-    const issue = generatedGeometryIssue(target, paragraphStyle);
+    const issue = generatedGeometryIssue(target, paragraph);
     if (issue) return `RenderedPreparedParagraphGeometryMismatch:${issue}`;
   }
   const boundaryAdvanceIssue = renderedBoundaryAdvanceIssue(paragraph);
@@ -724,6 +750,7 @@ function computedTypographyIssue(
   contract,
   canonicalPreparedFlow = false,
   renderFontFamilies = null,
+  { allowLiveFontSizeAndLineHeight = false } = {},
 ) {
   const style = getComputedStyle(paragraph);
   const actualFamilies = parseFontFamilies(style.fontFamily).map((family) => family.toLowerCase());
@@ -739,9 +766,11 @@ function computedTypographyIssue(
     const rendered = paragraph.getAttribute("data-tq-rendered") ?? "missing";
     return `fontFamily:${actualFamilies.join("|")}!=${expectedFamilies.join("|")};projection=${projection};variable=${variable};fallback=${fallback};rendered=${rendered}`;
   }
-  if (Math.abs(numericCssPx(style.fontSize) - contract.fontSizePx) > 0.01) return "fontSize";
+  if (!allowLiveFontSizeAndLineHeight &&
+      Math.abs(numericCssPx(style.fontSize) - contract.fontSizePx) > 0.01) return "fontSize";
   const expectedLineHeight = canonicalPreparedFlow ? 0 : contract.lineHeightPx;
-  if (Math.abs(numericCssPx(style.lineHeight) - expectedLineHeight) > 0.01) return "lineHeight";
+  if (!allowLiveFontSizeAndLineHeight &&
+      Math.abs(numericCssPx(style.lineHeight) - expectedLineHeight) > 0.01) return "lineHeight";
   if (numericWeight(style.fontWeight) !== contract.fontWeight) return "fontWeight";
   const actualFontStyle = style.fontStyle.toLowerCase();
   if (contract.italic ? !actualFontStyle.startsWith("italic") : actualFontStyle !== "normal") {
@@ -766,7 +795,9 @@ function computedTypographyIssue(
   if ((style.fontVariantAlternates || "normal") !== "normal") return "fontVariantAlternates";
   if ((style.fontVariantEastAsian || "normal") !== "normal") return "fontVariantEastAsian";
   if ((style.fontVariantCaps || "normal") !== "normal") return "fontVariantCaps";
-  if ((style.fontVariantNumeric || "normal") !== "normal") return "fontVariantNumeric";
+  if ((style.fontVariantNumeric || "normal") !== (contract.fontVariantNumeric || "normal")) {
+    return "fontVariantNumeric";
+  }
   if ((style.fontVariantPosition || "normal") !== "normal") return "fontVariantPosition";
   if ((style.fontLanguageOverride || "normal") !== "normal") return "fontLanguageOverride";
   if ((style.fontSizeAdjust || "none") !== "none") return "fontSizeAdjust";
@@ -821,7 +852,7 @@ function unicodeRangesMatch(left, right) {
   return JSON.stringify(canonicalUnicodeRanges(left)) === JSON.stringify(canonicalUnicodeRanges(right));
 }
 
-function cssFaceContract(evidence, faces, documentObject) {
+function cssFaceContract(evidence, faces, documentObject, requireExactFirstPaintDisplay = true) {
   const expectedUrl = new URL(evidence.publicUrl, documentObject.baseURI).href;
   const coverageText = evidence.coverageText || evidence.probe.text;
   const coveragePoints = Array.from(coverageText, (point) => point.codePointAt(0));
@@ -847,15 +878,20 @@ function cssFaceContract(evidence, faces, documentObject) {
     defaultDescriptor(face.variationSettings, new Set(["", "normal"])) &&
     defaultDescriptor(face.languageOverride, new Set(["", "normal"])) &&
     defaultDescriptor(face.namedInstance, new Set(["", "auto"])) &&
-    exactFirstPaintDisplay(face.display));
+    (!requireExactFirstPaintDisplay || exactFirstPaintDisplay(face.display)));
   return {
     matches,
     compatibleLocalDeclared: matches && candidates.some((face) => face.hasLocalSource),
   };
 }
 
-function matchingCssFace(evidence, faces, documentObject) {
-  return cssFaceContract(evidence, faces, documentObject).matches;
+function matchingCssFace(evidence, faces, documentObject, requireExactFirstPaintDisplay) {
+  return cssFaceContract(
+    evidence,
+    faces,
+    documentObject,
+    requireExactFirstPaintDisplay,
+  ).matches;
 }
 
 async function measureProbe(evidence, documentObject, featureContract) {
@@ -873,6 +909,7 @@ async function measureProbe(evidence, documentObject, featureContract) {
     `font-weight:${evidence.probe.fontWeight}!important`,
     `font-style:${evidence.probe.italic ? "italic" : "normal"}!important`,
     `font-variant-east-asian:${featureContract.fontVariantEastAsian}!important`,
+    `font-variant-numeric:${featureContract.fontVariantNumeric}!important`,
     `font-feature-settings:${featureContract.fontFeatureSettings}!important`,
     "font-variation-settings:normal!important",
     "font-kerning:normal!important",
@@ -890,8 +927,15 @@ async function measureProbe(evidence, documentObject, featureContract) {
   }
 }
 
-async function validateFontEvidence(evidence, faces, documentObject) {
-  if (!matchingCssFace(evidence, faces, documentObject)) return "FontFaceContractMismatch";
+async function validateFontEvidence(
+  evidence,
+  faces,
+  documentObject,
+  requireExactFirstPaintDisplay,
+) {
+  if (!matchingCssFace(evidence, faces, documentObject, requireExactFirstPaintDisplay)) {
+    return "FontFaceContractMismatch";
+  }
   const featureContract = openTypeFeatureContract(evidence.probe.features);
   if (!featureContract) return "FontProbeFeaturesUnsupported";
   const descriptor = `${evidence.probe.italic ? "italic" : "normal"} ${evidence.probe.fontWeight} ` +
@@ -942,7 +986,7 @@ function liveRenderFontFamilies(root, manifest, paragraph) {
     : null;
 }
 
-function fontContractTypographyIssue(root, manifest) {
+function fontContractTypographyIssue(root, manifest, options = {}) {
   const contracts = Array.from(manifest?.typographies ?? [], (entry) => entry?.value)
     .filter((value) => value && Array.isArray(value.fontFamilies));
   if (contracts.length === 0) return "manifestTypography";
@@ -954,6 +998,7 @@ function fontContractTypographyIssue(root, manifest) {
       contract,
       canonicalPreparedFlow(paragraph),
       liveRenderFontFamilies(root, manifest, paragraph),
+      options,
     ));
     if (!issues.some((issue) => issue == null)) return issues[0] ?? "unknown";
   }
@@ -1111,14 +1156,25 @@ async function validateManifestFontContract(manifest, documentObject) {
   const cssFaceCollection = collectFontFaces(documentObject);
   if (cssFaceCollection.unverifiable) return { reason: "FontFaceCssomUnverifiable" };
   const cssFaces = cssFaceCollection.faces;
+  const requireExactFirstPaintDisplay = manifest.entrySource === "server-dom-v1";
   let compatibleLocalDeclared = false;
   for (const group of evidenceGroups.values()) {
     const aggregate = { ...group.representative, coverageText: Array.from(group.coverage).join("") };
-    const faceContract = cssFaceContract(aggregate, cssFaces, documentObject);
+    const faceContract = cssFaceContract(
+      aggregate,
+      cssFaces,
+      documentObject,
+      requireExactFirstPaintDisplay,
+    );
     if (!faceContract.matches) return { reason: "FontFaceContractMismatch" };
     compatibleLocalDeclared ||= faceContract.compatibleLocalDeclared;
     for (const evidence of group.probes.values()) {
-      const issue = await validateFontEvidence(evidence, cssFaces, documentObject);
+      const issue = await validateFontEvidence(
+        evidence,
+        cssFaces,
+        documentObject,
+        requireExactFirstPaintDisplay,
+      );
       if (issue) return { reason: issue };
     }
   }
@@ -1154,7 +1210,9 @@ export async function validatePrecomputedSnapshotExactFontContract(root, isCurre
   }
 
   if (fontContractOnlyManifest(manifest)) {
-    const initialTypographyIssue = fontContractTypographyIssue(root, manifest);
+    const initialTypographyIssue = fontContractTypographyIssue(root, manifest, {
+      allowLiveFontSizeAndLineHeight: true,
+    });
     if (initialTypographyIssue) {
       root.setAttribute(TYPOGRAPHY_ISSUE_ATTRIBUTE, initialTypographyIssue);
       return { matches: false, reason: "SnapshotTypographyMismatch" };
@@ -1162,7 +1220,9 @@ export async function validatePrecomputedSnapshotExactFontContract(root, isCurre
     const fontContract = await validateManifestFontContract(manifest, documentObject);
     if (fontContract.reason) return { matches: false, reason: fontContract.reason };
     if (!isCurrent()) return { matches: false, reason: "superseded" };
-    const revalidatedTypographyIssue = fontContractTypographyIssue(root, manifest);
+    const revalidatedTypographyIssue = fontContractTypographyIssue(root, manifest, {
+      allowLiveFontSizeAndLineHeight: true,
+    });
     if (revalidatedTypographyIssue) {
       root.setAttribute(TYPOGRAPHY_ISSUE_ATTRIBUTE, revalidatedTypographyIssue);
       return { matches: false, reason: "SnapshotTypographyChangedDuringValidation" };
@@ -1206,6 +1266,7 @@ export async function validatePrecomputedSnapshotExactFontContract(root, isCurre
       entry.typography,
       canonicalPreparedFlow(paragraph),
       liveRenderFontFamilies(root, manifest, paragraph),
+      { allowLiveFontSizeAndLineHeight: true },
     );
     if (typographyIssue) {
       root.setAttribute(TYPOGRAPHY_ISSUE_ATTRIBUTE, typographyIssue);
@@ -1240,6 +1301,7 @@ export async function validatePrecomputedSnapshotExactFontContract(root, isCurre
       entry.typography,
       canonicalPreparedFlow(paragraph),
       liveRenderFontFamilies(root, manifest, paragraph),
+      { allowLiveFontSizeAndLineHeight: true },
     );
     if (typographyIssue) {
       root.setAttribute(TYPOGRAPHY_ISSUE_ATTRIBUTE, typographyIssue);
@@ -1257,6 +1319,64 @@ export async function validatePrecomputedSnapshotExactFontContract(root, isCurre
 
 export function isPrecomputedSnapshotAdopted(root) {
   return states.has(root);
+}
+
+/**
+ * Synchronously rechecks the contracts that a completed FontFaceSet cycle can
+ * invalidate without changing source text. This deliberately does not load or
+ * probe fonts again: adoption already did that, and reloading from a
+ * `loadingdone` handler would create another loading cycle. A changed CSS face
+ * contract or any resulting prepared geometry drift still fails closed.
+ */
+export function adoptedPrecomputedSnapshotLiveIssue(root) {
+  const state = states.get(root);
+  const manifest = state?.manifest;
+  if (!manifest) return "SnapshotStateMissing";
+  if ([...manifest.entries, ...(manifest.fontContractEntries ?? [])].some((entry) =>
+    entry?.fontEvidence?.backendRevision !== FONT_BACKEND_REVISION)) {
+    return "SnapshotFontBackendRevisionMismatch";
+  }
+  const evidenceGroups = groupedFontEvidence(manifest);
+  if (!evidenceGroups) return "SnapshotFontEvidenceInvalid";
+  const documentObject = root.ownerDocument || document;
+  const cssFaceCollection = collectFontFaces(documentObject);
+  if (cssFaceCollection.unverifiable) return "FontFaceCssomUnverifiable";
+  const requireExactFirstPaintDisplay = manifest.entrySource === "server-dom-v1";
+  for (const group of evidenceGroups.values()) {
+    const aggregate = {
+      ...group.representative,
+      coverageText: Array.from(group.coverage).join(""),
+    };
+    if (!cssFaceContract(
+      aggregate,
+      cssFaceCollection.faces,
+      documentObject,
+      requireExactFirstPaintDisplay,
+    ).matches) return "FontFaceContractMismatch";
+  }
+
+  const paragraphs = rootParagraphs(root, manifest.paragraphSelector);
+  if (paragraphs.length !== manifest.entries.length) return "SnapshotCandidateSetMismatch";
+  const byKey = new Map(paragraphs.map((paragraph) => [
+    paragraph.getAttribute("data-tq-snapshot-key"),
+    paragraph,
+  ]));
+  if (byKey.size !== paragraphs.length) return "SnapshotCandidateKeyInvalid";
+  for (const entry of manifest.entries) {
+    const paragraph = byKey.get(entry?.key);
+    if (!paragraph) return "SnapshotEntryMissing";
+    const width = contentBoxWidth(paragraph);
+    if (!snapshotEntryWidthMatches(width, entry)) return "SnapshotWidthMismatch";
+    if (!computedTypographyMatches(
+      paragraph,
+      entry.typography,
+      true,
+      manifest.renderFontFamilies,
+    )) return "SnapshotTypographyMismatch";
+    const geometryIssue = renderedPreparedParagraphIssue(paragraph, width);
+    if (geometryIssue) return geometryIssue.replace("RenderedPreparedParagraph", "RenderedSnapshot");
+  }
+  return null;
 }
 
 /**
@@ -1291,8 +1411,7 @@ export function precomputedSnapshotMaximumMeasureMatches(root) {
   return manifest.entries.every((entry) => {
     const paragraph = byKey.get(entry?.key);
     const width = paragraph == null ? Number.NaN : contentBoxWidth(paragraph);
-    return Number.isFinite(width) && Number.isFinite(entry?.maxWidthPx) &&
-      Math.abs(width - entry.maxWidthPx) <= WIDTH_TOLERANCE_PX;
+    return snapshotEntryWidthMatches(width, entry);
   });
 }
 
@@ -1411,7 +1530,7 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
       return miss(root, "SnapshotSourceSemanticsMismatch");
     }
     const width = contentBoxWidth(paragraph);
-    if (!Number.isFinite(width) || Math.abs(width - entry.maxWidthPx) > WIDTH_TOLERANCE_PX) {
+    if (!snapshotEntryWidthMatches(width, entry)) {
       return miss(root, "SnapshotWidthMismatch");
     }
     if (!computedTypographyMatches(
@@ -1442,7 +1561,7 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
       return miss(root, "SnapshotSourceSemanticsChangedDuringValidation");
     }
     const width = contentBoxWidth(paragraph);
-    if (!Number.isFinite(width) || Math.abs(width - entry.maxWidthPx) > WIDTH_TOLERANCE_PX) {
+    if (!snapshotEntryWidthMatches(width, entry)) {
       return miss(root, "SnapshotWidthChangedDuringValidation");
     }
     if (!computedTypographyMatches(
@@ -1506,7 +1625,7 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
     for (const { paragraph, entry } of prepared) {
       const width = contentBoxWidth(paragraph);
       if (
-        !Number.isFinite(width) || Math.abs(width - entry.maxWidthPx) > WIDTH_TOLERANCE_PX ||
+        !snapshotEntryWidthMatches(width, entry) ||
         !computedTypographyMatches(paragraph, entry.typography, true, manifest.renderFontFamilies)
       ) throw new Error("RenderedSnapshotHostContractMismatch");
       const issue = renderedPreparedParagraphIssue(paragraph, width);

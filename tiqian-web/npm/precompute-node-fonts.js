@@ -21,11 +21,11 @@ async function readSource(source) {
   throw new Error("UnsupportedFontSource");
 }
 
-export async function createBuildFontSession(faceSpecs) {
+export async function createBuildFontSession(faceSpecs, options = {}) {
   if (!Array.isArray(faceSpecs) || faceSpecs.length === 0) throw new Error("MissingExplicitFontFaces");
   const loaded = await Promise.all(faceSpecs.map(async (spec) => ({
     ...spec,
     source: await readSource(spec.source),
   })));
-  return createFontSession(loaded, { sessionPrefix: "tq-build-font" });
+  return createFontSession(loaded, { ...options, sessionPrefix: "tq-build-font" });
 }

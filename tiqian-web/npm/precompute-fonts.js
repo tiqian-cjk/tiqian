@@ -410,6 +410,15 @@ function scriptForText(text) {
 const SHARED_CURLY_QUOTE = /[\u2018-\u201d]/u;
 const LATIN_CONTEXT_PROPORTIONAL_FEATURES = Object.freeze(["pwid", "palt"]);
 const NO_SHAPING_FEATURES = Object.freeze([]);
+const SUPPORTED_BASE_FEATURES = new Set(["lnum"]);
+
+function normalizeBaseFeatures(value) {
+  if (value == null) return NO_SHAPING_FEATURES;
+  if (!Array.isArray(value) || value.some((feature) => !SUPPORTED_BASE_FEATURES.has(feature))) {
+    throw new Error("UnsupportedFontSessionBaseFeatures");
+  }
+  return Object.freeze(Array.from(new Set(value)));
+}
 
 /**
  * ContextualSharedQuoteShaping: the common layout pipeline resolves the quote
@@ -433,7 +442,7 @@ export function shapingPolicyForRole(role, displayText) {
   return Object.freeze({ script: scriptForText(displayText), features: NO_SHAPING_FEATURES });
 }
 
-function shapeRecord(record, displayText, fontSize, fontWeight, locale, role) {
+function shapeRecord(record, displayText, fontSize, fontWeight, locale, role, baseFeatures) {
   const font = createFont(record, fontWeight);
   const buffer = new record.hb.Buffer();
   buffer.addText(displayText);
@@ -443,7 +452,11 @@ function shapeRecord(record, displayText, fontSize, fontWeight, locale, role) {
   const policy = shapingPolicyForRole(role, displayText);
   const script = policy.script;
   buffer.setScript(script);
-  const features = policy.features
+  const appliedFeatures = [
+    ...baseFeatures,
+    ...policy.features.filter((tag) => !baseFeatures.includes(tag)),
+  ];
+  const features = appliedFeatures
     .map((tag) => record.hb.Feature.fromString(`${tag}=1`))
     .filter(Boolean);
   record.hb.shape(font, buffer, features);
@@ -479,6 +492,7 @@ function shapeRecord(record, displayText, fontSize, fontWeight, locale, role) {
     role,
     script,
     features: policy.features,
+    probeFeatures: appliedFeatures,
     displayText,
     glyphs,
     advance: cursorX * scale,
@@ -573,7 +587,15 @@ function installGlobalBackend() {
         sourceText,
       );
       const record = selection.record;
-      const result = shapeRecord(record, displayText, fontSize, fontWeight, locale, role);
+      const result = shapeRecord(
+        record,
+        displayText,
+        fontSize,
+        fontWeight,
+        locale,
+        role,
+        session.baseFeatures,
+      );
       if (!selection.displayCovered) {
         // The exact CSS face contract rejected the display codepoint even if
         // the raw sfnt happens to retain an unreachable glyph. Mark the probe
@@ -594,7 +616,7 @@ function installGlobalBackend() {
         record.weightRange.join("-"),
         record.unicodeRange,
         record.publicUrl,
-        result.features.join(","),
+        result.probeFeatures.join(","),
       ].join("|");
       if (!session.used.has(usageKey)) {
         session.used.set(usageKey, {
@@ -606,7 +628,7 @@ function installGlobalBackend() {
           probeFontSizePx: fontSize,
           probeScript: result.script,
           probeLanguage: locale,
-          probeFeatures: result.features,
+          probeFeatures: result.probeFeatures,
           coverageText: new Set(Array.from(displayText)),
         });
       } else {
@@ -718,6 +740,7 @@ export async function createFontSession(faceSpecs, options = {}) {
     used: new Map(),
     metricCache: new Map(),
     harfbuzzVersion: hb.versionString(),
+    baseFeatures: normalizeBaseFeatures(options.baseFeatures),
   };
   installGlobalBackend();
   sessions.set(sessionId, session);

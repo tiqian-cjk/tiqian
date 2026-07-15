@@ -5,6 +5,7 @@ import {
   fontLoadingAffectsTypography,
   isLoadedSnapshotAdopted,
   lineLengthGridMeasure,
+  loadedAdoptedSnapshotLiveIssue,
   loadedSnapshotMaximumMeasureMatches,
   needsCjkDashShaping,
   prepareCjkDashShapingIfNeeded,
@@ -241,6 +242,7 @@ class TiqianProseElement extends HTMLElementBase {
     delete this.dataset.tiqianRelayoutMs;
     delete this.dataset.tiqianRelayoutMaxSliceMs;
     delete this.dataset.tiqianFontWait;
+    delete this.dataset.tiqianSnapshotLiveIssue;
     this.#removeReadyListener();
     this.#stopTypographyObservation();
     this.#readyListener = (event) => {
@@ -366,6 +368,7 @@ class TiqianProseElement extends HTMLElementBase {
           if (!this.#runtimeStateActive) this.#releaseExactFontSession();
           this.#hasDispatched = true;
           this.#acceptLayoutCompletion = true;
+          this.#acceptValidatedSnapshotGeometry();
           this.dispatchEvent(new CustomEvent("tiqian:ready", {
             detail: {
               enhancedCount: snapshot.count,
@@ -816,7 +819,7 @@ class TiqianProseElement extends HTMLElementBase {
     return true;
   }
 
-  #invalidateSnapshotAndEnhance() {
+  #invalidateSnapshotAndEnhance({ restoreBeforeLoad = false } = {}) {
     if (!this.#snapshotAdopted && !isLoadedSnapshotAdopted(this)) return;
     const generation = this.#generation;
     this.#hasDispatched = false;
@@ -826,15 +829,16 @@ class TiqianProseElement extends HTMLElementBase {
       if (!restoreLoadedSnapshot(this)) throw new Error("Adopted snapshot could not be restored");
       this.#snapshotAdopted = false;
     };
+    if (restoreBeforeLoad) restoreImmediatelyBeforeDispatch();
     loadTiqianRuntime()
       .then(() => {
         if (
           !this.isConnected || generation !== this.#generation ||
           activeRequest !== this.#enhanceRequest
         ) return false;
-        const enhancement = this.#dispatchProgressiveEnhance(generation, {
-          beforeDispatch: restoreImmediatelyBeforeDispatch,
-        });
+        const enhancement = this.#dispatchProgressiveEnhance(generation, restoreBeforeLoad
+          ? undefined
+          : { beforeDispatch: restoreImmediatelyBeforeDispatch });
         // Async functions run synchronously through their first await, so this
         // captures the request generation claimed by #dispatchProgressiveEnhance.
         activeRequest = this.#enhanceRequest;
@@ -862,6 +866,18 @@ class TiqianProseElement extends HTMLElementBase {
     this.#finishLayoutWorkAndObserve();
     this.dataset.tiqianCapabilityIssue = "RuntimeLoadFailed";
     console.warn("Tiqian Web runtime failed to load after snapshot invalidation", error);
+  }
+
+  #acceptValidatedSnapshotGeometry() {
+    // SnapshotValidationConsumesObservedGeometry: adoption rechecks live width,
+    // typography and rendered geometry immediately before its atomic commit.
+    // Resize/observer notifications recorded while that validation was in
+    // flight are therefore already represented by the adopted result. Reset
+    // only the consumed bookkeeping here; a later browser event still arrives
+    // after observation resumes and invalidates the snapshot normally.
+    this.#layoutWorkRevision = this.#geometryRevision;
+    this.#responsiveCommitRequired = false;
+    this.#responsiveRelayoutRequired = false;
   }
 
   #tryReadoptSnapshotAtMaximumMeasure() {
@@ -924,6 +940,7 @@ class TiqianProseElement extends HTMLElementBase {
       this.#releaseExactFontSession();
       this.#hasDispatched = true;
       this.#acceptLayoutCompletion = true;
+      this.#acceptValidatedSnapshotGeometry();
       this.dispatchEvent(new CustomEvent("tiqian:relayout-ready", {
         detail: {
           enhancedCount: snapshot.count,
@@ -1048,6 +1065,42 @@ class TiqianProseElement extends HTMLElementBase {
 
   #handleResponsiveGeometryChange() {
     this.#geometryRevision += 1;
+    const snapshotAdopted = this.#snapshotAdopted || isLoadedSnapshotAdopted(this);
+    const committedMeasureChanged = this.#hasDispatched && (
+      this.#paragraphMeasureSignature() !== this.#lastParagraphMeasures ||
+      (snapshotAdopted && !loadedSnapshotMaximumMeasureMatches(this))
+    );
+    if (committedMeasureChanged) {
+      if (this.#layoutWorkInFlight && this.#layoutWorkUsesCapturedMeasure) {
+        this.#cancelCapturedLayoutForLatestGeometry();
+        return;
+      }
+      if (snapshotAdopted) {
+        // ResponsiveSnapshotRollbackBeforePaint: a maximum-width snapshot is
+        // immediately stale when the live paragraph measure changes. Restore
+        // responsive semantic source in the resize/observer callback itself;
+        // waiting for the scheduled commit paints old wide lines in a narrow
+        // container before the runtime has a chance to rebreak them.
+        this.#invalidateSnapshotAndEnhance({ restoreBeforeLoad: true });
+        return;
+      }
+      if (this.#runtimeStateActive) {
+        // ResponsiveRuntimeRollbackBeforePaint: runtime paragraphs carry
+        // explicit line breaks, so the same rule applies after a snapshot has
+        // already fallen back. Teardown is synchronous and leaves native
+        // source readable until progressive enhancement commits latest-width
+        // paragraphs atomically.
+        if (
+          this.hasAttribute("snapshot-ref") && loadedSnapshotMaximumMeasureMatches(this) &&
+          !snapshotCompletionSelector(this)
+        ) {
+          this.#tryReadoptSnapshotAtMaximumMeasure();
+          return;
+        }
+        this.#refreshRuntimeFromSource();
+        return;
+      }
+    }
     if (this.#layoutWorkInFlight) {
       this.#responsiveCommitRequired = true;
       this.#scheduleResponsiveRetarget();
@@ -1211,6 +1264,20 @@ class TiqianProseElement extends HTMLElementBase {
     }
     if (document.fonts) {
       this.#fontLoadingDoneListener = (event) => {
+        const snapshotAdopted = this.#snapshotAdopted || isLoadedSnapshotAdopted(this);
+        const snapshotLiveIssue = snapshotAdopted
+          ? loadedAdoptedSnapshotLiveIssue(this)
+          : null;
+        if (snapshotAdopted && snapshotLiveIssue == null) {
+          // SnapshotFontLoadCycleAlreadyValidated: snapshot adoption awaited
+          // and probed every exact evidence face. The browser may dispatch the
+          // corresponding loadingdone task only after observers resume; retain
+          // the snapshot when its CSS face, typography and rendered geometry
+          // contracts still hold instead of starting a redundant font cycle.
+          delete this.dataset.tiqianSnapshotLiveIssue;
+          return;
+        }
+        if (snapshotLiveIssue) this.dataset.tiqianSnapshotLiveIssue = snapshotLiveIssue;
         const relevantFaceLoaded = fontLoadingAffectsTypography(
           event,
           this.#typographyElements(),

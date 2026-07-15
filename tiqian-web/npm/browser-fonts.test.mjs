@@ -41,7 +41,11 @@ function faceEvidence(sourceSha256, overrides = {}) {
   };
 }
 
-function manifestWithFaces(facesByEntry, versions = facesByEntry.map(() => "fixture-hb")) {
+function manifestWithFaces(
+  facesByEntry,
+  versions = facesByEntry.map(() => "fixture-hb"),
+  typography = {},
+) {
   const descriptors = [];
   const descriptorIndexes = new Map();
   const fontFaceEvidence = facesByEntry.map((faces) => faces.map((face) => {
@@ -65,7 +69,7 @@ function manifestWithFaces(facesByEntry, versions = facesByEntry.map(() => "fixt
     paragraphSelector: "p[data-tq-snapshot-key]",
     valueStyles: [],
     valueStylesSha256: "fixture",
-    typographies: [{ sha256: "fixture", value: {} }],
+    typographies: [{ sha256: "fixture", value: typography }],
     fontEvidence: {
       backendRevision: FONT_BACKEND_REVISION,
       harfbuzzVersion: versions[0],
@@ -202,6 +206,7 @@ test("browser font sessions aggregate manifest evidence and close after the fina
   assert.equal(state.contractCalls.length, 4);
   assert.equal(state.createCalls[0].specs.length, 1);
   assert.equal(state.createCalls[0].options.sessionPrefix, "tq-browser-font");
+  assert.deepEqual(state.createCalls[0].options.baseFeatures, []);
   assert.equal(state.closeCount(), 0);
 
   assert.equal(state.loader.release(first), true);
@@ -216,6 +221,24 @@ test("browser font sessions aggregate manifest evidence and close after the fina
   assert.equal(state.createCalls.length, 2);
   assert.equal(state.loader.release(next), true);
   assert.equal(state.closeCount(), 2);
+});
+
+test("lining numeric snapshots recreate the browser HarfBuzz session with lnum", async () => {
+  const bytes = new TextEncoder().encode("fixture-font-source");
+  const manifest = manifestWithFaces(
+    [[faceEvidence(digest(bytes), { probe: {
+      ...faceEvidence(digest(bytes)).probe,
+      features: ["lnum"],
+    } })]],
+    undefined,
+    { fontVariantNumeric: "lining-nums" },
+  );
+  const state = harness(manifest, { bytes });
+
+  const handle = await state.loader.prepare(state.root);
+
+  assert.deepEqual(state.createCalls[0].options.baseFeatures, ["lnum"]);
+  assert.equal(state.loader.release(handle), true);
 });
 
 test("browser font sessions include runtime-only semantic contract entries", async () => {

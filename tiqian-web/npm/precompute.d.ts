@@ -20,6 +20,7 @@ export interface SnapshotTypography {
   letterSpacingPx?: 0;
   fontFeatureSettings?: "normal";
   fontVariationSettings?: "normal";
+  fontVariantNumeric?: "normal" | "lining-nums";
 }
 
 export interface PreparedParagraph {
