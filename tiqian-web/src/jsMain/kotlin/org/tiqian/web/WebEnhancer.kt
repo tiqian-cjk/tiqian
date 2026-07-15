@@ -807,11 +807,15 @@ object TiqianWeb {
             it.capabilityIssue != null
         }
         if (shapingCapabilityIssue != null) {
+            val pendingCjkDashProbe =
+                shapingCapabilityIssue.capabilityIssue == CJK_DASH_CAPABILITY_ISSUE &&
+                    options.cjkDashCapability?.status == "pending"
             return ParagraphLayoutPreparation.Unsupported(
                 CapabilityIssue(
                     name = shapingCapabilityIssue.capabilityIssue!!,
                     detail = shapingCapabilityIssue.reason,
                     element = paragraph.source,
+                    reportToConsole = !pendingCjkDashProbe,
                 ),
             )
         }
@@ -1142,7 +1146,13 @@ object TiqianWeb {
         }
         issue.element.setAttribute("data-tiqian-capability-issue", issue.name)
         issue.element.setAttribute("data-tiqian-capability-detail", issue.detail.take(CAPABILITY_DETAIL_LIMIT))
-        consoleWarn("TiqianWeb skipped paragraph: ${issue.name} (${issue.detail})")
+        // PendingCapabilityIsObservableNotTerminal: the semantic paragraph is
+        // intentionally kept native while the asynchronous dash-face probe is
+        // in flight. Keep the DOM marker for the targeted retry, but reserve a
+        // console warning for the retry's final unavailable/mismatch result.
+        if (issue.reportToConsole) {
+            consoleWarn("TiqianWeb skipped paragraph: ${issue.name} (${issue.detail})")
+        }
     }
 
     private fun optionsFromJs(options: JsAny?): EnhanceOptions {
@@ -1367,6 +1377,7 @@ object TiqianWeb {
         val name: String,
         val detail: String,
         val element: HTMLElement,
+        val reportToConsole: Boolean = true,
     ) {
         internal var markerCaptured: Boolean = false
         internal var originalNameAttribute: String? = null

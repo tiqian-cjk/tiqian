@@ -899,6 +899,7 @@ class TiqianWebEnhancerTest {
         TiqianWeb.install()
         installTestAnimationFrames()
         installTestCjkDashBridge()
+        installTestConsoleWarnCapture()
         try {
             val root = mount(
                 """
@@ -930,6 +931,7 @@ class TiqianWebEnhancerTest {
                 "NoConformingCjkDashGlyph",
                 dash.getAttribute("data-tiqian-capability-issue"),
             )
+            assertFalse(capturedTestConsoleWarnings().contains("NoConformingCjkDashGlyph"))
             val renderedPlainChild = plain.firstChild
             assertNotNull(renderedPlainChild)
 
@@ -960,7 +962,9 @@ class TiqianWebEnhancerTest {
             assertEquals(2, readyCount)
             assertEquals("普通中文正文。", copySelection(plain))
             assertEquals("中文——中文。", copySelection(dash))
+            assertTrue(capturedTestConsoleWarnings().contains("DomDashFaceGeometryMismatch"))
         } finally {
+            restoreTestConsoleWarnCapture()
             clearTestCjkDashBridge()
         }
     }
@@ -2231,6 +2235,33 @@ private external fun flushAllTestAnimationFrames(): Int
 private external fun pendingTestAnimationFrameCount(): Int
 @JsFun("() => globalThis.__TiqianTestAnimationFrames ? globalThis.__TiqianTestAnimationFrames.cancelled : 0")
 private external fun cancelledTestAnimationFrameCount(): Int
+@JsFun(
+    """() => {
+      var tqPreviousWarnCapture = globalThis.__TiqianTestConsoleWarnCapture;
+      if (tqPreviousWarnCapture) throw new Error("console.warn capture already installed");
+      var tqOriginalWarn = console.warn;
+      var tqMessages = [];
+      globalThis.__TiqianTestConsoleWarnCapture = { original: tqOriginalWarn, messages: tqMessages };
+      console.warn = (...args) => tqMessages.push(args.map(String).join(" "));
+    }""",
+)
+private external fun installTestConsoleWarnCapture()
+@JsFun(
+    """() => {
+      var tqWarnCapture = globalThis.__TiqianTestConsoleWarnCapture;
+      return tqWarnCapture ? tqWarnCapture.messages.join("\n") : "";
+    }""",
+)
+private external fun capturedTestConsoleWarnings(): String
+@JsFun(
+    """() => {
+      var tqWarnCapture = globalThis.__TiqianTestConsoleWarnCapture;
+      if (!tqWarnCapture) return;
+      console.warn = tqWarnCapture.original;
+      delete globalThis.__TiqianTestConsoleWarnCapture;
+    }""",
+)
+private external fun restoreTestConsoleWarnCapture()
 @JsFun(
     """(element, top, width) => {
       element.getBoundingClientRect = () => new DOMRect(0, top, width, 30);
