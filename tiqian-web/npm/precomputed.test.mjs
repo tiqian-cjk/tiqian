@@ -422,7 +422,7 @@ function fixture({
       value: typography,
     }],
     fontEvidence: {
-      backendRevision: "tiqian-shared-harfbuzz-v3",
+      backendRevision: "tiqian-shared-harfbuzz-v4",
       harfbuzzVersion: "fixture",
       faces: [{
         ...Object.fromEntries(Object.entries(evidence).filter(([key]) =>

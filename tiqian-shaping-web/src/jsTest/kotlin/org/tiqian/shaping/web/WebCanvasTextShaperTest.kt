@@ -43,4 +43,12 @@ class WebCanvasTextShaperTest {
         assertEquals(bounds, normalized.bounds)
         assertNull(normalized.adjustment)
     }
+
+    @Test
+    fun onlyEllipsisDisplayReplacementRequiresExactCoverageEvidence() {
+        assertEquals(true, isUnverifiedEllipsisDisplaySubstitution("……", "⋯⋯"))
+        assertEquals(false, isUnverifiedEllipsisDisplaySubstitution("……", "……"))
+        assertEquals(false, isUnverifiedEllipsisDisplaySubstitution("——", "⸺"))
+        assertEquals(false, isUnverifiedEllipsisDisplaySubstitution("…", "⋯⋯"))
+    }
 }

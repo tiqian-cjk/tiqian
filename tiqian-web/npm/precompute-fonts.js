@@ -305,7 +305,7 @@ function faceCandidates(session, families, requestedWeight, italic) {
   return [];
 }
 
-function selectFace(session, families, requestedWeight, italic, text) {
+function findFace(session, families, requestedWeight, italic, text) {
   const points = codePoints(text);
   const desiredStyle = italic ? "italic" : "normal";
   for (const family of families) {
@@ -318,9 +318,42 @@ function selectFace(session, families, requestedWeight, italic, text) {
     );
     for (const record of weightMatched) if (faceCovers(record, points)) return record;
   }
+  return null;
+}
+
+function selectFace(session, families, requestedWeight, italic, text) {
+  const record = findFace(session, families, requestedWeight, italic, text);
+  if (record) return record;
   throw new Error(
     `NoExactFontFace:families=${families.join(",")};weight=${requestedWeight};italic=${italic};text=${JSON.stringify(text)}`,
   );
+}
+
+/**
+ * ExactDisplaySubstitutionCoverage: a display-only substitution may probe a
+ * codepoint that the source face does not expose. Keep that failure inside the
+ * exact session so the common layout engine can observe a missing glyph and
+ * apply ADR 0003's source-text rollback instead of abandoning exact layout for
+ * the whole paragraph.
+ */
+export function selectShapeFace(
+  session,
+  families,
+  requestedWeight,
+  italic,
+  displayText,
+  sourceText = displayText,
+) {
+  const displayRecord = findFace(session, families, requestedWeight, italic, displayText);
+  if (displayRecord) return Object.freeze({ record: displayRecord, displayCovered: true });
+  if (sourceText !== displayText) {
+    const sourceRecord = findFace(session, families, requestedWeight, italic, sourceText);
+    if (sourceRecord) return Object.freeze({ record: sourceRecord, displayCovered: false });
+  }
+  return Object.freeze({
+    record: selectFace(session, families, requestedWeight, italic, displayText),
+    displayCovered: true,
+  });
 }
 
 function scriptForText(text) {
@@ -485,17 +518,43 @@ function installGlobalBackend() {
   }
   globalThis.__TiqianFontBackendRevision = BACKEND_REVISION;
   globalThis.__TiqianFontBackend = {
-    shape(sessionId, displayText, serializedFamilies, fontSize, fontWeight, italic, locale, role) {
+    shape(
+      sessionId,
+      displayText,
+      serializedFamilies,
+      fontSize,
+      fontWeight,
+      italic,
+      locale,
+      role,
+      sourceText = displayText,
+    ) {
       const session = sessions.get(sessionId);
       if (!session) throw new Error(`UnknownFontSession:${sessionId}`);
       const families = serializedFamilies.split(FAMILY_SEPARATOR).filter(Boolean);
-      const record = selectFace(session, families, fontWeight, italic, displayText);
+      const selection = selectShapeFace(
+        session,
+        families,
+        fontWeight,
+        italic,
+        displayText,
+        sourceText,
+      );
+      const record = selection.record;
       const result = shapeRecord(record, displayText, fontSize, fontWeight, locale, role);
-      if (result.glyphs.some((glyph) => glyph.id === 0)) {
+      if (!selection.displayCovered) {
+        // The exact CSS face contract rejected the display codepoint even if
+        // the raw sfnt happens to retain an unreachable glyph. Mark the probe
+        // as missing so the common engine re-shapes the original source text.
+        result.glyphs = result.glyphs.map((glyph) => ({ ...glyph, id: 0 }));
+      }
+      const missingGlyph = result.glyphs.some((glyph) => glyph.id === 0);
+      if (missingGlyph && sourceText === displayText) {
         throw new Error(`MissingGlyph:face=${record.faceId};text=${JSON.stringify(displayText)}`);
       }
       const handle = registry.nextResultId++;
       shapeResults.set(handle, result);
+      if (missingGlyph) return handle;
       const usageKey = [
         instanceId(record, fontWeight),
         record.family,

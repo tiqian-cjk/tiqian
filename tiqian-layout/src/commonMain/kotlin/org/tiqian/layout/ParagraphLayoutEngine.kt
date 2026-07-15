@@ -338,6 +338,9 @@ class ExplainableStubParagraphLayoutEngine(
             )
             val rollbackCause = when {
                 substitution.displayText == sourceText -> null
+                shaped.decisions.any {
+                    it.capabilityIssue == UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE
+                } -> "SubstitutionRollbackOnUnverifiedGlyphCoverage"
                 shaped.decisions.any { it.missingGlyphs > 0 } -> "SubstitutionRollbackOnMissingGlyph"
                 shaped.dashInkCoverageDeficient(substitution.displayText, segmentStyle.fontSize) ->
                     "DashSubstitutionInkCoverageRollback"
@@ -3437,6 +3440,7 @@ private const val BOPOMOFO_FONT_WEIGHT_BOOST = 300
 private const val MANDATORY_BREAK_FONT_KEY = "mandatory-break"
 private const val ZERO_WIDTH_SOFT_BREAK_FONT_KEY = "zero-width-space"
 private const val INLINE_OBJECT_FONT_KEY = "inline-object"
+private const val UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE = "UnverifiedDisplaySubstitutionCoverage"
 /** `DashSubstitutionInkCoverageRollback`: keep `⸺` only if its ink fills ≥85% of the 2em advance (Pixel Noto ≈80% rolls back; Source Han ≈94% keeps). */
 private const val DASH_SUBSTITUTION_MIN_INK_COVERAGE = 0.85f
 private const val DASH_SUBSTITUTION_TARGET_EM = 2f

@@ -769,7 +769,7 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
-    fun renderedSubstitutionKeepsSourceForCopyHandler() {
+    fun unverifiedCanvasEllipsisKeepsSourceDisplayAndCopyText() {
         val root = mount(
             """
             <div data-tiqian-root="true">
@@ -781,9 +781,10 @@ class TiqianWebEnhancerTest {
         val count = TiqianWeb.enhance(root, testOptions())
 
         assertEquals(1, count)
-        val sourceMapped = root.querySelector("p [data-tq-src]") as? HTMLElement
-        assertNotNull(sourceMapped)
-        assertTrue(sourceMapped.getAttribute("data-tq-src")?.contains("……") == true)
+        val paragraph = root.querySelector("p") as HTMLElement
+        assertTrue(paragraph.textContent?.contains("……") == true)
+        assertTrue(paragraph.textContent?.contains("⋯⋯") == false)
+        assertEquals("中文……中文。", copySelection(paragraph))
     }
 
     @Test

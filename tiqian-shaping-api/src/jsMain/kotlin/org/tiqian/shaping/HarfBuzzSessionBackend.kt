@@ -35,6 +35,7 @@ class HarfBuzzSessionTextShaper(
             italic = input.style.italic,
             locale = input.style.locale,
             role = input.fontDecision.role.name,
+            sourceText = source,
         )
         try {
             val openTypeFeatures = buildList {
@@ -146,7 +147,7 @@ class HarfBuzzSessionFontMetricsResolver(
 }
 
 private const val FAMILY_SEPARATOR = "\u001f"
-@JsFun("(sessionId, displayText, fontFamilies, fontSize, fontWeight, italic, locale, role) => globalThis.__TiqianFontBackend.shape(sessionId, displayText, fontFamilies, fontSize, fontWeight, italic, locale, role)")
+@JsFun("(sessionId, displayText, fontFamilies, fontSize, fontWeight, italic, locale, role, sourceText) => globalThis.__TiqianFontBackend.shape(sessionId, displayText, fontFamilies, fontSize, fontWeight, italic, locale, role, sourceText)")
 private external fun sessionShape(
     sessionId: String,
     displayText: String,
@@ -156,6 +157,7 @@ private external fun sessionShape(
     italic: Boolean,
     locale: String,
     role: String,
+    sourceText: String,
 ): Int
 @JsFun("(handle) => globalThis.__TiqianFontBackend.shapeGlyphCount(handle)")
 private external fun shapeGlyphCount(handle: Int): Int

@@ -278,6 +278,13 @@ class WebCanvasTextShaper(
 
     override fun shape(input: ShapingInput): ShapingResult {
         val source = input.text.substring(input.range.start, input.range.end)
+        if (isUnverifiedEllipsisDisplaySubstitution(source, input.displayText)) {
+            return shapeWithCanvas(
+                input,
+                capabilityIssue = UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE to
+                    "CanvasCannotVerifySameFaceU+22EFCoverage",
+            )
+        }
         if (source == CJK_DASH_SOURCE || input.displayText == TWO_EM_DASH) {
             return shapePreparedCjkDash(input, source)
                 ?: shapeWithCanvas(input, capabilityIssue = dashCapabilityIssue())
@@ -561,6 +568,12 @@ class WebCanvasTextShaper(
     }
 }
 
+internal fun isUnverifiedEllipsisDisplaySubstitution(source: String, display: String): Boolean =
+    source.isNotEmpty() &&
+        source.length == display.length &&
+        source.all { it == '\u2026' } &&
+        display.all { it == '\u22EF' }
+
 internal data class NormalizedCanvasInkBounds(
     val bounds: Rect,
     val adjustment: String?,
@@ -604,6 +617,7 @@ internal fun normalizeSubpixelCanvasInkOverhang(
 }
 
 private const val CANVAS_INK_OVERHANG_EVIDENCE_THRESHOLD_PX = 1f
+private const val UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE = "UnverifiedDisplaySubstitutionCoverage"
 
 /**
  * ContextualWebCurlyQuoteFeatures: the common classifier has already resolved

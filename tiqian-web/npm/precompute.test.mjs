@@ -5,6 +5,7 @@ import {
   cssWeightPreference,
   fontRecordMatchesFamily,
   parseUnicodeRange,
+  selectShapeFace,
   shapingPolicyForRole,
 } from "./precompute-fonts.js";
 import {
@@ -58,6 +59,57 @@ test("CSS weight matching lets a requested regular weight use the nearest medium
   assert.deepEqual(cssWeightPreference([500, 500], 400), [1, 100]);
   assert.deepEqual(cssWeightPreference([400, 700], 500), [0, 0]);
   assert.ok(cssWeightPreference([300, 300], 400)[0] > cssWeightPreference([500, 500], 400)[0]);
+});
+
+test("display substitutions require real exact-face glyph coverage", () => {
+  class FixtureFont {
+    constructor(face) {
+      this.face = face;
+    }
+
+    setScale() {}
+
+    nominalGlyph(codePoint) {
+      return this.face.glyphs.has(codePoint) ? codePoint : null;
+    }
+  }
+  const record = (faceId, unicodeRange, glyphs) => ({
+    faceId,
+    family: "Fixture CJK",
+    localNames: [],
+    style: "normal",
+    weightRange: [400, 400],
+    unicodeRanges: parseUnicodeRange(unicodeRange),
+    axisInfos: {},
+    face: { upem: 1000, glyphs: new Set(glyphs) },
+    hb: { Font: FixtureFont },
+  });
+  const sourceFace = record("source-ellipsis", "U+2026", [0x2026]);
+  const declaredOnlyFace = record("declared-midline", "U+22EF", []);
+  const families = ["Fixture CJK"];
+
+  const fallback = selectShapeFace(
+    { records: [declaredOnlyFace, sourceFace] },
+    families,
+    400,
+    false,
+    "⋯",
+    "…",
+  );
+  assert.equal(fallback.record.faceId, "source-ellipsis");
+  assert.equal(fallback.displayCovered, false);
+
+  const midlineFace = record("real-midline", "U+22EF", [0x22ef]);
+  const preferred = selectShapeFace(
+    { records: [declaredOnlyFace, midlineFace, sourceFace] },
+    families,
+    400,
+    false,
+    "⋯",
+    "…",
+  );
+  assert.equal(preferred.record.faceId, "real-midline");
+  assert.equal(preferred.displayCovered, true);
 });
 
 test("Node Kotlin/JS precompute runs the real layout pipeline through a synchronous font session", async () => {
@@ -199,7 +251,7 @@ test("snapshot template keeps the prepared DOM inert and Pagefind-ignored", () =
     },
     maxWidthPx: 360,
     fontEvidence: {
-      backendRevision: "tiqian-shared-harfbuzz-v3",
+      backendRevision: "tiqian-shared-harfbuzz-v4",
       harfbuzzVersion: "fixture",
       faces: [{
         family: "Fixture CJK",
@@ -245,7 +297,7 @@ test("snapshot bundle exposes compact SSR artifacts without inline geometry", ()
     },
     maxWidthPx: 360,
     fontEvidence: {
-      backendRevision: "tiqian-shared-harfbuzz-v3",
+      backendRevision: "tiqian-shared-harfbuzz-v4",
       harfbuzzVersion: "fixture",
       faces: [{
         family: "Fixture CJK",

@@ -2882,6 +2882,41 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun ellipsisSubstitutionRollsBackWhenCoverageCannotBeVerified() {
+        val engine = ExplainableStubParagraphLayoutEngine(
+            textShaper = object : TextShaper {
+                val delegate = ExplainableStubTextShaper()
+                override fun shape(input: ShapingInput): ShapingResult {
+                    val result = delegate.shape(input)
+                    return if (input.displayText.contains('⋯')) {
+                        result.copy(
+                            decisions = result.decisions.map {
+                                it.copy(capabilityIssue = "UnverifiedDisplaySubstitutionCoverage")
+                            },
+                        )
+                    } else {
+                        result
+                    }
+                }
+            },
+        )
+
+        val result = engine.layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("中……文"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        assertEquals("……", result.clusters.single { it.text == "……" }.displayText)
+        assertTrue(
+            result.debug.fontDecisions.single { it.sourceText == "……" }
+                .substitutionReason.endsWith("SubstitutionRollbackOnUnverifiedGlyphCoverage"),
+        )
+    }
+
+    @Test
     fun dashSubstitutionRollsBackWhenInkDoesNotFillTheTwoEmAdvance() {
         // DashSubstitutionInkCoverageRollback: the font HAS `⸺` but draws it as
         // a ~1.6em rule left-aligned in the 2em advance (Pixel's Noto CJK) — the
