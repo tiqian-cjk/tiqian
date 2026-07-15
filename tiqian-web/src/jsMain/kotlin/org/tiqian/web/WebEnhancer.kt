@@ -157,7 +157,7 @@ object TiqianWeb {
             val fontSize = state.options.fontSize
                 ?: parseCssPx(computedStyle(paragraph, "font-size"))
                 ?: DEFAULT_FONT_SIZE
-            effectiveLineMeasure(sourceParagraphWidth(paragraph, state.activeOptions()), fontSize)
+            effectiveLineMeasure(sourceParagraphWidth(paragraph), fontSize)
         }
         var stale = false
         fun liveMeasure(index: Int): Float {
@@ -166,7 +166,7 @@ object TiqianWeb {
                 ?: parseCssPx(computedStyle(paragraph, "font-size"))
                 ?: DEFAULT_FONT_SIZE
             return effectiveLineMeasure(
-                sourceParagraphWidth(paragraph, state.activeOptions()),
+                sourceParagraphWidth(paragraph),
                 fontSize,
             )
         }
@@ -620,7 +620,7 @@ object TiqianWeb {
         // geometry seen when the job starts. If the host changes again while
         // slices are running, element.js schedules one latest-width follow-up
         // instead of allowing a queue of obsolete widths to replay.
-        val widths = paragraphs.map { paragraphWidth(it, activeOptions) }
+        val widths = paragraphs.map(::paragraphWidth)
         val commitSession = ProgressiveRelayoutSession(
             paragraphs = paragraphs,
             state = state,
@@ -645,7 +645,7 @@ object TiqianWeb {
                     // paragraph DOM until its replacement is ready, then
                     // require the captured measure to still equal the live
                     // measure immediately before the single-paragraph commit.
-                    val currentWidth = paragraphWidth(paragraph, activeOptions)
+                    val currentWidth = paragraphWidth(paragraph)
                     if (
                         isCurrentResponsiveMeasure(
                             preparedWidth = widths[paragraphIndex],
@@ -718,23 +718,20 @@ object TiqianWeb {
         }
     }
 
-    private fun paragraphWidth(paragraph: EnhancedParagraph, options: EnhanceOptions): Float {
-        return sourceParagraphWidth(paragraph.source, options)
+    private fun paragraphWidth(paragraph: EnhancedParagraph): Float {
+        return sourceParagraphWidth(paragraph.source)
     }
 
-    private fun sourceParagraphWidth(paragraph: HTMLElement, options: EnhanceOptions): Float {
-        val exactFontLayout = options.conformingExactFontSessionId() != null
-        return (if (exactFontLayout) {
-            elementContentWidth(paragraph)
-        } else {
-            elementWidth(paragraph)
-        }).toFloat()
+    private fun sourceParagraphWidth(paragraph: HTMLElement): Float {
+        // ContentBoxLineMeasure: LayoutConstraints describe the inline content
+        // box where glyphs are placed. A host may add padding directly to a
+        // paragraph-shaped list item; using its border-box width lays the line
+        // out once through that padding and then starts it after the padding,
+        // causing a real right-edge overflow. Font backend selection does not
+        // change which CSS box owns the available line measure.
+        return elementContentWidth(paragraph).toFloat()
             .takeIf { it > 0f }
-            ?: (if (exactFontLayout) {
-                elementContentWidth(paragraph.parentElement as? HTMLElement ?: paragraph)
-            } else {
-                elementWidth(paragraph.parentElement as? HTMLElement ?: paragraph)
-        }).toFloat()
+            ?: elementContentWidth(paragraph.parentElement as? HTMLElement ?: paragraph).toFloat()
                 .takeIf { it > 0f }
             ?: 320f
     }
@@ -748,7 +745,7 @@ object TiqianWeb {
         widthOverride: Float? = null,
         ignoreUnchangedMeasure: Boolean = false,
     ): ParagraphLayoutPreparation {
-        val width = widthOverride ?: paragraphWidth(paragraph, options)
+        val width = widthOverride ?: paragraphWidth(paragraph)
         // LineLengthGridResponsiveInvalidation: the Web adapter currently
         // exposes the default Start-aligned body, so widths within the same
         // floor(width / fontSize) cell count produce identical layout and a
@@ -2266,8 +2263,6 @@ private external fun releasePreparedParagraphDomStyles(host: HTMLElement): Boole
 private external fun releasePreparedRootDomStyles(root: HTMLElement): Boolean
 @JsFun("(host, width) => globalThis.__TiqianPreparedDomValidator && typeof globalThis.__TiqianPreparedDomValidator.issue === 'function' ? globalThis.__TiqianPreparedDomValidator.issue(host, width) : 'PreparedDomValidatorUnavailable'")
 private external fun validatePreparedParagraphDom(host: HTMLElement, width: Double): String?
-@JsFun("(element) => element.getBoundingClientRect().width")
-private external fun elementWidth(element: HTMLElement): Double
 @JsFun(
     """(element) => {
       const rect = element.getBoundingClientRect();

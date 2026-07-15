@@ -514,6 +514,36 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
+    fun listItemPaddingIsExcludedFromTheAvailableLineMeasure() {
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 216px; font-size: 18px; line-height: 30px">
+              <style>
+                ul { box-sizing: border-box; padding-inline-start: 36px; margin-inline: 0; }
+                li { box-sizing: border-box; padding-inline-start: 7px; }
+              </style>
+              <ul><li id="padded">列表项自己的 padding 不能被正文版心重复占用。</li></ul>
+            </div>
+            """.trimIndent(),
+        )
+
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+
+        val item = root.querySelector("#padded") as HTMLElement
+        val line = item.querySelector(":scope > [data-tq-line-width]") as HTMLElement
+        val lineMeasure = line.getAttribute("data-tq-line-width")!!.toDouble()
+        val contentWidth = item.clientWidth -
+            cssPx(computedStyleValue(item, "padding-left")) -
+            cssPx(computedStyleValue(item, "padding-right"))
+        assertTrue(lineMeasure <= contentWidth + 0.5)
+        assertTrue(
+            kotlin.math.abs(lineMeasure - 162.0) < 0.5,
+            "173px content box should expose nine 18px cells, was $lineMeasure",
+        )
+        assertEquals("列表项自己的 padding 不能被正文版心重复占用。", copySelection(item))
+    }
+
+    @Test
     fun canonicalPreparedParagraphCanFallBackIntoRuntimeWithoutTreatingGeometryAsHostObjects() {
         val source = "甲’乙\n丙"
         val root = mount(
