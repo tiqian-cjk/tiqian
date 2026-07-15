@@ -230,7 +230,7 @@ test("snapshot template keeps the prepared DOM inert and Pagefind-ignored", () =
     status: "prepared",
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v10",
+    renderRevision: "prebroken-dom-v11",
     renderFontFamilies: ["Snapshot Sans"],
     key: "p-1",
     renderArtifactSha256: "c".repeat(64),
@@ -276,7 +276,7 @@ test("snapshot bundle exposes compact SSR artifacts without inline geometry", ()
     status: "prepared",
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v10",
+    renderRevision: "prebroken-dom-v11",
     renderFontFamilies: ["Snapshot Sans"],
     key: "p-1",
     renderArtifactSha256: "c".repeat(64),
@@ -330,6 +330,9 @@ test("snapshot bundle exposes compact SSR artifacts without inline geometry", ()
   assert.match(bundle.template, /^<template /u);
   assert.match(bundle.template, /server-dom-v1/u);
   assert.doesNotMatch(bundle.template, /data-tq-entry=/u);
+  assert.match(bundle.inertTemplate, /^<template /u);
+  assert.match(bundle.inertTemplate, /data-tq-entry="p-1"/u);
+  assert.doesNotMatch(bundle.inertTemplate, /server-dom-v1/u);
   assert.match(bundle.clientTemplate, /font-contract-v1/u);
   assert.doesNotMatch(bundle.clientTemplate, /data-tq-entry=/u);
   assert.ok(bundle.clientTemplate.length < bundle.template.length);
@@ -350,6 +353,16 @@ test("snapshot bundle exposes compact SSR artifacts without inline geometry", ()
   };
   const boundedPreloads = renderSnapshotBundle([prepared, laterFace], { id: "tq-page-two" });
   assert.deepEqual(boundedPreloads.fontPreloads, ["/fonts/fixture-deadbeef.woff2"]);
+
+  const semanticContract = renderSnapshotBundle([prepared], {
+    id: "tq-page-semantic",
+    fontContractParagraphs: [laterFace],
+  });
+  assert.equal(semanticContract.entries.length, 1);
+  assert.equal(semanticContract.entries[0].key, "p-1");
+  assert.match(semanticContract.template, /fontContractEntries/u);
+  assert.match(semanticContract.template, /below-fold-deadbeef/u);
+  assert.match(semanticContract.clientTemplate, /below-fold-deadbeef/u);
 });
 
 test("snapshot template refuses a stale prepared render revision", () => {
@@ -371,7 +384,7 @@ test("v1 snapshot candidates stay aligned with the paragraph observer contract",
     status: "prepared",
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v10",
+    renderRevision: "prebroken-dom-v11",
     renderFontFamilies: ["Snapshot Sans"],
     key: "p-1",
     renderArtifactSha256: "c".repeat(64),

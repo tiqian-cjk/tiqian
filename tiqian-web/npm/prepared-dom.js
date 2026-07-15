@@ -3,6 +3,7 @@ import {
   RENDER_REVISION,
   SNAPSHOT_SCHEMA,
 } from "./snapshot-schema.js";
+import { normalizeSnapshotSemantics } from "./snapshot-source.js";
 
 const SPACING_EPSILON = 0.01;
 const RENDER_FLOW_EPSILON_PX = 0.01;
@@ -242,6 +243,26 @@ function renderedElement(tag, attributes = {}, text = null, voidElement = false)
   };
 }
 
+function renderedContainer(tag, attributes = {}) {
+  const entries = Object.entries(attributes)
+    .filter(([, value]) => value != null)
+    .map(([name, value]) => [name, String(value)])
+    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+  const children = [];
+  return {
+    children,
+    get html() {
+      const serializedAttributes = entries.map(([name, value]) =>
+        value === "" ? name : `${name}="${escapeAttribute(value)}"`).join(" ");
+      return `<${tag}${serializedAttributes ? ` ${serializedAttributes}` : ""}>` +
+        `${children.map((child) => child.html).join("")}</${tag}>`;
+    },
+    get artifact() {
+      return [tag, entries, children.map((child) => child.artifact)];
+    },
+  };
+}
+
 function renderedText(value) {
   const text = String(value);
   return {
@@ -273,7 +294,9 @@ function preparedFeatureSignature(run) {
 }
 
 function canMergePreparedRun(left, right) {
-  if (left.rangeEnd !== right.rangeStart || preparedFeatureSignature(left) !== preparedFeatureSignature(right)) {
+  if (left.rangeEnd !== right.rangeStart ||
+      left.semanticSignature !== right.semanticSignature ||
+      preparedFeatureSignature(left) !== preparedFeatureSignature(right)) {
     return false;
   }
   if (left.spacing.kind === "none" && right.spacing.kind === "none") return true;
@@ -337,22 +360,60 @@ export function renderPreparedParagraphArtifact(
   if (!Number.isFinite(paragraphHeight) || paragraphHeight < 0 || !Array.isArray(plan.lines)) {
     throw new Error("InvalidPreparedParagraphGeometry");
   }
+  const sourceText = plan.lines.flatMap((line) => line.cells).map((cell) => cell.source).join("");
+  const semantics = normalizeSnapshotSemantics(options.sourceText ?? sourceText, options.semantics ?? []);
+  const inlineBoxes = Array.from(options.inlineBoxes ?? []);
+  const inlineStartByOffset = new Map();
+  const inlineEndByOffset = new Map();
+  for (const box of inlineBoxes) {
+    inlineStartByOffset.set(box.start, (inlineStartByOffset.get(box.start) ?? 0) + Number(box.inlineStartPx));
+    inlineEndByOffset.set(box.end, (inlineEndByOffset.get(box.end) ?? 0) + Number(box.inlineEndPx));
+  }
+  const semanticSpansFor = (rangeStart, rangeEnd) => semantics.filter((span) =>
+    rangeStart >= span.start && rangeEnd <= span.end);
+  const semanticSpansCrossing = (offset) => semantics.filter((span) =>
+    offset > span.start && offset < span.end);
   const nodes = [];
+  let activeSemantics = [];
+  let activeContainers = [];
+  const semanticContainerFor = (semanticPath) => {
+    const commonLimit = Math.min(activeSemantics.length, semanticPath.length);
+    let common = 0;
+    while (common < commonLimit && activeSemantics[common] === semanticPath[common]) common += 1;
+    activeSemantics = activeSemantics.slice(0, common);
+    activeContainers = activeContainers.slice(0, common);
+    let container = activeContainers.at(-1)?.children ?? nodes;
+    for (let index = common; index < semanticPath.length; index += 1) {
+      const semantic = semanticPath[index];
+      const wrapper = renderedContainer(semantic.tagName, {
+        ...Object.fromEntries(semantic.attributes),
+        "data-tq-source-semantic": "true",
+      });
+      container.push(wrapper);
+      activeSemantics.push(semantic);
+      activeContainers.push(wrapper);
+      container = wrapper.children;
+    }
+    return container;
+  };
   for (let lineIndex = 0; lineIndex < plan.lines.length; lineIndex += 1) {
     const line = plan.lines[lineIndex];
     const height = line.bottom - line.top;
     const first = line.cells[0];
     const flowStart = first ? first.drawX - first.leadingLayoutAdvance : 0;
-    if (first && Math.abs(flowStart - first.drawX) > RENDER_FLOW_EPSILON_PX) {
+    const firstInlineStart = first ? inlineStartByOffset.get(first.rangeStart) ?? 0 : 0;
+    if (first && Math.abs(first.leadingLayoutAdvance - firstInlineStart) > RENDER_FLOW_EPSILON_PX) {
       throw new Error(`SnapshotRenderFlowMismatch:line=${lineIndex};leading-layout-advance`);
     }
     const cells = line.cells.map((cell, index) => {
       const next = line.cells[index + 1];
+      const trailingInlineEdge = inlineEndByOffset.get(cell.rangeEnd) ?? 0;
+      const nextLeadingInlineEdge = next ? inlineStartByOffset.get(next.rangeStart) ?? 0 : 0;
       const trailingGap = next
-        ? next.drawX - cell.drawX - cell.naturalWidth
+        ? next.drawX - cell.drawX - cell.naturalWidth - trailingInlineEdge - nextLeadingInlineEdge
         : line.hyphenAdvance > 0
           ? 0
-          : line.indent + line.visualWidth - cell.drawX - cell.naturalWidth;
+          : line.indent + line.visualWidth - cell.drawX - cell.naturalWidth - trailingInlineEdge;
       return {
         rangeStart: cell.rangeStart,
         rangeEnd: cell.rangeEnd,
@@ -363,8 +424,10 @@ export function renderPreparedParagraphArtifact(
         openTypeFeatures: cell.openTypeFeatures,
         trailingGap,
         spacing: preparedSpacing(cell.display, trailingGap),
+        semanticPath: semanticSpansFor(cell.rangeStart, cell.rangeEnd),
       };
     });
+    for (const cell of cells) cell.semanticSignature = JSON.stringify(cell.semanticPath);
     const runs = [];
     for (const cell of cells) {
       const pending = runs.at(-1);
@@ -372,11 +435,16 @@ export function renderPreparedParagraphArtifact(
       else runs.push({ ...cell, spacing: { ...cell.spacing } });
     }
     const last = line.cells.at(-1);
-    const flowEnd = last ? last.drawX + last.naturalWidth : 0;
+    const flowEnd = last
+      ? last.drawX + last.naturalWidth + (inlineEndByOffset.get(last.rangeEnd) ?? 0)
+      : 0;
     const hyphenLeadingGap = line.hyphenAdvance > 0
       ? line.indent + line.visualWidth - flowEnd
       : 0;
-    const expectedFlowWidth = flowStart + runs.reduce(
+    const inlineEdgeWidth = line.cells.reduce((sum, cell) =>
+      sum + (inlineStartByOffset.get(cell.rangeStart) ?? 0) +
+        (inlineEndByOffset.get(cell.rangeEnd) ?? 0), 0);
+    const expectedFlowWidth = flowStart + inlineEdgeWidth + runs.reduce(
       (sum, run) => sum + run.naturalWidth + run.trailingGap,
       0,
     ) + hyphenLeadingGap + line.hyphenAdvance;
@@ -409,9 +477,11 @@ export function renderPreparedParagraphArtifact(
       "data-tq-paragraph-height": String(paragraphHeight),
     };
     applyDynamicStyles(markerAttributes, markerStyles, styleClassFor);
-    nodes.push(renderedElement("span", markerAttributes));
+    semanticContainerFor(activeSemantics).push(renderedElement("span", markerAttributes));
 
-    for (const run of runs) nodes.push(renderRun(run, styleClassFor));
+    for (const run of runs) {
+      semanticContainerFor(run.semanticPath).push(renderRun(run, styleClassFor));
+    }
 
     if (line.hyphenAdvance > 0) {
       const hyphenAttributes = {
@@ -430,16 +500,17 @@ export function renderPreparedParagraphArtifact(
           : [],
         styleClassFor,
       );
-      nodes.push(renderedElement("span", hyphenAttributes, "-"));
+      semanticContainerFor(activeSemantics).push(renderedElement("span", hyphenAttributes, "-"));
     }
-    nodes.push(renderedElement("span", {
+    const boundaryContainer = semanticContainerFor(semanticSpansCrossing(line.rangeEnd));
+    boundaryContainer.push(renderedElement("span", {
       "aria-hidden": "true",
       "data-tq-copy-ignore": "true",
       "data-tq-geometry": "true",
       "data-tq-line-end-sentinel": String(lineIndex),
     }));
     if (line.endReason === "MandatoryBreak") {
-      nodes.push(renderedElement("span", {
+      boundaryContainer.push(renderedElement("span", {
         "data-tq-geometry": "true",
         "data-tq-hard-break": "true",
         "data-tq-src": "\n",
@@ -456,9 +527,10 @@ export function renderPreparedParagraphArtifact(
         breakAttributes["aria-hidden"] = "true";
         breakAttributes["data-tq-copy-ignore"] = "true";
       }
-      nodes.push(renderedElement("br", breakAttributes, null, true));
+      boundaryContainer.push(renderedElement("br", breakAttributes, null, true));
     }
   }
+  semanticContainerFor([]);
   if (plan.lines.length > 0) {
     // ParagraphSelectionEndSentinel mirrors the runtime DOM renderer. The
     // zero-width character keeps Chromium's cross-block selection terminator

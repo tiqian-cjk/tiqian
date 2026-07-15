@@ -11,6 +11,10 @@ import {
   releasePreparedValueStyleRoot,
 } from "./prepared-dom.js";
 import { parseSnapshotManifest } from "./snapshot-manifest.js";
+import {
+  snapshotSourceArtifactFromDom,
+  snapshotSourceArtifactString,
+} from "./snapshot-source.js";
 
 const ROOT_SELECTOR = "tiqian-prose, [data-tiqian-root]";
 const WIDTH_TOLERANCE_PX = 0.5;
@@ -30,9 +34,11 @@ const PREPARED_VERTICAL_TOLERANCE_PX = 0.02;
 const RENDER_FLOW_EPSILON_PX = 0.01;
 const PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE = "pwid,palt";
 export const EXACT_RENDER_FONT_ATTRIBUTE = "data-tiqian-exact-render-font";
+const SERVER_RENDERED_SNAPSHOT_ATTRIBUTE = "data-tq-ssr-snapshot";
 const EXACT_LAYOUT_ISSUE_ATTRIBUTE = "data-tiqian-exact-layout-issue";
 const TYPOGRAPHY_ISSUE_ATTRIBUTE = "data-tiqian-snapshot-typography-issue";
 const states = new WeakMap();
+const directServerArtifacts = new WeakMap();
 
 function parseFontFamilies(value) {
   const families = [];
@@ -260,17 +266,38 @@ function canonicalRenderedPlainSource(parent) {
   return result;
 }
 
-function plainParagraphSource(paragraph) {
+function paragraphSourceArtifact(paragraph) {
   if (
     paragraph.getAttribute("data-tq-rendered") === "true" &&
     (paragraph.getAttribute("data-tq-canonical-source") === "true" ||
       paragraph.getAttribute("data-tq-canonical-plain") === "true")
-  ) return canonicalRenderedPlainSource(paragraph);
-  for (const element of paragraph.querySelectorAll("*")) {
-    if (element.tagName !== "BR") return null;
+  ) {
+    const text = canonicalRenderedPlainSource(paragraph);
+    return { text, serialized: null };
   }
-  const value = typeof paragraph.innerText === "string" ? paragraph.innerText : paragraph.textContent;
-  return String(value ?? "").replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+  try {
+    const artifact = snapshotSourceArtifactFromDom(paragraph);
+    const liveText = typeof paragraph.innerText === "string"
+      ? paragraph.innerText.replaceAll("\r\n", "\n").replaceAll("\r", "\n")
+      : artifact.text;
+    return {
+      text: liveText,
+      serialized: snapshotSourceArtifactString(liveText, artifact.semantics),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function plainParagraphSource(paragraph) {
+  return paragraphSourceArtifact(paragraph)?.text ?? null;
+}
+
+async function sourceArtifactMatches(paragraph, entry) {
+  if (typeof entry.sourceArtifactSha256 !== "string") return true;
+  const source = paragraphSourceArtifact(paragraph);
+  if (source?.serialized == null) return true;
+  return await sha256Text(source.serialized) === entry.sourceArtifactSha256;
 }
 
 async function sha256Text(value) {
@@ -303,7 +330,8 @@ function contentBoxWidth(element) {
 
 function canonicalPreparedFlow(paragraph) {
   return paragraph.getAttribute("data-tq-rendered") === "true" &&
-    paragraph.getAttribute("data-tq-canonical-plain") === "true";
+    (paragraph.getAttribute("data-tq-canonical-source") === "true" ||
+      paragraph.getAttribute("data-tq-canonical-plain") === "true");
 }
 
 // TranslationOnlyAncestorTransformCompatibility: an ancestor's visual x/y
@@ -507,7 +535,17 @@ function renderedBoundaryAdvanceIssue(paragraph) {
 }
 
 function renderedLineAdvanceIssue(paragraph, contentWidth) {
-  const children = Array.from(paragraph.childNodes ?? []);
+  const children = [];
+  const appendFlowNodes = (parent) => {
+    for (const node of Array.from(parent.childNodes ?? [])) {
+      if (node.nodeType === 1 && node.hasAttribute("data-tq-source-semantic")) {
+        appendFlowNodes(node);
+      } else {
+        children.push(node);
+      }
+    }
+  };
+  appendFlowNodes(paragraph);
   const markers = Array.from(paragraph.querySelectorAll("[data-tq-line-flow-width]"));
   const sentinels = Array.from(paragraph.querySelectorAll("[data-tq-line-end-sentinel]"));
   if (markers.length === 0 || markers.length !== sentinels.length) return "markers";
@@ -882,7 +920,8 @@ async function manifestValueStylesAreValid(manifest) {
 
 function manifestEntryKeysAreUnique(manifest) {
   if (!Array.isArray(manifest?.entries)) return false;
-  const keys = manifest.entries.map((entry) => entry?.key);
+  const keys = [...manifest.entries, ...(manifest.fontContractEntries ?? [])]
+    .map((entry) => entry?.key);
   return keys.every((key) => typeof key === "string" && key.length > 0) &&
     new Set(keys).size === keys.length;
 }
@@ -925,11 +964,72 @@ function fontContractTypographyMatches(root, manifest) {
   return fontContractTypographyIssue(root, manifest) == null;
 }
 
-function templateEntry(template, key) {
+function templateEntry(template, key, root = null) {
   for (const entry of template.content?.querySelectorAll?.("[data-tq-entry]") ?? []) {
     if (entry.getAttribute("data-tq-entry") === key) return entry;
   }
+  return directServerArtifacts.get(root)?.get(key) ?? null;
+}
+
+function captureServerRenderedSnapshotArtifacts(root, manifest, paragraphsByKey) {
+  const artifacts = new Map();
+  for (const entry of manifest.entries) {
+    const paragraph = paragraphsByKey.get(entry?.key);
+    if (paragraph) artifacts.set(entry.key, paragraph.cloneNode(true));
+  }
+  if (artifacts.size > 0) directServerArtifacts.set(root, artifacts);
+}
+
+function templateSourceEntry(documentObject, reference, key) {
+  const sourceTemplate = documentObject.getElementById(`${reference}-source`);
+  if (!sourceTemplate?.content) return null;
+  for (const entry of sourceTemplate.content.querySelectorAll?.("[data-tq-source-entry]") ?? []) {
+    if (entry.getAttribute("data-tq-source-entry") === key) return entry;
+  }
   return null;
+}
+
+/**
+ * DirectSsrSourceRestore: a failed first-paint adoption must never feed the
+ * prepared replay DOM into the runtime lowerer as if it were host rich text.
+ * The server source template is the canonical semantic backing for every
+ * direct entry. Once restored, clear the marker so a later maximum-measure
+ * adoption reads the immutable prepared artifact from the normal template.
+ */
+function restoreServerRenderedSnapshotSource(root) {
+  const reference = root?.getAttribute?.("snapshot-ref");
+  if (!reference || root.getAttribute(SERVER_RENDERED_SNAPSHOT_ATTRIBUTE) !== reference) {
+    return false;
+  }
+  const documentObject = root.ownerDocument || document;
+  const sourceTemplate = documentObject.getElementById(`${reference}-source`);
+  if (!sourceTemplate?.content) return false;
+  const sourceEntries = Array.from(
+    sourceTemplate.content.querySelectorAll?.("[data-tq-source-entry]") ?? [],
+  );
+  if (sourceEntries.length === 0) return false;
+  const paragraphs = new Map(
+    Array.from(root.querySelectorAll("[data-tq-snapshot-key]"))
+      .filter((paragraph) => paragraph.closest(ROOT_SELECTOR) === root)
+      .map((paragraph) => [paragraph.getAttribute("data-tq-snapshot-key"), paragraph]),
+  );
+  const restoreEntries = sourceEntries.map((source) => ({
+    source,
+    paragraph: paragraphs.get(source.getAttribute("data-tq-source-entry")),
+  }));
+  if (restoreEntries.some(({ paragraph }) => !paragraph)) return false;
+  for (const { source, paragraph } of restoreEntries) {
+    while (paragraph.firstChild) paragraph.removeChild(paragraph.firstChild);
+    for (const child of Array.from(source.childNodes)) {
+      paragraph.appendChild(child.cloneNode(true));
+    }
+    paragraph.removeAttribute("data-tq-rendered");
+    paragraph.removeAttribute("data-tq-canonical-plain");
+    paragraph.removeAttribute("data-tq-canonical-source");
+  }
+  root.removeAttribute(SERVER_RENDERED_SNAPSHOT_ATTRIBUTE);
+  root.removeAttribute(EXACT_RENDER_FONT_ATTRIBUTE);
+  return true;
 }
 
 function canonicalSnapshotNode(node) {
@@ -964,6 +1064,7 @@ function rootParagraphs(root, selector) {
 }
 
 function miss(root, reason) {
+  restoreServerRenderedSnapshotSource(root);
   root.dataset.tiqianSnapshotMiss = reason;
   delete root.dataset.tiqianSnapshot;
   return { adopted: false, reason };
@@ -971,7 +1072,7 @@ function miss(root, reason) {
 
 function groupedFontEvidence(manifest) {
   const evidenceGroups = new Map();
-  for (const entry of manifest.entries) {
+  for (const entry of [...manifest.entries, ...(manifest.fontContractEntries ?? [])]) {
     if (!entry?.fontEvidence || !Array.isArray(entry.fontEvidence.faces) ||
         entry.fontEvidence.faces.length === 0) return null;
     for (const evidence of entry.fontEvidence.faces) {
@@ -1001,7 +1102,7 @@ function groupedFontEvidence(manifest) {
 }
 
 async function validateManifestFontContract(manifest, documentObject) {
-  if (manifest.entries.some((entry) =>
+  if ([...manifest.entries, ...(manifest.fontContractEntries ?? [])].some((entry) =>
     entry?.fontEvidence?.backendRevision !== FONT_BACKEND_REVISION)) {
     return { reason: "SnapshotFontBackendRevisionMismatch" };
   }
@@ -1097,6 +1198,9 @@ export async function validatePrecomputedSnapshotExactFontContract(root, isCurre
     if (source == null || await sha256Text(source) !== entry.sourceSha256) {
       return { matches: false, reason: "SnapshotSourceMismatch" };
     }
+    if (!await sourceArtifactMatches(paragraph, entry)) {
+      return { matches: false, reason: "SnapshotSourceSemanticsMismatch" };
+    }
     const typographyIssue = computedTypographyIssue(
       paragraph,
       entry.typography,
@@ -1127,6 +1231,9 @@ export async function validatePrecomputedSnapshotExactFontContract(root, isCurre
     const source = paragraph == null ? null : plainParagraphSource(paragraph);
     if (source == null || await sha256Text(source) !== entry.sourceSha256) {
       return { matches: false, reason: "SnapshotSourceChangedDuringValidation" };
+    }
+    if (paragraph == null || !await sourceArtifactMatches(paragraph, entry)) {
+      return { matches: false, reason: "SnapshotSourceSemanticsChangedDuringValidation" };
     }
     const typographyIssue = computedTypographyIssue(
       paragraph,
@@ -1218,7 +1325,10 @@ export function restorePrecomputedSnapshot(root) {
     }
   }
   if (state.valueStylesInstalled) releasePreparedValueStyleRoot(root);
-  if (state.originalExactRenderFontAttribute == null) {
+  if (state.serverRenderedEntries) {
+    root.removeAttribute(SERVER_RENDERED_SNAPSHOT_ATTRIBUTE);
+    root.removeAttribute(EXACT_RENDER_FONT_ATTRIBUTE);
+  } else if (state.originalExactRenderFontAttribute == null) {
     root.removeAttribute(EXACT_RENDER_FONT_ATTRIBUTE);
   } else {
     root.setAttribute(EXACT_RENDER_FONT_ATTRIBUTE, state.originalExactRenderFontAttribute);
@@ -1270,6 +1380,9 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
   if (byKey.size !== paragraphs.length) return miss(root, "SnapshotCandidateKeyInvalid");
   const serverRenderedEntries = manifest.entrySource === "server-dom-v1" &&
     root.getAttribute("data-tq-ssr-snapshot") === reference;
+  if (serverRenderedEntries) {
+    captureServerRenderedSnapshotArtifacts(root, manifest, byKey);
+  }
   const prepared = [];
   for (const entry of manifest.entries) {
     if (
@@ -1279,14 +1392,23 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
       await sha256Text(stableStringify(entry.typography)) !== entry.typographySha256
     ) return miss(root, "SnapshotTypographyDigestMismatch");
     const paragraph = byKey.get(entry.key);
-    const snapshot = serverRenderedEntries ? paragraph : templateEntry(template, entry.key);
+    const snapshot = serverRenderedEntries ? paragraph : templateEntry(template, entry.key, root);
     if (!paragraph || !snapshot) return miss(root, "SnapshotEntryMissing");
+    const sourceSnapshot = serverRenderedEntries
+      ? templateSourceEntry(documentObject, reference, entry.key)
+      : null;
+    if (serverRenderedEntries && !sourceSnapshot) {
+      return miss(root, "SnapshotSourceEntryMissing");
+    }
     if (!await snapshotArtifactMatches(snapshot, entry.renderArtifactSha256)) {
       return miss(root, "SnapshotArtifactDigestMismatch");
     }
     const source = plainParagraphSource(paragraph);
     if (source == null || await sha256Text(source) !== entry.sourceSha256) {
       return miss(root, "SnapshotSourceMismatch");
+    }
+    if (!serverRenderedEntries && !await sourceArtifactMatches(paragraph, entry)) {
+      return miss(root, "SnapshotSourceSemanticsMismatch");
     }
     const width = contentBoxWidth(paragraph);
     if (!Number.isFinite(width) || Math.abs(width - entry.maxWidthPx) > WIDTH_TOLERANCE_PX) {
@@ -1300,7 +1422,7 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
     )) {
       return miss(root, "SnapshotTypographyMismatch");
     }
-    prepared.push({ paragraph, snapshot, entry });
+    prepared.push({ paragraph, snapshot, sourceSnapshot, entry });
   }
 
   const fontContract = await validateManifestFontContract(manifest, documentObject);
@@ -1315,6 +1437,9 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
     const source = plainParagraphSource(paragraph);
     if (source == null || await sha256Text(source) !== entry.sourceSha256) {
       return miss(root, "SnapshotSourceChangedDuringValidation");
+    }
+    if (!serverRenderedEntries && !await sourceArtifactMatches(paragraph, entry)) {
+      return miss(root, "SnapshotSourceSemanticsChangedDuringValidation");
     }
     const width = contentBoxWidth(paragraph);
     if (!Number.isFinite(width) || Math.abs(width - entry.maxWidthPx) > WIDTH_TOLERANCE_PX) {
@@ -1340,19 +1465,25 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
       manifest.valueStyles,
       manifest.renderFontFamilies,
     );
-    for (const { paragraph, snapshot, entry } of prepared) {
+    for (const { paragraph, snapshot, sourceSnapshot, entry } of prepared) {
       const originalContent = documentObject.createDocumentFragment();
       if (serverRenderedEntries) {
-        for (const child of Array.from(paragraph.childNodes)) {
+        for (const child of Array.from(sourceSnapshot?.childNodes ?? paragraph.childNodes)) {
           originalContent.appendChild(child.cloneNode(true));
         }
       } else {
         while (paragraph.firstChild) originalContent.appendChild(paragraph.firstChild);
       }
-      const originalRenderedAttribute = paragraph.getAttribute("data-tq-rendered");
+      const originalRenderedAttribute = serverRenderedEntries
+        ? null
+        : paragraph.getAttribute("data-tq-rendered");
       const originalLangAttribute = paragraph.getAttribute("lang");
-      const originalCanonicalPlainAttribute = paragraph.getAttribute("data-tq-canonical-plain");
-      const originalCanonicalSourceAttribute = paragraph.getAttribute("data-tq-canonical-source");
+      const originalCanonicalPlainAttribute = serverRenderedEntries
+        ? null
+        : paragraph.getAttribute("data-tq-canonical-plain");
+      const originalCanonicalSourceAttribute = serverRenderedEntries
+        ? null
+        : paragraph.getAttribute("data-tq-canonical-source");
       adopted.push({
         paragraph,
         originalContent,
@@ -1362,7 +1493,8 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
         originalCanonicalSourceAttribute,
       });
       paragraph.setAttribute("data-tq-rendered", "true");
-      paragraph.setAttribute("data-tq-canonical-plain", "true");
+      if (entry.semantic === true) paragraph.removeAttribute("data-tq-canonical-plain");
+      else paragraph.setAttribute("data-tq-canonical-plain", "true");
       paragraph.setAttribute("data-tq-canonical-source", "true");
       paragraph.setAttribute("lang", entry.typography.locale);
       if (!serverRenderedEntries) {
@@ -1385,6 +1517,7 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
       paragraphs: adopted,
       valueStylesInstalled,
       originalExactRenderFontAttribute,
+      serverRenderedEntries,
     });
     restorePrecomputedSnapshot(root);
     return miss(root, `SnapshotAdoptionFailed:${error instanceof Error ? error.message : String(error)}`);
@@ -1394,6 +1527,7 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
     manifest,
     valueStylesInstalled,
     originalExactRenderFontAttribute,
+    serverRenderedEntries,
   });
   root.setAttribute("data-tiqian-enhanced", "true");
   root.setAttribute("data-tiqian-enhanced-count", String(adopted.length));

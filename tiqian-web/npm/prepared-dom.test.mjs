@@ -198,6 +198,44 @@ test("shared prepared DOM lowering keeps plain text native and the wire determin
   assert.match(fromObject.html, /<\/span>中文<span/u);
 });
 
+test("prepared semantic links remain one native element across engine soft wraps", () => {
+  const rendered = renderPreparedParagraphArtifact(
+    twoLineFixture("AutoWrap"),
+    { locale: "zh-Hans" },
+    {
+      sourceText: "中文",
+      semantics: [{
+        start: 0,
+        end: 2,
+        tagName: "a",
+        attributes: { href: "/article", class: "host-link" },
+      }],
+    },
+  );
+
+  assert.equal(rendered.html.match(/<a\b/gu)?.length, 1);
+  assert.match(rendered.html, /<a class="host-link" data-tq-source-semantic="true" href="\/article">/u);
+  assert.match(rendered.html, /<br[^>]*data-tq-engine-break="AutoWrap"[^>]*><span[^>]*data-tq-line-index="1"/u);
+  assert.equal(rendered.artifact.filter(([tag]) => tag === "a").length, 1);
+  assert.equal(rendered.artifact[1][0], "a");
+});
+
+test("prepared semantic inline boxes reserve host padding in the same flow", () => {
+  const plan = fixturePlan();
+  plan.lines[0].visualWidth = 48.4;
+  plan.lines[0].cells[0].drawX = 6.2;
+  plan.lines[0].cells[0].leadingLayoutAdvance = 6.2;
+  plan.lines[0].cells[1].drawX = 24.2;
+  const rendered = renderPreparedParagraphArtifact(plan, { locale: "zh-Hans" }, {
+    sourceText: "中文",
+    semantics: [{ start: 0, end: 2, tagName: "code", attributes: {} }],
+    inlineBoxes: [{ start: 0, end: 2, inlineStartPx: 6.2, inlineEndPx: 6.2 }],
+  });
+
+  assert.match(rendered.html, /data-tq-line-flow-width="48\.4"/u);
+  assert.match(rendered.html, /<code data-tq-source-semantic="true">/u);
+});
+
 test("browser replay installs the same canonical HTML and returns its line markers", () => {
   const planJson = JSON.stringify(fixturePlan());
   const expected = renderPreparedParagraphArtifact(planJson, "zh-Hans");
@@ -414,7 +452,7 @@ test("global runtime bridge delegates to the canonical lowering and browser repl
   const host = fakeHost();
 
   assert.equal(bridge.layoutRevision, "tiqian-layout-v2");
-  assert.equal(bridge.renderRevision, "prebroken-dom-v10");
+  assert.equal(bridge.renderRevision, "prebroken-dom-v11");
   assert.deepEqual(bridge.lower(JSON.stringify(plan), "zh-Hans"), expected);
   assert.equal(bridge.render(host, plan, { locale: "zh-Hans" }).html, expected.html);
   assert.equal(host.innerHTML, expected.html);

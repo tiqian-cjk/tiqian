@@ -73,11 +73,15 @@ tiqian-prose [data-tq-rendered="true"] {
   all: unset !important;
 }
 
-/* CanonicalPreparedLineBox: the shared line marker is the sole owner of the
-   exact LayoutResult ascent/descent. The paragraph's inherited strut must not
-   add a second browser-derived vertical metric. */
-[data-tq-rendered="true"][data-tq-canonical-plain="true"] {
+/* EngineOwnedLineBox: the shared line marker is the sole owner of the exact
+   LayoutResult ascent/descent. This applies to both canonical plain DOM and
+   semantic runtime DOM; otherwise a link or code span revives the host strut
+   and adds fractional height to only those paragraphs. */
+[data-tq-rendered="true"] {
   line-height: 0 !important;
+}
+
+[data-tq-rendered="true"][data-tq-canonical-source="true"] {
   /* ExactPreparedShapingCss: HarfBuzz enables normal kerning while the CSS
      `auto` value lets the browser choose a size-dependent policy. Force the
      same stable shaping inputs used by build-time and browser runtime probes. */
@@ -100,11 +104,11 @@ tiqian-prose [data-tq-rendered="true"] {
   margin-left: 0 !important;
 }
 
-[data-tq-rendered="true"][data-tq-canonical-plain="true"] > .tq-line[data-tq-line-shift="true"] {
+[data-tq-rendered="true"][data-tq-canonical-source="true"] .tq-line[data-tq-line-shift="true"] {
   margin-left: var(--tq-line-flow-start) !important;
 }
 
-[data-tq-rendered="true"][data-tq-canonical-plain="true"] > [data-tq-line-end-sentinel] {
+[data-tq-rendered="true"][data-tq-canonical-source="true"] [data-tq-line-end-sentinel] {
   all: unset !important;
   display: inline-block !important;
   width: 0 !important;
@@ -124,16 +128,16 @@ tiqian-prose [data-tq-rendered="true"] {
   pointer-events: none !important;
 }
 
-[data-tq-rendered="true"][data-tq-canonical-plain="true"] > [data-tq-hard-break] {
+[data-tq-rendered="true"][data-tq-canonical-source="true"] [data-tq-hard-break] {
   all: unset !important;
   display: none !important;
 }
 
-[data-tq-rendered="true"][data-tq-canonical-plain="true"] > br[data-tq-engine-break] {
+[data-tq-rendered="true"][data-tq-canonical-source="true"] br[data-tq-engine-break] {
   all: unset !important;
 }
 
-[data-tq-rendered="true"][data-tq-canonical-plain="true"] > [data-tq-engine-hyphen] {
+[data-tq-rendered="true"][data-tq-canonical-source="true"] [data-tq-engine-hyphen] {
   all: unset !important;
   display: inline-block !important;
   white-space: pre !important;

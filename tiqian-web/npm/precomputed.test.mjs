@@ -227,7 +227,8 @@ function fixtureComputedStyle(element, _pseudo, overrides = {}) {
   const engineHyphen = element?.hasAttribute?.("data-tq-engine-hyphen") === true;
   const measuredGeometry = !boundary && element?.hasAttribute?.("data-tq-advance") === true;
   const proportionalQuote = element?.getAttribute?.("data-tq-open-type-features") === "pwid,palt";
-  const canonicalPreparedFlow = element?.closest?.("[data-tq-canonical-plain]") != null;
+  const canonicalPreparedFlow = element?.closest?.("[data-tq-canonical-plain]") != null ||
+    element?.closest?.("[data-tq-canonical-source]") != null;
   return {
     display: boundary || engineHyphen ? "inline-block" : measuredGeometry ? "inline" : "block",
     whiteSpace: boundary || engineHyphen ? "pre" : "normal",
@@ -411,7 +412,7 @@ function fixture({
   const manifest = {
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v10",
+    renderRevision: "prebroken-dom-v11",
     fontSourcePolicy: "compatible-local-render-family-v2",
     renderFontFamilies: ["Fixture CJK"],
     paragraphSelector: "p[data-tq-snapshot-key]",
@@ -474,6 +475,16 @@ function fixture({
   });
 
   return { documentObject, root, paragraph, originalText, entry, measuredProbeStyles };
+}
+
+function attachServerSource(documentObject, text = "中国") {
+  const template = documentObject.createElement("template");
+  template.content = new FakeFragment();
+  const source = documentObject.createElement("div");
+  source.setAttribute("data-tq-source-entry", "p-1");
+  source.appendChild(new FakeText(text));
+  template.content.appendChild(source);
+  documentObject.elements.set("tq-page-source", template);
 }
 
 test("exact runtime fallback accepts a width miss only while every live input still matches", async () => {
@@ -743,12 +754,15 @@ test("server-rendered compact snapshot adopts without replacing its first-paint 
     paragraph.setAttribute("data-tq-canonical-plain", "true");
     paragraph.setAttribute("data-tq-canonical-source", "true");
     root.setAttribute("data-tq-ssr-snapshot", "tq-page");
+    root.setAttribute("data-tiqian-exact-render-font", "true");
+    attachServerSource(documentObject);
     const template = documentObject.elements.get("tq-page");
     const manifestScript = template.content.querySelector("[data-tq-snapshot-manifest]");
     manifestScript.textContent = JSON.stringify({
       ...JSON.parse(manifestScript.textContent),
       entrySource: "server-dom-v1",
     });
+    template.content.removeChild(entry);
     const firstPaintNode = paragraph.firstChild;
     root.setAttribute(
       "data-tiqian-exact-layout-issue",
@@ -762,7 +776,56 @@ test("server-rendered compact snapshot adopts without replacing its first-paint 
 
     assert.equal(restorePrecomputedSnapshot(root), true);
     assert.equal(paragraph.textContent, "中国");
+    assert.equal(paragraph.firstChild.nodeType, 3);
+    assert.equal(paragraph.getAttribute("data-tq-rendered"), null);
+    assert.equal(paragraph.getAttribute("data-tq-canonical-source"), null);
+    assert.equal(root.getAttribute("data-tq-ssr-snapshot"), null);
+    assert.equal(root.getAttribute("data-tiqian-exact-render-font"), null);
+
+    paragraph.width = 360;
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), { adopted: true, count: 1 });
+    assert.equal(paragraph.firstChild.nodeType, 1);
     assert.equal(paragraph.getAttribute("data-tq-rendered"), "true");
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
+test("a direct SSR width miss restores native source before runtime fallback", async () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = fixtureComputedStyle;
+  try {
+    const { documentObject, root, paragraph, entry } = fixture();
+    while (paragraph.firstChild) paragraph.removeChild(paragraph.firstChild);
+    for (const child of entry.childNodes) paragraph.appendChild(child.cloneNode(true));
+    paragraph.setAttribute("data-tq-rendered", "true");
+    paragraph.setAttribute("data-tq-canonical-source", "true");
+    paragraph.width = 240;
+    root.setAttribute("data-tq-ssr-snapshot", "tq-page");
+    root.setAttribute("data-tiqian-exact-render-font", "true");
+    attachServerSource(documentObject);
+    const template = documentObject.elements.get("tq-page");
+    const manifestScript = template.content.querySelector("[data-tq-snapshot-manifest]");
+    manifestScript.textContent = JSON.stringify({
+      ...JSON.parse(manifestScript.textContent),
+      entrySource: "server-dom-v1",
+    });
+    template.content.removeChild(entry);
+
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), {
+      adopted: false,
+      reason: "SnapshotWidthMismatch",
+    });
+    assert.equal(paragraph.firstChild.nodeType, 3);
+    assert.equal(paragraph.textContent, "中国");
+    assert.equal(paragraph.getAttribute("data-tq-rendered"), null);
+    assert.equal(paragraph.getAttribute("data-tq-canonical-source"), null);
+    assert.equal(root.getAttribute("data-tq-ssr-snapshot"), null);
+    assert.equal(root.getAttribute("data-tiqian-exact-render-font"), null);
+
+    paragraph.width = 360;
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), { adopted: true, count: 1 });
+    assert.equal(paragraph.firstChild.nodeType, 1);
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;
   }

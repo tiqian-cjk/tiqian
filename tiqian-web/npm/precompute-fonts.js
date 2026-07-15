@@ -293,6 +293,38 @@ function renderFamiliesFor(session, requestedFamilies) {
   return Object.freeze(result);
 }
 
+/** ExactSubsetCoverageBoundary: split shaping runs when CSS unicode-range selects another face. */
+function sourceBoundariesFor(session, textValue, baseStyle, textSpans = []) {
+  const text = String(textValue);
+  const spans = Array.from(textSpans ?? []);
+  const boundaries = [];
+  let offset = 0;
+  let previousSignature = null;
+  for (const point of text) {
+    const style = [...spans].reverse().find((span) =>
+      offset >= span.start && offset < span.end) ?? baseStyle;
+    const record = selectFace(
+      session,
+      style.fontFamilies,
+      style.fontWeight,
+      style.italic,
+      point,
+    );
+    const signature = [
+      record.faceId,
+      style.fontFamilies.join(FAMILY_SEPARATOR),
+      style.fontSizePx,
+      style.fontWeight,
+      style.italic,
+      style.baselineShiftPx ?? 0,
+    ].join("|");
+    if (previousSignature != null && signature !== previousSignature) boundaries.push(offset);
+    previousSignature = signature;
+    offset += point.length;
+  }
+  return boundaries;
+}
+
 function faceCandidates(session, families, requestedWeight, italic) {
   const desiredStyle = italic ? "italic" : "normal";
   for (const family of families) {
@@ -711,6 +743,9 @@ export async function createFontSession(faceSpecs, options = {}) {
     },
     renderFamilies(requestedFamilies) {
       return renderFamiliesFor(session, requestedFamilies);
+    },
+    sourceBoundaries(text, baseStyle, textSpans) {
+      return sourceBoundariesFor(session, text, baseStyle, textSpans);
     },
     captureEvidence() {
       return {

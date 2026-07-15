@@ -59,7 +59,7 @@ function manifestWithFaces(facesByEntry, versions = facesByEntry.map(() => "fixt
   return {
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v10",
+    renderRevision: "prebroken-dom-v11",
     fontSourcePolicy: "compatible-local-render-family-v2",
     renderFontFamilies: ["Fixture Sans"],
     paragraphSelector: "p[data-tq-snapshot-key]",
@@ -79,7 +79,7 @@ function manifestWithFaces(facesByEntry, versions = facesByEntry.map(() => "fixt
   };
 }
 
-function snapshotRoot(manifest) {
+function snapshotRoot(manifest, documentOverrides = {}) {
   const script = { textContent: JSON.stringify(manifest) };
   const template = {
     content: {
@@ -93,6 +93,7 @@ function snapshotRoot(manifest) {
     getElementById(id) {
       return id === "tq-page" ? template : null;
     },
+    ...documentOverrides,
   };
   return {
     ownerDocument: documentObject,
@@ -160,7 +161,7 @@ function harness(manifest, options = {}) {
   });
   return {
     loader,
-    root: snapshotRoot(manifest),
+    root: snapshotRoot(manifest, options.documentOverrides),
     requests,
     createCalls,
     sessions,
@@ -217,6 +218,58 @@ test("browser font sessions aggregate manifest evidence and close after the fina
   assert.equal(state.closeCount(), 2);
 });
 
+test("browser font sessions include runtime-only semantic contract entries", async () => {
+  const bytes = new TextEncoder().encode("fixture-font-source");
+  const sourceSha256 = digest(bytes);
+  const manifest = manifestWithFaces([
+    [faceEvidence(sourceSha256)],
+    [faceEvidence(sourceSha256, {
+      publicUrl: "/assets/semantic-deadbeef.woff2",
+      sourceOrder: 1,
+      unicodeRange: "U+6E32",
+      coverageText: "渲",
+      probe: {
+        ...faceEvidence(sourceSha256).probe,
+        text: "渲",
+      },
+    })],
+  ]);
+  manifest.fontContractEntries = [manifest.entries.pop()];
+  const state = harness(manifest, { bytes });
+
+  const handle = await state.loader.prepare(state.root);
+
+  assert.equal(state.createCalls[0].specs.length, 2);
+  assert.equal(state.requests.length, 2);
+  assert.equal(state.loader.release(handle), true);
+});
+
+test("exact render aliases load before progressive DOM can commit", async () => {
+  const bytes = new TextEncoder().encode("fixture-font-source");
+  const manifest = manifestWithFaces([[faceEvidence(digest(bytes))]]);
+  const loads = [];
+  const state = harness(manifest, {
+    bytes,
+    documentOverrides: {
+      fonts: {
+        async load(descriptor, text) {
+          loads.push({ descriptor, text });
+          return [{}];
+        },
+      },
+    },
+  });
+  const handle = await state.loader.prepare(state.root);
+
+  assert.equal(await state.loader.prepareRenderFonts(state.root, handle), true);
+
+  assert.deepEqual(loads, [{
+    descriptor: 'normal 400 16px "Fixture CJK"',
+    text: "中国",
+  }]);
+  assert.equal(state.loader.release(handle), true);
+});
+
 test("live snapshot font contract is required before fetching exact font bytes", async () => {
   const bytes = new TextEncoder().encode("fixture-font-source");
   const manifest = manifestWithFaces([[faceEvidence(digest(bytes))]]);
@@ -233,6 +286,82 @@ test("live snapshot font contract is required before fetching exact font bytes",
       return true;
     },
   );
+  assert.equal(state.requests.length, 0);
+  assert.equal(state.createCalls.length, 0);
+});
+
+test("parser-time source mismatch retries as soon as the snapshot source becomes complete", async () => {
+  const bytes = new TextEncoder().encode("fixture-font-source");
+  const manifest = manifestWithFaces([[faceEvidence(digest(bytes))]]);
+  let mutationCallback;
+  class FixtureMutationObserver {
+    constructor(callback) {
+      mutationCallback = callback;
+    }
+    observe() {}
+    disconnect() {}
+  }
+  const state = harness(manifest, {
+    bytes,
+    contractResults: [
+      { matches: false, reason: "SnapshotSourceMismatch" },
+      { matches: false, reason: "SnapshotSourceMismatch" },
+      { matches: true, reason: null },
+      { matches: true, reason: null },
+    ],
+    documentOverrides: {
+      readyState: "loading",
+      defaultView: { MutationObserver: FixtureMutationObserver },
+      addEventListener() {},
+      removeEventListener() {},
+    },
+  });
+
+  const pending = state.loader.prepare(state.root);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.requests.length, 0);
+  mutationCallback();
+  const handle = await pending;
+
+  assert.equal(state.requests.length, 1);
+  assert.equal(state.createCalls.length, 1);
+  assert.equal(state.loader.release(handle), true);
+});
+
+test("parser completion makes an unresolved source mismatch fail closed", async () => {
+  const bytes = new TextEncoder().encode("fixture-font-source");
+  const manifest = manifestWithFaces([[faceEvidence(digest(bytes))]]);
+  let parserComplete;
+  class FixtureMutationObserver {
+    observe() {}
+    disconnect() {}
+  }
+  const state = harness(manifest, {
+    bytes,
+    contractResults: [
+      { matches: false, reason: "SnapshotSourceMismatch" },
+      { matches: false, reason: "SnapshotSourceMismatch" },
+      { matches: false, reason: "SnapshotSourceMismatch" },
+    ],
+    documentOverrides: {
+      readyState: "loading",
+      defaultView: { MutationObserver: FixtureMutationObserver },
+      addEventListener(name, listener) {
+        if (name === "DOMContentLoaded") parserComplete = listener;
+      },
+      removeEventListener() {},
+    },
+  });
+
+  const pending = state.loader.prepare(state.root);
+  await new Promise((resolve) => setImmediate(resolve));
+  parserComplete();
+
+  await assert.rejects(pending, (error) => {
+    assertCode("SnapshotExactFontContractMismatch")(error);
+    assert.match(error.message, /SnapshotSourceMismatch/u);
+    return true;
+  });
   assert.equal(state.requests.length, 0);
   assert.equal(state.createCalls.length, 0);
 });

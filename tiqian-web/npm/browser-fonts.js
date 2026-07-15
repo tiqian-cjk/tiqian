@@ -15,6 +15,13 @@ import { validatePrecomputedSnapshotExactFontContract } from "./precomputed.js";
 const HASH_PATTERN = /^[a-f0-9]{64}$/u;
 const CONTENT_ADDRESS_PATTERN = /(?:^|[._/-])[a-f0-9]{8,}(?=[._/-]|$)/iu;
 const HANDLE_STATE = Symbol("tiqian.browserFontSession");
+const PARSER_PENDING_CONTRACT_REASONS = new Set([
+  "SnapshotCandidateSetMismatch",
+  "SnapshotCandidateKeyInvalid",
+  "SnapshotEntryMissing",
+  "SnapshotSourceMismatch",
+  "SnapshotSourceSemanticsMismatch",
+]);
 
 export class BrowserFontSessionError extends Error {
   constructor(code, detail, options) {
@@ -107,6 +114,10 @@ function sameValue(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function cssString(value) {
+  return `"${String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+}
+
 function evidenceFace(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     fail("SnapshotFontEvidenceInvalid", "face");
@@ -149,6 +160,9 @@ function collectManifestFaces(manifest) {
   if (!Array.isArray(manifest.entries) || manifest.entries.length === 0) {
     fail("SnapshotManifestInvalid", "entries");
   }
+  if (manifest.fontContractEntries != null && !Array.isArray(manifest.fontContractEntries)) {
+    fail("SnapshotManifestInvalid", "fontContractEntries");
+  }
   if (!Array.isArray(manifest.renderFontFamilies) || manifest.renderFontFamilies.length === 0 ||
       manifest.renderFontFamilies.some((family) => typeof family !== "string" || !family.trim()) ||
       new Set(manifest.renderFontFamilies.map((family) => family.trim().toLowerCase())).size !==
@@ -164,7 +178,7 @@ function collectManifestFaces(manifest) {
   const versions = new Set();
   const backendRevisions = new Set();
   const groups = new Map();
-  for (const entry of manifest.entries) {
+  for (const entry of [...manifest.entries, ...(manifest.fontContractEntries ?? [])]) {
     const fontEvidence = entry?.fontEvidence;
     if (!fontEvidence || typeof fontEvidence !== "object" || Array.isArray(fontEvidence)) {
       fail("SnapshotFontEvidenceInvalid", "fontEvidence");
@@ -184,11 +198,16 @@ function collectManifestFaces(manifest) {
     }
     for (const rawFace of fontEvidence.faces) {
       const face = evidenceFace(rawFace);
+      const coverageText = stringValue(
+        rawFace.coverageText || rawFace.probe?.text,
+        "SnapshotFontEvidenceInvalid",
+        "coverageText",
+      );
       const key = faceDescriptorKey(face);
       const existing = groups.get(key);
       const axisTags = Object.keys(face.axes).sort();
       if (!existing) {
-        groups.set(key, { ...face, axisTags });
+        groups.set(key, { ...face, axisTags, coverage: new Set(coverageText) });
         continue;
       }
       if (
@@ -198,6 +217,7 @@ function collectManifestFaces(manifest) {
         !sameValue(existing.localNames, face.localNames) ||
         !sameValue(existing.axisTags, axisTags)
       ) fail("SnapshotFontEvidenceConflict", face.publicUrl);
+      for (const point of coverageText) existing.coverage.add(point);
     }
   }
   if (versions.size !== 1) fail("SnapshotHarfBuzzVersionConflict");
@@ -206,8 +226,11 @@ function collectManifestFaces(manifest) {
   if (backendRevision !== FONT_BACKEND_REVISION) {
     fail("FontBackendRevisionMismatch", `${backendRevision}:${FONT_BACKEND_REVISION}`);
   }
-  const faces = Array.from(groups.values()).sort((left, right) =>
-    left.sourceOrder - right.sourceOrder);
+  const faces = Array.from(groups.values(), ({ coverage, ...face }) => ({
+    ...face,
+    coverageText: Array.from(coverage).join(""),
+    loadWeight: face.axes.wght ?? face.weight[0],
+  })).sort((left, right) => left.sourceOrder - right.sourceOrder);
   const sourceOrders = new Set();
   for (const face of faces) {
     if (sourceOrders.has(face.sourceOrder)) {
@@ -317,13 +340,82 @@ export function createBrowserFontSessionLoader(options = {}) {
   const validateContract = options.validateContract ?? validatePrecomputedSnapshotExactFontContract;
   const cache = new WeakMap();
 
-  async function requireExactContract(root) {
+  async function validateExactContract(root) {
     let result;
     try {
       result = await validateContract(root);
     } catch (error) {
       fail("SnapshotExactFontContractValidationFailed", undefined, error);
     }
+    return result;
+  }
+
+  async function waitForParserContract(root, initialResult) {
+    const documentObject = root?.ownerDocument;
+    const MutationObserverConstructor = documentObject?.defaultView?.MutationObserver ??
+      globalThis.MutationObserver;
+    if (
+      initialResult?.matches || documentObject?.readyState !== "loading" ||
+      !PARSER_PENDING_CONTRACT_REASONS.has(initialResult?.reason) ||
+      typeof MutationObserverConstructor !== "function" ||
+      typeof documentObject.addEventListener !== "function"
+    ) return initialResult;
+
+    return new Promise((resolve, reject) => {
+      let validating = false;
+      let queued = false;
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        observer.disconnect();
+        documentObject.removeEventListener?.("DOMContentLoaded", onParserComplete);
+        resolve(result);
+      };
+      const failValidation = (error) => {
+        if (settled) return;
+        settled = true;
+        observer.disconnect();
+        documentObject.removeEventListener?.("DOMContentLoaded", onParserComplete);
+        reject(error);
+      };
+      const revalidate = async ({ parserComplete = false } = {}) => {
+        if (settled) return;
+        if (validating) {
+          queued = true;
+          return;
+        }
+        validating = true;
+        let result;
+        try {
+          result = await validateExactContract(root);
+        } catch (error) {
+          failValidation(error);
+          return;
+        } finally {
+          validating = false;
+        }
+        if (result?.matches || parserComplete || documentObject.readyState !== "loading" ||
+            !PARSER_PENDING_CONTRACT_REASONS.has(result?.reason)) {
+          finish(result);
+          return;
+        }
+        if (queued) {
+          queued = false;
+          void revalidate();
+        }
+      };
+      const onParserComplete = () => void revalidate({ parserComplete: true });
+      const observer = new MutationObserverConstructor(() => void revalidate());
+      observer.observe(root, { attributes: true, childList: true, characterData: true, subtree: true });
+      documentObject.addEventListener("DOMContentLoaded", onParserComplete, { once: true });
+      // Close the gap between the first validation and installing observers.
+      void revalidate();
+    });
+  }
+
+  async function requireExactContract(root) {
+    const result = await waitForParserContract(root, await validateExactContract(root));
     if (!result?.matches) {
       fail("SnapshotExactFontContractMismatch", result?.reason ?? "unknown");
     }
@@ -343,8 +435,7 @@ export function createBrowserFontSessionLoader(options = {}) {
 
   async function load(context) {
     const bytesByUrl = new Map();
-    const faceSpecs = [];
-    for (const face of context.faces) {
+    const faceSpecs = await Promise.all(context.faces.map(async (face) => {
       const url = resolvedFontUrl(face.publicUrl, context.baseUrl);
       let bytesPromise = bytesByUrl.get(url);
       if (!bytesPromise) {
@@ -371,7 +462,7 @@ export function createBrowserFontSessionLoader(options = {}) {
       if (actualSourceSha256 !== face.sourceSha256) {
         fail("FontSourceDigestMismatch", face.publicUrl);
       }
-      faceSpecs.push({
+      return {
         family: face.family,
         style: face.style,
         weight: [...face.weight],
@@ -380,8 +471,8 @@ export function createBrowserFontSessionLoader(options = {}) {
         faceIndex: face.faceIndex,
         sourceOrder: face.sourceOrder,
         source: bytes.slice(),
-      });
-    }
+      };
+    }));
 
     let session;
     try {
@@ -415,6 +506,12 @@ export function createBrowserFontSessionLoader(options = {}) {
         versions,
         cacheKey,
         session: null,
+        renderFontFaces: context.faces.map((face) => ({
+          family: face.family,
+          style: face.style,
+          weight: face.loadWeight,
+          text: face.coverageText,
+        })),
       };
       state.promise = load(context).then((session) => {
         state.session = session;
@@ -468,6 +565,29 @@ export function createBrowserFontSessionLoader(options = {}) {
     return handle;
   }
 
+  async function prepareRenderFonts(root, handle) {
+    const token = handle?.[HANDLE_STATE];
+    if (!token || token.released || !token.state.session) {
+      fail("BrowserFontSessionHandleInvalid");
+    }
+    const fontSet = root?.ownerDocument?.fonts;
+    if (typeof fontSet?.load !== "function") fail("RenderFontFaceSetUnavailable");
+    let results;
+    try {
+      results = await Promise.all(token.state.renderFontFaces.map((face) => fontSet.load(
+        `${face.style} ${face.weight} 16px ${cssString(face.family)}`,
+        face.text,
+      )));
+    } catch (error) {
+      fail("RenderFontFaceLoadFailed", undefined, error);
+    }
+    const missing = results.findIndex((faces) => !faces || faces.length === 0);
+    if (missing >= 0) {
+      fail("RenderFontFaceLoadFailed", token.state.renderFontFaces[missing].family);
+    }
+    return true;
+  }
+
   function release(handle) {
     const token = handle?.[HANDLE_STATE];
     if (!token || token.released) return false;
@@ -477,11 +597,12 @@ export function createBrowserFontSessionLoader(options = {}) {
     return true;
   }
 
-  return Object.freeze({ prepare, revalidate, release });
+  return Object.freeze({ prepare, revalidate, prepareRenderFonts, release });
 }
 
 const defaultLoader = createBrowserFontSessionLoader();
 
 export const prepareBrowserFontSession = defaultLoader.prepare;
 export const revalidateBrowserFontSession = defaultLoader.revalidate;
+export const prepareBrowserRenderFonts = defaultLoader.prepareRenderFonts;
 export const releaseBrowserFontSession = defaultLoader.release;

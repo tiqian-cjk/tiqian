@@ -29,6 +29,14 @@ test("exact prepared DOM renders through the manifest font family contract", () 
   assert.match(stylesheet, /font-optical-sizing:\s*none\s*!important/u);
 });
 
+test("semantic and canonical paragraphs share the engine-owned line box", () => {
+  assert.match(stylesheet, /EngineOwnedLineBox/u);
+  assert.match(
+    stylesheet,
+    /\[data-tq-rendered="true"\]\s*\{\s*line-height:\s*0\s*!important/u,
+  );
+});
+
 test("shaping boundaries outrank the generic geometry span reset", () => {
   assert.match(
     stylesheet,

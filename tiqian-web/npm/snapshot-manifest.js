@@ -52,6 +52,10 @@ export function compactSnapshotManifest(entries, metadata) {
     return {
       key: entry.key,
       sourceSha256: entry.sourceSha256,
+      ...(typeof entry.sourceArtifactSha256 === "string"
+        ? { sourceArtifactSha256: entry.sourceArtifactSha256 }
+        : {}),
+      ...(Array.isArray(entry.semantics) && entry.semantics.length > 0 ? { semantic: true } : {}),
       typographyRef,
       maxWidthPx: entry.maxWidthPx,
       fontFaceEvidence,
@@ -86,7 +90,7 @@ export function expandSnapshotManifest(manifest) {
   }
   const typographies = manifest.typographies;
   const descriptors = manifest.fontEvidence.faces;
-  const entries = manifest.entries.map((entry) => {
+  const expandEntries = (entries) => entries.map((entry) => {
     const typography = tableReference(
       typographies,
       entry?.typographyRef,
@@ -110,6 +114,10 @@ export function expandSnapshotManifest(manifest) {
     return {
       key: entry.key,
       sourceSha256: entry.sourceSha256,
+      ...(typeof entry.sourceArtifactSha256 === "string"
+        ? { sourceArtifactSha256: entry.sourceArtifactSha256 }
+        : {}),
+      ...(entry.semantic === true ? { semantic: true } : {}),
       typographySha256: typography.sha256,
       typography: typography.value,
       maxWidthPx: entry.maxWidthPx,
@@ -121,7 +129,15 @@ export function expandSnapshotManifest(manifest) {
       renderArtifactSha256: entry.renderArtifactSha256,
     };
   });
-  return { ...manifest, entries };
+  const entries = expandEntries(manifest.entries);
+  const fontContractEntries = Array.isArray(manifest.fontContractEntries)
+    ? expandEntries(manifest.fontContractEntries)
+    : undefined;
+  return {
+    ...manifest,
+    entries,
+    ...(fontContractEntries ? { fontContractEntries } : {}),
+  };
 }
 
 export function parseSnapshotManifest(text) {
