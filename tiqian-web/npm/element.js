@@ -16,9 +16,11 @@ import { ensureTiqianStyles } from "./styles.js";
 
 const ELEMENT_NAME = "tiqian-prose";
 const DEFAULT_PARAGRAPH_SELECTOR = "p, li";
+const ROOT_SELECTOR = `${ELEMENT_NAME}, [data-tiqian-root]`;
+const SKIPPED_ANCESTOR_SELECTOR =
+  ".not-prose, pre, table, .katex, .katex-display, .expressive-code, .tq-paragraph, [data-tiqian-skip]";
 const EXACT_RENDER_FONT_ATTRIBUTE = "data-tiqian-exact-render-font";
 const EXACT_PREPARED_FALLBACK_ATTRIBUTE = "data-tiqian-exact-layout-fallback";
-const RESPONSIVE_LATEST_RETARGET_QUIET_MS = 32;
 const RESPONSIVE_SNAPSHOT_GEOMETRY_MISSES = new Set([
   "SnapshotWidthMismatch",
   "SnapshotWidthChangedDuringValidation",
@@ -84,6 +86,31 @@ function nextFrame() {
   return new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
+function belongsToRootScope(element, root) {
+  return element.closest(ROOT_SELECTOR) === root;
+}
+
+function isRuntimeCompletionCandidate(element, root) {
+  if (!belongsToRootScope(element, root)) return false;
+  if (element.closest(SKIPPED_ANCESTOR_SELECTOR)) return false;
+  if (
+    element.tagName === "LI" &&
+    element.querySelector(":scope > p, :scope > ul, :scope > ol, :scope > blockquote, :scope > pre, :scope > table")
+  ) return false;
+  return true;
+}
+
+function snapshotCompletionSelector(root) {
+  const hasUnpreparedParagraph = Array.from(
+    root.querySelectorAll("p:not([data-tq-snapshot-key])"),
+  ).some((paragraph) => isRuntimeCompletionCandidate(paragraph, root));
+  const hasListItem = Array.from(root.querySelectorAll("ol > li, ul > li"))
+    .some((item) => isRuntimeCompletionCandidate(item, root));
+  return [hasUnpreparedParagraph ? "p:not([data-tq-snapshot-key])" : null, hasListItem ? "li" : null]
+    .filter(Boolean)
+    .join(",");
+}
+
 function loadExactFontFallback() {
   exactFontFallbackPromise ??= Promise.all([
     import("./browser-fonts.js"),
@@ -93,6 +120,7 @@ function loadExactFontFallback() {
     return {
       prepareBrowserFontSession: fonts.prepareBrowserFontSession,
       revalidateBrowserFontSession: fonts.revalidateBrowserFontSession,
+      prepareBrowserRenderFonts: fonts.prepareBrowserRenderFonts,
       releaseBrowserFontSession: fonts.releaseBrowserFontSession,
       installPreparedRenderFontStyle: preparedDom.installPreparedRenderFontStyle,
       releasePreparedRenderFontStyle: preparedDom.releasePreparedRenderFontStyle,
@@ -142,9 +170,8 @@ class TiqianProseElement extends HTMLElementBase {
   #resizeFrame = 0;
   #resizeObserver = null;
   #responsiveCommitRequired = false;
-  #responsiveRetargetTimer = 0;
+  #responsiveRetargetFrame = 0;
   #responsiveRelayoutRequired = false;
-  #runtimeCoversSnapshotParagraphs = false;
   #runtimeStateActive = false;
   #snapshotAdopted = false;
   #typographyFrame = 0;
@@ -200,7 +227,9 @@ class TiqianProseElement extends HTMLElementBase {
     // mapping request with actual <strong> content must enter the runtime.
     const strongEmphasisRuntimeRequired =
       this.strongAsEmphasisMarks && this.querySelector("strong") !== null;
-    const runtimePromise = this.hasAttribute("snapshot-ref") && !strongEmphasisRuntimeRequired
+    const initialCompletionSelector = snapshotCompletionSelector(this);
+    const runtimePromise = this.hasAttribute("snapshot-ref") &&
+        !strongEmphasisRuntimeRequired && !initialCompletionSelector
       ? null
       : loadTiqianRuntime();
     runtimePromise?.catch(() => {});
@@ -300,7 +329,7 @@ class TiqianProseElement extends HTMLElementBase {
         const operation = this.#beginLayoutWork({ captureSignatures: false });
         let snapshot = { adopted: false };
         try {
-          if (!strongEmphasisRuntimeRequired) {
+          if (!strongEmphasisRuntimeRequired && !initialCompletionSelector) {
             snapshot = await tryAdoptRequestedSnapshot(
               this,
               () => this.isConnected && generation === this.#generation &&
@@ -320,21 +349,18 @@ class TiqianProseElement extends HTMLElementBase {
         }
         if (snapshot.adopted) {
           this.#snapshotAdopted = true;
-          // SnapshotListRuntimeCompletion: v1 snapshots intentionally contain
-          // only plain <p> entries. Keep those exact SSR paragraphs live, but
-          // run the Web engine over list-item text. The static stylesheet already
-          // owns the stable 2ic indent and the browser continues to own markers;
-          // this runtime pass only supplies Tiqian line layout inside that box.
-          if (this.querySelector("ol > li, ul > li")) {
+          // SnapshotWholeRootConsistency: content can change between the
+          // preflight and async adoption. If a new runtime-only candidate
+          // appears, restore the complete source and enhance the whole root.
+          const completionSelector = snapshotCompletionSelector(this);
+          if (completionSelector) {
+            restoreLoadedSnapshot(this);
+            this.#snapshotAdopted = false;
             await (runtimePromise ?? loadTiqianRuntime());
             if (!this.isConnected || generation !== this.#generation) {
-              restoreLoadedSnapshot(this);
               return;
             }
-            await this.#dispatchProgressiveEnhance(generation, {
-              paragraphSelector: "li",
-              runtimeCoversSnapshotParagraphs: false,
-            });
+            await this.#dispatchProgressiveEnhance(generation);
             return;
           }
           if (!this.#runtimeStateActive) this.#releaseExactFontSession();
@@ -397,7 +423,6 @@ class TiqianProseElement extends HTMLElementBase {
     // later connection.
     if (this.#runtimeStateActive) dispatch("tiqian:destroy", this);
     this.#runtimeStateActive = false;
-    this.#runtimeCoversSnapshotParagraphs = false;
     this.#releaseExactFontSession();
     this.removeAttribute(EXACT_RENDER_FONT_ATTRIBUTE);
   }
@@ -426,10 +451,7 @@ class TiqianProseElement extends HTMLElementBase {
       this.#invalidateSnapshotAndEnhance();
       return;
     }
-    this.#dispatchProgressiveEnhance(this.#generation).catch((error) => {
-      this.dataset.tiqianCapabilityIssue = "FontCapabilityPreparationFailed";
-      console.warn("Tiqian Web font capability preparation failed", error);
-    });
+    this.#refreshRuntimeFromSource();
   }
 
   #baseEnhanceOptions() {
@@ -499,7 +521,6 @@ class TiqianProseElement extends HTMLElementBase {
     restoreLoadedSnapshot(this);
     if (this.#runtimeStateActive) dispatch("tiqian:destroy", this);
     this.#runtimeStateActive = false;
-    this.#runtimeCoversSnapshotParagraphs = false;
     this.#releaseExactFontSession();
     this.removeAttribute(EXACT_RENDER_FONT_ATTRIBUTE);
     if (this.isConnected) this.connectedCallback();
@@ -508,15 +529,11 @@ class TiqianProseElement extends HTMLElementBase {
   async #dispatchProgressiveEnhance(
     generation,
     {
-      forceAtomic = false,
-      forceProgressive = false,
       beforeDispatch = null,
       paragraphSelector = null,
-      runtimeCoversSnapshotParagraphs = true,
     } = {},
   ) {
     const request = ++this.#enhanceRequest;
-    const atomicRefresh = !forceProgressive && (forceAtomic || this.#runtimeStateActive);
     this.#beginLayoutWork();
     const baseOptions = {
       ...(this.#baseEnhanceOptions() ?? {}),
@@ -547,12 +564,10 @@ class TiqianProseElement extends HTMLElementBase {
     }
     // PreparedSnapshotTransition: callers leaving a precomputed snapshot keep
     // that rendered DOM live while the runtime and exact-font session load. The
-    // source backing is restored after every await and immediately before
-    // dispatch. For a server-DOM snapshot that backing is the same prepared
-    // first-paint artifact, so width-only transitions can replace paragraphs in
-    // bounded progressive slices without exposing browser-native layout. A
-    // typography change still requests one atomic replacement because the old
-    // glyph styling itself is no longer a valid visual backing.
+    // semantic source is restored immediately before dispatch. Viewport-near
+    // paragraphs are prepared in bounded frames and replaced atomically; source
+    // paragraphs not reached yet remain responsive through the same exact root
+    // font and host line-height contract.
     beforeDispatch?.();
     if (exactFontSession) {
       try {
@@ -561,7 +576,26 @@ class TiqianProseElement extends HTMLElementBase {
           exactFontSession.renderFontFamilies,
         );
         this.setAttribute(EXACT_RENDER_FONT_ATTRIBUTE, "true");
+        // ExactRenderFontReadyBeforeCommit: HarfBuzz already owns the layout
+        // metrics, but CSS must finish loading the same alias faces before the
+        // first paragraph is committed. This avoids a second font-driven pass
+        // and prevents progressive frames from painting a fallback face.
+        await this.#exactFontSession.prepareRenderFont(this, exactFontSession);
+        if (
+          !this.isConnected || generation !== this.#generation ||
+          request !== this.#enhanceRequest
+        ) {
+          this.#releaseExactFontSession();
+          return false;
+        }
       } catch (error) {
+        if (
+          !this.isConnected || generation !== this.#generation ||
+          request !== this.#enhanceRequest
+        ) {
+          this.#releaseExactFontSession();
+          return false;
+        }
         this.#releaseExactFontSession();
         exactFontSession = null;
         this.dataset.tiqianExactFontMiss = "ExactRenderFontStyleUnavailable";
@@ -571,13 +605,12 @@ class TiqianProseElement extends HTMLElementBase {
     if (!exactFontSession) {
       this.removeAttribute(EXACT_RENDER_FONT_ATTRIBUTE);
     }
-    // Async font preparation happens before layout. Retarget the work revision
-    // here so only viewport changes that overlap the actual progressive job
-    // require a latest-width follow-up.
-    this.#beginLayoutWork({ usesCapturedMeasure: atomicRefresh });
+    // Capture the input signature for cancellation. Kotlin reads the live width
+    // again for each paragraph, while this coordinator cancels the remaining
+    // job on the next frame if the effective line measure changes.
+    this.#beginLayoutWork({ usesCapturedMeasure: true });
     this.#hasDispatched = true;
     this.#runtimeStateActive = true;
-    this.#runtimeCoversSnapshotParagraphs = runtimeCoversSnapshotParagraphs;
     this.#acceptLayoutCompletion = true;
     const preparedOptions = {
       ...baseOptions,
@@ -590,11 +623,7 @@ class TiqianProseElement extends HTMLElementBase {
         },
       } : {}),
     };
-    dispatch(
-      atomicRefresh ? "tiqian:enhance-atomically" : "tiqian:enhance-progressively",
-      this,
-      preparedOptions,
-    );
+    dispatch("tiqian:enhance-progressively", this, preparedOptions);
     if (dashCapabilityPromise) {
       dashCapabilityPromise.then(
         (capability) => this.#retryCjkDashCapability(
@@ -670,6 +699,7 @@ class TiqianProseElement extends HTMLElementBase {
       reference,
       handle,
       revalidate: loader.revalidateBrowserFontSession,
+      prepareRenderFont: loader.prepareBrowserRenderFonts,
       release: loader.releaseBrowserFontSession,
       installRenderFont: loader.installPreparedRenderFontStyle,
       releaseRenderFont: loader.releasePreparedRenderFontStyle,
@@ -751,14 +781,15 @@ class TiqianProseElement extends HTMLElementBase {
     const effectiveLayoutChangedDuringWork =
       currentMeasures !== this.#layoutWorkMeasureSignature ||
       currentMaximumMeasure !== this.#layoutWorkMaximumMeasure;
-    const capturedTypographyChanged = this.#layoutWorkUsesCapturedMeasure &&
-      currentTypography !== this.#layoutWorkTypographySignature;
-    // A media-query typography change invalidates shaping even when it leaves
-    // font-size and the integer cell count unchanged. Keep lastTypography at
-    // the committed value so the next-frame follow-up selects full enhancement.
-    const layoutInputsChangedDuringWork = capturedTypographyChanged ||
-      (rawGeometryChangedDuringWork &&
-        (!this.#layoutWorkUsesCapturedMeasure || effectiveLayoutChangedDuringWork));
+    // RenderOutputTypographyIsNotAnInputChange: the renderer intentionally
+    // changes paragraph line-height and positioning after it commits measured
+    // line boxes. Comparing that output signature with the captured native
+    // source signature schedules a redundant destroy-and-enhance pass. Real
+    // font, style and viewport changes are observed while work is in flight and
+    // cancel the captured job before ready; completion only needs to reconcile
+    // geometry revisions that survived those observers.
+    const layoutInputsChangedDuringWork = rawGeometryChangedDuringWork &&
+      (!this.#layoutWorkUsesCapturedMeasure || effectiveLayoutChangedDuringWork);
     this.#acceptLayoutCompletion = false;
     this.#layoutWorkInFlight = false;
     this.#layoutWorkSignaturesCaptured = false;
@@ -785,10 +816,9 @@ class TiqianProseElement extends HTMLElementBase {
     return true;
   }
 
-  #invalidateSnapshotAndEnhance({ typographyChanged = true } = {}) {
+  #invalidateSnapshotAndEnhance() {
     if (!this.#snapshotAdopted && !isLoadedSnapshotAdopted(this)) return;
     const generation = this.#generation;
-    const runtimeBacked = this.#runtimeStateActive && this.#runtimeCoversSnapshotParagraphs;
     this.#hasDispatched = false;
     let activeRequest = ++this.#enhanceRequest;
     this.#beginLayoutWork();
@@ -796,21 +826,6 @@ class TiqianProseElement extends HTMLElementBase {
       if (!restoreLoadedSnapshot(this)) throw new Error("Adopted snapshot could not be restored");
       this.#snapshotAdopted = false;
     };
-    if (runtimeBacked && !typographyChanged) {
-      try {
-        // A runtime-backed snapshot restores another Tiqian rendering, not SSR.
-        // Keep the restore and relayout dispatch in this task so even that
-        // backing rendering cannot become an unintended intermediate paint.
-        restoreImmediatelyBeforeDispatch();
-        this.#hasDispatched = true;
-        this.#beginLayoutWork({ usesCapturedMeasure: true });
-        this.#acceptLayoutCompletion = true;
-        dispatch("tiqian:relayout", this);
-      } catch (error) {
-        this.#recoverSnapshotEnhanceFailure(generation, activeRequest, error);
-      }
-      return;
-    }
     loadTiqianRuntime()
       .then(() => {
         if (
@@ -818,8 +833,6 @@ class TiqianProseElement extends HTMLElementBase {
           activeRequest !== this.#enhanceRequest
         ) return false;
         const enhancement = this.#dispatchProgressiveEnhance(generation, {
-          forceAtomic: typographyChanged,
-          forceProgressive: !typographyChanged,
           beforeDispatch: restoreImmediatelyBeforeDispatch,
         });
         // Async functions run synchronously through their first await, so this
@@ -856,8 +869,7 @@ class TiqianProseElement extends HTMLElementBase {
     const generation = this.#generation;
     const startedAt = performance.now();
     const operation = this.#beginLayoutWork();
-    const runtimeSnapshotBackingRestored =
-      this.#runtimeStateActive && this.#runtimeCoversSnapshotParagraphs;
+    const runtimeSnapshotBackingRestored = this.#runtimeStateActive;
     if (runtimeSnapshotBackingRestored) {
       // RuntimeSnapshotBackingRestore: the first runtime enhancement retains
       // the exact server-rendered nodes as its teardown backing. Snapshot
@@ -869,7 +881,6 @@ class TiqianProseElement extends HTMLElementBase {
       this.#hasDispatched = false;
       dispatch("tiqian:destroy", this);
       this.#runtimeStateActive = false;
-      this.#runtimeCoversSnapshotParagraphs = false;
     }
     tryAdoptRequestedSnapshot(
       this,
@@ -896,22 +907,18 @@ class TiqianProseElement extends HTMLElementBase {
         return;
       }
       this.#snapshotAdopted = true;
-      // SnapshotListRuntimeCompletion also applies to responsive re-adoption:
-      // destroying the narrow runtime restores SSR for both paragraphs and
-      // list items, while the v1 snapshot intentionally covers only <p>.
-      if (this.querySelector("ol > li, ul > li")) {
+      const completionSelector = snapshotCompletionSelector(this);
+      if (completionSelector) {
+        restoreLoadedSnapshot(this);
+        this.#snapshotAdopted = false;
         await loadTiqianRuntime();
         if (
           !this.isConnected || generation !== this.#generation ||
           operation !== this.#layoutOperation
         ) {
-          restoreLoadedSnapshot(this);
           return;
         }
-        await this.#dispatchProgressiveEnhance(generation, {
-          paragraphSelector: "li",
-          runtimeCoversSnapshotParagraphs: false,
-        });
+        await this.#dispatchProgressiveEnhance(generation);
         return;
       }
       this.#releaseExactFontSession();
@@ -988,6 +995,25 @@ class TiqianProseElement extends HTMLElementBase {
     this.#hasDispatched = true;
     this.#acceptLayoutCompletion = true;
     dispatch("tiqian:relayout", this);
+  }
+
+  #refreshRuntimeFromSource() {
+    const generation = this.#generation;
+    this.#hasDispatched = false;
+    if (this.#runtimeStateActive) {
+      // ResponsiveNativeBacking: pre-broken Tiqian lines cannot reflow while a
+      // new width or typography is being prepared. Restore the complete
+      // semantic source first so every remaining paragraph responds through the
+      // host cascade while viewport-near paragraphs are enhanced atomically.
+      dispatch("tiqian:destroy", this);
+      this.#runtimeStateActive = false;
+    }
+    this.#dispatchProgressiveEnhance(generation).catch((error) => {
+      if (!this.isConnected || generation !== this.#generation) return;
+      this.#finishLayoutWorkAndObserve();
+      this.dataset.tiqianCapabilityIssue = "FontCapabilityPreparationFailed";
+      console.warn("Tiqian Web source refresh failed", error);
+    });
   }
 
   #removeReadyListener() {
@@ -1085,11 +1111,11 @@ class TiqianProseElement extends HTMLElementBase {
         this.#observeWidth();
         this.#observeTypography();
       } else {
-        this.#invalidateSnapshotAndEnhance({ typographyChanged });
+        this.#invalidateSnapshotAndEnhance();
       }
       return;
     }
-    if (atMaximumMeasure && !typographyChanged) {
+    if (atMaximumMeasure && !typographyChanged && !snapshotCompletionSelector(this)) {
       this.#tryReadoptSnapshotAtMaximumMeasure();
       return;
     }
@@ -1114,17 +1140,8 @@ class TiqianProseElement extends HTMLElementBase {
       this.#scheduleTypographyCheck(true);
       return;
     }
-    if (typographyChanged) {
-      this.#lastTypography = signature;
-      this.#dispatchProgressiveEnhance(this.#generation).catch((error) => {
-        this.dataset.tiqianCapabilityIssue = "FontCapabilityPreparationFailed";
-        console.warn("Tiqian Web font capability preparation failed", error);
-      });
-    } else {
-      this.#beginLayoutWork({ usesCapturedMeasure: true });
-      this.#acceptLayoutCompletion = true;
-      dispatch("tiqian:relayout", this);
-    }
+    if (typographyChanged) this.#lastTypography = signature;
+    this.#refreshRuntimeFromSource();
   }
 
   #removeViewportResizeListener() {
@@ -1151,8 +1168,8 @@ class TiqianProseElement extends HTMLElementBase {
     if (!this.#layoutWorkInFlight || !this.#layoutWorkUsesCapturedMeasure) return;
     this.#clearResponsiveRetarget();
     const operation = this.#layoutOperation;
-    this.#responsiveRetargetTimer = setTimeout(() => {
-      this.#responsiveRetargetTimer = 0;
+    this.#responsiveRetargetFrame = requestAnimationFrame(() => {
+      this.#responsiveRetargetFrame = 0;
       if (
         !this.isConnected || !this.#layoutWorkInFlight ||
         !this.#layoutWorkUsesCapturedMeasure || operation !== this.#layoutOperation
@@ -1168,13 +1185,13 @@ class TiqianProseElement extends HTMLElementBase {
         maximumMeasure === this.#layoutWorkMaximumMeasure
       ) return;
       this.#cancelCapturedLayoutForLatestGeometry();
-    }, RESPONSIVE_LATEST_RETARGET_QUIET_MS);
+    });
   }
 
   #clearResponsiveRetarget() {
-    if (!this.#responsiveRetargetTimer) return;
-    clearTimeout(this.#responsiveRetargetTimer);
-    this.#responsiveRetargetTimer = 0;
+    if (!this.#responsiveRetargetFrame) return;
+    cancelAnimationFrame(this.#responsiveRetargetFrame);
+    this.#responsiveRetargetFrame = 0;
   }
 
   #observeTypography() {
@@ -1265,7 +1282,7 @@ class TiqianProseElement extends HTMLElementBase {
     this.#responsiveCommitRequired = true;
     this.#responsiveRelayoutRequired = false;
     this.#stopLayoutWorkInputObservation();
-    dispatch("tiqian:cancel-layout-work", this);
+    this.#restoreRuntimeSourceForRetarget();
     this.#ensureViewportResizeListener();
     this.#scheduleResponsiveGeometryCommit();
   }
@@ -1277,7 +1294,7 @@ class TiqianProseElement extends HTMLElementBase {
     this.#acceptLayoutCompletion = false;
     this.#layoutWorkInFlight = false;
     this.#stopLayoutWorkInputObservation();
-    dispatch("tiqian:cancel-layout-work", this);
+    this.#restoreRuntimeSourceForRetarget();
     // The requested target signatures were recorded before the cancelled job
     // committed. Force the existing coordinator to read live geometry and
     // dispatch the latest target even when those cached signatures match.
@@ -1285,6 +1302,20 @@ class TiqianProseElement extends HTMLElementBase {
     this.#responsiveRelayoutRequired = true;
     this.#ensureViewportResizeListener();
     this.#scheduleResponsiveGeometryCommit();
+  }
+
+  #restoreRuntimeSourceForRetarget() {
+    // ResponsiveRetargetNativeRollback: cancellation runs before the next
+    // paint. Restore every already committed paragraph in the same callback so
+    // no frame can display geometry captured for the superseded measure. The
+    // next responsive commit starts viewport-priority enhancement from this
+    // responsive semantic backing.
+    if (this.#runtimeStateActive) {
+      dispatch("tiqian:destroy", this);
+      this.#runtimeStateActive = false;
+    } else {
+      dispatch("tiqian:cancel-layout-work", this);
+    }
   }
 
   #scheduleTypographyCheck(force = false) {
@@ -1310,10 +1341,7 @@ class TiqianProseElement extends HTMLElementBase {
         this.#invalidateSnapshotAndEnhance();
         return;
       }
-      this.#dispatchProgressiveEnhance(this.#generation).catch((error) => {
-        this.dataset.tiqianCapabilityIssue = "FontCapabilityPreparationFailed";
-        console.warn("Tiqian Web font capability preparation failed", error);
-      });
+      this.#refreshRuntimeFromSource();
     });
   }
 

@@ -32,6 +32,12 @@ import org.tiqian.shaping.HarfBuzzSessionTextShaper
 import org.tiqian.font.CjkFontRoleClassifier
 import org.tiqian.font.FontRole
 import org.tiqian.font.FontRoleContext
+import org.tiqian.font.FontMetricsRequest
+import org.tiqian.font.FontMetricsResolver
+import org.tiqian.font.RawFontMetrics
+import org.tiqian.shaping.ShapingInput
+import org.tiqian.shaping.ShapingResult
+import org.tiqian.shaping.TextShaper
 import org.tiqian.shaping.web.WebCanvasFontMetricsResolver
 import org.tiqian.shaping.web.WebCanvasTextShaper
 import org.tiqian.shaping.web.WebCjkDashCapability
@@ -124,19 +130,69 @@ object TiqianWeb {
     }
 
     /**
-     * Enhance in bounded animation-frame slices. Paragraphs not reached yet stay
-     * as native SSR DOM, so loading Tiqian never creates one page-sized long task.
+     * Enhance viewport-near paragraphs first in bounded animation-frame slices.
+     * Each paragraph is replaced atomically in the slice that prepared it; the
+     * remaining paragraphs keep responsive semantic source DOM.
      */
-    fun enhanceProgressively(root: HTMLElement, options: EnhanceOptions = EnhanceOptions()) {
+    fun enhanceProgressively(root: HTMLElement, options: EnhanceOptions = EnhanceOptions()) =
+        enhanceProgressively(root, options, ProgressiveJobKind.Enhance)
+
+    private fun enhanceProgressively(
+        root: HTMLElement,
+        options: EnhanceOptions,
+        kind: ProgressiveJobKind,
+    ) {
         installTiqianCopyHandler()
         destroy(root)
         val state = createRootState(root, options)
         val candidates = paragraphCandidates(root, state.options.paragraphSelector)
+            .withIndex()
+            .sortedWith(
+                compareBy<IndexedValue<HTMLElement>> {
+                    paragraphViewportDistance(it.value)
+                }.thenBy { it.index },
+            )
+            .map { it.value }
+        val capturedMeasures = candidates.map { paragraph ->
+            val fontSize = state.options.fontSize
+                ?: parseCssPx(computedStyle(paragraph, "font-size"))
+                ?: DEFAULT_FONT_SIZE
+            effectiveLineMeasure(sourceParagraphWidth(paragraph, state.activeOptions()), fontSize)
+        }
+        var stale = false
+        fun liveMeasure(index: Int): Float {
+            val paragraph = candidates[index]
+            val fontSize = state.options.fontSize
+                ?: parseCssPx(computedStyle(paragraph, "font-size"))
+                ?: DEFAULT_FONT_SIZE
+            return effectiveLineMeasure(
+                sourceParagraphWidth(paragraph, state.activeOptions()),
+                fontSize,
+            )
+        }
         val job = ProgressiveJob(
             state = state,
-            kind = ProgressiveJobKind.Enhance,
+            kind = kind,
             itemCount = candidates.size,
-            processItem = { index -> processParagraph(candidates[index], state) },
+            processItem = { index ->
+                if (liveMeasure(index) != capturedMeasures[index]) {
+                    stale = true
+                } else {
+                    processParagraph(candidates[index], state)
+                }
+            },
+            onItemsFinished = {
+                stale = stale || candidates.indices.any { index ->
+                    liveMeasure(index) != capturedMeasures[index]
+                }
+                if (stale) {
+                    for (paragraph in state.paragraphs.asReversed()) restoreParagraph(paragraph)
+                    for (issue in state.issues.asReversed()) clearIssue(issue)
+                    state.paragraphs.clear()
+                    state.issues.clear()
+                }
+            },
+            stale = { stale },
             startedAt = performanceNow(),
         )
         states[root] = state
@@ -217,24 +273,44 @@ object TiqianWeb {
         }
         val resolved = exactEligibleOptions.withRootDefaults(root)
         val exactSessionId = resolved.conformingExactFontSessionId()
+        val browserMetrics = WebCanvasFontMetricsResolver(resolved.fonts)
+        val browserShaper = WebCanvasTextShaper(resolved.fonts, resolved.cjkDashCapability)
         val browserEngine = ExplainableStubParagraphLayoutEngine(
             lineBreaker = LookaheadLineBreaker(),
-            fontMetricsResolver = WebCanvasFontMetricsResolver(resolved.fonts),
-            textShaper = WebCanvasTextShaper(resolved.fonts, resolved.cjkDashCapability),
+            fontMetricsResolver = browserMetrics,
+            textShaper = browserShaper,
         )
-        val engine = if (exactSessionId != null) {
+        val exactMetrics = exactSessionId?.let(::HarfBuzzSessionFontMetricsResolver)
+        val exactShaper = exactSessionId?.let(::HarfBuzzSessionTextShaper)
+        val engine = if (exactMetrics != null && exactShaper != null) {
             ExplainableStubParagraphLayoutEngine(
                 lineBreaker = LookaheadLineBreaker(),
-                fontMetricsResolver = HarfBuzzSessionFontMetricsResolver(exactSessionId),
-                textShaper = HarfBuzzSessionTextShaper(exactSessionId),
+                fontMetricsResolver = exactMetrics,
+                textShaper = exactShaper,
             )
         } else {
             browserEngine
+        }
+        val semanticExactEngine = if (exactMetrics != null && exactShaper != null) {
+            ExplainableStubParagraphLayoutEngine(
+                lineBreaker = LookaheadLineBreaker(),
+                fontMetricsResolver = ExactSessionBrowserFallbackFontMetricsResolver(
+                    exact = exactMetrics,
+                    browser = browserMetrics,
+                ),
+                textShaper = ExactSessionBrowserFallbackTextShaper(
+                    exact = exactShaper,
+                    browser = browserShaper,
+                ),
+            )
+        } else {
+            null
         }
         return RootState(
             root = root,
             options = resolved,
             engine = engine,
+            semanticExactEngine = semanticExactEngine,
             browserFallbackEngine = browserEngine.takeIf { exactSessionId != null },
             paragraphs = mutableListOf(),
             issues = mutableListOf(),
@@ -305,6 +381,7 @@ object TiqianWeb {
                 paragraph = item,
                 options = state.activeOptions(),
                 engine = state.activeEngine(),
+                semanticExactEngine = state.activeSemanticExactEngine(),
                 browserFallbackEngine = state.activeExactFallbackEngine(),
                 onExactPreparedDomFallback = state::disableExactPreparedDom,
             )
@@ -396,6 +473,10 @@ object TiqianWeb {
         if (job.nextIndex >= job.itemCount) {
             try {
                 job.onItemsFinished?.invoke()
+                job.maxSliceDuration = maxOf(
+                    job.maxSliceDuration,
+                    performanceNow() - sliceStartedAt,
+                )
                 finishProgressiveJob(job)
             } catch (error: Throwable) {
                 job.onFailure?.invoke()
@@ -483,6 +564,7 @@ object TiqianWeb {
         val replacement = createRootState(root, options)
         state.options = replacement.options
         state.engine = replacement.engine
+        state.semanticExactEngine = replacement.semanticExactEngine
         state.browserFallbackEngine = replacement.browserFallbackEngine
         state.exactPreparedDomEnabled = replacement.exactPreparedDomEnabled
         state.exactPreparedDomFallback = replacement.exactPreparedDomFallback
@@ -520,14 +602,10 @@ object TiqianWeb {
         if (state.issues.any { it.name in WIDTH_DEPENDENT_CAPABILITY_ISSUES }) {
             // WidthDependentCapabilityTransitionRetry: only named
             // capabilities whose eligibility depends on line count need to be
-            // lowered again at the new width. Stable shaping/capability issues
-            // remain native while the already enhanced paragraphs relayout.
-            // An already enhanced root must not expose every paragraph's SSR
-            // source across animation frames while that eligibility is retried.
-            // Rebuild synchronously in this event task and terminate the
-            // responsive operation with the relayout completion event emitted
-            // by enhanceAtomically().
-            enhanceAtomically(root, state.options)
+            // lowered again at the new width. Restore semantic source once,
+            // then let viewport-near paragraphs take over atomically in bounded
+            // slices just like any other source refresh.
+            enhanceProgressively(root, state.options, ProgressiveJobKind.Relayout)
             return
         }
         val paragraphs = state.paragraphs.toList()
@@ -543,7 +621,6 @@ object TiqianWeb {
         // slices are running, element.js schedules one latest-width follow-up
         // instead of allowing a queue of obsolete widths to replay.
         val widths = paragraphs.map { paragraphWidth(it, activeOptions) }
-        val previousMeasures = paragraphs.map { it.lastMeasure }
         val commitSession = ProgressiveRelayoutSession(
             paragraphs = paragraphs,
             state = state,
@@ -560,18 +637,17 @@ object TiqianWeb {
                         paragraph = paragraph,
                         options = activeOptions,
                         engine = activeEngine,
+                        semanticExactEngine = state.activeSemanticExactEngine(),
                         browserFallbackEngine = activeExactFallbackEngine,
                         widthOverride = widths[paragraphIndex],
                     )
-                    // ParagraphAtomicResponsiveCatchUp: each paragraph keeps
-                    // its previous Tiqian DOM until its new result is ready.
-                    // Validate the captured width immediately before replacing
-                    // that paragraph. A stale off-screen tail is skipped and
-                    // the custom element schedules one latest-width follow-up.
+                    // ParagraphCurrentMeasureCommit: keep the previous
+                    // paragraph DOM until its replacement is ready, then
+                    // require the captured measure to still equal the live
+                    // measure immediately before the single-paragraph commit.
                     val currentWidth = paragraphWidth(paragraph, activeOptions)
                     if (
-                        isBoundedResponsiveCatchUp(
-                            previousMeasure = previousMeasures[paragraphIndex],
+                        isCurrentResponsiveMeasure(
                             preparedWidth = widths[paragraphIndex],
                             currentWidth = currentWidth,
                             fontSize = paragraph.lowered.textStyle.fontSize,
@@ -609,6 +685,7 @@ object TiqianWeb {
         paragraph: EnhancedParagraph,
         options: EnhanceOptions,
         engine: ExplainableStubParagraphLayoutEngine,
+        semanticExactEngine: ExplainableStubParagraphLayoutEngine? = null,
         browserFallbackEngine: ExplainableStubParagraphLayoutEngine? = null,
         onExactPreparedDomFallback: (String) -> Unit = {},
     ): CapabilityIssue? {
@@ -617,6 +694,7 @@ object TiqianWeb {
                 paragraph = paragraph,
                 options = options,
                 engine = engine,
+                semanticExactEngine = semanticExactEngine,
                 browserFallbackEngine = browserFallbackEngine,
             )
         ) {
@@ -641,17 +719,21 @@ object TiqianWeb {
     }
 
     private fun paragraphWidth(paragraph: EnhancedParagraph, options: EnhanceOptions): Float {
+        return sourceParagraphWidth(paragraph.source, options)
+    }
+
+    private fun sourceParagraphWidth(paragraph: HTMLElement, options: EnhanceOptions): Float {
         val exactFontLayout = options.conformingExactFontSessionId() != null
         return (if (exactFontLayout) {
-            elementContentWidth(paragraph.source)
+            elementContentWidth(paragraph)
         } else {
-            elementWidth(paragraph.source)
+            elementWidth(paragraph)
         }).toFloat()
             .takeIf { it > 0f }
             ?: (if (exactFontLayout) {
-                elementContentWidth(paragraph.source.parentElement as? HTMLElement ?: paragraph.source)
+                elementContentWidth(paragraph.parentElement as? HTMLElement ?: paragraph)
             } else {
-                elementWidth(paragraph.source.parentElement as? HTMLElement ?: paragraph.source)
+                elementWidth(paragraph.parentElement as? HTMLElement ?: paragraph)
         }).toFloat()
                 .takeIf { it > 0f }
             ?: 320f
@@ -661,6 +743,7 @@ object TiqianWeb {
         paragraph: EnhancedParagraph,
         options: EnhanceOptions,
         engine: ExplainableStubParagraphLayoutEngine,
+        semanticExactEngine: ExplainableStubParagraphLayoutEngine? = null,
         browserFallbackEngine: ExplainableStubParagraphLayoutEngine? = null,
         widthOverride: Float? = null,
         ignoreUnchangedMeasure: Boolean = false,
@@ -697,18 +780,28 @@ object TiqianWeb {
             inlineBoxes = paragraph.lowered.inlineBoxes,
             inlineObjects = paragraph.lowered.inlineObjects,
         )
-        var exactPreparedDom = browserFallbackEngine != null &&
-            paragraph.lowered.isCanonicalPlainParagraph()
-        val result = if (exactPreparedDom) {
+        // ExactSessionSemanticLayout: semantic DOM changes how LayoutResult is
+        // replayed, not which font backend owns shaping and measurement. Keep
+        // links, code, and other supported inline semantics on the same exact
+        // session as canonical plain paragraphs; use the browser adapter only
+        // when that session reports a named font capability failure.
+        val exactFontLayout = browserFallbackEngine != null
+        var exactPreparedDom = exactFontLayout && paragraph.lowered.isCanonicalPlainParagraph()
+        val layoutEngine = if (exactFontLayout && !exactPreparedDom) {
+            semanticExactEngine ?: engine
+        } else {
+            engine
+        }
+        val result = if (exactFontLayout) {
             try {
-                engine.layout(input)
+                layoutEngine.layout(input)
             } catch (error: Throwable) {
                 if (!isExactFontSessionCapabilityFailure(error)) throw error
                 exactPreparedDom = false
-                browserFallbackEngine!!.layout(input)
+                browserFallbackEngine.layout(input)
             }
         } else {
-            (browserFallbackEngine ?: engine).layout(input)
+            engine.layout(input)
         }
         val shapingCapabilityIssue = result.debug.shapingDecisions.firstOrNull {
             it.capabilityIssue != null
@@ -773,29 +866,12 @@ object TiqianWeb {
         return (gridCells * fontSize).coerceAtMost(width)
     }
 
-    private fun isBoundedResponsiveCatchUp(
-        previousMeasure: Float?,
+    private fun isCurrentResponsiveMeasure(
         preparedWidth: Float,
         currentWidth: Float,
         fontSize: Float,
-    ): Boolean {
-        val preparedMeasure = effectiveLineMeasure(preparedWidth, fontSize)
-        val currentMeasure = effectiveLineMeasure(currentWidth, fontSize)
-        if (preparedMeasure == currentMeasure) return true
-        if (
-            previousMeasure == null || preparedMeasure == previousMeasure ||
-            preparedWidth < fontSize || currentWidth < fontSize
-        ) return false
-        val monotonicCatchUp = if (previousMeasure <= currentMeasure) {
-            preparedMeasure >= previousMeasure && preparedMeasure <= currentMeasure
-        } else {
-            preparedMeasure <= previousMeasure && preparedMeasure >= currentMeasure
-        }
-        if (!monotonicCatchUp) return false
-        val preparedCells = kotlin.math.floor(preparedWidth / fontSize).toInt()
-        val currentCells = kotlin.math.floor(currentWidth / fontSize).toInt()
-        return kotlin.math.abs(preparedCells - currentCells) <= MAX_RESPONSIVE_STALE_COMMIT_CELLS
-    }
+    ): Boolean = effectiveLineMeasure(preparedWidth, fontSize) ==
+        effectiveLineMeasure(currentWidth, fontSize)
 
     private fun commitPreparedParagraph(
         paragraph: EnhancedParagraph,
@@ -1190,6 +1266,7 @@ object TiqianWeb {
         val root: HTMLElement,
         var options: EnhanceOptions,
         var engine: ExplainableStubParagraphLayoutEngine,
+        var semanticExactEngine: ExplainableStubParagraphLayoutEngine?,
         var browserFallbackEngine: ExplainableStubParagraphLayoutEngine?,
         val paragraphs: MutableList<EnhancedParagraph>,
         val issues: MutableList<CapabilityIssue>,
@@ -1201,6 +1278,9 @@ object TiqianWeb {
 
         fun activeEngine(): ExplainableStubParagraphLayoutEngine =
             if (exactPreparedDomEnabled) engine else browserFallbackEngine ?: engine
+
+        fun activeSemanticExactEngine(): ExplainableStubParagraphLayoutEngine? =
+            semanticExactEngine.takeIf { exactPreparedDomEnabled }
 
         fun activeExactFallbackEngine(): ExplainableStubParagraphLayoutEngine? =
             browserFallbackEngine.takeIf { exactPreparedDomEnabled }
@@ -1789,6 +1869,36 @@ private fun LoweredParagraph.isCanonicalPlainParagraph(): Boolean =
 private fun isExactFontSessionCapabilityFailure(error: Throwable): Boolean {
     val detail = error.message.orEmpty()
     return EXACT_FONT_SESSION_CAPABILITY_FAILURES.any(detail::contains)
+}
+
+/**
+ * SemanticExactRunFallback: rich paragraphs may intentionally introduce a
+ * different font family (for example inline code). Preserve exact HarfBuzz
+ * shaping for every covered run and delegate only the unsupported run to the
+ * browser adapter, whose semantic clone keeps the corresponding host style.
+ */
+private class ExactSessionBrowserFallbackTextShaper(
+    private val exact: TextShaper,
+    private val browser: TextShaper,
+) : TextShaper {
+    override fun shape(input: ShapingInput): ShapingResult = try {
+        exact.shape(input)
+    } catch (error: Throwable) {
+        if (!isExactFontSessionCapabilityFailure(error)) throw error
+        browser.shape(input)
+    }
+}
+
+private class ExactSessionBrowserFallbackFontMetricsResolver(
+    private val exact: FontMetricsResolver,
+    private val browser: FontMetricsResolver,
+) : FontMetricsResolver {
+    override fun resolve(request: FontMetricsRequest): RawFontMetrics = try {
+        exact.resolve(request)
+    } catch (error: Throwable) {
+        if (!isExactFontSessionCapabilityFailure(error)) throw error
+        browser.resolve(request)
+    }
 }
 
 data class DomInlineObject(
@@ -2486,7 +2596,6 @@ private const val ZERO_ADVANCE_EPSILON = 0.01f
 private const val CAPABILITY_DETAIL_LIMIT = 512
 private const val MAX_PROGRESSIVE_SLICE_MS = 8.0
 private const val MAX_PROGRESSIVE_ITEMS_PER_SLICE = 8
-private const val MAX_RESPONSIVE_STALE_COMMIT_CELLS = 1
 private const val CANONICAL_SOURCE_ATTRIBUTE = "data-tq-canonical-source"
 private const val RELAYOUT_ERROR_ATTRIBUTE = "data-tiqian-relayout-error"
 private const val EXACT_PREPARED_FALLBACK_ATTRIBUTE = "data-tiqian-exact-layout-fallback"

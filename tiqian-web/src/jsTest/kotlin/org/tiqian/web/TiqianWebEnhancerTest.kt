@@ -58,6 +58,93 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
+    fun exactFontSessionAlsoShapesSemanticParagraphsBeforeRuntimeDomReplay() {
+        installExactFontSessionFixture(failShaping = false)
+        try {
+            val root = mount(
+                """
+                <div data-tiqian-root="true" style="width: 220px">
+                  <p data-tq-snapshot-key="rich" style="font-family: 'Fixture CJK'; font-size: 18px; line-height: 30px">中文<a href="/more">链接</a>正文。</p>
+                </div>
+                """.trimIndent(),
+            )
+
+            val count = TiqianWeb.enhance(root, exactTestOptions())
+
+            assertEquals(1, count)
+            val paragraph = root.querySelector("p") as HTMLElement
+            assertTrue(exactFontShapeCount() > 0)
+            assertNull(paragraph.getAttribute("data-tq-canonical-plain"))
+            assertNotNull(paragraph.querySelector("a[href='/more']"))
+            assertNotNull(paragraph.querySelector(".tq-line"))
+            assertNull(paragraph.querySelector("[data-tq-exact-rendered]"))
+            assertEquals("中文链接正文。", copySelection(paragraph))
+        } finally {
+            clearExactFontSessionFixture()
+        }
+    }
+
+    @Test
+    fun semanticParagraphFallsBackPerUnsupportedFontRunWithoutAbandoningExactLayout() {
+        installExactFontSessionFixture(failShaping = false, failFamily = "Fixture Mono")
+        try {
+            val root = mount(
+                """
+                <div data-tiqian-root="true" style="width: 260px">
+                  <p data-tq-snapshot-key="rich" style="font-family: 'Fixture CJK'; font-size: 18px; line-height: 30px">中文<code style="font-family: 'Fixture Mono'">code42</code>正文。</p>
+                </div>
+                """.trimIndent(),
+            )
+
+            assertEquals(1, TiqianWeb.enhance(root, exactTestOptions()))
+
+            val paragraph = root.querySelector("p") as HTMLElement
+            assertTrue(exactFontShapeCount() > 0)
+            assertTrue(exactFontFallbackCount() > 0)
+            assertNull(paragraph.getAttribute("data-tq-canonical-plain"))
+            assertNull(paragraph.getAttribute("data-tiqian-capability-issue"))
+            assertNotNull(paragraph.querySelector("code"))
+            assertEquals("中文code42正文。", copySelection(paragraph))
+        } finally {
+            clearExactFontSessionFixture()
+        }
+    }
+
+    @Test
+    fun unsupportedGlyphFallbackKeepsExactParagraphLineMetrics() {
+        installExactFontSessionFixture(failShaping = false, failText = "a")
+        try {
+            val root = mount(
+                """
+                <div data-tiqian-root="true" style="width: 300px">
+                  <p data-tq-snapshot-key="exact" style="font-family: 'Fixture CJK'; font-size: 18px; line-height: 30px">中文<a href="/more">链接</a>正文。</p>
+                  <p data-tq-snapshot-key="fallback" style="font-family: 'Fixture CJK'; font-size: 18px; line-height: 30px">… and <a href="/more">more</a>.</p>
+                </div>
+                """.trimIndent(),
+            )
+
+            assertEquals(2, TiqianWeb.enhance(root, exactTestOptions()))
+
+            val paragraphs = root.querySelectorAll("p")
+            val exactParagraph = paragraphs.item(0) as HTMLElement
+            val fallbackParagraph = paragraphs.item(1) as HTMLElement
+            val exactLine = exactParagraph.querySelector(".tq-line") as HTMLElement
+            val fallbackLine = fallbackParagraph.querySelector(".tq-line") as HTMLElement
+            assertTrue(exactFontFallbackCount() > 0)
+            assertEquals(
+                exactLine.style.getPropertyValue("--tq-line-height"),
+                fallbackLine.style.getPropertyValue("--tq-line-height"),
+            )
+            assertEquals(
+                exactLine.style.getPropertyValue("--tq-line-baseline-offset"),
+                fallbackLine.style.getPropertyValue("--tq-line-baseline-offset"),
+            )
+        } finally {
+            clearExactFontSessionFixture()
+        }
+    }
+
+    @Test
     fun exactBrowserFallbackCarriesLatinQuoteFeaturesIntoPreparedDomPlan() {
         installExactFontSessionFixture(failShaping = false)
         try {
@@ -987,7 +1074,7 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
-    fun widthDependentCapabilityRetriesWholeRootWithoutCrossFrameNativeExposure() {
+    fun widthDependentCapabilityRetryRestartsProgressivelyFromNativeSource() {
         val root = mount(
             """
             <div data-tiqian-root="true" style="width: 520px">
@@ -1024,24 +1111,23 @@ class TiqianWebEnhancerTest {
         val narrowRenderedChild = assertNotNull(plainParagraph.firstChild)
 
         root.style.width = "520px"
-        probeRenderedParagraphCountAtNextFrame(root, 2)
         dispatchRelayout(root)
 
-        assertEquals(1, pendingTestAnimationFrameCount(), "only the exposure probe may remain queued")
-        assertEquals(2, relayoutReadyCount, "atomic retry must terminate the responsive operation")
-        assertEquals("true", cloneParagraph.getAttribute("data-tq-rendered"))
-        assertEquals("true", plainParagraph.getAttribute("data-tq-rendered"))
+        assertEquals(1, pendingTestAnimationFrameCount())
+        assertEquals(1, relayoutReadyCount)
+        assertNull(cloneParagraph.getAttribute("data-tq-rendered"))
+        assertNull(plainParagraph.getAttribute("data-tq-rendered"))
+        assertEquals(originalHtml, cloneParagraph.innerHTML)
         assertFalse(plainParagraph.firstChild === narrowRenderedChild)
-        assertNull(cloneParagraph.getAttribute("data-tiqian-capability-issue"))
-        assertEquals("2", root.getAttribute("data-tiqian-enhanced-count"))
+        assertEquals("0", root.getAttribute("data-tiqian-enhanced-count"))
 
         flushAllTestAnimationFrames()
 
-        assertEquals(
-            "false",
-            root.getAttribute("data-test-native-exposure"),
-            "no animation frame may observe the whole root restored to native source",
-        )
+        assertEquals(2, relayoutReadyCount)
+        assertEquals("true", cloneParagraph.getAttribute("data-tq-rendered"))
+        assertEquals("true", plainParagraph.getAttribute("data-tq-rendered"))
+        assertNull(cloneParagraph.getAttribute("data-tiqian-capability-issue"))
+        assertEquals("2", root.getAttribute("data-tiqian-enhanced-count"))
     }
 
     @Test
@@ -1594,6 +1680,106 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
+    fun longProgressiveEnhancementCommitsParagraphsAtomicallyAcrossFrames() {
+        val markup = (0 until 18).joinToString("") { index ->
+            "<p>第${index}段在自己的准备帧中原子切换。</p>"
+        }
+        val root = mount("<div data-tiqian-root='true' style='width: 180px'>$markup</div>")
+        val paragraphs = (0 until 18).map { index ->
+            root.querySelectorAll("p").item(index) as HTMLElement
+        }
+        val sourceChildren = paragraphs.map { paragraph -> assertNotNull(paragraph.firstChild) }
+        var readyCount = 0
+        root.addEventListener("tiqian:ready", { readyCount += 1 })
+        installTestAnimationFrames()
+
+        TiqianWeb.enhanceProgressively(root, testOptions())
+
+        var progressiveFrames = 0
+        var previousRenderedCount = 0
+        while (pendingTestAnimationFrameCount() > 0) {
+            assertEquals(1, flushOneTestAnimationFrame())
+            val renderedCount = root.querySelectorAll("p[data-tq-rendered='true']").length
+            assertTrue(renderedCount >= previousRenderedCount)
+            assertTrue(paragraphs.indices.all { index ->
+                val paragraph = paragraphs[index]
+                paragraph.firstChild === sourceChildren[index] ||
+                    paragraph.getAttribute("data-tq-rendered") == "true"
+            }, "each paragraph must be either intact source or a complete Tiqian result")
+            if (pendingTestAnimationFrameCount() > 0) {
+                progressiveFrames += 1
+                assertTrue(renderedCount in 1 until paragraphs.size)
+                assertEquals(renderedCount.toString(), root.getAttribute("data-tiqian-enhanced-count"))
+                assertEquals(0, readyCount)
+            }
+            previousRenderedCount = renderedCount
+        }
+
+        assertTrue(progressiveFrames >= 2)
+        assertTrue(paragraphs.indices.all { index ->
+            paragraphs[index].firstChild !== sourceChildren[index]
+        })
+        assertEquals("18", root.getAttribute("data-tiqian-enhanced-count"))
+        assertEquals(1, readyCount)
+    }
+
+    @Test
+    fun progressiveEnhancementPrioritizesViewportParagraphs() {
+        val markup = (0 until 18).joinToString("") { index ->
+            "<p>第${index}段用于验证视口优先顺序。</p>"
+        }
+        val root = mount("<div data-tiqian-root='true' style='width: 180px'>$markup</div>")
+        val paragraphs = (0 until 18).map { index ->
+            root.querySelectorAll("p").item(index) as HTMLElement
+        }
+        paragraphs.forEachIndexed { index, paragraph ->
+            setElementRect(paragraph, top = 1_000_000.0 - index * 1_000.0, width = 180.0)
+        }
+        setElementRect(paragraphs.last(), top = 0.0, width = 180.0)
+        installTestAnimationFrames()
+
+        TiqianWeb.enhanceProgressively(root, testOptions())
+        assertEquals(1, flushOneTestAnimationFrame())
+
+        assertEquals("true", paragraphs.last().getAttribute("data-tq-rendered"))
+        assertTrue(root.querySelectorAll("p[data-tq-rendered='true']").length < paragraphs.size)
+        flushAllTestAnimationFrames()
+        assertEquals(18, root.querySelectorAll("p[data-tq-rendered='true']").length)
+    }
+
+    @Test
+    fun progressiveEnhancementRollsBackPartialWorkPreparedAcrossDifferentWidths() {
+        val markup = (0 until 18).joinToString("") { index ->
+            "<p>第${index}段不能把旧宽度结果混入同一次整批提交。</p>"
+        }
+        val root = mount("<div data-tiqian-root='true' style='width: 320px'>$markup</div>")
+        val paragraphs = (0 until 18).map { index ->
+            root.querySelectorAll("p").item(index) as HTMLElement
+        }
+        val sourceChildren = paragraphs.map { paragraph -> assertNotNull(paragraph.firstChild) }
+        var readyCount = 0
+        root.addEventListener("tiqian:ready", { readyCount += 1 })
+        installTestAnimationFrames()
+
+        TiqianWeb.enhanceProgressively(root, testOptions())
+        assertEquals(1, flushOneTestAnimationFrame())
+        root.style.width = "120px"
+        flushAllTestAnimationFrames()
+
+        assertTrue(paragraphs.indices.all { index ->
+            paragraphs[index].firstChild === sourceChildren[index]
+        })
+        assertEquals(0, root.querySelectorAll("p[data-tq-rendered='true']").length)
+        assertEquals(1, readyCount)
+
+        TiqianWeb.enhanceProgressively(root, testOptions())
+        flushAllTestAnimationFrames()
+
+        assertEquals(18, root.querySelectorAll("p[data-tq-rendered='true']").length)
+        assertEquals(2, readyCount)
+    }
+
+    @Test
     fun relayoutDuringInitialProgressiveWorkRestartsWithoutStrandingCandidates() {
         val root = mount(
             """
@@ -1692,7 +1878,7 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
-    fun longRelayoutYieldsBetweenBoundedDomCommitSlices() {
+    fun longRelayoutYieldsAndCommitsEachParagraphAtomically() {
         val markup = (0 until 18).joinToString("") { index ->
             "<p>第${index}段在分帧提交时必须一直保持上一份提椠排版。</p>"
         }
@@ -1710,23 +1896,23 @@ class TiqianWebEnhancerTest {
         root.style.width = "120px"
         dispatchRelayout(root)
 
-        var changed = 0
-        var frameCount = 0
-        while (changed == 0 && frameCount < 100) {
+        var progressiveFrames = 0
+        var previousUpdatedCount = 0
+        while (pendingTestAnimationFrameCount() > 0) {
             assertEquals(1, flushOneTestAnimationFrame())
-            frameCount += 1
-            changed = paragraphs.indices.count { index ->
+            val updatedCount = paragraphs.indices.count { index ->
                 paragraphs[index].firstChild !== previousChildren[index]
             }
+            assertTrue(updatedCount >= previousUpdatedCount)
+            if (pendingTestAnimationFrameCount() > 0) {
+                progressiveFrames += 1
+                assertTrue(updatedCount in 1 until paragraphs.size)
+                assertEquals(0, relayoutReadyCount)
+            }
+            previousUpdatedCount = updatedCount
         }
 
-        assertTrue(changed in 1..8, "one commit slice must replace at most eight paragraphs")
-        assertTrue(changed < paragraphs.size, "a long root must yield before replacing its tail")
-        assertEquals(0, relayoutReadyCount, "ready belongs to the final commit slice")
-        assertTrue(pendingTestAnimationFrameCount() > 0)
-
-        flushAllTestAnimationFrames()
-
+        assertTrue(progressiveFrames >= 2, "a long root must still yield during relayout")
         assertTrue(paragraphs.indices.all { index ->
             paragraphs[index].firstChild !== previousChildren[index]
         })
@@ -1734,8 +1920,8 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
-    fun relayoutCommitsPreparedMeasureAtMostOneGridCellBehindCurrentWidth() {
-        val source = "任务执行中再次跨格时允许排版沿同一方向追赶最终宽度。".repeat(4)
+    fun relayoutNeverCommitsPreparedMeasureOneGridCellBehindCurrentWidth() {
+        val source = "任务执行中再次跨格时不能提交落后最终宽度的排版。".repeat(4)
         val root = mount("<div data-tiqian-root='true' style='width: 320px'><p>$source</p></div>")
         val intermediateRoot = mount(
             "<div data-tiqian-root='true' style='width: 180px'><p>$source</p></div>",
@@ -1767,17 +1953,17 @@ class TiqianWebEnhancerTest {
         root.style.width = "162px"
         flushAllTestAnimationFrames()
 
-        assertFalse(paragraph.firstChild === initialChild)
-        assertEquals(intermediate, renderedLineSignature(paragraph))
+        assertTrue(paragraph.firstChild === initialChild)
+        assertEquals(initial, renderedLineSignature(paragraph))
         assertEquals(1, readyCount)
-        assertEquals(0, staleCount)
+        assertEquals(1, staleCount)
 
         dispatchRelayout(root)
         flushAllTestAnimationFrames()
 
         assertEquals(final, renderedLineSignature(paragraph))
         assertEquals(2, readyCount)
-        assertEquals(0, staleCount)
+        assertEquals(1, staleCount)
     }
 
     @Test
@@ -2046,14 +2232,11 @@ private external fun pendingTestAnimationFrameCount(): Int
 @JsFun("() => globalThis.__TiqianTestAnimationFrames ? globalThis.__TiqianTestAnimationFrames.cancelled : 0")
 private external fun cancelledTestAnimationFrameCount(): Int
 @JsFun(
-    """(root, expectedCount) => {
-      requestAnimationFrame(() => {
-        const renderedCount = root.querySelectorAll("p[data-tq-rendered='true']").length;
-        root.setAttribute("data-test-native-exposure", String(renderedCount !== expectedCount));
-      });
+    """(element, top, width) => {
+      element.getBoundingClientRect = () => new DOMRect(0, top, width, 30);
     }""",
 )
-private external fun probeRenderedParagraphCountAtNextFrame(root: HTMLElement, expectedCount: Int)
+private external fun setElementRect(element: HTMLElement, top: Double, width: Double)
 @JsFun("(event) => event.detail && event.detail.stale === true")
 private external fun relayoutEventIsStale(event: Event): Boolean
 @JsFun(
@@ -2066,16 +2249,31 @@ private external fun relayoutEventIsStale(event: Event): Boolean
     }""",
 )
 private external fun restoreTestAnimationFrames()
+private fun installExactFontSessionFixture(
+    failShaping: Boolean,
+    failFamily: String? = null,
+    failText: String? = null,
+) {
+    installExactFontSessionFixtureBridge(failShaping, failFamily, failText)
+}
 @JsFun(
-    """(failShaping) => {
+    """(failShaping, failFamily, failText) => {
       const shapes = new Map();
       const metrics = new Map();
       let nextHandle = 1;
       globalThis.__TiqianExactPreparedPlan = "";
       globalThis.__TiqianExactPreparedRenderCount = 0;
+      globalThis.__TiqianExactFontShapeCount = 0;
+      globalThis.__TiqianExactFontFallbackCount = 0;
       globalThis.__TiqianFontBackend = {
-        shape(_session, displayText, _families, fontSize, _fontWeight, _italic, _locale, role) {
-          if (failShaping) throw new Error("NoExactFontFace:test");
+        shape(_session, displayText, families, fontSize, _fontWeight, _italic, _locale, role) {
+          if (failShaping ||
+              (failFamily && String(families).includes(failFamily)) ||
+              (failText && String(displayText).includes(failText))) {
+            globalThis.__TiqianExactFontFallbackCount += 1;
+            throw new Error("NoExactFontFace:test");
+          }
+          globalThis.__TiqianExactFontShapeCount += 1;
           const handle = nextHandle++;
           const glyphs = [];
           let glyphIndex = 0;
@@ -2109,7 +2307,11 @@ private external fun restoreTestAnimationFrames()
         shapeFeature: (handle, index) => shapes.get(handle).features[index],
         shapeUnsafeBreakCount: () => 0,
         releaseShape: (handle) => shapes.delete(handle),
-        metrics(_session, _families, fontSize) {
+        metrics(_session, families, fontSize) {
+          if (failShaping || (failFamily && String(families).includes(failFamily))) {
+            globalThis.__TiqianExactFontFallbackCount += 1;
+            throw new Error("NoExactFontFace:test");
+          }
           const handle = nextHandle++;
           metrics.set(handle, [fontSize, fontSize * 0.25, 0, fontSize * 0.88, fontSize * 0.12]);
           return handle;
@@ -2129,7 +2331,15 @@ private external fun restoreTestAnimationFrames()
       globalThis.__TiqianPreparedDomValidator = { issue: () => null };
     }""",
 )
-private external fun installExactFontSessionFixture(failShaping: Boolean)
+private external fun installExactFontSessionFixtureBridge(
+    failShaping: Boolean,
+    failFamily: String?,
+    failText: String?,
+)
+@JsFun("() => globalThis.__TiqianExactFontShapeCount || 0")
+private external fun exactFontShapeCount(): Int
+@JsFun("() => globalThis.__TiqianExactFontFallbackCount || 0")
+private external fun exactFontFallbackCount(): Int
 @JsFun("(detail) => { globalThis.__TiqianPreparedDomValidator = { issue: () => detail }; }")
 private external fun failExactPreparedDomValidation(detail: String)
 @JsFun("(detail) => { globalThis.__TiqianPreparedDomRenderer = { render() { throw new Error(detail); } }; }")
@@ -2138,7 +2348,7 @@ private external fun failExactPreparedDomRender(detail: String)
 private external fun exactPreparedPlan(): String
 @JsFun("() => globalThis.__TiqianExactPreparedRenderCount || 0")
 private external fun exactPreparedRenderCount(): Int
-@JsFun("() => { delete globalThis.__TiqianFontBackend; delete globalThis.__TiqianPreparedDomRenderer; delete globalThis.__TiqianPreparedDomValidator; delete globalThis.__TiqianExactPreparedPlan; delete globalThis.__TiqianExactPreparedRenderCount; }")
+@JsFun("() => { delete globalThis.__TiqianFontBackend; delete globalThis.__TiqianPreparedDomRenderer; delete globalThis.__TiqianPreparedDomValidator; delete globalThis.__TiqianExactPreparedPlan; delete globalThis.__TiqianExactPreparedRenderCount; delete globalThis.__TiqianExactFontShapeCount; delete globalThis.__TiqianExactFontFallbackCount; }")
 private external fun clearExactFontSessionFixture()
 @JsFun(
     """() => {
