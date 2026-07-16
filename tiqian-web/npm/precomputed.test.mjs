@@ -15,6 +15,9 @@ import { stableStringify } from "./snapshot-schema.js";
 
 function matchesSelector(element, selector) {
   if (selector === "*") return element.nodeType === 1;
+  if (selector === ":is(p, li)[data-tq-snapshot-key]") {
+    return ["P", "LI"].includes(element.tagName) && element.hasAttribute("data-tq-snapshot-key");
+  }
   if (selector === "tiqian-prose, [data-tiqian-root]") {
     return element.tagName === "TIQIAN-PROSE" || element.hasAttribute("data-tiqian-root");
   }
@@ -231,7 +234,11 @@ function fixtureComputedStyle(element, _pseudo, overrides = {}) {
   const canonicalPreparedFlow = element?.closest?.("[data-tq-canonical-plain]") != null ||
     element?.closest?.("[data-tq-canonical-source]") != null;
   return {
-    display: boundary || engineHyphen ? "inline-block" : measuredGeometry ? "inline" : "block",
+    display: boundary || engineHyphen
+      ? "inline-block"
+      : measuredGeometry
+        ? "inline"
+        : element?.tagName === "LI" ? "list-item" : "block",
     whiteSpace: boundary || engineHyphen ? "pre" : "normal",
     verticalAlign: "baseline",
     direction: "ltr",
@@ -300,6 +307,10 @@ function fixture({
   nativeText = false,
   fontDisplay = "block",
   entrySource = undefined,
+  paragraphTag = "p",
+  paragraphSelector = "p[data-tq-snapshot-key]",
+  paragraphWidth = 360,
+  maximumWidth = 360,
 } = {}) {
   const measuredProbeStyles = [];
   const documentObject = {
@@ -333,9 +344,9 @@ function fixture({
 
   const root = documentObject.createElement("tiqian-prose");
   root.setAttribute("snapshot-ref", "tq-page");
-  const paragraph = documentObject.createElement("p");
+  const paragraph = documentObject.createElement(paragraphTag);
   paragraph.setAttribute("data-tq-snapshot-key", "p-1");
-  paragraph.width = 360;
+  paragraph.width = paragraphWidth;
   paragraph.height = paragraphHeight;
   paragraph.innerText = "中国";
   const originalText = new FakeText("中国");
@@ -428,7 +439,7 @@ function fixture({
     fontSourcePolicy: "compatible-local-render-family-v2",
     ...(entrySource === undefined ? {} : { entrySource }),
     renderFontFamilies: ["Fixture CJK"],
-    paragraphSelector: "p[data-tq-snapshot-key]",
+    paragraphSelector,
     valueStyles: [],
     valueStylesSha256: sha256(stableStringify([])),
     typographies: [{
@@ -447,7 +458,7 @@ function fixture({
       key: "p-1",
       sourceSha256: sha256("中国"),
       typographyRef: 0,
-      maxWidthPx: 360,
+      maxWidthPx: maximumWidth,
       fontFaceEvidence: [{ faceRef: 0, coverageText: evidence.coverageText, probe: evidence.probe }],
       renderArtifactSha256: sha256(stableStringify(entry.childNodes.map(canonicalFixtureNode))),
     }],
@@ -519,6 +530,31 @@ test("exact runtime fallback accepts a width miss only while every live input st
       matches: false,
       reason: "SnapshotSourceMismatch",
     });
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
+test("snapshot list items preserve their native marker display contract", async () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = fixtureComputedStyle;
+  try {
+    const { root, paragraph } = fixture({
+      paragraphTag: "li",
+      paragraphSelector: ":is(p, li)[data-tq-snapshot-key]",
+    });
+
+    assert.deepEqual(await validatePrecomputedSnapshotExactFontContract(root), {
+      matches: true,
+      reason: null,
+      paragraphSelector: ":is(p, li)[data-tq-snapshot-key]",
+      compatibleLocalDeclared: false,
+    });
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), {
+      adopted: true,
+      count: 1,
+    });
+    assert.equal(paragraph.getAttribute("data-tq-rendered"), "true");
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;
   }
@@ -1233,6 +1269,22 @@ test("post-adoption line pen mismatch restores the original paragraph", async ()
       reason: "SnapshotAdoptionFailed:RenderedSnapshotLineAdvanceMismatch:0;sentinel;expectedFlow=36;expectedCore=36;actual=38;contentWidth=360",
     });
     assert.strictEqual(paragraph.firstChild, originalText);
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
+test("an exact engine-owned line pen may protrude beyond the raw content box", async () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = fixtureComputedStyle;
+  try {
+    const { root } = fixture({
+      lineEnd: 36.015625,
+      paragraphWidth: 35,
+      maximumWidth: 35,
+    });
+
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), { adopted: true, count: 1 });
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;
   }

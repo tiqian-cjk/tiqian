@@ -344,6 +344,7 @@ test("snapshot bundle exposes compact SSR artifacts without inline geometry", ()
   assert.deepEqual(bundle.rootAttributes, { "data-tiqian-exact-render-font": "true" });
   assert.match(bundle.template, /^<template /u);
   assert.match(bundle.template, /server-dom-v1/u);
+  assert.match(bundle.template, /:is\(p, li\)\[data-tq-snapshot-key\]/u);
   assert.doesNotMatch(bundle.template, /data-tq-entry=/u);
   assert.match(bundle.inertTemplate, /^<template /u);
   assert.match(bundle.inertTemplate, /data-tq-entry="p-1"/u);

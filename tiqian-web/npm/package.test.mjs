@@ -185,8 +185,7 @@ test("the custom element validates a snapshot before dynamically loading the bro
   );
   assert.match(elementSource, /#restartConnectedLifecycle\(\)/u);
   assert.match(elementSource, /function snapshotCompletionSelector\(root\)/u);
-  assert.match(elementSource, /root\.querySelectorAll\("ol > li, ul > li"\)/u);
-  assert.match(elementSource, /p:not\(\[data-tq-snapshot-key\]\)/u);
+  assert.match(elementSource, /:is\(p, li\):not\(\[data-tq-snapshot-key\]\)/u);
   assert.match(elementSource, /!strongEmphasisRuntimeRequired && !initialCompletionSelector/u);
   assert.match(
     elementSource,

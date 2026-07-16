@@ -319,6 +319,36 @@ test("prepared positive spacing participates in native selection instead of usin
   assert.match(lowered.html, /<\/span>文<span/u);
 });
 
+test("a single-cell overlap preserves its glyph width and carries negative flow in margin", () => {
+  const plan = fixturePlan();
+  plan.sourceText = " 中";
+  plan.lines[0].rangeEnd = 2;
+  plan.lines[0].visualWidth = 17;
+  plan.lines[0].cells = [{
+    rangeStart: 0,
+    rangeEnd: 1,
+    source: " ",
+    display: " ",
+    drawX: 0,
+    naturalWidth: 4,
+    leadingLayoutAdvance: 0,
+  }, {
+    rangeStart: 1,
+    rangeEnd: 2,
+    source: "中",
+    display: "中",
+    drawX: -1,
+    naturalWidth: 18,
+    leadingLayoutAdvance: 0,
+  }];
+
+  const lowered = renderPreparedParagraphArtifact(plan, "zh-Hans");
+
+  assert.match(lowered.html, /margin-right:-5px!important/u);
+  assert.match(lowered.html, /data-tq-advance="4"/u);
+  assert.doesNotMatch(lowered.html, /letter-spacing:-5px!important/u);
+});
+
 test("a multi-character cluster applies one total trailing adjustment", () => {
   const plan = fixturePlan();
   plan.lines[0].rangeEnd = 4;

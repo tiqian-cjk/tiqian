@@ -124,6 +124,8 @@ function harness(manifest, options = {}) {
   let closeCount = 0;
   const fetch = async (url, init) => {
     requests.push({ url, init });
+    const sequencedError = options.fetchErrors?.shift?.();
+    if (sequencedError) throw sequencedError;
     if (options.fetchError) throw options.fetchError;
     return {
       ok: options.responseOk ?? true,
@@ -229,6 +231,45 @@ test("browser font sessions aggregate manifest evidence and close after the fina
   assert.equal(state.createCalls.length, 2);
   assert.equal(state.loader.release(next), true);
   assert.equal(state.closeCount(), 2);
+});
+
+test("browser font sessions retain whitespace-only glyph evidence", async () => {
+  const bytes = new TextEncoder().encode("fixture-font-source");
+  const sourceSha256 = digest(bytes);
+  const manifest = manifestWithFaces([[
+    faceEvidence(sourceSha256, {
+      unicodeRange: "U+0020",
+      coverageText: " ",
+      probe: {
+        ...faceEvidence(sourceSha256).probe,
+        text: " ",
+        advancePx: 4,
+        script: "Latn",
+      },
+    }),
+  ]]);
+  const state = harness(manifest, { bytes });
+
+  const handle = await state.loader.prepare(state.root);
+
+  assert.equal(state.createCalls.length, 1);
+  assert.equal(state.loader.release(handle), true);
+});
+
+test("browser font sessions retry one transient content-addressed fetch", async () => {
+  const bytes = new TextEncoder().encode("fixture-font-source");
+  const manifest = manifestWithFaces([[faceEvidence(digest(bytes))]]);
+  const state = harness(manifest, {
+    bytes,
+    fetchErrors: [new TypeError("conditional cache race")],
+  });
+
+  const handle = await state.loader.prepare(state.root);
+
+  assert.equal(state.requests.length, 2);
+  assert.deepEqual(state.requests[0].init, { credentials: "same-origin" });
+  assert.deepEqual(state.requests[1].init, { credentials: "same-origin", cache: "reload" });
+  assert.equal(state.loader.release(handle), true);
 });
 
 test("lining numeric snapshots preserve the server lnum replay contract", async () => {

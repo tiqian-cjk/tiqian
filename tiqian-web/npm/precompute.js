@@ -19,7 +19,7 @@ import {
 const FAMILY_SEPARATOR = "\u001f";
 const RECORD_SEPARATOR = "\u001e";
 const FIELD_SEPARATOR = "\u001d";
-const PLAIN_PARAGRAPH_SELECTOR = "p[data-tq-snapshot-key]";
+const PLAIN_PARAGRAPH_SELECTOR = ":is(p, li)[data-tq-snapshot-key]";
 const SNAPSHOT_LOCALE = "zh-Hans";
 const PARAGRAPH_CAPABILITY_ISSUES = [
   "NoExactFontFace",

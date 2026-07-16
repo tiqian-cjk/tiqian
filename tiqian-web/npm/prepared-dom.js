@@ -275,9 +275,16 @@ function renderedText(value) {
   };
 }
 
-function preparedSpacing(display, trailingGap) {
+function preparedSpacing(display, naturalWidth, trailingGap) {
   if (Math.abs(trailingGap) < SPACING_EPSILON) return { kind: "none", px: 0 };
-  if (display.length === 1) return { kind: "letter", px: trailingGap };
+  // NegativeSingleCellFlowAdvance: browsers clamp the border-box width of a
+  // one-character inline span at zero when negative letter-spacing exceeds the
+  // glyph advance. Preserve the selectable source glyph at its natural width
+  // and carry the overtake in margin-right, which is also how multi-character
+  // overlap is represented. The line sentinel still verifies the total flow.
+  if (display.length === 1 && naturalWidth + trailingGap >= 0) {
+    return { kind: "letter", px: trailingGap };
+  }
   if (trailingGap < 0) return { kind: "overlap", px: trailingGap };
   // MultiCharacterTrailingLetterDistribution: CSS applies letter-spacing once
   // per rendered character, including the final character in the inline box.
@@ -428,7 +435,7 @@ export function renderPreparedParagraphArtifact(
         shapingBoundary: cell.shapingBoundary === true,
         openTypeFeatures: cell.openTypeFeatures,
         trailingGap,
-        spacing: preparedSpacing(cell.display, trailingGap),
+        spacing: preparedSpacing(cell.display, cell.naturalWidth, trailingGap),
         semanticPath: semanticSpansFor(cell.rangeStart, cell.rangeEnd),
       };
     });

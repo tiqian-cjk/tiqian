@@ -644,7 +644,12 @@ function renderedLineAdvanceIssue(paragraph, contentWidth) {
     if (
       !Number.isFinite(actual) || Math.abs(actual - expectedFlow) > LINE_ADVANCE_TOLERANCE_PX ||
       Math.abs(actual - expectedCore) > LINE_ADVANCE_TOLERANCE_PX ||
-      actual - contentWidth > WIDTH_TOLERANCE_PX
+      // PreparedCoreProtrusionAllowance: punctuation compression and the
+      // line-length grid may intentionally place the serialized line pen just
+      // beyond the raw content box. Reject only browser flow beyond both the
+      // live box and the engine-owned core pen; exact agreement with the core
+      // is not an overflow regression.
+      actual - Math.max(contentWidth, expectedCore) > WIDTH_TOLERANCE_PX
     ) return issue(`sentinel;expectedFlow=${expectedFlow};expectedCore=${expectedCore};actual=${actual};contentWidth=${contentWidth}`);
   }
   return null;
@@ -815,7 +820,12 @@ function computedTypographyIssue(
   for (const value of [style.paddingLeft, style.paddingRight, style.borderLeftWidth, style.borderRightWidth]) {
     if (value && Math.abs(numericCssPx(value)) > 0.01) return "horizontalPaddingOrBorder";
   }
-  if ((style.display || "block") !== "block") return "display";
+  // NativeListMarkerOuterDisplay: prepared geometry replaces only the list
+  // item's children. The host <li> must retain its list-item outer display so
+  // the browser keeps owning marker painting, while ordinary paragraphs remain
+  // strict block containers.
+  const expectedDisplay = paragraph.tagName === "LI" ? "list-item" : "block";
+  if ((style.display || "block") !== expectedDisplay) return "display";
   if ((style.transform || "none") !== "none") return "transform";
   if ((style.scale || "none") !== "none") return "scale";
   if (!new Set(["", "auto"]).has(style.columnCount || "auto")) return "columnCount";

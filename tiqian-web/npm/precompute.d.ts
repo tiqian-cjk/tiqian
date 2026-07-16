@@ -130,7 +130,7 @@ export declare function renderSnapshotBundle(
   preparedParagraphs: readonly PreparedParagraph[],
   options: {
     id: string;
-    paragraphSelector?: "p[data-tq-snapshot-key]";
+    paragraphSelector?: ":is(p, li)[data-tq-snapshot-key]";
     fontContractParagraphs?: readonly PreparedParagraph[];
   },
 ): SnapshotBundle;
@@ -138,7 +138,7 @@ export declare function renderSnapshotTemplate(
   preparedParagraphs: readonly PreparedParagraph[],
   options: {
     id: string;
-    paragraphSelector?: "p[data-tq-snapshot-key]";
+    paragraphSelector?: ":is(p, li)[data-tq-snapshot-key]";
     fontContractParagraphs?: readonly PreparedParagraph[];
   },
 ): string;

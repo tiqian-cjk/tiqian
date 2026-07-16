@@ -102,14 +102,11 @@ function isRuntimeCompletionCandidate(element, root) {
 }
 
 function snapshotCompletionSelector(root) {
-  const hasUnpreparedParagraph = Array.from(
-    root.querySelectorAll("p:not([data-tq-snapshot-key])"),
-  ).some((paragraph) => isRuntimeCompletionCandidate(paragraph, root));
-  const hasListItem = Array.from(root.querySelectorAll("ol > li, ul > li"))
-    .some((item) => isRuntimeCompletionCandidate(item, root));
-  return [hasUnpreparedParagraph ? "p:not([data-tq-snapshot-key])" : null, hasListItem ? "li" : null]
-    .filter(Boolean)
-    .join(",");
+  const selector = ":is(p, li):not([data-tq-snapshot-key])";
+  return Array.from(root.querySelectorAll(selector))
+    .some((paragraph) => isRuntimeCompletionCandidate(paragraph, root))
+    ? selector
+    : "";
 }
 
 function loadExactFontFallback() {
@@ -270,7 +267,11 @@ class TiqianProseElement extends HTMLElementBase {
       // A route reconnect or a different line-length grid gets a fresh attempt.
       if (this.hasAttribute(EXACT_PREPARED_FALLBACK_ATTRIBUTE)) {
         this.#exactFontRejectedAttempt = this.#exactFontAttemptSignature();
-        this.#releaseExactFontSession();
+        // ResponsiveExactFontSessionReuse: the font bytes and shaping session
+        // are still exact; only this line measure failed DOM replay. Retain the
+        // session so a later grid can revalidate without downloading every
+        // unicode-range subset again. Disconnect and snapshot adoption remain
+        // the owners of final release.
         this.removeAttribute(EXACT_RENDER_FONT_ATTRIBUTE);
       }
       if (stale) this.#responsiveCommitRequired = true;
@@ -550,6 +551,12 @@ class TiqianProseElement extends HTMLElementBase {
     // paragraphs not reached yet remain responsive through the same exact root
     // font and host line-height contract.
     beforeDispatch?.();
+    // LatestExactLayoutDiagnostics: source DOM is live at this point, so stale
+    // replay diagnostics can be cleared without briefly re-enabling exact CSS
+    // on geometry from the previous measure. The current run will set them
+    // again if its own prepared DOM cannot be represented.
+    delete this.dataset.tiqianExactLayoutIssue;
+    this.removeAttribute(EXACT_PREPARED_FALLBACK_ATTRIBUTE);
     if (exactFontSession) {
       try {
         this.#exactFontSession.installRenderFont(

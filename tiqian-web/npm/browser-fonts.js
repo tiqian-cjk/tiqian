@@ -39,6 +39,11 @@ function stringValue(value, code, field) {
   return value;
 }
 
+function textValue(value, code, field) {
+  if (typeof value !== "string" || value.length === 0) fail(code, field);
+  return value;
+}
+
 function digestValue(value, field) {
   if (typeof value !== "string" || !HASH_PATTERN.test(value)) {
     fail("SnapshotFontEvidenceInvalid", field);
@@ -216,8 +221,12 @@ function collectManifestFaces(manifest) {
     }
     for (const rawFace of fontEvidence.faces) {
       const face = evidenceFace(rawFace);
-      const coverageText = stringValue(
-        rawFace.coverageText || rawFace.probe?.text,
+      // WhitespaceGlyphEvidenceIsText: a dedicated Latin/space face can
+      // legitimately contribute only U+0020. Descriptor identifiers still use
+      // trim-aware validation, but glyph coverage must preserve every source
+      // code point and reject only the actually empty string.
+      const coverageText = textValue(
+        rawFace.coverageText ?? rawFace.probe?.text,
         "SnapshotFontEvidenceInvalid",
         "coverageText",
       );
@@ -455,26 +464,43 @@ export function createBrowserFontSessionLoader(options = {}) {
 
   async function load(context) {
     const bytesByUrl = new Map();
+    const fetchFontBytes = async (url) => {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        let response;
+        try {
+          response = await fetchImplementation(url, {
+            credentials: "same-origin",
+            ...(attempt === 0 ? {} : { cache: "reload" }),
+          });
+        } catch (error) {
+          // ContentAddressedFontFetchRetry: a navigation or responsive
+          // transition can race a conditional-cache response even though the
+          // immutable shard is healthy. Retry once from the origin without a
+          // fixed delay; integrity validation below still rejects wrong bytes.
+          if (attempt === 0) continue;
+          fail("FontFetchFailed", url, error);
+        }
+        if (!response?.ok || typeof response.arrayBuffer !== "function") {
+          const status = response?.status ?? "invalid-response";
+          const retryable = status === 304 || status === 408 || status === 429 ||
+            (typeof status === "number" && status >= 500);
+          if (attempt === 0 && retryable) continue;
+          fail("FontFetchFailed", `${url}:${status}`);
+        }
+        try {
+          return new Uint8Array(await response.arrayBuffer());
+        } catch (error) {
+          if (attempt === 0) continue;
+          fail("FontFetchFailed", url, error);
+        }
+      }
+      fail("FontFetchFailed", url);
+    };
     const faceSpecs = await Promise.all(context.faces.map(async (face) => {
       const url = resolvedFontUrl(face.publicUrl, context.baseUrl);
       let bytesPromise = bytesByUrl.get(url);
       if (!bytesPromise) {
-        bytesPromise = (async () => {
-          let response;
-          try {
-            response = await fetchImplementation(url, { credentials: "same-origin" });
-          } catch (error) {
-            fail("FontFetchFailed", url, error);
-          }
-          if (!response?.ok || typeof response.arrayBuffer !== "function") {
-            fail("FontFetchFailed", `${url}:${response?.status ?? "invalid-response"}`);
-          }
-          try {
-            return new Uint8Array(await response.arrayBuffer());
-          } catch (error) {
-            fail("FontFetchFailed", url, error);
-          }
-        })();
+        bytesPromise = fetchFontBytes(url);
         bytesByUrl.set(url, bytesPromise);
       }
       const bytes = await bytesPromise;
