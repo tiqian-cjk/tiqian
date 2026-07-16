@@ -20,6 +20,7 @@ const FAMILY_SEPARATOR = "\u001f";
 const RECORD_SEPARATOR = "\u001e";
 const FIELD_SEPARATOR = "\u001d";
 const PLAIN_PARAGRAPH_SELECTOR = ":is(p, li)[data-tq-snapshot-key]";
+const RUNTIME_PARAGRAPH_SELECTOR = ":is(p, li):not([data-tiqian-skip])";
 const SNAPSHOT_LOCALE = "zh-Hans";
 const PARAGRAPH_CAPABILITY_ISSUES = [
   "NoExactFontFace",
@@ -399,7 +400,11 @@ export async function createPrecomputer(options = {}) {
   });
 }
 
-function buildSnapshotBundle(preparedParagraphs, options = {}) {
+function buildSnapshotBundle(
+  preparedParagraphs,
+  options = {},
+  supportedParagraphSelector = PLAIN_PARAGRAPH_SELECTOR,
+) {
   const entries = Array.from(preparedParagraphs ?? []);
   const fontContractEntries = Array.from(options.fontContractParagraphs ?? []);
   const contractCorpus = [...entries, ...fontContractEntries];
@@ -427,8 +432,8 @@ function buildSnapshotBundle(preparedParagraphs, options = {}) {
   const id = String(options.id ?? "").trim();
   if (!id) throw new Error("MissingSnapshotTemplateId");
   if (!/^[A-Za-z][A-Za-z0-9_-]*$/u.test(id)) throw new Error("InvalidSnapshotTemplateId");
-  const paragraphSelector = String(options.paragraphSelector ?? PLAIN_PARAGRAPH_SELECTOR);
-  if (paragraphSelector !== PLAIN_PARAGRAPH_SELECTOR) {
+  const paragraphSelector = String(options.paragraphSelector ?? supportedParagraphSelector);
+  if (paragraphSelector !== supportedParagraphSelector) {
     throw new Error("UnsupportedSnapshotParagraphSelector");
   }
   const valueStyles = [];
@@ -537,7 +542,10 @@ export function renderSnapshotBundle(preparedParagraphs, options = {}) {
  * or snapshot-ready root attribute is exposed to the host.
  */
 export function renderFontContractBundle(preparedParagraphs, options = {}) {
-  const snapshotBundle = buildSnapshotBundle(preparedParagraphs, options);
+  const snapshotBundle = buildSnapshotBundle(preparedParagraphs, {
+    ...options,
+    paragraphSelector: options.paragraphSelector ?? RUNTIME_PARAGRAPH_SELECTOR,
+  }, RUNTIME_PARAGRAPH_SELECTOR);
   const template = snapshotBundle.clientTemplate;
   return Object.freeze({
     ...snapshotBundle,

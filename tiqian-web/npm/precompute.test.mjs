@@ -387,6 +387,8 @@ test("snapshot bundle exposes compact SSR artifacts without inline geometry", ()
   assert.equal(fontContract.template, fontContract.clientTemplate);
   assert.equal(fontContract.inertTemplate, fontContract.clientTemplate);
   assert.match(fontContract.clientTemplate, /font-contract-v1/u);
+  assert.match(fontContract.clientTemplate, /:is\(p, li\):not\(\[data-tiqian-skip\]\)/u);
+  assert.doesNotMatch(fontContract.clientTemplate, /:is\(p, li\)\[data-tq-snapshot-key\]/u);
   assert.doesNotMatch(fontContract.initialStyle, /\.tqv-/u);
 });
 

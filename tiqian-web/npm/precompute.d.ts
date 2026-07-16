@@ -142,7 +142,7 @@ export declare function renderFontContractBundle(
   preparedParagraphs: readonly PreparedParagraph[],
   options: {
     id: string;
-    paragraphSelector?: ":is(p, li)[data-tq-snapshot-key]";
+    paragraphSelector?: ":is(p, li):not([data-tiqian-skip])";
     fontContractParagraphs?: readonly PreparedParagraph[];
   },
 ): SnapshotBundle;
