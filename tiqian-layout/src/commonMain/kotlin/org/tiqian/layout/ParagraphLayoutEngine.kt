@@ -68,6 +68,7 @@ import org.tiqian.core.KinsokuDecisionInfo
 import org.tiqian.core.LineLengthGridDecisionInfo
 import org.tiqian.core.FirstLineIndentDecisionInfo
 import kotlin.math.floor
+import kotlin.text.CharCategory
 import org.tiqian.core.LineSpacingDecisionInfo
 import org.tiqian.core.TextRange
 import org.tiqian.font.CjkFontRoleClassifier
@@ -96,6 +97,12 @@ import org.tiqian.shaping.ExplainableStubTextShaper
 import org.tiqian.shaping.ShapingInput
 import org.tiqian.shaping.ShapingResult
 import org.tiqian.shaping.TextShaper
+
+private val COMBINING_MARK_CATEGORIES = setOf(
+    CharCategory.NON_SPACING_MARK,
+    CharCategory.COMBINING_SPACING_MARK,
+    CharCategory.ENCLOSING_MARK,
+)
 
 interface ParagraphLayoutEngine {
     fun layout(input: LayoutInput): LayoutResult
@@ -2336,16 +2343,17 @@ class ExplainableStubParagraphLayoutEngine(
                 }
             }
 
-            // `VariationSelectorStaysWithBaseCluster`: U+FE0E/U+FE0F and the
-            // supplementary variation selectors modify the preceding scalar;
-            // shaping them as an independent Unknown run produces a legitimate
-            // zero advance which the web capability gate then mistakes for a
-            // broken visible glyph. Keep the source range intact and send the
-            // base plus selector through one font decision and shaping call.
+            // `GraphemeExtendStaysWithBaseCluster`: Unicode combining marks and
+            // variation selectors modify the preceding scalar. Shaping an Mn,
+            // Mc, or Me scalar as an independent Unknown run loses its base
+            // context and produces a legitimate zero advance which web capability
+            // validation then mistakes for a broken visible glyph. Keep the source
+            // range intact and send the base plus every extending mark through one
+            // font decision and shaping call.
             while (index < text.length && index !in spanBoundaries) {
-                val selector = text.codePointAtCompat(index)
-                if (!selector.isVariationSelectorCodePoint()) break
-                index += selector.charCount()
+                val extender = text.codePointAtCompat(index)
+                if (!extender.isCombiningMarkCodePoint() && !extender.isVariationSelectorCodePoint()) break
+                index += extender.charCount()
             }
 
             ranges.add(ResolvedClusterRange(TextRange(start, index), role))
@@ -2372,6 +2380,9 @@ class ExplainableStubParagraphLayoutEngine(
 
     private fun Int.isVariationSelectorCodePoint(): Boolean =
         this in 0xFE00..0xFE0F || this in 0xE0100..0xE01EF
+
+    private fun Int.isCombiningMarkCodePoint(): Boolean =
+        this in 0..0xFFFF && toChar().category in COMBINING_MARK_CATEGORIES
 
     private fun Int.isAsciiPointMarkCodePoint(): Boolean =
         this in 0..0xFFFF && ClreqPunctuationPolicies.isAsciiPointMark(toChar())

@@ -338,6 +338,21 @@ class ExplainableStubParagraphLayoutEngineTest {
     }
 
     @Test
+    fun combiningMarksStayInTheirBaseShapingRuns() {
+        val result = ExplainableStubParagraphLayoutEngine(hyphenator = NoHyphenator).layout(
+            LayoutInput(
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic(0f)),
+                content = TiqianTextContent("༎ຶ Ỏ̷"),
+                constraints = LayoutConstraints(maxWidth = 320f),
+            ),
+        )
+
+        assertTrue(result.debug.shapingDecisions.any { it.sourceText == "༎ຶ" })
+        assertTrue(result.debug.shapingDecisions.any { it.sourceText == "Ỏ̷" })
+        assertTrue(result.debug.shapingDecisions.none { it.sourceText == "ຶ" || it.sourceText == "̷" })
+    }
+
+    @Test
     fun preservesSourceTextWhenUsingClreqRecommendedDisplayGlyphs() {
         val result = ExplainableStubParagraphLayoutEngine().layout(
             LayoutInput(
