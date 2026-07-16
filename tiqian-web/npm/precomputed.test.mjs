@@ -811,6 +811,24 @@ test("shared prepared DOM validator tolerates compatible-local subpixel segment 
   }
 });
 
+test("shared prepared DOM validator allows one browser quantization step beyond the probe tolerance", () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = fixtureComputedStyle;
+  try {
+    const { paragraph, entry } = fixture({
+      localSource: true,
+      segmentLeft: 0.765625,
+      lineEnd: 36.765625,
+    });
+    while (paragraph.firstChild) paragraph.removeChild(paragraph.firstChild);
+    for (const child of entry.childNodes) paragraph.appendChild(child.cloneNode(true));
+    paragraph.setAttribute("data-tq-canonical-plain", "true");
+    assert.equal(renderedPreparedParagraphIssue(paragraph, 360), null);
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
 test("strict snapshot adoption preserves and restores the original SSR node identity", async () => {
   const previousGetComputedStyle = globalThis.getComputedStyle;
   globalThis.getComputedStyle = fixtureComputedStyle;
@@ -822,6 +840,7 @@ test("strict snapshot adoption preserves and restores the original SSR node iden
     assert.equal(root.dataset.tiqianSnapshotFontPolicy, "url-only");
     assert.equal(paragraph.getAttribute("data-tq-rendered"), "true");
     assert.equal(paragraph.getAttribute("data-tq-canonical-source"), "true");
+    assert.equal(paragraph.getAttribute("data-tq-exact-prepared-dom"), "true");
     assert.notStrictEqual(paragraph.firstChild, originalText);
 
     assert.equal(restorePrecomputedSnapshot(root), true);
@@ -829,6 +848,7 @@ test("strict snapshot adoption preserves and restores the original SSR node iden
     assert.strictEqual(paragraph.firstChild, originalText);
     assert.equal(paragraph.getAttribute("data-tq-rendered"), null);
     assert.equal(paragraph.getAttribute("data-tq-canonical-source"), null);
+    assert.equal(paragraph.getAttribute("data-tq-exact-prepared-dom"), null);
     assert.equal(root.dataset.tiqianSnapshotFontPolicy, undefined);
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;

@@ -112,6 +112,12 @@ test("the custom element validates a snapshot before dynamically loading the bro
   const readoptionStart = elementSource.indexOf("  #tryReadoptSnapshotAtMaximumMeasure() {");
   const readoptionEnd = elementSource.indexOf("  #recoverRuntimeAfterSnapshotMiss(", readoptionStart);
   const readoptionSource = elementSource.slice(readoptionStart, readoptionEnd);
+  const mixedCompletionStart = elementSource.indexOf("MixedSnapshotRuntimeCompletion");
+  const mixedCompletionEnd = elementSource.indexOf(
+    "          if (!this.#runtimeStateActive)",
+    mixedCompletionStart,
+  );
+  const mixedCompletionSource = elementSource.slice(mixedCompletionStart, mixedCompletionEnd);
 
   assert.ok(adoption >= 0);
   assert.match(initialSnapshotSource, /#beginLayoutWork\(\{ captureSignatures: false \}\)/u);
@@ -131,7 +137,7 @@ test("the custom element validates a snapshot before dynamically loading the bro
   );
   assert.match(
     elementSource,
-    /if \(!strongEmphasisRuntimeRequired && !initialCompletionSelector\) \{[\s\S]*?tryAdoptRequestedSnapshot\(/u,
+    /if \(!strongEmphasisRuntimeRequired\) \{[\s\S]*?tryAdoptRequestedSnapshot\(/u,
   );
   assert.match(runtimeSource, /import\("\.\/runtime\/tiqian-web\.js"\)/u);
   assert.doesNotMatch(elementSource, /from "\.\/runtime\/tiqian-web\.js"/u);
@@ -188,12 +194,16 @@ test("the custom element validates a snapshot before dynamically loading the bro
   assert.match(elementSource, /#restartConnectedLifecycle\(\)/u);
   assert.match(elementSource, /function snapshotCompletionSelector\(root\)/u);
   assert.match(elementSource, /:is\(p, li\):not\(\[data-tq-snapshot-key\]\)/u);
-  assert.match(elementSource, /!strongEmphasisRuntimeRequired && !initialCompletionSelector/u);
+  assert.match(elementSource, /!strongEmphasisRuntimeRequired\) \{/u);
   assert.match(
     elementSource,
-    /SnapshotWholeRootConsistency[\s\S]*?restoreLoadedSnapshot\(this\)[\s\S]*?#dispatchProgressiveEnhance\(generation\)/u,
+    /MixedSnapshotRuntimeCompletion[\s\S]*?#dispatchProgressiveEnhance\(generation, \{[\s\S]*?paragraphSelector: completionSelector/u,
   );
-  assert.doesNotMatch(elementSource, /paragraphSelector:\s*completionSelector/u);
+  assert.match(elementSource, /paragraphSelector:\s*completionSelector/u);
+  assert.doesNotMatch(
+    mixedCompletionSource,
+    /restoreLoadedSnapshot\(this\)/u,
+  );
   assert.doesNotMatch(elementSource, /runtimeCoversSnapshotParagraphs|preserveSnapshotRenderFont/u);
   assert.match(
     elementSource,
@@ -263,6 +273,14 @@ test("the custom element validates a snapshot before dynamically loading the bro
     elementSource,
     /ResponsiveRuntimeRollbackAtFirstSafeSignal[\s\S]*?#refreshRuntimeFromSource\(\)/u,
   );
+  assert.match(
+    elementSource,
+    /MixedSnapshotCompletionResume[\s\S]*?completionSelector && !this\.#runtimeStateActive[\s\S]*?paragraphSelector: completionSelector/u,
+  );
+  assert.match(
+    elementSource,
+    /ReadoptionMissMustReclaimSource[\s\S]*?!this\.#runtimeStateActive[\s\S]*?#dispatchProgressiveEnhance\(generation\)/u,
+  );
   assert.match(elementSource, /PreparedSnapshotTransition/u);
   assert.match(
     elementSource,
@@ -282,9 +300,18 @@ test("the custom element validates a snapshot before dynamically loading the bro
     /const currentParagraphWidths = this\.#paragraphWidthSignature\(\)[\s\S]*?this\.#lastParagraphWidths = currentParagraphWidths/u,
   );
   assert.match(elementSource, /!widthsChanged && !measuresChanged/u);
+  assert.match(
+    elementSource,
+    /hostInlineSizeRefresh = widthsChanged[\s\S]*?\[data-tq-host-inline-size\][\s\S]*?!hostInlineSizeRefresh/u,
+  );
   assert.match(elementSource, /usesCapturedMeasure: true/u);
   assert.match(elementSource, /currentMeasures !== this\.#layoutWorkMeasureSignature/u);
   assert.match(elementSource, /RenderOutputTypographyIsNotAnInputChange/u);
+  assert.match(
+    elementSource,
+    /RendererOwnedProgressiveStyleMutation[\s\S]*?rendererOwnedProgressiveStyleMutation\(record, this\)/u,
+  );
+  assert.match(elementSource, /attributeOldValue: true/u);
   assert.doesNotMatch(
     elementSource,
     /const capturedTypographyChanged = this\.#layoutWorkUsesCapturedMeasure/u,

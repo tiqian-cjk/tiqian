@@ -28,13 +28,25 @@ const PROBE_RELATIVE_TOLERANCE = 0.03;
 // drift that changes the actual layout.
 const SEGMENT_ADVANCE_ABSOLUTE_TOLERANCE_PX = PROBE_ABSOLUTE_TOLERANCE_PX;
 const SEGMENT_ADVANCE_RELATIVE_TOLERANCE = PROBE_RELATIVE_TOLERANCE;
-const LINE_ADVANCE_TOLERANCE_PX = 0.75;
-const INLINE_POSITION_TOLERANCE_PX = 0.75;
+// BrowserSubpixelQuantizationAllowance: Range/inline fragment geometry is
+// quantized to 1/64 CSS px. Add exactly one quantization step to the existing
+// 0.75 px contract so a compatible-local prefix at 0.76 px does not discard an
+// otherwise identical line; a full-pixel prefix drift still fails closed.
+const BROWSER_SUBPIXEL_QUANTIZATION_PX = 1 / 64;
+// Serialized engine floats can land a few 1e-13 px below their mathematical
+// value (for example 898.9999999999998). Do not turn that representation noise
+// into a rejection exactly on the named 49/64 px boundary.
+const GEOMETRY_COMPARISON_EPSILON_PX = 1e-9;
+const LINE_ADVANCE_TOLERANCE_PX = PROBE_ABSOLUTE_TOLERANCE_PX +
+  BROWSER_SUBPIXEL_QUANTIZATION_PX + GEOMETRY_COMPARISON_EPSILON_PX;
+const INLINE_POSITION_TOLERANCE_PX = PROBE_ABSOLUTE_TOLERANCE_PX +
+  BROWSER_SUBPIXEL_QUANTIZATION_PX + GEOMETRY_COMPARISON_EPSILON_PX;
 const LINE_VERTICAL_TOLERANCE_PX = 0.75;
 const PREPARED_VERTICAL_TOLERANCE_PX = 0.02;
 const RENDER_FLOW_EPSILON_PX = 0.01;
 const PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE = "pwid,palt";
 export const EXACT_RENDER_FONT_ATTRIBUTE = "data-tiqian-exact-render-font";
+const EXACT_PREPARED_DOM_ATTRIBUTE = "data-tq-exact-prepared-dom";
 const SERVER_RENDERED_SNAPSHOT_ATTRIBUTE = "data-tq-ssr-snapshot";
 const EXACT_LAYOUT_ISSUE_ATTRIBUTE = "data-tiqian-exact-layout-issue";
 const TYPOGRAPHY_ISSUE_ATTRIBUTE = "data-tiqian-snapshot-typography-issue";
@@ -1005,7 +1017,18 @@ function fontContractTypographyIssue(root, manifest, options = {}) {
   const contracts = Array.from(manifest?.typographies ?? [], (entry) => entry?.value)
     .filter((value) => value && Array.isArray(value.fontFamilies));
   if (contracts.length === 0) return "manifestTypography";
-  const paragraphs = rootParagraphs(root, manifest.paragraphSelector);
+  // RuntimeFontContractCandidateParity: exact-font validation covers the same
+  // paragraph-shaped owners as the Kotlin runtime. Container list items and
+  // explicitly skipped subtrees are not shaping inputs and must not invalidate
+  // an otherwise exact session merely because they carry host-owned typography.
+  const paragraphs = rootParagraphs(root, manifest.paragraphSelector).filter((paragraph) => {
+    if (paragraph.closest(
+      ".not-prose, pre, table, .katex, .katex-display, .expressive-code, .tq-paragraph, [data-tiqian-skip]",
+    )) return false;
+    return paragraph.tagName !== "LI" || !paragraph.querySelector(
+      ":scope > p, :scope > ul, :scope > ol, :scope > blockquote, :scope > pre, :scope > table",
+    );
+  });
   if (paragraphs.length === 0) return "paragraphCandidate";
   for (const paragraph of paragraphs) {
     const issues = contracts.map((contract) => computedTypographyIssue(
@@ -1457,6 +1480,11 @@ export function restorePrecomputedSnapshot(root) {
     } else {
       item.paragraph.setAttribute("data-tq-canonical-source", item.originalCanonicalSourceAttribute);
     }
+    if (item.originalExactPreparedDomAttribute == null) {
+      item.paragraph.removeAttribute(EXACT_PREPARED_DOM_ATTRIBUTE);
+    } else {
+      item.paragraph.setAttribute(EXACT_PREPARED_DOM_ATTRIBUTE, item.originalExactPreparedDomAttribute);
+    }
   }
   if (state.valueStylesInstalled) releasePreparedValueStyleRoot(root);
   if (state.serverRenderedEntries) {
@@ -1618,6 +1646,9 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
       const originalCanonicalSourceAttribute = serverRenderedEntries
         ? null
         : paragraph.getAttribute("data-tq-canonical-source");
+      const originalExactPreparedDomAttribute = serverRenderedEntries
+        ? null
+        : paragraph.getAttribute(EXACT_PREPARED_DOM_ATTRIBUTE);
       adopted.push({
         paragraph,
         originalContent,
@@ -1625,8 +1656,10 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
         originalLangAttribute,
         originalCanonicalPlainAttribute,
         originalCanonicalSourceAttribute,
+        originalExactPreparedDomAttribute,
       });
       paragraph.setAttribute("data-tq-rendered", "true");
+      paragraph.setAttribute(EXACT_PREPARED_DOM_ATTRIBUTE, "true");
       if (entry.semantic === true) paragraph.removeAttribute("data-tq-canonical-plain");
       else paragraph.setAttribute("data-tq-canonical-plain", "true");
       paragraph.setAttribute("data-tq-canonical-source", "true");

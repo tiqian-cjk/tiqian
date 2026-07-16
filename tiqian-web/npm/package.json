@@ -48,6 +48,7 @@
     "digest.js",
     "element.d.ts",
     "element.js",
+    "font-contract.js",
     "lazy-capabilities.js",
     "precompute.d.ts",
     "precompute.js",

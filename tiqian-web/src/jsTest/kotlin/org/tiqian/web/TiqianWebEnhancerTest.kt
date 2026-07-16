@@ -15,6 +15,7 @@ import kotlin.test.assertTrue
 import org.w3c.dom.Element
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.events.Event
+import org.tiqian.shaping.web.WebCjkDashCapability
 
 class TiqianWebEnhancerTest {
     private val mounted = mutableListOf<HTMLElement>()
@@ -104,6 +105,39 @@ class TiqianWebEnhancerTest {
             assertNull(paragraph.getAttribute("data-tiqian-capability-issue"))
             assertNotNull(paragraph.querySelector("code"))
             assertEquals("中文code42正文。", copySelection(paragraph))
+        } finally {
+            clearExactFontSessionFixture()
+        }
+    }
+
+    @Test
+    fun unkeyedRuntimeCompletionKeepsExactDashWhenAnotherRunNeedsBrowserFallback() {
+        installExactFontSessionFixture(failShaping = false, failText = "坏")
+        try {
+            val root = mount(
+                """
+                <div data-tiqian-root="true" style="width: 260px">
+                  <p style="font-family: 'Fixture CJK'; font-size: 18px; line-height: 30px">坏——正文。</p>
+                </div>
+                """.trimIndent(),
+            )
+            val options = exactTestOptions().copy(
+                paragraphSelector = "p:not([data-tq-snapshot-key])",
+                cjkDashCapability = WebCjkDashCapability(
+                    status = "unavailable",
+                    detail = "ServerShapingReplayRequired",
+                ),
+            )
+
+            assertEquals(1, TiqianWeb.enhance(root, options))
+
+            val paragraph = root.querySelector("p") as HTMLElement
+            assertTrue(exactFontShapeCount() > 0)
+            assertTrue(exactFontFallbackCount() > 0)
+            assertNull(paragraph.getAttribute("data-tq-canonical-plain"))
+            assertNull(paragraph.getAttribute("data-tiqian-capability-issue"))
+            assertNotNull(paragraph.querySelector(".tq-line"))
+            assertEquals("坏——正文。", copySelection(paragraph))
         } finally {
             clearExactFontSessionFixture()
         }
@@ -389,6 +423,53 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
+    fun keepsInlineCodeParagraphNativeWithoutKnownMonospaceFontFace() {
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 220px">
+              <p>中文<code style='font-family: "MissingFixtureMono", monospace'>code</code>正文。</p>
+            </div>
+            """.trimIndent(),
+        )
+
+        val count = TiqianWeb.enhance(
+            root,
+            TiqianWeb.EnhanceOptions(fontSize = 18f, lineHeight = 30f),
+        )
+
+        assertEquals(0, count)
+        val paragraph = root.querySelector("p") as HTMLElement
+        assertNull(paragraph.getAttribute("data-tq-rendered"))
+        assertEquals(
+            "InlineCodeFontFaceUnavailable",
+            paragraph.getAttribute("data-tiqian-capability-issue"),
+        )
+        assertTrue(paragraph.textContent?.contains("中文code正文。") == true)
+    }
+
+    @Test
+    fun longInlineCodeTokenUsesRuntimeEmergencyBreaksWithoutOverflow() {
+        val token = "eeeeeeeebad9a5e4b24e74cb55e829fb82c8244c0a5a3bae585179575af33bb0"
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 220px">
+              <p style="font-size: 18px; line-height: 30px">域名是 <code style="padding-left: 4px; padding-right: 4px">$token</code>，它不会消失。</p>
+            </div>
+            """.trimIndent(),
+        )
+
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+
+        val paragraph = root.querySelector("p") as HTMLElement
+        assertEquals("true", paragraph.getAttribute("data-tq-rendered"))
+        assertNotNull(paragraph.querySelector("code"))
+        assertTrue(paragraph.querySelectorAll(".tq-line").length > 1)
+        assertTrue(paragraph.scrollWidth <= paragraph.clientWidth + 1)
+        assertNull(paragraph.getAttribute("data-tiqian-capability-issue"))
+        assertEquals("域名是 $token，它不会消失。", copySelection(paragraph))
+    }
+
+    @Test
     fun enhancesLeafListItemsWithoutReplacingListContainers() {
         val root = mount(
             """
@@ -418,6 +499,81 @@ class TiqianWebEnhancerTest {
         assertNotNull(inner.querySelector("strong"))
         assertEquals("list-item", computedStyleValue(inner, "display"))
         assertEquals("内层正文。", copySelection(inner))
+    }
+
+    @Test
+    fun progressiveEnhancementDoesNotMeasureSkippedAutoSizedListContainers() {
+        for (display in listOf("flex", "grid")) {
+            val root = mount(
+                """
+                <div data-tiqian-root="true" style="width: 220px">
+                  <ol>
+                    <li id="outer" style="display: $display">
+                      <p id="child">脚注正文应由客户端接管，而且接管前后不能改变 auto-sized item 的宿主宽度。</p>
+                      <a href="#note">↩</a>
+                    </li>
+                  </ol>
+                </div>
+                """.trimIndent(),
+            )
+            val outer = root.querySelector("#outer") as HTMLElement
+            val child = root.querySelector("#child") as HTMLElement
+            val sourceWidth = elementWidth(child)
+            var stale = false
+            root.addEventListener("tiqian:ready", { event ->
+                stale = relayoutEventIsStale(event)
+            })
+            installTestAnimationFrames()
+
+            TiqianWeb.enhanceProgressively(root, testOptions())
+            flushAllTestAnimationFrames()
+
+            assertNull(outer.getAttribute("data-tq-rendered"))
+            assertEquals("true", child.getAttribute("data-tq-rendered"))
+            assertEquals(sourceWidth, elementWidth(child), 0.5)
+            assertEquals("true", child.getAttribute("data-tq-host-inline-size"))
+            assertEquals("1", root.getAttribute("data-tiqian-enhanced-count"))
+            assertFalse(stale)
+
+            TiqianWeb.destroy(root)
+            assertNull(child.getAttribute("data-tq-host-inline-size"))
+            assertEquals(sourceWidth, elementWidth(child), 0.5)
+        }
+    }
+
+    @Test
+    fun progressiveEnhancementPreservesWidthDerivedThroughShrinkToFitAncestor() {
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 576px">
+              <figure style="display: inline-block; margin: 0; max-width: 100%">
+                <div style="width: 500px"></div>
+                <figcaption>
+                  <p style="margin: 0">ContentSizedParagraphWithoutNativeBreakOpportunitiesMustKeepTheHostMeasureWhileItsSourceNodesAreInCustody</p>
+                </figcaption>
+              </figure>
+            </div>
+            """.trimIndent(),
+        )
+        val paragraph = root.querySelector("p") as HTMLElement
+        val sourceWidth = elementWidth(paragraph)
+        var stale = false
+        root.addEventListener("tiqian:ready", { event ->
+            stale = relayoutEventIsStale(event)
+        })
+        installTestAnimationFrames()
+
+        TiqianWeb.enhanceProgressively(root, testOptions())
+        flushAllTestAnimationFrames()
+
+        assertEquals("true", paragraph.getAttribute("data-tq-rendered"))
+        assertEquals("true", paragraph.getAttribute("data-tq-host-inline-size"))
+        assertEquals(sourceWidth, elementWidth(paragraph), 0.5)
+        assertFalse(stale)
+
+        TiqianWeb.destroy(root)
+        assertNull(paragraph.getAttribute("data-tq-host-inline-size"))
+        assertEquals(sourceWidth, elementWidth(paragraph), 0.5)
     }
 
     @Test
@@ -1591,6 +1747,21 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
+    fun combiningMarksAreShapedWithTheirBasesInsteadOfRejectingTheParagraph() {
+        val source = "合法组合标记༎ຶ与螺丝Ỏ̷仍应保留在正文中。"
+        val root = mount(
+            "<div data-tiqian-root='true' style='width: 320px'><p>$source</p></div>",
+        )
+
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+
+        val paragraph = root.querySelector("p") as HTMLElement
+        assertEquals("true", paragraph.getAttribute("data-tq-rendered"))
+        assertNull(paragraph.getAttribute("data-tiqian-capability-issue"))
+        assertEquals(source, copySelection(paragraph))
+    }
+
+    @Test
     fun plainBodyTextUsesSparseRunsRatherThanOneNodePerCluster() {
         val text = "中文排版需要保留语义与宿主样式，同时由引擎负责断行和标点几何。".repeat(8)
         val root = mount("<div data-tiqian-root='true' style='width: 320px'><p>$text</p></div>")
@@ -1673,7 +1844,11 @@ class TiqianWebEnhancerTest {
         }
         val sourceChildren = paragraphs.map { paragraph -> assertNotNull(paragraph.firstChild) }
         var readyCount = 0
-        root.addEventListener("tiqian:ready", { readyCount += 1 })
+        var stale = false
+        root.addEventListener("tiqian:ready", { event ->
+            readyCount += 1
+            stale = relayoutEventIsStale(event)
+        })
         installTestAnimationFrames()
 
         TiqianWeb.enhanceProgressively(root, testOptions())
@@ -1704,6 +1879,7 @@ class TiqianWebEnhancerTest {
         })
         assertEquals("18", root.getAttribute("data-tiqian-enhanced-count"))
         assertEquals(1, readyCount)
+        assertFalse(stale)
     }
 
     @Test
@@ -1741,7 +1917,11 @@ class TiqianWebEnhancerTest {
         }
         val sourceChildren = paragraphs.map { paragraph -> assertNotNull(paragraph.firstChild) }
         var readyCount = 0
-        root.addEventListener("tiqian:ready", { readyCount += 1 })
+        var stale = false
+        root.addEventListener("tiqian:ready", { event ->
+            readyCount += 1
+            stale = relayoutEventIsStale(event)
+        })
         installTestAnimationFrames()
 
         TiqianWeb.enhanceProgressively(root, testOptions())
@@ -1754,12 +1934,14 @@ class TiqianWebEnhancerTest {
         })
         assertEquals(0, root.querySelectorAll("p[data-tq-rendered='true']").length)
         assertEquals(1, readyCount)
+        assertTrue(stale)
 
         TiqianWeb.enhanceProgressively(root, testOptions())
         flushAllTestAnimationFrames()
 
         assertEquals(18, root.querySelectorAll("p[data-tq-rendered='true']").length)
         assertEquals(2, readyCount)
+        assertFalse(stale)
     }
 
     @Test
@@ -2149,11 +2331,13 @@ class TiqianWebEnhancerTest {
 
     private fun testOptions(): TiqianWeb.EnhanceOptions =
         TiqianWeb.EnhanceOptions(
+            monospaceFontContractExplicit = true,
             fontSize = 18f,
             lineHeight = 30f,
         )
 
     private fun exactTestOptions(): TiqianWeb.EnhanceOptions = TiqianWeb.EnhanceOptions(
+        monospaceFontContractExplicit = true,
         paragraphSelector = "p[data-tq-snapshot-key]",
         exactFontSession = TiqianWeb.ExactFontSessionCapability(
             status = "conforming",

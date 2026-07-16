@@ -316,7 +316,15 @@ object TiqianWeb {
         return buildList {
             for (i in 0 until nodes.length) {
                 val paragraph = nodes.item(i) as? HTMLElement ?: continue
-                if (belongsToRootScope(paragraph, root, ROOT_SELECTOR)) add(paragraph)
+                // RuntimeEligibleMeasureSet: progressive staleness compares the
+                // same leaf paragraphs that can actually enter the pipeline.
+                // Measuring a host-owned outer <li> and later rendering its
+                // child <p> changes the container's live width/measure, which
+                // used to roll back every valid child as a false stale job.
+                if (
+                    belongsToRootScope(paragraph, root, ROOT_SELECTOR) &&
+                    shouldTryParagraph(paragraph)
+                ) add(paragraph)
             }
         }
     }
@@ -353,10 +361,18 @@ object TiqianWeb {
         val originalStyleAttribute = paragraph.getAttribute("style")
         val originalPosition = paragraph.style.getPropertyValue("position")
         val originalPositionPriority = paragraph.style.getPropertyPriority("position")
+        val originalInlineSize = paragraph.style.getPropertyValue("inline-size")
+        val originalInlineSizePriority = paragraph.style.getPropertyPriority("inline-size")
+        val originalHostInlineSizeAttribute = paragraph.getAttribute(HOST_INLINE_SIZE_ATTRIBUTE)
+        val sourceInlineSize = captureSourceInlineSize(paragraph)
         val originalContent = document.createDocumentFragment()
         while (paragraph.firstChild != null) {
             originalContent.appendChild(paragraph.firstChild!!)
         }
+        val hostInlineSizeApplied = stabilizeContentSizedItemInlineSize(
+            paragraph,
+            sourceInlineSize,
+        )
         paragraph.setAttribute("data-tq-rendered", "true")
         val item = EnhancedParagraph(
             source = paragraph,
@@ -369,6 +385,10 @@ object TiqianWeb {
             originalStyleAttribute = originalStyleAttribute,
             originalPosition = originalPosition,
             originalPositionPriority = originalPositionPriority,
+            originalInlineSize = originalInlineSize,
+            originalInlineSizePriority = originalInlineSizePriority,
+            originalHostInlineSizeAttribute = originalHostInlineSizeAttribute,
+            hostInlineSizeApplied = hostInlineSizeApplied,
         )
         val layoutIssue = try {
             layoutParagraph(
@@ -503,6 +523,7 @@ object TiqianWeb {
                 issueCount = job.state.issues.size,
                 durationMs = performanceNow() - job.startedAt,
                 maxSliceMs = job.maxSliceDuration,
+                stale = job.commitSkipped || job.stale?.invoke() == true,
             )
         }
     }
@@ -537,6 +558,7 @@ object TiqianWeb {
                 issueCount = job.state.issues.size,
                 durationMs = performanceNow() - job.startedAt,
                 maxSliceMs = job.maxSliceDuration,
+                stale = false,
             )
         }
     }
@@ -740,7 +762,15 @@ object TiqianWeb {
         // session as canonical plain paragraphs; use the browser adapter only
         // when that session reports a named font capability failure.
         val exactFontLayout = browserFallbackEngine != null
-        var exactPreparedDom = exactFontLayout && paragraph.lowered.isCanonicalPlainParagraph()
+        // KeyedCanonicalPreparedDomOnly: a snapshot key proves that the server
+        // captured a complete exact replay corpus for this canonical source.
+        // An unkeyed runtime-completion paragraph may carry only the required
+        // exact runs (notably a CJK dash) and must therefore retain per-run
+        // browser fallback instead of retrying its whole paragraph through the
+        // browser shaper after one unrelated replay miss.
+        var exactPreparedDom = exactFontLayout &&
+            paragraph.source.hasAttribute("data-tq-snapshot-key") &&
+            paragraph.lowered.isCanonicalPlainParagraph()
         val layoutEngine = if (exactFontLayout && !exactPreparedDom) {
             semanticExactEngine ?: engine
         } else {
@@ -1004,6 +1034,8 @@ object TiqianWeb {
             capabilityDetailAttribute = paragraph.source.getAttribute("data-tiqian-capability-detail"),
             lastMeasure = paragraph.lastMeasure,
             containingBlockApplied = paragraph.containingBlockApplied,
+            hostInlineSizeApplied = paragraph.hostInlineSizeApplied,
+            hostInlineSizeAttribute = paragraph.source.getAttribute(HOST_INLINE_SIZE_ATTRIBUTE),
             originalContentHadChildren = paragraph.originalContent.firstChild != null,
         )
         while (paragraph.source.firstChild != null) {
@@ -1053,6 +1085,12 @@ object TiqianWeb {
             )
             paragraph.lastMeasure = snapshot.lastMeasure
             paragraph.containingBlockApplied = snapshot.containingBlockApplied
+            paragraph.hostInlineSizeApplied = snapshot.hostInlineSizeApplied
+            restoreAttribute(
+                paragraph.source,
+                HOST_INLINE_SIZE_ATTRIBUTE,
+                snapshot.hostInlineSizeAttribute,
+            )
         }
     }
 
@@ -1135,6 +1173,7 @@ object TiqianWeb {
         }
         return EnhanceOptions(
             fontFamilies = FontFamilyOptions(cjk, latin, monospace, cjkSerif, latinSerif),
+            monospaceFontContractExplicit = monospace != null,
             fontSize = fontSize,
             lineHeight = lineHeight,
             firstLineIndentIc = firstLineIndent,
@@ -1153,6 +1192,7 @@ object TiqianWeb {
 
     data class EnhanceOptions(
         val fontFamilies: FontFamilyOptions = FontFamilyOptions(),
+        internal val monospaceFontContractExplicit: Boolean = false,
         val fontSize: Float? = null,
         val lineHeight: Float? = null,
         val firstLineIndentIc: Float = 0f,
@@ -1170,6 +1210,8 @@ object TiqianWeb {
             val resolvedCjk = fontFamilies.cjk ?: inheritedFontFamily ?: DEFAULT_CJK_FONT_FAMILY
             val resolvedLatin = fontFamilies.latin ?: inheritedFontFamily ?: DEFAULT_LATIN_FONT_FAMILY
             val resolved = copy(
+                monospaceFontContractExplicit =
+                    monospaceFontContractExplicit || fontFamilies.monospace != null,
                 fontFamilies = fontFamilies.copy(
                     cjk = resolvedCjk,
                     latin = resolvedLatin,
@@ -1302,8 +1344,18 @@ object TiqianWeb {
         val originalStyleAttribute: String?,
         val originalPosition: String,
         val originalPositionPriority: String,
+        val originalInlineSize: String,
+        val originalInlineSizePriority: String,
+        val originalHostInlineSizeAttribute: String?,
         var lastMeasure: Float? = null,
         var containingBlockApplied: Boolean = false,
+        var hostInlineSizeApplied: String? = null,
+    )
+
+    private data class SourceInlineSize(
+        val borderBoxWidth: Double,
+        val contentBoxWidth: Double,
+        val borderBoxSizing: Boolean,
     )
 
     private data class LiveParagraphSnapshot(
@@ -1318,6 +1370,8 @@ object TiqianWeb {
         val capabilityDetailAttribute: String?,
         val lastMeasure: Float?,
         val containingBlockApplied: Boolean,
+        val hostInlineSizeApplied: String?,
+        val hostInlineSizeAttribute: String?,
         val originalContentHadChildren: Boolean,
     )
 
@@ -1337,6 +1391,48 @@ object TiqianWeb {
         if (computedStyle(paragraph.source, "position").trim().lowercase() != "static") return
         paragraph.source.style.setProperty("position", "relative", "important")
         paragraph.containingBlockApplied = true
+    }
+
+    private fun captureSourceInlineSize(paragraph: HTMLElement): SourceInlineSize =
+        SourceInlineSize(
+            borderBoxWidth = paragraph.getBoundingClientRect().width,
+            contentBoxWidth = elementContentWidth(paragraph),
+            borderBoxSizing =
+                computedStyle(paragraph, "box-sizing").trim().lowercase() == "border-box",
+        )
+
+    private fun stabilizeContentSizedItemInlineSize(
+        paragraph: HTMLElement,
+        source: SourceInlineSize,
+    ): String? {
+        val empty = captureSourceInlineSize(paragraph)
+        val sourceUsedInlineSize = if (source.borderBoxSizing) {
+            source.borderBoxWidth
+        } else {
+            source.contentBoxWidth
+        }
+        val emptyUsedInlineSize = if (source.borderBoxSizing) {
+            empty.borderBoxWidth
+        } else {
+            empty.contentBoxWidth
+        }
+        // SourceMeasureBeforeCustodyTransfer: flex/grid items and descendants
+        // of shrink-to-fit ancestors can derive their used inline size from the
+        // semantic children that Tiqian moves into source custody. Detect that
+        // real dependency from the before/after used size rather than guessing
+        // a finite set of parent display modes. Ordinary blocks keep their host
+        // auto sizing; only a custody-induced width change is stabilized.
+        if (
+            !sourceUsedInlineSize.isFinite() || sourceUsedInlineSize <= 0.0 ||
+            !emptyUsedInlineSize.isFinite() ||
+            kotlin.math.abs(sourceUsedInlineSize - emptyUsedInlineSize) < 0.5
+        ) return null
+        val usedInlineSize = sourceUsedInlineSize
+        if (!usedInlineSize.isFinite() || usedInlineSize <= 0.0) return null
+        val serialized = "${usedInlineSize}px"
+        paragraph.style.setProperty("inline-size", serialized, "important")
+        paragraph.setAttribute(HOST_INLINE_SIZE_ATTRIBUTE, "true")
+        return serialized
     }
 
     private fun restoreParagraph(paragraph: EnhancedParagraph) {
@@ -1371,10 +1467,33 @@ object TiqianWeb {
                 )
             }
         }
+        val appliedInlineSize = paragraph.hostInlineSizeApplied
+        if (
+            appliedInlineSize != null &&
+            paragraph.source.getAttribute(HOST_INLINE_SIZE_ATTRIBUTE) == "true" &&
+            paragraph.source.style.getPropertyValue("inline-size") == appliedInlineSize &&
+            paragraph.source.style.getPropertyPriority("inline-size") == "important"
+        ) {
+            if (paragraph.originalInlineSize.isEmpty()) {
+                paragraph.source.style.removeProperty("inline-size")
+            } else {
+                paragraph.source.style.setProperty(
+                    "inline-size",
+                    paragraph.originalInlineSize,
+                    paragraph.originalInlineSizePriority,
+                )
+            }
+        }
+        restoreAttribute(
+            paragraph.source,
+            HOST_INLINE_SIZE_ATTRIBUTE,
+            paragraph.originalHostInlineSizeAttribute,
+        )
         if (paragraph.originalStyleAttribute == null) {
             removeEmptyStyleAttribute(paragraph.source)
         }
         paragraph.containingBlockApplied = false
+        paragraph.hostInlineSizeApplied = null
     }
 
     private fun clearIssue(issue: CapabilityIssue) {
@@ -1454,6 +1573,7 @@ private object MarkdownParagraphLowerer {
             baseInlineStyle = baseInlineStyle,
             baseLineHeight = lineHeight,
             strongAsEmphasisMarks = options.strongAsEmphasisMarks,
+            monospaceFontContractExplicit = options.monospaceFontContractExplicit,
         )
         if (!builder.appendChildren(paragraph, baseInlineStyle, depth = 0)) {
             return null
@@ -1497,6 +1617,7 @@ private object MarkdownParagraphLowerer {
         private val baseInlineStyle: InlineStyle,
         private val baseLineHeight: Float,
         private val strongAsEmphasisMarks: Boolean,
+        private val monospaceFontContractExplicit: Boolean,
     ) {
         val text = StringBuilder()
         private val spans = mutableListOf<TextSpan>()
@@ -1556,6 +1677,22 @@ private object MarkdownParagraphLowerer {
                 return unsupported(
                     "UnsupportedInlineFormattingContext",
                     "${tag.lowercase()}:$display",
+                )
+            }
+            // InlineCodeRequiresKnownFontFace: the browser may resolve a
+            // generic monospace fallback that is absent from the shaping
+            // contract. Its advances cannot be replayed reliably. Accept a
+            // code run only when the caller explicitly supplied the
+            // monospace contract or the computed family names a loaded CSS
+            // FontFace; otherwise keep the whole semantic paragraph native.
+            if (
+                tag == "CODE" &&
+                !monospaceFontContractExplicit &&
+                !hasLoadedDeclaredFontFace(element)
+            ) {
+                return unsupported(
+                    "InlineCodeFontFaceUnavailable",
+                    computedStyle(element, "font-family").trim(),
                 )
             }
             inlineShapingStyleIssue(element, sourceElement)?.let { property ->
@@ -2348,6 +2485,43 @@ private external fun measuredOpaqueInlineObjectGeometry(element: Element): Strin
 private external fun isCloneSafeOpaqueInlineObject(element: Element): Boolean
 @JsFun("(element, property) => getComputedStyle(element).getPropertyValue(property)")
 private external fun computedStyle(element: Element, property: String): String
+@JsFun(
+    """(element) => {
+      const fonts = document.fonts;
+      if (!fonts || typeof fonts[Symbol.iterator] !== "function") return false;
+      const normalize = (family) => String(family || "")
+        .trim()
+        .replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, (_, doubleQuoted, singleQuoted) =>
+          doubleQuoted != null ? doubleQuoted : (singleQuoted != null ? singleQuoted : ""))
+        .normalize("NFC")
+        .toLocaleLowerCase("en-US");
+      const requested = new Set();
+      let token = "";
+      let quote = null;
+      for (const character of getComputedStyle(element).fontFamily) {
+        if (quote && character === quote) {
+          quote = null;
+          token += character;
+        } else if (quote) {
+          token += character;
+        } else if (character === "'" || character === '"') {
+          quote = character;
+          token += character;
+        } else if (character === ",") {
+          requested.add(normalize(token));
+          token = "";
+        } else {
+          token += character;
+        }
+      }
+      requested.add(normalize(token));
+      requested.delete("");
+      return Array.from(fonts).some((face) =>
+        face && face.status === "loaded" && requested.has(normalize(face.family))
+      );
+    }""",
+)
+private external fun hasLoadedDeclaredFontFace(element: Element): Boolean
 @JsFun("(element) => { if (!(element.getAttribute('style') || '').trim()) element.removeAttribute('style'); }")
 private external fun removeEmptyStyleAttribute(element: HTMLElement)
 @JsFun(
@@ -2385,13 +2559,14 @@ private external fun belongsToRootScope(paragraph: HTMLElement, root: HTMLElemen
 private external fun consoleWarn(message: String)
 @JsFun("() => performance.now()")
 private external fun performanceNow(): Double
-@JsFun("(root, enhancedCount, issueCount, durationMs, maxSliceMs) => root.dispatchEvent(new CustomEvent('tiqian:ready', { detail: { enhancedCount, issueCount, durationMs, maxSliceMs } }))")
+@JsFun("(root, enhancedCount, issueCount, durationMs, maxSliceMs, stale) => root.dispatchEvent(new CustomEvent('tiqian:ready', { detail: { enhancedCount, issueCount, durationMs, maxSliceMs, stale } }))")
 private external fun dispatchTiqianReady(
     root: HTMLElement,
     enhancedCount: Int,
     issueCount: Int,
     durationMs: Double,
     maxSliceMs: Double,
+    stale: Boolean,
 )
 @JsFun("(root, enhancedCount, issueCount, durationMs, maxSliceMs, failed, error, stale) => root.dispatchEvent(new CustomEvent('tiqian:relayout-ready', { detail: { enhancedCount, issueCount, durationMs, maxSliceMs, relayout: true, failed, error, stale } }))")
 private external fun dispatchTiqianRelayoutReady(
@@ -2586,6 +2761,7 @@ private const val CAPABILITY_DETAIL_LIMIT = 512
 private const val MAX_PROGRESSIVE_SLICE_MS = 8.0
 private const val MAX_PROGRESSIVE_ITEMS_PER_SLICE = 8
 private const val CANONICAL_SOURCE_ATTRIBUTE = "data-tq-canonical-source"
+private const val HOST_INLINE_SIZE_ATTRIBUTE = "data-tq-host-inline-size"
 private const val RELAYOUT_ERROR_ATTRIBUTE = "data-tiqian-relayout-error"
 private const val EXACT_PREPARED_FALLBACK_ATTRIBUTE = "data-tiqian-exact-layout-fallback"
 private const val DEFAULT_LINE_HEIGHT_MULTIPLIER = 1.75f

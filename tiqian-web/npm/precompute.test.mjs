@@ -16,6 +16,7 @@ import {
   renderSnapshotTemplate,
   snapshotPlainTextIssue,
 } from "./precompute.js";
+import { requiredCjkDashContractInput } from "./font-contract.js";
 
 function snapshotFixturePlan() {
   return {
@@ -111,6 +112,32 @@ test("display substitutions require real exact-face glyph coverage", () => {
   );
   assert.equal(preferred.record.faceId, "real-midline");
   assert.equal(preferred.displayCovered, true);
+});
+
+test("runtime font contracts retain required dash replay for every owning style", () => {
+  const typography = {
+    fontFamilies: ["Fixture CJK"],
+    fontSizePx: 18,
+    fontWeight: 400,
+    italic: false,
+  };
+  const input = {
+    key: "runtime-only",
+    text: "粗——常⸺文",
+    maxWidthPx: 360,
+    textSpans: [{ start: 1, end: 3, fontWeight: 700 }],
+  };
+
+  assert.deepEqual(requiredCjkDashContractInput(input, typography), {
+    key: "runtime-only",
+    text: "——⸺",
+    maxWidthPx: 360,
+    textSpans: [
+      { start: 0, end: 2, fontFamilies: ["Fixture CJK"], fontSizePx: 18, fontWeight: 700, italic: false, baselineShiftPx: 0 },
+      { start: 2, end: 3, fontFamilies: ["Fixture CJK"], fontSizePx: 18, fontWeight: 400, italic: false, baselineShiftPx: 0 },
+    ],
+  });
+  assert.equal(requiredCjkDashContractInput({ ...input, text: "普通正文" }, typography), null);
 });
 
 test("Node Kotlin/JS precompute runs the real layout pipeline through a synchronous font session", async () => {
@@ -337,7 +364,7 @@ test("snapshot bundle exposes compact SSR artifacts without inline geometry", ()
   assert.match(bundle.initialStyle, /--tq-exact-render-font-family:"Snapshot Sans"/u);
   assert.match(
     bundle.initialStyle,
-    /\[data-tiqian-exact-render-font=true\].*\[data-tq-rendered=true\]\{font-family:var\(--tq-exact-render-font-family\)!important;font-kerning:normal!important;font-optical-sizing:none!important\}/u,
+    /\[data-tiqian-exact-render-font=true\].*\[data-tq-rendered=true\]:is\(\[data-tq-canonical-plain=true\],\[data-tq-exact-prepared-dom=true\]\)\{font-family:var\(--tq-exact-render-font-family\)!important;font-kerning:normal!important;font-optical-sizing:none!important\}/u,
   );
   assert.match(bundle.initialStyle, /\.tqv-0\{/u);
   assert.deepEqual(bundle.renderFontFamilies, ["Snapshot Sans"]);

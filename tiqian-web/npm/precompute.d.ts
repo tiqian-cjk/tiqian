@@ -94,11 +94,7 @@ export interface Precomputer {
   readonly renderFontFamilies: readonly string[];
   prepareParagraph(input: SnapshotParagraphInput): Promise<PreparedParagraph | UnsupportedPreparedParagraph>;
   /** Capture exact-font and server-replay evidence for runtime-only or semantic prose. */
-  prepareFontContract(input: {
-    key: string;
-    text: string;
-    maxWidthPx: number;
-  }): Promise<PreparedParagraph | UnsupportedPreparedParagraph>;
+  prepareFontContract(input: SnapshotParagraphInput): Promise<PreparedParagraph | UnsupportedPreparedParagraph>;
   close(): void;
 }
 

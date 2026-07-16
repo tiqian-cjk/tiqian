@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { createBuildFontSession } from "./precompute-node-fonts.js";
+import { requiredCjkDashContractInput } from "./font-contract.js";
 import { renderPreparedParagraphArtifact } from "./prepared-dom.js";
 import { compactSnapshotManifest } from "./snapshot-manifest.js";
 import {
@@ -213,7 +214,7 @@ function cssString(value) {
 
 function exactRenderFontStyle(id, renderFontFamilies) {
   const root = `:is(tiqian-prose,[data-tiqian-root])[snapshot-ref=${cssString(id)}]`;
-  const prepared = `${root}[data-tiqian-exact-render-font=true]:not([data-tiqian-exact-layout-fallback]) [data-tq-rendered=true]`;
+  const prepared = `${root}[data-tiqian-exact-render-font=true]:not([data-tiqian-exact-layout-fallback]) [data-tq-rendered=true]:is([data-tq-canonical-plain=true],[data-tq-exact-prepared-dom=true])`;
   return `${root}{--tq-exact-render-font-family:${renderFontFamilies.map(cssString).join(",")}}` +
     `${prepared}{font-family:var(--tq-exact-render-font-family)!important;` +
     `font-kerning:normal!important;font-optical-sizing:none!important}`;
@@ -391,7 +392,14 @@ export async function createPrecomputer(options = {}) {
     typography,
     renderFontFamilies,
     prepareParagraph: (input = {}) => prepare(input, true),
-    prepareFontContract: (input = {}) => prepare(input, false),
+    prepareFontContract: async (input = {}) => {
+      const prepared = await prepare(input, false);
+      if (prepared.status === "prepared") return prepared;
+      const requiredDashReplay = requiredCjkDashContractInput(input, typography);
+      return requiredDashReplay == null
+        ? prepared
+        : prepare(requiredDashReplay, false);
+    },
     close() {
       if (closed) return;
       closed = true;

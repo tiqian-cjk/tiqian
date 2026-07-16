@@ -24,10 +24,12 @@ test("web lists keep native markers on a stable two-character body indent", () =
 });
 
 test("exact prepared DOM renders through the manifest font family contract", () => {
-  assert.match(stylesheet, /ExactRenderFontContract/u);
+  assert.match(stylesheet, /ExactPreparedDomFontProjection/u);
   assert.match(stylesheet, /data-tiqian-exact-render-font="true"/u);
   assert.match(stylesheet, /var\(--tq-exact-render-font-family\)/u);
   assert.match(stylesheet, /:not\(\[data-tiqian-exact-layout-fallback\]\)/u);
+  assert.match(stylesheet, /\[data-tq-canonical-plain="true"\]/u);
+  assert.match(stylesheet, /\[data-tq-exact-prepared-dom="true"\]/u);
   assert.match(stylesheet, /ExactPreparedShapingCss/u);
   assert.match(stylesheet, /font-kerning:\s*normal\s*!important/u);
   assert.match(stylesheet, /font-optical-sizing:\s*none\s*!important/u);
