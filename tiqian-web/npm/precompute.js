@@ -486,7 +486,7 @@ function buildSnapshotBundle(preparedParagraphs, options = {}) {
     `data-tq-layout-revision="${LAYOUT_REVISION}" data-tq-render-revision="${RENDER_REVISION}" ` +
     `data-pagefind-ignore><script type="application/json" data-tq-snapshot-manifest>${serverManifestJson}</script></template>`;
   // RuntimeSemanticFontContract: prepared DOM remains limited to canonical
-  // plain paragraphs, while the browser exact session must also cover text
+  // plain paragraphs, while the browser server-replay session must also cover text
   // that is replayed through semantic DOM (links, code siblings, etc.).
   const clientManifestJson = JSON.stringify(clientFontContractManifest(manifest))
     .replaceAll("<", "\\u003c");

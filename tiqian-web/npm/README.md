@@ -151,9 +151,9 @@ precomputer.close();
 - 包是 ESM-only；CommonJS 宿主需要使用动态 `import()`。
 - `@tiqian/prose/precompute` 需要 Node.js 22 或更高版本。
 - 布局、断行、行调整与 DOM 增强发布为 Kotlin/JS；生成 runtime 不需要 WebAssembly GC、
-  Exception Handling 或 `application/wasm` MIME 配置。可选的 exact-font / 破折号字体证据会懒加载
-  `harfbuzzjs` 自带的基础 WebAssembly；普通 host-font 路径与已命中的构建期快照不加载它。
-  JavaScript 或可选字体能力加载失败时，原始 SSR 正文仍然可读。
+  Exception Handling 或 `application/wasm` MIME 配置。HarfBuzz / WOFF2 WebAssembly 只在 Node
+  构建期生成字体证据；浏览器端的快照 miss 使用纯 JavaScript 缩放并重放服务器证据，不加载或执行
+  WebAssembly。JavaScript、字体或回放证据不可用时，原始 SSR 正文仍然可读。
 
 ## 了解提椠
 

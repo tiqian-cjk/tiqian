@@ -139,7 +139,6 @@ class TiqianProseElement extends HTMLElementBase {
 
   #forceTypographyRefresh = false;
   #acceptLayoutCompletion = false;
-  #capabilityRetryListener = null;
   #connected = false;
   #deferredTypographyCheck = false;
   #fontLoadingDoneListener = null;
@@ -170,6 +169,7 @@ class TiqianProseElement extends HTMLElementBase {
   #readyListener = null;
   #resizeFrame = 0;
   #resizeObserver = null;
+  #resizeObserverFrame = 0;
   #responsiveCommitRequired = false;
   #responsiveRetargetFrame = 0;
   #responsiveRelayoutRequired = false;
@@ -238,7 +238,6 @@ class TiqianProseElement extends HTMLElementBase {
     delete this.dataset.tiqianEnhanceMs;
     delete this.dataset.tiqianLoadMs;
     delete this.dataset.tiqianMaxSliceMs;
-    delete this.dataset.tiqianDashRetryMs;
     delete this.dataset.tiqianRelayoutMs;
     delete this.dataset.tiqianRelayoutMaxSliceMs;
     delete this.dataset.tiqianFontWait;
@@ -250,14 +249,12 @@ class TiqianProseElement extends HTMLElementBase {
         generation !== this.#generation || !this.#hasDispatched ||
         !this.#acceptLayoutCompletion
       ) return;
-      const { durationMs, maxSliceMs, capabilityRetry, relayout, stale } = event.detail ?? {};
+      const { durationMs, maxSliceMs, relayout, stale } = event.detail ?? {};
       if (relayout) {
         if (Number.isFinite(durationMs)) this.dataset.tiqianRelayoutMs = durationMs.toFixed(1);
         if (Number.isFinite(maxSliceMs)) {
           this.dataset.tiqianRelayoutMaxSliceMs = maxSliceMs.toFixed(1);
         }
-      } else if (capabilityRetry) {
-        if (Number.isFinite(durationMs)) this.dataset.tiqianDashRetryMs = durationMs.toFixed(1);
       } else {
         if (Number.isFinite(durationMs)) this.dataset.tiqianEnhanceMs = durationMs.toFixed(1);
         if (Number.isFinite(maxSliceMs)) this.dataset.tiqianMaxSliceMs = maxSliceMs.toFixed(1);
@@ -281,16 +278,6 @@ class TiqianProseElement extends HTMLElementBase {
     };
     this.addEventListener("tiqian:ready", this.#readyListener);
     this.addEventListener("tiqian:relayout-ready", this.#readyListener);
-    this.#removeCapabilityRetryListener();
-    this.#capabilityRetryListener = () => {
-      if (generation !== this.#generation || !this.#hasDispatched) return;
-      // The Kotlin side emits this only when a retry job actually starts. A
-      // request may otherwise be queued behind enhancement or become a no-op,
-      // neither of which may claim responsive-work ownership here.
-      this.#beginLayoutWork();
-      this.#acceptLayoutCompletion = true;
-    };
-    this.addEventListener("tiqian:capability-retry-start", this.#capabilityRetryListener);
     this.#ensureViewportResizeListener();
 
     // HostCascadeReadyGate: connectedCallback may run before an app's
@@ -392,7 +379,6 @@ class TiqianProseElement extends HTMLElementBase {
         this.#releaseExactFontSession();
         if (!isLoadedSnapshotAdopted(this)) this.removeAttribute(EXACT_RENDER_FONT_ATTRIBUTE);
         this.#removeReadyListener();
-        this.#removeCapabilityRetryListener();
         this.dataset.tiqianCapabilityIssue = "RuntimeLoadFailed";
         console.warn("Tiqian Web runtime failed to load", error);
       });
@@ -412,7 +398,6 @@ class TiqianProseElement extends HTMLElementBase {
     this.#clearInitialFontRetry();
     delete this.dataset.tiqianFontWait;
     this.#removeReadyListener();
-    this.#removeCapabilityRetryListener();
     this.#stopTypographyObservation();
     this.#stopLayoutWorkInputObservation();
     this.#stopWidthObservation();
@@ -516,7 +501,6 @@ class TiqianProseElement extends HTMLElementBase {
     this.#acceptLayoutCompletion = false;
     this.#snapshotAdopted = false;
     this.#removeReadyListener();
-    this.#removeCapabilityRetryListener();
     this.#clearInitialFontRetry();
     this.#stopTypographyObservation();
     this.#stopLayoutWorkInputObservation();
@@ -543,12 +527,6 @@ class TiqianProseElement extends HTMLElementBase {
       ...(paragraphSelector ? { paragraphSelector } : {}),
     };
     const needsDash = needsCjkDashShaping(this);
-    const dashCapabilityPromise = needsDash
-      ? prepareCjkDashShapingIfNeeded(this, baseOptions)
-      : null;
-    const cjkDashCapability = needsDash
-      ? { status: "pending", detail: "CjkDashFontShapingPending" }
-      : { status: "not-needed" };
     let exactFontSession = null;
     try {
       exactFontSession = await this.#prepareExactFontSession(generation, request);
@@ -579,8 +557,8 @@ class TiqianProseElement extends HTMLElementBase {
           exactFontSession.renderFontFamilies,
         );
         this.setAttribute(EXACT_RENDER_FONT_ATTRIBUTE, "true");
-        // ExactRenderFontReadyBeforeCommit: HarfBuzz already owns the layout
-        // metrics, but CSS must finish loading the same alias faces before the
+        // ExactRenderFontReadyBeforeCommit: server replay already owns the
+        // layout metrics, but CSS must finish loading the same alias faces before the
         // first paragraph is committed. This avoids a second font-driven pass
         // and prevents progressive frames from painting a fallback face.
         await this.#exactFontSession.prepareRenderFont(this, exactFontSession);
@@ -608,6 +586,21 @@ class TiqianProseElement extends HTMLElementBase {
     if (!exactFontSession) {
       this.removeAttribute(EXACT_RENDER_FONT_ATTRIBUTE);
     }
+    // BrowserDashCapabilityBeforeDispatch: the browser no longer starts an
+    // asynchronous HarfBuzz probe. Resolve the immediate capability result
+    // before the first layout so a dash paragraph is never laid out once as
+    // pending and then redundantly retried. An exact server-replay session is
+    // carried separately and remains the authoritative dash path.
+    const cjkDashCapability = needsDash
+      ? await prepareCjkDashShapingIfNeeded(this, {
+          ...baseOptions,
+          ...(exactFontSession ? { exactFontSession } : {}),
+        })
+      : { status: "not-needed" };
+    if (!this.isConnected || generation !== this.#generation || request !== this.#enhanceRequest) {
+      this.#releaseExactFontSession();
+      return false;
+    }
     // Capture the input signature for cancellation. Kotlin reads the live width
     // again for each paragraph, while this coordinator cancels the remaining
     // job on the next frame if the effective line measure changes.
@@ -627,38 +620,7 @@ class TiqianProseElement extends HTMLElementBase {
       } : {}),
     };
     dispatch("tiqian:enhance-progressively", this, preparedOptions);
-    if (dashCapabilityPromise) {
-      dashCapabilityPromise.then(
-        (capability) => this.#retryCjkDashCapability(
-          generation,
-          request,
-          preparedOptions,
-          capability,
-        ),
-        (error) => this.#retryCjkDashCapability(
-          generation,
-          request,
-          preparedOptions,
-          {
-            status: "unavailable",
-            issue: "NoConformingCjkDashGlyph",
-            detail: error instanceof Error ? error.message : String(error),
-          },
-        ),
-      );
-    }
     return true;
-  }
-
-  #retryCjkDashCapability(generation, request, preparedOptions, cjkDashCapability) {
-    if (
-      !this.isConnected || generation !== this.#generation ||
-      request !== this.#enhanceRequest
-    ) return;
-    dispatch("tiqian:retry-cjk-dash", this, {
-      ...preparedOptions,
-      cjkDashCapability,
-    });
   }
 
   async #prepareExactFontSession(generation, request) {
@@ -674,7 +636,7 @@ class TiqianProseElement extends HTMLElementBase {
     }
     // ExactFontValidationRenderProjection: the SSR marker owns first paint,
     // while this session owns runtime validation. Reassert the projection here
-    // so a host hydrator cannot make HarfBuzz validation depend on attribute
+    // so a host hydrator cannot make exact-font validation depend on attribute
     // reconciliation timing. The caller removes it on every failed session.
     this.setAttribute(EXACT_RENDER_FONT_ATTRIBUTE, "true");
     const loader = await loadExactFontFallback();
@@ -1040,25 +1002,67 @@ class TiqianProseElement extends HTMLElementBase {
     this.#readyListener = null;
   }
 
-  #removeCapabilityRetryListener() {
-    if (!this.#capabilityRetryListener) return;
-    this.removeEventListener("tiqian:capability-retry-start", this.#capabilityRetryListener);
-    this.#capabilityRetryListener = null;
-  }
-
   #observeWidth() {
     this.#resizeObserver?.disconnect();
-    this.#resizeObserver = new ResizeObserver(() => this.#handleResponsiveGeometryChange());
-    this.#resizeObserver.observe(this);
-    for (const paragraph of this.querySelectorAll(DEFAULT_PARAGRAPH_SELECTOR)) {
-      this.#resizeObserver.observe(paragraph);
+    // ResponsiveInlineSizeObservation: takeover intentionally changes block
+    // height. Seed and compare only border-box inline sizes so those commits do
+    // not trigger a redundant responsive pass. A container-only width change
+    // is reported from inside the browser's ResizeObserver delivery loop; DOM
+    // rollback there can make a shallower host observer (for example one that
+    // watches body height) miss its own notification. Defer that fallback to
+    // the next frame, outside the delivery loop. Window and visual-viewport
+    // resize signals still synchronously restore source before paint.
+    const widths = new WeakMap();
+    const targets = [
+      this,
+      ...Array.from(this.querySelectorAll(DEFAULT_PARAGRAPH_SELECTOR))
+        .filter((paragraph) => belongsToRootScope(paragraph, this)),
+    ];
+    for (const target of targets) {
+      widths.set(target, target.getBoundingClientRect().width);
     }
+    const observer = new ResizeObserver((entries) => {
+      let changed = false;
+      for (const entry of entries) {
+        const borderBox = Array.isArray(entry.borderBoxSize)
+          ? entry.borderBoxSize[0]
+          : entry.borderBoxSize;
+        const width = Number(borderBox?.inlineSize ?? entry.target.getBoundingClientRect().width);
+        const previous = widths.get(entry.target);
+        widths.set(entry.target, width);
+        if (previous == null || Math.abs(width - previous) >= 0.5) changed = true;
+      }
+      if (!changed) return;
+      observer.disconnect();
+      if (this.#resizeObserver === observer) this.#resizeObserver = null;
+      if (this.#resizeObserverFrame) cancelAnimationFrame(this.#resizeObserverFrame);
+      this.#resizeObserverFrame = requestAnimationFrame(() => {
+        this.#resizeObserverFrame = 0;
+        if (this.isConnected) this.#handleResponsiveGeometryChange();
+      });
+    });
+    this.#resizeObserver = observer;
+    for (const target of targets) observer.observe(target, { box: "border-box" });
     this.#ensureViewportResizeListener();
   }
 
   #ensureViewportResizeListener() {
     if (this.#viewportResizeListener) return;
-    this.#viewportResizeListener = () => this.#handleResponsiveGeometryChange();
+    this.#viewportResizeListener = () => {
+      // ViewportResizeCancelsCapturedProgressiveWork: a window resize event can
+      // run before layout has exposed the new paragraph widths. Waiting for a
+      // later ResizeObserver delivery lets one already-prepared paragraph paint
+      // at the superseded measure. A captured progressive job is cheap to
+      // restart and its native backing reflows immediately, so cancel it at the
+      // earliest viewport signal without guessing whether the eventual width
+      // remains in the same grid cell.
+      if (this.#layoutWorkInFlight && this.#layoutWorkUsesCapturedMeasure) {
+        this.#geometryRevision += 1;
+        this.#cancelCapturedLayoutForLatestGeometry();
+        return;
+      }
+      this.#handleResponsiveGeometryChange();
+    };
     window.addEventListener("resize", this.#viewportResizeListener);
     globalThis.visualViewport?.addEventListener?.("resize", this.#viewportResizeListener);
   }
@@ -1076,20 +1080,20 @@ class TiqianProseElement extends HTMLElementBase {
         return;
       }
       if (snapshotAdopted) {
-        // ResponsiveSnapshotRollbackBeforePaint: a maximum-width snapshot is
-        // immediately stale when the live paragraph measure changes. Restore
-        // responsive semantic source in the resize/observer callback itself;
-        // waiting for the scheduled commit paints old wide lines in a narrow
-        // container before the runtime has a chance to rebreak them.
+        // ResponsiveSnapshotRollbackAtFirstSafeSignal: a maximum-width
+        // snapshot is stale when the live paragraph measure changes. Viewport
+        // resize reaches this synchronously before paint; a container-only
+        // ResizeObserver signal reaches it at the leading edge of the next
+        // frame, outside the observer delivery loop.
         this.#invalidateSnapshotAndEnhance({ restoreBeforeLoad: true });
         return;
       }
       if (this.#runtimeStateActive) {
-        // ResponsiveRuntimeRollbackBeforePaint: runtime paragraphs carry
-        // explicit line breaks, so the same rule applies after a snapshot has
-        // already fallen back. Teardown is synchronous and leaves native
-        // source readable until progressive enhancement commits latest-width
-        // paragraphs atomically.
+        // ResponsiveRuntimeRollbackAtFirstSafeSignal: runtime paragraphs carry
+        // explicit line breaks, so the same safe-signal rule applies after a
+        // snapshot has already fallen back. Teardown is synchronous and leaves
+        // native source readable until progressive enhancement commits
+        // latest-width paragraphs atomically.
         if (
           this.hasAttribute("snapshot-ref") && loadedSnapshotMaximumMeasureMatches(this) &&
           !snapshotCompletionSelector(this)
@@ -1148,7 +1152,10 @@ class TiqianProseElement extends HTMLElementBase {
     const measuresChanged = paragraphMeasures !== this.#lastParagraphMeasures;
     const signature = this.#typographySignature();
     const typographyChanged = signature !== this.#lastTypography;
-    if (!forceLatestWidth && !widthsChanged && !measuresChanged && !typographyChanged) return;
+    if (!forceLatestWidth && !widthsChanged && !measuresChanged && !typographyChanged) {
+      this.#observeWidth();
+      return;
+    }
     this.#lastWidth = width;
     this.#lastParagraphMeasures = paragraphMeasures;
     this.#lastParagraphWidths = paragraphWidths;
@@ -1207,6 +1214,8 @@ class TiqianProseElement extends HTMLElementBase {
   #pauseWidthObservation() {
     this.#resizeObserver?.disconnect();
     this.#resizeObserver = null;
+    if (this.#resizeObserverFrame) cancelAnimationFrame(this.#resizeObserverFrame);
+    this.#resizeObserverFrame = 0;
     if (this.#resizeFrame) cancelAnimationFrame(this.#resizeFrame);
     this.#resizeFrame = 0;
   }
@@ -1347,7 +1356,10 @@ class TiqianProseElement extends HTMLElementBase {
     this.#acceptLayoutCompletion = false;
     this.#layoutWorkInFlight = false;
     this.#responsiveCommitRequired = true;
-    this.#responsiveRelayoutRequired = false;
+    // TypographyRetargetMustRestart: cancellation restores native source.
+    // Even when that source now matches the last observed signature, a fresh
+    // job is still required to replace the rolled-back paragraphs.
+    this.#responsiveRelayoutRequired = true;
     this.#stopLayoutWorkInputObservation();
     this.#restoreRuntimeSourceForRetarget();
     this.#ensureViewportResizeListener();

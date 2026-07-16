@@ -119,7 +119,9 @@ Web 列表保留原生 marker 与语义，只把列表正文交给 Tiqian 排版
 HarfBuzz session，并调用同一个 `tiqian-layout` 生成最大版心的预排结果。纯文本与受控语义 inline
 共用 source / semantic artifact / typography / font / width 证据；prepared DOM 留在正文之外的 inert
 template，SSR 正文始终是可响应的 native semantic backing。浏览器只有在 live width、字体与 artifact
-证据全部匹配时才整批采用快照，否则保留 source，再回到实时 Web pipeline。完整契约见
+证据全部匹配时才整批采用快照；窄屏等 snapshot miss 使用构建期捕获的字号无关 shaping / metrics
+回放表继续运行 Kotlin/JS layout core，浏览器不加载 HarfBuzz / WOFF2 WASM。证据缺失时保留 source，
+再回到 Canvas host-font pipeline。完整契约见
 [ADR 0040](adr/0040-build-time-web-font-snapshots.md)。
 
 引擎插入的视觉软换行不进入复制或无障碍语义；真实 mandatory break 保留。跨段复制同时提供

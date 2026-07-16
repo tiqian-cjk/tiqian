@@ -1,4 +1,10 @@
-import { FONT_BACKEND_REVISION } from "./snapshot-schema.js";
+import { sha256 } from "./digest.js";
+import {
+  FONT_BACKEND_REVISION,
+  FONT_REPLAY_REVISION,
+  metricReplayKey,
+  shapeReplayKey,
+} from "./snapshot-schema.js";
 
 const FAMILY_SEPARATOR = "\u001f";
 export { FONT_BACKEND_REVISION };
@@ -23,13 +29,7 @@ function loadBackends() {
   return backendPromise;
 }
 
-export async function sha256(bytes) {
-  const subtle = globalThis.crypto?.subtle;
-  if (!subtle) throw new Error("WebCryptoUnavailable");
-  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  const digest = await subtle.digest("SHA-256", view);
-  return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
-}
+export { sha256 };
 
 function isWoff2(bytes) {
   return bytes.length >= 4 &&
@@ -557,6 +557,62 @@ function instanceId(record, requestedWeight) {
     .map(([tag, value]) => `${tag}=${value}`).join(",") || "default"}`;
 }
 
+function normalizedReplayNumber(value, fontSize) {
+  return Number.isFinite(value) ? value / fontSize : null;
+}
+
+function captureShapeReplay(session, input, result) {
+  const key = shapeReplayKey(
+    input.displayText,
+    input.serializedFamilies,
+    input.fontWeight,
+    input.italic,
+    input.locale,
+    input.role,
+    input.sourceText,
+  );
+  if (session.replayShapes.has(key)) return;
+  const fontSize = Number(input.fontSize);
+  if (!Number.isFinite(fontSize) || fontSize <= 0) return;
+  session.replayShapes.set(key, {
+    key,
+    result: {
+      faceId: result.record.faceId,
+      fontInstanceId: instanceId(result.record, input.fontWeight),
+      script: result.script,
+      features: [...result.features],
+      unsafeBreakCount: result.unsafeBreakCount,
+      advanceEm: normalizedReplayNumber(result.advance, fontSize),
+      glyphs: result.glyphs.map((glyph) => ({
+        id: glyph.id,
+        advanceEm: normalizedReplayNumber(glyph.advance, fontSize),
+        xEm: normalizedReplayNumber(glyph.x, fontSize),
+        yEm: normalizedReplayNumber(glyph.y, fontSize),
+        boundsEm: glyph.bounds == null
+          ? null
+          : glyph.bounds.map((value) => normalizedReplayNumber(value, fontSize)),
+      })),
+    },
+  });
+}
+
+function captureMetricReplay(session, input, result) {
+  const key = metricReplayKey(
+    input.serializedFamilies,
+    input.fontWeight,
+    input.italic,
+    input.role,
+    input.faceSelectionText,
+  );
+  if (session.replayMetrics.has(key)) return;
+  const fontSize = Number(input.fontSize);
+  if (!Number.isFinite(fontSize) || fontSize <= 0) return;
+  session.replayMetrics.set(key, {
+    key,
+    valuesEm: result.map((value) => normalizedReplayNumber(value, fontSize)),
+  });
+}
+
 function installGlobalBackend() {
   if (globalThis.__TiqianFontBackend) {
     if (globalThis.__TiqianFontBackendRevision === BACKEND_REVISION) return;
@@ -606,6 +662,16 @@ function installGlobalBackend() {
       if (missingGlyph && sourceText === displayText) {
         throw new Error(`MissingGlyph:face=${record.faceId};text=${JSON.stringify(displayText)}`);
       }
+      captureShapeReplay(session, {
+        displayText,
+        serializedFamilies,
+        fontSize,
+        fontWeight,
+        italic,
+        locale,
+        role,
+        sourceText,
+      }, result);
       const handle = registry.nextResultId++;
       shapeResults.set(handle, result);
       if (missingGlyph) return handle;
@@ -660,11 +726,17 @@ function installGlobalBackend() {
       const session = sessions.get(sessionId);
       if (!session) throw new Error(`UnknownFontSession:${sessionId}`);
       const families = serializedFamilies.split(FAMILY_SEPARATOR).filter(Boolean);
+      const result = metricsFor(session, families, fontSize, fontWeight, italic, faceSelectionText);
+      captureMetricReplay(session, {
+        serializedFamilies,
+        fontSize,
+        fontWeight,
+        italic,
+        role: _role,
+        faceSelectionText,
+      }, result);
       const handle = registry.nextResultId++;
-      metricResults.set(
-        handle,
-        metricsFor(session, families, fontSize, fontWeight, italic, faceSelectionText),
-      );
+      metricResults.set(handle, result);
       return handle;
     },
     metricValue: (handle, index) => metricResults.get(handle)?.[index] ?? Number.NaN,
@@ -739,6 +811,8 @@ export async function createFontSession(faceSpecs, options = {}) {
     records,
     used: new Map(),
     metricCache: new Map(),
+    replayShapes: new Map(),
+    replayMetrics: new Map(),
     harfbuzzVersion: hb.versionString(),
     baseFeatures: normalizeBaseFeatures(options.baseFeatures),
   };
@@ -763,6 +837,8 @@ export async function createFontSession(faceSpecs, options = {}) {
     })),
     beginCapture() {
       session.used.clear();
+      session.replayShapes.clear();
+      session.replayMetrics.clear();
     },
     renderFamilies(requestedFamilies) {
       return renderFamiliesFor(session, requestedFamilies);
@@ -798,12 +874,19 @@ export async function createFontSession(faceSpecs, options = {}) {
             features: usage.probeFeatures,
           },
         })),
+        replay: {
+          revision: FONT_REPLAY_REVISION,
+          shapes: Array.from(session.replayShapes.values()),
+          metrics: Array.from(session.replayMetrics.values()),
+        },
       };
     },
     close() {
       sessions.delete(sessionId);
       session.used.clear();
       session.metricCache.clear();
+      session.replayShapes.clear();
+      session.replayMetrics.clear();
     },
   };
 }

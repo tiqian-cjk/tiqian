@@ -3,7 +3,6 @@
 package org.tiqian.shaping.web
 
 import kotlin.JsFun
-import kotlin.js.JsAny
 import kotlinx.browser.document
 import org.tiqian.core.Cluster
 import org.tiqian.core.Glyph
@@ -103,10 +102,9 @@ class WebFontFamilies(
 
 }
 
-/** A CSSOM-resolved HarfBuzz session prepared asynchronously by `@tiqian/prose`. */
+/** Browser dash capability after the host-side exact-font path has been resolved. */
 data class WebCjkDashCapability(
     val status: String,
-    val sessionId: String? = null,
     val detail: String? = null,
 )
 
@@ -286,117 +284,9 @@ class WebCanvasTextShaper(
             )
         }
         if (source == CJK_DASH_SOURCE || input.displayText == TWO_EM_DASH) {
-            return shapePreparedCjkDash(input, source)
-                ?: shapeWithCanvas(input, capabilityIssue = dashCapabilityIssue())
+            return shapeWithCanvas(input, capabilityIssue = dashCapabilityIssue())
         }
         return shapeWithCanvas(input)
-    }
-
-    private fun shapePreparedCjkDash(input: ShapingInput, source: String): ShapingResult? {
-        val capability = cjkDashCapability ?: return null
-        if (capability.status != "conforming") return null
-        val sessionId = capability.sessionId ?: return null
-        val shaped = preparedCjkDashShape(
-            sessionId,
-            input.style.fontSize.toDouble(),
-            input.style.fontWeight.toDouble(),
-            input.style.italic,
-        ) ?: return null
-        if (dashShapeString(shaped, "status") != "conforming") return null
-
-        val glyphCount = dashShapeGlyphCount(shaped)
-        val advance = dashShapeNumber(shaped, "advance").toFloat()
-        val display = dashShapeString(shaped, "displayText") ?: return null
-        val cssFontFamily = dashShapeString(shaped, "cssFontFamily") ?: return null
-        if (glyphCount <= 0 || !advance.isFinite() || advance <= ZERO_ADVANCE_EPSILON) return null
-        val glyphs = buildList {
-            for (index in 0 until glyphCount) {
-                val glyphAdvance = dashShapeGlyphNumber(shaped, index, "advance").toFloat()
-                val glyphId = dashShapeGlyphNumber(shaped, index, "id")
-                if (!glyphAdvance.isFinite() || glyphAdvance < 0f || !glyphId.isFinite()) return null
-                val bounds = if (dashShapeGlyphHasBounds(shaped, index)) {
-                    Rect(
-                        left = dashShapeGlyphBoundsNumber(shaped, index, "left").toFloat(),
-                        top = dashShapeGlyphBoundsNumber(shaped, index, "top").toFloat(),
-                        right = dashShapeGlyphBoundsNumber(shaped, index, "right").toFloat(),
-                        bottom = dashShapeGlyphBoundsNumber(shaped, index, "bottom").toFloat(),
-                    ).takeIf { rect ->
-                        rect.left.isFinite() && rect.top.isFinite() &&
-                            rect.right.isFinite() && rect.bottom.isFinite()
-                    }
-                } else {
-                    null
-                }
-                add(
-                    Glyph(
-                        id = glyphId.toUInt(),
-                        clusterRange = input.range,
-                        advance = glyphAdvance,
-                        x = dashShapeGlyphNumber(shaped, index, "x").toFloat(),
-                        y = dashShapeGlyphNumber(shaped, index, "y").toFloat(),
-                        renderFontKey = cssFontFamily,
-                        bounds = bounds,
-                    ),
-                )
-            }
-        }
-        val fontKey = input.fontDecision.candidate.key
-        val strategy = dashShapeString(shaped, "strategy")
-        val face = dashShapeString(shaped, "faceId")
-        val loclEvidence = dashShapeString(shaped, "loclEvidence")
-        val decision = ShapingDecisionInfo(
-            range = input.range,
-            sourceText = source,
-            displayText = display,
-            fontKey = fontKey,
-            glyphCount = glyphs.size,
-            advance = advance,
-            source = "HarfBuzzWebFontData",
-            reason = buildString {
-                append("HarfBuzzWebFontData")
-                append("; strategy=")
-                append(strategy)
-                append("; face=")
-                append(face)
-                append("; script=Hani; language=zh-Hans; locl=")
-                append(loclEvidence)
-                append("; inkCoverage=")
-                append(dashShapeNumber(shaped, "inkCoverage"))
-                append("; horizontalCenterDelta=")
-                append(dashShapeNumber(shaped, "horizontalCenterDelta"))
-                append("; verticalCenterDelta=")
-                append(dashShapeNumber(shaped, "verticalCenterDelta"))
-                append("; seamGap=")
-                append(dashShapeNumber(shaped, "seamGap"))
-            },
-            glyphsWithoutInkBounds = glyphs.count { it.bounds == null },
-            missingGlyphs = glyphs.count { it.id == 0u },
-            resolvedFace = face,
-            script = dashShapeString(shaped, "script"),
-            language = dashShapeString(shaped, "language"),
-            strategy = strategy,
-            featureEvidence = loclEvidence,
-        )
-        return ShapingResult(
-            clusters = listOf(
-                Cluster(
-                    range = input.range,
-                    text = source,
-                    displayText = display,
-                    fontKey = fontKey,
-                    advance = advance,
-                ),
-            ),
-            glyphRuns = listOf(
-                GlyphRun(
-                    range = input.range,
-                    fontKey = fontKey,
-                    glyphs = glyphs,
-                    advance = advance,
-                ),
-            ),
-            decisions = listOf(decision),
-        )
     }
 
     private fun dashCapabilityIssue(): Pair<String, String> {
@@ -631,22 +521,3 @@ private fun contextualWebOpenTypeFeatures(role: FontRole, display: String): List
     } else {
         emptyList()
     }
-@JsFun("(sessionId, fontSize, fontWeight, italic) => globalThis.__TiqianWebFontShaping && globalThis.__TiqianWebFontShaping.shapeCjkDash ? globalThis.__TiqianWebFontShaping.shapeCjkDash(sessionId, fontSize, fontWeight, italic) : null")
-private external fun preparedCjkDashShape(
-    sessionId: String,
-    fontSize: Double,
-    fontWeight: Double,
-    italic: Boolean,
-): JsAny?
-@JsFun("(value, name) => value && value[name] != null ? String(value[name]) : null")
-private external fun dashShapeString(value: JsAny, name: String): String?
-@JsFun("(value, name) => { const number = Number(value && value[name]); return Number.isFinite(number) ? number : NaN; }")
-private external fun dashShapeNumber(value: JsAny, name: String): Double
-@JsFun("(value) => value && Array.isArray(value.glyphs) ? value.glyphs.length : 0")
-private external fun dashShapeGlyphCount(value: JsAny): Int
-@JsFun("(value, index, name) => { const glyph = value && value.glyphs && value.glyphs[index]; const number = Number(glyph && glyph[name]); return Number.isFinite(number) ? number : NaN; }")
-private external fun dashShapeGlyphNumber(value: JsAny, index: Int, name: String): Double
-@JsFun("(value, index) => !!(value && value.glyphs && value.glyphs[index] && value.glyphs[index].bounds)")
-private external fun dashShapeGlyphHasBounds(value: JsAny, index: Int): Boolean
-@JsFun("(value, index, name) => { const glyph = value && value.glyphs && value.glyphs[index]; const number = Number(glyph && glyph.bounds && glyph.bounds[name]); return Number.isFinite(number) ? number : NaN; }")
-private external fun dashShapeGlyphBoundsNumber(value: JsAny, index: Int, name: String): Double

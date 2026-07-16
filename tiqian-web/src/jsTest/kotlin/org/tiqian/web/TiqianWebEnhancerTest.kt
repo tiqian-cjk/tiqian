@@ -12,7 +12,6 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import org.tiqian.shaping.web.WebCjkDashCapability
 import org.w3c.dom.Element
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.events.Event
@@ -922,81 +921,6 @@ class TiqianWebEnhancerTest {
         assertEquals("NoConformingCjkDashGlyph", paragraph.getAttribute("data-tiqian-capability-issue"))
         assertNull(paragraph.getAttribute("data-tq-rendered"))
         assertEquals("中文——中文。", copySelection(paragraph))
-    }
-
-    @Test
-    fun preparedDashCapabilityRetriesOnlyNativeDashParagraphs() {
-        TiqianWeb.install()
-        installTestAnimationFrames()
-        installTestCjkDashBridge()
-        installTestConsoleWarnCapture()
-        try {
-            val root = mount(
-                """
-                <div data-tiqian-root="true" style="width: 420px">
-                  <p class="plain" style="font-family: Arial, sans-serif">普通中文正文。</p>
-                  <p class="dash" style="font-family: Arial, sans-serif">中文——中文。</p>
-                </div>
-                """.trimIndent(),
-            )
-            val plain = root.querySelector(".plain") as HTMLElement
-            val dash = root.querySelector(".dash") as HTMLElement
-            var readyCount = 0
-            root.addEventListener("tiqian:ready", { readyCount += 1 })
-
-            TiqianWeb.enhanceProgressively(
-                root,
-                testOptions().copy(
-                    cjkDashCapability = WebCjkDashCapability(
-                        status = "pending",
-                        detail = "CjkDashFontShapingPending",
-                    ),
-                ),
-            )
-            flushAllTestAnimationFrames()
-
-            assertEquals("true", plain.getAttribute("data-tq-rendered"))
-            assertNull(dash.getAttribute("data-tq-rendered"))
-            assertEquals(
-                "NoConformingCjkDashGlyph",
-                dash.getAttribute("data-tiqian-capability-issue"),
-            )
-            assertFalse(capturedTestConsoleWarnings().contains("NoConformingCjkDashGlyph"))
-            val renderedPlainChild = plain.firstChild
-            assertNotNull(renderedPlainChild)
-
-            // The fixture deliberately cannot reproduce a real HarfBuzz/DOM face
-            // match. Reaching DomDashFaceGeometryMismatch proves the targeted
-            // retry ran through layout and the final DOM gate without touching
-            // the already enhanced ordinary paragraph.
-            TiqianWeb.retryCjkDashCapability(
-                root,
-                testOptions().copy(
-                    cjkDashCapability = WebCjkDashCapability(
-                        status = "conforming",
-                        sessionId = "fixture-dash-session",
-                        detail = "test",
-                    ),
-                ),
-            )
-            flushAllTestAnimationFrames()
-
-            assertTrue(plain.firstChild === renderedPlainChild)
-            assertNull(dash.getAttribute("data-tq-rendered"))
-            assertEquals(
-                "DomDashFaceGeometryMismatch",
-                dash.getAttribute("data-tiqian-capability-issue"),
-            )
-            assertEquals("1", root.getAttribute("data-tiqian-enhanced-count"))
-            assertEquals("1", root.getAttribute("data-tiqian-issue-count"))
-            assertEquals(2, readyCount)
-            assertEquals("普通中文正文。", copySelection(plain))
-            assertEquals("中文——中文。", copySelection(dash))
-            assertTrue(capturedTestConsoleWarnings().contains("DomDashFaceGeometryMismatch"))
-        } finally {
-            restoreTestConsoleWarnCapture()
-            clearTestCjkDashBridge()
-        }
     }
 
     @Test
@@ -2411,48 +2335,6 @@ private external fun exactPreparedPlan(): String
 private external fun exactPreparedRenderCount(): Int
 @JsFun("() => { delete globalThis.__TiqianFontBackend; delete globalThis.__TiqianPreparedDomRenderer; delete globalThis.__TiqianPreparedDomValidator; delete globalThis.__TiqianExactPreparedPlan; delete globalThis.__TiqianExactPreparedRenderCount; delete globalThis.__TiqianExactFontShapeCount; delete globalThis.__TiqianExactFontFallbackCount; }")
 private external fun clearExactFontSessionFixture()
-@JsFun(
-    """() => {
-      globalThis.__TiqianWebFontShaping = {
-        shapeCjkDash(sessionId, fontSize) {
-          if (sessionId !== 'fixture-dash-session') return null;
-          const size = Number(fontSize);
-          const advance = size * 8 / 9;
-          const pairedAdvance = advance * 2;
-          const glyphs = [];
-          for (let index = 0; index < 2; index++) {
-            glyphs.push({
-              id: 100 + index,
-              advance,
-              x: index * advance,
-              y: 0,
-              bounds: { left: 0, top: -size * 0.55, right: size, bottom: -size * 0.45 },
-            });
-          }
-          return {
-            status: 'conforming',
-            strategy: 'PairedEmDash',
-            displayText: '——',
-            cssFontFamily: 'Arial',
-            faceId: 'fixture-arial',
-            sourceUrl: 'fixture://arial',
-            script: 'Hani',
-            language: 'zh-Hans',
-            loclEvidence: 'DefaultCjkConforming',
-            advance: pairedAdvance,
-            inkCoverage: 1,
-            horizontalCenterDelta: 0,
-            verticalCenterDelta: 0,
-            seamGap: 0,
-            glyphs,
-          };
-        },
-      };
-    }""",
-)
-private external fun installTestCjkDashBridge()
-@JsFun("() => { delete globalThis.__TiqianWebFontShaping; }")
-private external fun clearTestCjkDashBridge()
 @JsFun("(root) => document.dispatchEvent(new CustomEvent('tiqian:enhance', { detail: { root } }))")
 private external fun dispatchEnhanceWithoutOptions(root: HTMLElement)
 @JsFun("(root) => document.dispatchEvent(new CustomEvent('tiqian:enhance', { detail: { root, options: { strongAsEmphasisMarks: true } } }))")

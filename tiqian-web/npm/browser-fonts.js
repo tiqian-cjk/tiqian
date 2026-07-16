@@ -1,9 +1,8 @@
-import {
-  createFontSession,
-  sha256,
-} from "./precompute-fonts.js";
+import { createServerReplayFontSession } from "./browser-font-replay.js";
+import { sha256 } from "./digest.js";
 import {
   FONT_BACKEND_REVISION,
+  FONT_REPLAY_REVISION,
   FONT_SOURCE_POLICY,
   LAYOUT_REVISION,
   RENDER_REVISION,
@@ -160,6 +159,13 @@ function collectManifestFaces(manifest) {
   if (!Array.isArray(manifest.entries) || manifest.entries.length === 0) {
     fail("SnapshotManifestInvalid", "entries");
   }
+  if (
+    manifest.fontReplay?.revision !== FONT_REPLAY_REVISION ||
+    !Array.isArray(manifest.fontReplay.shapes) ||
+    !Array.isArray(manifest.fontReplay.metrics)
+  ) {
+    fail("SnapshotFontReplayInvalid");
+  }
   if (manifest.fontContractEntries != null && !Array.isArray(manifest.fontContractEntries)) {
     fail("SnapshotManifestInvalid", "fontContractEntries");
   }
@@ -256,6 +262,7 @@ function collectManifestFaces(manifest) {
     backendRevision,
     harfbuzzVersion: versions.values().next().value,
     faces,
+    replay: manifest.fontReplay,
     baseFeatures: fontVariantNumeric === "lining-nums" ? ["lnum"] : [],
   };
 }
@@ -347,7 +354,7 @@ function validateSession(session, expected) {
 }
 
 export function createBrowserFontSessionLoader(options = {}) {
-  const createSession = options.createFontSession ?? createFontSession;
+  const createSession = options.createFontSession ?? createServerReplayFontSession;
   const digest = options.sha256 ?? sha256;
   const fetchImplementation = options.fetch ?? ((...args) => globalThis.fetch(...args));
   const validateContract = options.validateContract ?? validatePrecomputedSnapshotExactFontContract;
@@ -492,6 +499,9 @@ export function createBrowserFontSessionLoader(options = {}) {
       session = await createSession(faceSpecs, {
         sessionPrefix: "tq-browser-font",
         baseFeatures: context.baseFeatures,
+        replay: context.replay,
+        faceMetadata: context.faces,
+        harfbuzzVersion: context.harfbuzzVersion,
       });
       validateSession(session, context);
       return session;
@@ -566,7 +576,7 @@ export function createBrowserFontSessionLoader(options = {}) {
     if (!token || token.released || !token.state.session) {
       fail("BrowserFontSessionHandleInvalid");
     }
-    // ExistingSessionLiveContractRevalidation: the loaded HarfBuzz session and
+    // ExistingSessionLiveContractRevalidation: the server-replay session and
     // verified source bytes are immutable, but the host source, cascade and
     // declared font contract remain live. The contract validator already
     // rechecks those inputs after its asynchronous font probes, so one pass is

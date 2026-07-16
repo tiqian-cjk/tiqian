@@ -6,7 +6,10 @@ import {
   BrowserFontSessionError,
   createBrowserFontSessionLoader,
 } from "./browser-fonts.js";
-import { FONT_BACKEND_REVISION } from "./precompute-fonts.js";
+import {
+  FONT_BACKEND_REVISION,
+  FONT_REPLAY_REVISION,
+} from "./snapshot-schema.js";
 
 function digest(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -63,7 +66,7 @@ function manifestWithFaces(
   return {
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v11",
+    renderRevision: "prebroken-dom-v12",
     fontSourcePolicy: "compatible-local-render-family-v2",
     renderFontFamilies: ["Fixture Sans"],
     paragraphSelector: "p[data-tq-snapshot-key]",
@@ -74,6 +77,11 @@ function manifestWithFaces(
       backendRevision: FONT_BACKEND_REVISION,
       harfbuzzVersion: versions[0],
       faces: descriptors,
+    },
+    fontReplay: {
+      revision: FONT_REPLAY_REVISION,
+      shapes: [],
+      metrics: [],
     },
     entries: facesByEntry.map((_faces, index) => ({
       key: `p-${index + 1}`,
@@ -154,7 +162,7 @@ function harness(manifest, options = {}) {
     return session;
   };
   const loader = createBrowserFontSessionLoader({
-    createFontSession,
+    ...(options.useDefaultSession ? {} : { createFontSession }),
     fetch,
     sha256: async (value) => digest(value),
     validateContract: async (root) => {
@@ -223,7 +231,7 @@ test("browser font sessions aggregate manifest evidence and close after the fina
   assert.equal(state.closeCount(), 2);
 });
 
-test("lining numeric snapshots recreate the browser HarfBuzz session with lnum", async () => {
+test("lining numeric snapshots preserve the server lnum replay contract", async () => {
   const bytes = new TextEncoder().encode("fixture-font-source");
   const manifest = manifestWithFaces(
     [[faceEvidence(digest(bytes), { probe: {
@@ -567,4 +575,83 @@ test("manifest backend revisions must agree with the browser backend", async () 
     assertCode("FontBackendRevisionMismatch"),
   );
   assert.equal(state.requests.length, 0);
+});
+
+test("the default browser session scales server shaping evidence without loading HarfBuzz", async () => {
+  const bytes = new TextEncoder().encode("fixture-font-source");
+  const manifest = manifestWithFaces([[faceEvidence(digest(bytes))]]);
+  const families = "Fixture CJK";
+  const shapeKey = JSON.stringify([
+    "正文",
+    families,
+    400,
+    false,
+    "zh-Hans",
+    "CjkText",
+    "正文",
+  ]);
+  const metricKey = JSON.stringify([
+    families,
+    400,
+    false,
+    "CjkText",
+    "正文",
+  ]);
+  manifest.fontReplay.shapes = [{
+    key: shapeKey,
+    result: {
+      faceId: "fixture-face",
+      fontInstanceId: "fixture-instance",
+      script: "Hani",
+      features: [],
+      unsafeBreakCount: 0,
+      advanceEm: 2,
+      glyphs: [{
+        id: 42,
+        advanceEm: 2,
+        xEm: 0,
+        yEm: 0,
+        boundsEm: [0, -0.8, 2, 0.2],
+      }],
+    },
+  }];
+  manifest.fontReplay.metrics = [{
+    key: metricKey,
+    valuesEm: [0.8, 0.2, 0, 0.8, 0.2],
+  }];
+  const state = harness(manifest, { bytes, useDefaultSession: true });
+
+  const handle = await state.loader.prepare(state.root);
+  const shape = globalThis.__TiqianFontBackend.shape(
+    handle.id,
+    "正文",
+    families,
+    20,
+    400,
+    false,
+    "zh-Hans",
+    "CjkText",
+    "正文",
+  );
+  assert.equal(globalThis.__TiqianFontBackend.shapeAdvance(shape), 40);
+  assert.equal(globalThis.__TiqianFontBackend.shapeGlyphAdvance(shape, 0), 40);
+  assert.equal(globalThis.__TiqianFontBackend.shapeGlyphBound(shape, 0, 1), -16);
+  globalThis.__TiqianFontBackend.releaseShape(shape);
+  const metrics = globalThis.__TiqianFontBackend.metrics(
+    handle.id,
+    families,
+    20,
+    400,
+    false,
+    "CjkText",
+    "正文",
+  );
+  assert.deepEqual(
+    Array.from({ length: 5 }, (_, index) =>
+      globalThis.__TiqianFontBackend.metricValue(metrics, index)),
+    [16, 4, 0, 16, 4],
+  );
+  globalThis.__TiqianFontBackend.releaseMetrics(metrics);
+  assert.equal(state.createCalls.length, 0);
+  assert.equal(state.loader.release(handle), true);
 });

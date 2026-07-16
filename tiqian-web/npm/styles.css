@@ -17,8 +17,8 @@ tiqian-prose [data-tq-rendered="true"] {
   position: relative;
 }
 
-/* ExactRenderFontContract: prepared DOM and exact-browser fallback render
-   through the same CSS family aliases used by build/runtime HarfBuzz. The
+/* ExactRenderFontContract: prepared DOM and server-shaping replay render
+   through the same CSS family aliases used by build-time HarfBuzz. The
    root marker is applied only after the corresponding font contract has been
    accepted; a core capability fallback returns font ownership to the host. */
 :is(tiqian-prose, [data-tiqian-root])[data-tiqian-exact-render-font="true"]:not([data-tiqian-exact-layout-fallback]) [data-tq-rendered="true"] {

@@ -45,6 +45,20 @@ test("dash detection covers paired and two-em source forms", () => {
   assert.equal(needsCjkDashShaping({ textContent: "甲—乙" }), false);
 });
 
+test("dash capability fails closed without loading browser HarfBuzz", async () => {
+  delete globalThis.__TiqianWebFontShaping;
+
+  assert.deepEqual(
+    await prepareCjkDashShapingIfNeeded({ textContent: "甲——乙" }),
+    {
+      status: "unavailable",
+      issue: "NoConformingCjkDashGlyph",
+      detail: "BrowserHarfBuzzDisabled",
+    },
+  );
+  assert.equal(globalThis.__TiqianWebFontShaping, undefined);
+});
+
 test("font loading invalidation filters unrelated family and face variants", () => {
   assert.deepEqual(
     parseCssFontFamilies('"IBM Plex Sans SC", system-ui, \'Noto Sans\''),

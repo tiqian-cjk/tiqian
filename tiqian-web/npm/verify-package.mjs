@@ -11,6 +11,7 @@ const RUNTIMES = [
     directory: "runtime/",
     path: "runtime/tiqian-web.js",
     marker: "TiqianWeb",
+    forbiddenMarkers: ["__TiqianWebFontShaping", "WebAssembly"],
   },
   {
     directory: "precompute-runtime/",
@@ -53,6 +54,9 @@ export async function verifyPackage(packageRoot = new URL("./", import.meta.url)
     const source = await readFile(new URL(runtime.path, packageRoot), "utf8");
     if (source.length <= 100 || !source.includes(runtime.marker)) {
       fail(`${runtime.path} is not a non-empty Kotlin/JS runtime`);
+    }
+    for (const marker of runtime.forbiddenMarkers ?? []) {
+      if (source.includes(marker)) fail(`${runtime.path} contains forbidden browser marker ${marker}`);
     }
     const runtimeEntries = await readdir(new URL(runtime.directory, packageRoot));
     const wasmEntry = runtimeEntries.find((entry) => entry.endsWith(".wasm"));

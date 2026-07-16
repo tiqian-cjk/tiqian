@@ -93,7 +93,7 @@ export interface Precomputer {
   readonly typography: SnapshotTypography;
   readonly renderFontFamilies: readonly string[];
   prepareParagraph(input: SnapshotParagraphInput): Promise<PreparedParagraph | UnsupportedPreparedParagraph>;
-  /** Capture exact-font evidence for runtime-only or semantic prose. */
+  /** Capture exact-font and server-replay evidence for runtime-only or semantic prose. */
   prepareFontContract(input: {
     key: string;
     text: string;
@@ -115,7 +115,7 @@ export interface SnapshotBundle {
   readonly template: string;
   /** Inert manifest and prepared DOM adopted only after live geometry validation. */
   readonly inertTemplate: string;
-  /** Compact exact-font manifest for client-side navigation fallback. */
+  /** Compact exact-font and server-replay manifest for client-side navigation fallback. */
   readonly clientTemplate: string;
   readonly initialStyle: string;
   readonly renderFontFamilies: readonly string[];

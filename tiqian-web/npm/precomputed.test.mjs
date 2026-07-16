@@ -424,7 +424,7 @@ function fixture({
   const manifest = {
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v11",
+    renderRevision: "prebroken-dom-v12",
     fontSourcePolicy: "compatible-local-render-family-v2",
     ...(entrySource === undefined ? {} : { entrySource }),
     renderFontFamilies: ["Fixture CJK"],

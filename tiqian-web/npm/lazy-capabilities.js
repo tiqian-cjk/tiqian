@@ -4,7 +4,6 @@ export const DEFAULT_TYPOGRAPHY_FONT_WAIT_MS = 3_000;
 
 let precomputedModule;
 let precomputedPromise;
-let dashShapingPromise;
 
 export function lineLengthGridCellCount(containerWidth, fontSize) {
   const width = Math.fround(Number(containerWidth));
@@ -222,6 +221,11 @@ export async function tryAdoptRequestedSnapshot(root, isCurrent = () => true) {
 
 export function prepareCjkDashShapingIfNeeded(root, options = {}) {
   if (!needsCjkDashShaping(root)) return Promise.resolve({ status: "not-needed" });
-  dashShapingPromise ??= import("./font-shaping.js");
-  return dashShapingPromise.then((module) => module.prepareCjkDashShaping(root, options));
+  return Promise.resolve({
+    status: "unavailable",
+    issue: "NoConformingCjkDashGlyph",
+    detail: options?.exactFontSession
+      ? "ServerShapingReplayRequired"
+      : "BrowserHarfBuzzDisabled",
+  });
 }

@@ -64,7 +64,6 @@ object TiqianWeb {
     private var installed = false
     private val states = LinkedHashMap<HTMLElement, RootState>()
     private val progressiveJobs = LinkedHashMap<HTMLElement, ProgressiveJob>()
-    private val pendingCjkDashRetries = LinkedHashMap<HTMLElement, EnhanceOptions>()
 
     fun install() {
         if (installed) return
@@ -82,10 +81,6 @@ object TiqianWeb {
         document.addEventListener("tiqian:enhance-atomically", listener@{ event: Event ->
             val root = eventRoot(event) ?: document.body ?: return@listener
             enhanceAtomically(root, optionsFromJs(eventOptions(event)))
-        })
-        document.addEventListener("tiqian:retry-cjk-dash", listener@{ event: Event ->
-            val root = eventRoot(event) ?: return@listener
-            retryCjkDashCapability(root, optionsFromJs(eventOptions(event)))
         })
         document.addEventListener("tiqian:destroy", listener@{ event: Event ->
             val root = eventRoot(event) ?: document.body ?: return@listener
@@ -242,7 +237,6 @@ object TiqianWeb {
     }
 
     fun destroy(root: HTMLElement) {
-        pendingCjkDashRetries.remove(root)
         cancelProgressiveJob(root)
         val state = states.remove(root)
         if (state != null) {
@@ -509,11 +503,7 @@ object TiqianWeb {
                 issueCount = job.state.issues.size,
                 durationMs = performanceNow() - job.startedAt,
                 maxSliceMs = job.maxSliceDuration,
-                capabilityRetry = job.kind == ProgressiveJobKind.CjkDashRetry,
             )
-        }
-        pendingCjkDashRetries.remove(job.state.root)?.let { options ->
-            retryCjkDashCapability(job.state.root, options)
         }
     }
 
@@ -547,41 +537,8 @@ object TiqianWeb {
                 issueCount = job.state.issues.size,
                 durationMs = performanceNow() - job.startedAt,
                 maxSliceMs = job.maxSliceDuration,
-                capabilityRetry = job.kind == ProgressiveJobKind.CjkDashRetry,
             )
         }
-    }
-
-    internal fun retryCjkDashCapability(root: HTMLElement, options: EnhanceOptions) {
-        if (progressiveJobs[root] != null) {
-            pendingCjkDashRetries[root] = options
-            return
-        }
-        val state = states[root] ?: return
-        val retriable = state.issues.filter { it.name == CJK_DASH_CAPABILITY_ISSUE }
-        if (retriable.isEmpty()) return
-        dispatchTiqianCapabilityRetryStart(root)
-        val replacement = createRootState(root, options)
-        state.options = replacement.options
-        state.engine = replacement.engine
-        state.semanticExactEngine = replacement.semanticExactEngine
-        state.browserFallbackEngine = replacement.browserFallbackEngine
-        state.exactPreparedDomEnabled = replacement.exactPreparedDomEnabled
-        state.exactPreparedDomFallback = replacement.exactPreparedDomFallback
-        val candidates = retriable.map { it.element }.distinct()
-        for (issue in retriable) {
-            clearIssue(issue)
-            state.issues.remove(issue)
-        }
-        startProgressiveJob(
-            ProgressiveJob(
-                state = state,
-                kind = ProgressiveJobKind.CjkDashRetry,
-                itemCount = candidates.size,
-                processItem = { index -> processParagraph(candidates[index], state) },
-                startedAt = performanceNow(),
-            ),
-        )
     }
 
     private fun relayout(root: HTMLElement) {
@@ -804,15 +761,11 @@ object TiqianWeb {
             it.capabilityIssue != null
         }
         if (shapingCapabilityIssue != null) {
-            val pendingCjkDashProbe =
-                shapingCapabilityIssue.capabilityIssue == CJK_DASH_CAPABILITY_ISSUE &&
-                    options.cjkDashCapability?.status == "pending"
             return ParagraphLayoutPreparation.Unsupported(
                 CapabilityIssue(
                     name = shapingCapabilityIssue.capabilityIssue!!,
                     detail = shapingCapabilityIssue.reason,
                     element = paragraph.source,
-                    reportToConsole = !pendingCjkDashProbe,
                 ),
             )
         }
@@ -1169,7 +1122,6 @@ object TiqianWeb {
         val dashCapability = dashCapabilityObject?.let { capability ->
             WebCjkDashCapability(
                 status = optionString(capability, "status") ?: "unavailable",
-                sessionId = optionString(capability, "sessionId"),
                 detail = optionString(capability, "detail"),
             )
         }
@@ -1303,7 +1255,6 @@ object TiqianWeb {
     private enum class ProgressiveJobKind {
         Enhance,
         Relayout,
-        CjkDashRetry,
     }
 
     private class ProgressiveJob(
@@ -1881,9 +1832,9 @@ private fun isExactFontSessionCapabilityFailure(error: Throwable): Boolean {
 
 /**
  * SemanticExactRunFallback: rich paragraphs may intentionally introduce a
- * different font family (for example inline code). Preserve exact HarfBuzz
- * shaping for every covered run and delegate only the unsupported run to the
- * browser adapter, whose semantic clone keeps the corresponding host style.
+ * different font family (for example inline code). Preserve the exact server
+ * HarfBuzz replay for every covered run and delegate only the unsupported run
+ * to the browser adapter, whose semantic clone keeps the corresponding host style.
  */
 private class ExactSessionBrowserFallbackTextShaper(
     private val exact: TextShaper,
@@ -2399,16 +2350,15 @@ private external fun belongsToRootScope(paragraph: HTMLElement, root: HTMLElemen
 private external fun consoleWarn(message: String)
 @JsFun("() => performance.now()")
 private external fun performanceNow(): Double
-@JsFun("(root, enhancedCount, issueCount, durationMs, maxSliceMs, capabilityRetry) => root.dispatchEvent(new CustomEvent('tiqian:ready', { detail: { enhancedCount, issueCount, durationMs, maxSliceMs, capabilityRetry } }))")
+@JsFun("(root, enhancedCount, issueCount, durationMs, maxSliceMs) => root.dispatchEvent(new CustomEvent('tiqian:ready', { detail: { enhancedCount, issueCount, durationMs, maxSliceMs } }))")
 private external fun dispatchTiqianReady(
     root: HTMLElement,
     enhancedCount: Int,
     issueCount: Int,
     durationMs: Double,
     maxSliceMs: Double,
-    capabilityRetry: Boolean,
 )
-@JsFun("(root, enhancedCount, issueCount, durationMs, maxSliceMs, failed, error, stale) => root.dispatchEvent(new CustomEvent('tiqian:relayout-ready', { detail: { enhancedCount, issueCount, durationMs, maxSliceMs, capabilityRetry: false, relayout: true, failed, error, stale } }))")
+@JsFun("(root, enhancedCount, issueCount, durationMs, maxSliceMs, failed, error, stale) => root.dispatchEvent(new CustomEvent('tiqian:relayout-ready', { detail: { enhancedCount, issueCount, durationMs, maxSliceMs, relayout: true, failed, error, stale } }))")
 private external fun dispatchTiqianRelayoutReady(
     root: HTMLElement,
     enhancedCount: Int,
@@ -2427,8 +2377,6 @@ private external fun dispatchTiqianProgressiveError(
     durationMs: Double,
     maxSliceMs: Double,
 )
-@JsFun("(root) => root.dispatchEvent(new CustomEvent('tiqian:capability-retry-start'))")
-private external fun dispatchTiqianCapabilityRetryStart(root: HTMLElement)
 private fun installTiqianGlobalApiBridge() {
     js(
         """
@@ -2605,7 +2553,6 @@ private const val MAX_PROGRESSIVE_ITEMS_PER_SLICE = 8
 private const val CANONICAL_SOURCE_ATTRIBUTE = "data-tq-canonical-source"
 private const val RELAYOUT_ERROR_ATTRIBUTE = "data-tiqian-relayout-error"
 private const val EXACT_PREPARED_FALLBACK_ATTRIBUTE = "data-tiqian-exact-layout-fallback"
-private const val CJK_DASH_CAPABILITY_ISSUE = "NoConformingCjkDashGlyph"
 private const val DEFAULT_LINE_HEIGHT_MULTIPLIER = 1.75f
 private const val DEFAULT_CJK_FONT_FAMILY = "\"MiSans VF\", \"PingFang SC\", \"Noto Sans CJK SC\", sans-serif"
 private const val DEFAULT_LATIN_FONT_FAMILY = "\"InterVariable\", \"Inter\", \"MiSans VF\", sans-serif"
@@ -2617,6 +2564,7 @@ private const val DEFAULT_LATIN_SERIF_FONT_FAMILY = "Georgia, \"Times New Roman\
 private val EXACT_FONT_SESSION_CAPABILITY_FAILURES = listOf(
     "NoExactFontFace",
     "MissingGlyph",
+    "MissingServerShapingReplay",
     "NoExactMetricFace",
     "NonUniformUnicodeRangeMetrics",
 )

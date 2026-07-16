@@ -16,10 +16,12 @@ test("published package includes the generated runtime and no repository-only bi
   assert.ok(manifest.files.includes("runtime/"));
   assert.ok(manifest.files.includes("precompute-runtime/"));
   assert.ok(manifest.files.includes("precompute-node-fonts.js"));
+  assert.ok(manifest.files.includes("browser-font-replay.js"));
   assert.ok(manifest.files.includes("browser-fonts.js"));
   assert.ok(manifest.files.includes("lazy-capabilities.js"));
   assert.ok(manifest.files.includes("prepared-dom.js"));
   assert.ok(manifest.files.includes("snapshot-manifest.js"));
+  assert.ok(manifest.files.includes("snapshot-source.js"));
   assert.ok(manifest.files.includes("snapshot-client.js"));
   assert.equal(manifest.exports["./precompute"].default, "./precompute.js");
   assert.equal(manifest.exports["./snapshot-client"].default, "./snapshot-client.js");
@@ -141,8 +143,11 @@ test("the custom element validates a snapshot before dynamically loading the bro
   assert.doesNotMatch(apiSource, /from "\.\/precomputed\.js"/u);
   assert.doesNotMatch(apiSource, /from "\.\/font-shaping\.js"/u);
   assert.match(lazyCapabilitiesSource, /import\("\.\/precomputed\.js"\)/u);
-  assert.match(lazyCapabilitiesSource, /import\("\.\/font-shaping\.js"\)/u);
-  assert.match(elementSource, /tiqian:retry-cjk-dash/u);
+  assert.doesNotMatch(lazyCapabilitiesSource, /font-shaping\.js/u);
+  assert.doesNotMatch(browserFontsSource, /precompute-fonts\.js/u);
+  assert.doesNotMatch(browserFontsSource, /harfbuzzjs|woff2-encoder/u);
+  assert.doesNotMatch(elementSource, /tiqian:retry-cjk-dash/u);
+  assert.match(elementSource, /BrowserDashCapabilityBeforeDispatch/u);
   assert.doesNotMatch(elementSource, /#exactFontSession\?\.reference === reference/u);
   assert.doesNotMatch(apiSource, /existing\?\.reference === reference/u);
   assert.match(browserFontsSource, /await requireExactContract\(root\)/u);
@@ -207,7 +212,13 @@ test("the custom element validates a snapshot before dynamically loading the bro
     /#recoverRuntimeAfterSnapshotMiss\(operation, reason, runtimeSnapshotBackingRestored = false\)/u,
   );
   assert.doesNotMatch(precomputeFontsSource, /spec\.contentAddressed/u);
-  assert.match(elementSource, /this\.#resizeObserver\.observe\(paragraph\)/u);
+  assert.doesNotMatch(elementSource, /tq-inline-size-probe/u);
+  assert.match(elementSource, /observer\.observe\(target, \{ box: "border-box" \}\)/u);
+  assert.match(
+    elementSource,
+    /ResponsiveInlineSizeObservation[\s\S]*?Math\.abs\(width - previous\) >= 0\.5[\s\S]*?observer\.disconnect\(\)[\s\S]*?#resizeObserverFrame = requestAnimationFrame/u,
+  );
+  assert.doesNotMatch(stylesSource, /tq-inline-size-probe/u);
   assert.match(elementSource, /#paragraphWidthSignature\(\)/u);
   assert.doesNotMatch(elementSource, /RESPONSIVE_LAYOUT_SETTLE_MS|#resizeSettleTimer/u);
   assert.doesNotMatch(elementSource, /RESPONSIVE_LATEST_RETARGET_QUIET_MS|setTimeout/u);
@@ -217,7 +228,15 @@ test("the custom element validates a snapshot before dynamically loading the bro
   );
   assert.match(
     elementSource,
+    /ViewportResizeCancelsCapturedProgressiveWork[\s\S]*?#cancelCapturedLayoutForLatestGeometry\(\)/u,
+  );
+  assert.match(
+    elementSource,
     /#cancelCapturedLayoutForLatestGeometry\(\)[\s\S]*?#restoreRuntimeSourceForRetarget\(\)[\s\S]*?#responsiveRelayoutRequired = true/u,
+  );
+  assert.match(
+    elementSource,
+    /TypographyRetargetMustRestart[\s\S]*?#responsiveRelayoutRequired = true/u,
   );
   assert.match(
     elementSource,
@@ -237,11 +256,11 @@ test("the custom element validates a snapshot before dynamically loading the bro
   assert.match(invalidationSource, /beforeDispatch: restoreImmediatelyBeforeDispatch/u);
   assert.match(
     elementSource,
-    /ResponsiveSnapshotRollbackBeforePaint[\s\S]*?#invalidateSnapshotAndEnhance\(\{ restoreBeforeLoad: true \}\)/u,
+    /ResponsiveSnapshotRollbackAtFirstSafeSignal[\s\S]*?#invalidateSnapshotAndEnhance\(\{ restoreBeforeLoad: true \}\)/u,
   );
   assert.match(
     elementSource,
-    /ResponsiveRuntimeRollbackBeforePaint[\s\S]*?#refreshRuntimeFromSource\(\)/u,
+    /ResponsiveRuntimeRollbackAtFirstSafeSignal[\s\S]*?#refreshRuntimeFromSource\(\)/u,
   );
   assert.match(elementSource, /PreparedSnapshotTransition/u);
   assert.match(

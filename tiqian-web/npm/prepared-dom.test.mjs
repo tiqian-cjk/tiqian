@@ -452,7 +452,7 @@ test("global runtime bridge delegates to the canonical lowering and browser repl
   const host = fakeHost();
 
   assert.equal(bridge.layoutRevision, "tiqian-layout-v2");
-  assert.equal(bridge.renderRevision, "prebroken-dom-v11");
+  assert.equal(bridge.renderRevision, "prebroken-dom-v12");
   assert.deepEqual(bridge.lower(JSON.stringify(plan), "zh-Hans"), expected);
   assert.equal(bridge.render(host, plan, { locale: "zh-Hans" }).html, expected.html);
   assert.equal(host.innerHTML, expected.html);
