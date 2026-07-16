@@ -66,6 +66,7 @@ assert.equal(typeof api.destroy, "function");
 assert.equal(typeof TiqianProseElement, "function");
 assert.deepEqual(Object.keys(precompute).sort(), [
   "createPrecomputer",
+  "renderFontContractBundle",
   "renderPreparedParagraph",
   "renderSnapshotBundle",
   "renderSnapshotTemplate",

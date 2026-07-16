@@ -530,6 +530,25 @@ export function renderSnapshotBundle(preparedParagraphs, options = {}) {
   return buildSnapshotBundle(preparedParagraphs, options);
 }
 
+/**
+ * Produces the compact exact-font contract used when a root must keep its
+ * semantic source DOM and perform every paragraph layout in the browser. The
+ * caller still supplies prepared evidence, but no prepared paragraph geometry
+ * or snapshot-ready root attribute is exposed to the host.
+ */
+export function renderFontContractBundle(preparedParagraphs, options = {}) {
+  const snapshotBundle = buildSnapshotBundle(preparedParagraphs, options);
+  const template = snapshotBundle.clientTemplate;
+  return Object.freeze({
+    ...snapshotBundle,
+    template,
+    inertTemplate: template,
+    initialStyle: exactRenderFontStyle(snapshotBundle.id, snapshotBundle.renderFontFamilies),
+    rootAttributes: Object.freeze({}),
+    entries: Object.freeze([]),
+  });
+}
+
 export function renderSnapshotTemplate(preparedParagraphs, options = {}) {
   return buildSnapshotBundle(preparedParagraphs, options).inertTemplate;
 }

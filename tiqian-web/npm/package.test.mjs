@@ -72,12 +72,14 @@ test("the precompute public surface matches its declarations", async () => {
   assert.match(source, /export \{ renderPreparedParagraph \} from "\.\/prepared-dom\.js"/u);
   assert.deepEqual(Object.keys(publicModule).sort(), [
     "createPrecomputer",
+    "renderFontContractBundle",
     "renderPreparedParagraph",
     "renderSnapshotBundle",
     "renderSnapshotTemplate",
     "snapshotPlainTextIssue",
   ]);
   assert.match(declarations, /function renderPreparedParagraph\(/u);
+  assert.match(declarations, /function renderFontContractBundle\(/u);
   assert.match(declarations, /readonly inertTemplate: string/u);
   assert.doesNotMatch(declarations, /renderPreparedParagraphArtifact/u);
   assert.doesNotMatch(declarations, /renderPreparedParagraphInto/u);

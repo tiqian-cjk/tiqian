@@ -120,13 +120,25 @@ export interface SnapshotBundle {
   readonly initialStyle: string;
   readonly renderFontFamilies: readonly string[];
   readonly fontPreloads: readonly string[];
-  readonly rootAttributes: Readonly<Record<"data-tiqian-exact-render-font", "true">>;
+  readonly rootAttributes: Readonly<Partial<Record<"data-tiqian-exact-render-font", "true">>>;
   readonly entries: readonly {
     readonly key: string;
     readonly html: string;
   }[];
 }
 export declare function renderSnapshotBundle(
+  preparedParagraphs: readonly PreparedParagraph[],
+  options: {
+    id: string;
+    paragraphSelector?: ":is(p, li)[data-tq-snapshot-key]";
+    fontContractParagraphs?: readonly PreparedParagraph[];
+  },
+): SnapshotBundle;
+/**
+ * Build a compact exact-font contract for roots that keep semantic source DOM
+ * and perform all paragraph layout in the browser.
+ */
+export declare function renderFontContractBundle(
   preparedParagraphs: readonly PreparedParagraph[],
   options: {
     id: string;

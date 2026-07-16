@@ -146,6 +146,10 @@ precomputer.close();
 快照而不重复传输整篇预排 HTML。用于精确绘制的 `@font-face` 必须使用默认
 `font-display: auto` 或显式 `block`，不能使用 `optional` 或 `swap`。
 
+当一个正文根包含暂时无法预排的富文本，但仍希望浏览器使用构建时验证过的字体字节和度量时，
+使用 `renderFontContractBundle()`。它只输出紧凑的精确字体契约，不输出可采用的段落几何，也不会
+要求宿主把正文标记成已使用快照；浏览器仍从原始语义 DOM 完成全部段落布局。
+
 ## 运行环境
 
 - 包是 ESM-only；CommonJS 宿主需要使用动态 `import()`。

@@ -10,6 +10,7 @@ import {
 } from "./precompute-fonts.js";
 import {
   createPrecomputer,
+  renderFontContractBundle,
   renderPreparedParagraph,
   renderSnapshotBundle,
   renderSnapshotTemplate,
@@ -379,6 +380,14 @@ test("snapshot bundle exposes compact SSR artifacts without inline geometry", ()
   assert.match(semanticContract.template, /fontContractEntries/u);
   assert.match(semanticContract.template, /below-fold-deadbeef/u);
   assert.match(semanticContract.clientTemplate, /below-fold-deadbeef/u);
+
+  const fontContract = renderFontContractBundle([prepared], { id: "tq-font-contract" });
+  assert.deepEqual(fontContract.entries, []);
+  assert.deepEqual(fontContract.rootAttributes, {});
+  assert.equal(fontContract.template, fontContract.clientTemplate);
+  assert.equal(fontContract.inertTemplate, fontContract.clientTemplate);
+  assert.match(fontContract.clientTemplate, /font-contract-v1/u);
+  assert.doesNotMatch(fontContract.initialStyle, /\.tqv-/u);
 });
 
 test("snapshot template refuses a stale prepared render revision", () => {
