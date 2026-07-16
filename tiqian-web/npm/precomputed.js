@@ -501,10 +501,15 @@ function generatedGeometryIssue(element, paragraph) {
       style[property] !== expected);
     if (stableMismatch) return `Boundary:${stableMismatch[0]}`;
     const featureContract = boundaryOpenTypeFeatureContract(element);
-    const inheritedProperties = featureContract?.signature
+    const inheritedProperties = (featureContract?.signature
       ? BOUNDARY_STYLE_PROPERTIES.filter((property) =>
         !FEATURE_OVERRIDABLE_BOUNDARY_STYLE_PROPERTIES.has(property))
-      : BOUNDARY_STYLE_PROPERTIES;
+      : BOUNDARY_STYLE_PROPERTIES)
+      // EngineOwnedBoundaryLetterSpacing: multi-character shaping runs can
+      // also carry layout adjustment. Their serialized advance is checked
+      // against the real border-box immediately below, so inherited equality
+      // would reject correct engine geometry without adding protection.
+      .filter((property) => property !== "letterSpacing");
     const inheritedMismatch = inheritedProperties.find((property) =>
       String(style[property] ?? "") !== String(inheritedStyle[property] ?? ""));
     if (inheritedMismatch) return `Boundary:${inheritedMismatch}`;

@@ -60,6 +60,13 @@ fun LayoutResult.toPreparedParagraphJson(): String {
                     .appendJsonNumber(naturalWidth[cluster.range] ?: cluster.advance).append(',')
                 append("\"leadingLayoutAdvance\":")
                     .appendJsonNumber(cluster.leadingLayoutAdvance)
+                // MultiCodeUnitShapingBoundary: Latin words, URLs, emoji, and
+                // other multi-unit clusters are already independently shaped
+                // by the core. DOM text must not merge adjacent clusters and
+                // ask the browser to shape a different, wider run.
+                if (cluster.range.end - cluster.range.start > 1) {
+                    append(",\"shapingBoundary\":true")
+                }
                 openTypeFeatures[cluster.range]?.takeIf { it.isNotEmpty() }?.let { features ->
                     append(",\"openTypeFeatures\":[")
                     features.forEachIndexed { featureIndex, feature ->

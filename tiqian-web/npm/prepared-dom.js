@@ -296,6 +296,7 @@ function preparedFeatureSignature(run) {
 function canMergePreparedRun(left, right) {
   if (left.rangeEnd !== right.rangeStart ||
       left.semanticSignature !== right.semanticSignature ||
+      left.shapingBoundary || right.shapingBoundary ||
       preparedFeatureSignature(left) !== preparedFeatureSignature(right)) {
     return false;
   }
@@ -314,7 +315,8 @@ function mergePreparedRun(left, right) {
 
 function renderRun(run, styleClassFor) {
   const featureSignature = preparedFeatureSignature(run);
-  const needsElement = featureSignature || run.source !== run.display || run.spacing.kind !== "none";
+  const needsElement = run.shapingBoundary || featureSignature ||
+    run.source !== run.display || run.spacing.kind !== "none";
   if (!needsElement) return renderedText(run.display);
   const attributes = {
     "data-tq-advance": String(
@@ -325,9 +327,11 @@ function renderRun(run, styleClassFor) {
     "data-tq-geometry": "true",
     "data-tq-x": String(run.drawX),
   };
+  if (run.shapingBoundary || featureSignature) {
+    attributes["data-tq-shaping-boundary"] = "";
+  }
   if (featureSignature) {
     if (featureSignature !== "pwid,palt") throw new Error("UnsupportedPreparedOpenTypeFeatures");
-    attributes["data-tq-shaping-boundary"] = "";
     attributes["data-tq-open-type-features"] = featureSignature;
   }
   if (run.source !== run.display) attributes["data-tq-src"] = run.source;
@@ -421,6 +425,7 @@ export function renderPreparedParagraphArtifact(
         display: cell.display,
         drawX: cell.drawX,
         naturalWidth: cell.naturalWidth,
+        shapingBoundary: cell.shapingBoundary === true,
         openTypeFeatures: cell.openTypeFeatures,
         trailingGap,
         spacing: preparedSpacing(cell.display, trailingGap),

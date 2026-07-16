@@ -347,6 +347,37 @@ test("a multi-character cluster applies one total trailing adjustment", () => {
   assert.doesNotMatch(lowered.html, /letter-spacing:3px!important/u);
 });
 
+test("independently shaped multi-character cells remain separate browser shaping runs", () => {
+  const plan = fixturePlan();
+  plan.lines[0].rangeEnd = 13;
+  plan.lines[0].visualWidth = 103;
+  plan.lines[0].cells = [{
+    rangeStart: 0,
+    rangeEnd: 8,
+    source: "https://",
+    display: "https://",
+    drawX: 0,
+    naturalWidth: 61,
+    leadingLayoutAdvance: 0,
+    shapingBoundary: true,
+  }, {
+    rangeStart: 8,
+    rangeEnd: 13,
+    source: "a.com",
+    display: "a.com",
+    drawX: 61,
+    naturalWidth: 42,
+    leadingLayoutAdvance: 0,
+    shapingBoundary: true,
+  }];
+
+  const lowered = renderPreparedParagraphArtifact(plan, "zh-Hans");
+  assert.equal(lowered.html.match(/data-tq-shaping-boundary/gu)?.length, 2);
+  assert.match(lowered.html, /data-tq-advance="61"/u);
+  assert.match(lowered.html, /data-tq-advance="42"/u);
+  assert.doesNotMatch(lowered.html, />https:\/\/a\.com<\/span>/u);
+});
+
 test("visual soft wraps stay out of accessibility and copy semantics", () => {
   const lowered = renderPreparedParagraphArtifact(twoLineFixture("AutoWrap"), "zh-Hans");
   const lineBreak = lowered.artifact.find(([tag]) => tag === "br");
@@ -452,7 +483,7 @@ test("global runtime bridge delegates to the canonical lowering and browser repl
   const host = fakeHost();
 
   assert.equal(bridge.layoutRevision, "tiqian-layout-v2");
-  assert.equal(bridge.renderRevision, "prebroken-dom-v12");
+  assert.equal(bridge.renderRevision, "prebroken-dom-v13");
   assert.deepEqual(bridge.lower(JSON.stringify(plan), "zh-Hans"), expected);
   assert.equal(bridge.render(host, plan, { locale: "zh-Hans" }).html, expected.html);
   assert.equal(host.innerHTML, expected.html);

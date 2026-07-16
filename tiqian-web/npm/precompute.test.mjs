@@ -214,9 +214,14 @@ test("Node Kotlin/JS precompute runs the real layout pipeline through a synchron
   const proportionalQuoteCells = quoteCells.filter((cell) =>
     JSON.stringify(cell.openTypeFeatures) === JSON.stringify(["pwid", "palt"]));
   const cjkQuoteCells = quoteCells.filter((cell) => cell.openTypeFeatures == null);
+  const multiCodeUnitCells = quotePlan.lines
+    .flatMap((line) => line.cells)
+    .filter((cell) => cell.rangeEnd - cell.rangeStart > 1);
 
   assert.equal(quoteCount(proportionalQuoteCells), 7, JSON.stringify(shapeCalls));
   assert.equal(quoteCount(cjkQuoteCells), 2, JSON.stringify(shapeCalls));
+  assert.ok(multiCodeUnitCells.length > 0);
+  assert.ok(multiCodeUnitCells.every((cell) => cell.shapingBoundary === true));
   assert.match(
     renderPreparedParagraph(quotePlan, { locale: "zh-Hans" }),
     /data-tq-open-type-features="pwid,palt"/u,
@@ -230,7 +235,7 @@ test("snapshot template keeps the prepared DOM inert and Pagefind-ignored", () =
     status: "prepared",
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v12",
+    renderRevision: "prebroken-dom-v13",
     renderFontFamilies: ["Snapshot Sans"],
     key: "p-1",
     renderArtifactSha256: "c".repeat(64),
@@ -281,7 +286,7 @@ test("snapshot bundle exposes compact SSR artifacts without inline geometry", ()
     status: "prepared",
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v12",
+    renderRevision: "prebroken-dom-v13",
     renderFontFamilies: ["Snapshot Sans"],
     key: "p-1",
     renderArtifactSha256: "c".repeat(64),
@@ -394,7 +399,7 @@ test("v1 snapshot candidates stay aligned with the paragraph observer contract",
     status: "prepared",
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v12",
+    renderRevision: "prebroken-dom-v13",
     renderFontFamilies: ["Snapshot Sans"],
     key: "p-1",
     renderArtifactSha256: "c".repeat(64),

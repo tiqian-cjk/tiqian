@@ -424,7 +424,7 @@ function fixture({
   const manifest = {
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v12",
+    renderRevision: "prebroken-dom-v13",
     fontSourcePolicy: "compatible-local-render-family-v2",
     ...(entrySource === undefined ? {} : { entrySource }),
     renderFontFamilies: ["Fixture CJK"],
@@ -739,6 +739,23 @@ test("shared prepared DOM validator compares vertical geometry only between inli
       renderedPreparedParagraphIssue(paragraph, 360),
       /^RenderedPreparedParagraphLineAdvanceMismatch:0;contributor-top;/u,
     );
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
+test("shaping boundaries may carry engine-owned letter spacing when their advance matches", async () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = (element, pseudo) => fixtureComputedStyle(
+    element,
+    pseudo,
+    element.hasAttribute?.("data-tq-shaping-boundary")
+      ? { letterSpacing: "0.75px" }
+      : {},
+  );
+  try {
+    const { root } = fixture({ shapingBoundary: true });
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), { adopted: true, count: 1 });
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;
   }
