@@ -13,6 +13,10 @@ tiqian-prose {
   list-style-position: outside !important;
 }
 
+:is(tiqian-prose, [data-tiqian-root]) :where(ol, ul):not(.footnotes-list) > li {
+  padding-inline: 0 !important;
+}
+
 tiqian-prose [data-tq-rendered="true"] {
   position: relative;
 }

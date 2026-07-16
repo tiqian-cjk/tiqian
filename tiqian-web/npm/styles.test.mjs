@@ -15,6 +15,10 @@ test("web lists keep native markers on a stable two-character body indent", () =
     stylesheet,
     /padding-inline-start:\s*var\(--tq-list-indent,\s*2ic\)\s*!important/u,
   );
+  assert.match(
+    stylesheet,
+    /:where\(ol, ul\):not\(\.footnotes-list\)\s*>\s*li\s*\{\s*padding-inline:\s*0\s*!important/u,
+  );
   assert.match(stylesheet, /list-style-position:\s*outside/u);
   assert.doesNotMatch(stylesheet, /data-tq-list-marker/u);
 });
