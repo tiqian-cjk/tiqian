@@ -1558,6 +1558,12 @@ private object MarkdownParagraphLowerer {
                     "${tag.lowercase()}:$display",
                 )
             }
+            inlineShapingStyleIssue(element, sourceElement)?.let { property ->
+                return unsupported(
+                    "UnsupportedInlineShapingStyle",
+                    "${tag.lowercase()}:$property",
+                )
+            }
             val inheritedStrongWeight = style.cjkStrongBaseWeight
             val strongBaseWeight = if (tag == "STRONG" && strongAsEmphasisMarks) {
                 inheritedStrongWeight ?: style.textStyle.fontWeight
@@ -2102,6 +2108,35 @@ private fun computedTextStyle(element: Element, fallback: TextStyle): TextStyle 
         italic = italic,
     )
 }
+
+// InlineShapingStyleParityContract: TextStyle currently models family, size,
+// weight, italic and baseline shift. The renderer preserves semantic wrappers,
+// so an inherited shaping property that changes only inside such a wrapper
+// would otherwise make browser glyph advances diverge from LayoutResult.
+private val unsupportedInlineShapingProperties = listOf(
+    "font-feature-settings",
+    "font-variation-settings",
+    "font-stretch",
+    "font-kerning",
+    "font-optical-sizing",
+    "font-variant-ligatures",
+    "font-variant-alternates",
+    "font-variant-east-asian",
+    "font-variant-caps",
+    "font-variant-numeric",
+    "font-variant-position",
+    "font-language-override",
+    "font-size-adjust",
+    "word-spacing",
+    "text-transform",
+    "text-rendering",
+)
+
+private fun inlineShapingStyleIssue(element: Element, paragraph: Element): String? =
+    unsupportedInlineShapingProperties.firstOrNull { property ->
+        computedStyle(element, property).trim().lowercase() !=
+            computedStyle(paragraph, property).trim().lowercase()
+    }
 
 private fun computedInlineStyle(element: Element, fallback: InlineStyle): InlineStyle {
     val computed = computedTextStyle(element, fallback.textStyle)

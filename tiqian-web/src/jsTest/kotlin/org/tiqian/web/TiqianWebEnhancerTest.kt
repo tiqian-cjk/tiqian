@@ -1130,6 +1130,31 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
+    fun inlineShapingFeatureThatLayoutResultCannotModelStaysNative() {
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 320px">
+              <p>阅读 <span style="font-feature-settings: 'hwid'; font-variant-east-asian: proportional-width">Font size</span> 以了解更多。</p>
+            </div>
+            """.trimIndent(),
+        )
+        val paragraph = root.querySelector("p") as HTMLElement
+        val originalHtml = paragraph.innerHTML
+
+        assertEquals(0, TiqianWeb.enhance(root, testOptions()))
+        assertEquals(originalHtml, paragraph.innerHTML)
+        assertNull(paragraph.getAttribute("data-tq-rendered"))
+        assertEquals(
+            "UnsupportedInlineShapingStyle",
+            paragraph.getAttribute("data-tiqian-capability-issue"),
+        )
+        assertEquals(
+            "span:font-feature-settings",
+            paragraph.getAttribute("data-tiqian-capability-detail"),
+        )
+    }
+
+    @Test
     fun zeroWidthSpaceSoftBreakEnhancesAndCopiesSourceFaithfully() {
         val source = "A.\u200B.\u200B.Complete？AaFont？"
         val root = mount(
