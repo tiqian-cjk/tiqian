@@ -1523,6 +1523,14 @@ private object MarkdownParagraphLowerer {
                 sourceBoundaries = emptySet(),
             )
         }
+        generatedPseudoContentIssue(paragraph)?.let { detail ->
+            lastIssue = TiqianWeb.CapabilityIssue(
+                "UnsupportedGeneratedInlineContent",
+                detail,
+                paragraph,
+            )
+            return null
+        }
         val builder = LoweringBuilder(
             sourceElement = paragraph,
             baseInlineStyle = baseInlineStyle,
@@ -1611,6 +1619,9 @@ private object MarkdownParagraphLowerer {
                 hardBreakOffsets += text.length
                 appendRawText("\n", style.whiteSpace)
                 return true
+            }
+            generatedPseudoContentIssue(element)?.let { detail ->
+                return unsupported("UnsupportedGeneratedInlineContent", detail)
             }
             val display = computedStyle(element, "display").trim().lowercase()
             val opaqueCandidate = tag in NON_TEXT_INLINE_TAGS ||
@@ -2230,6 +2241,21 @@ private fun inlineShapingStyleIssue(element: Element, paragraph: Element): Strin
             computedStyle(paragraph, property).trim().lowercase()
     }
 
+// GeneratedInlineContentMustStayNative: CSS ::before/::after content occupies
+// line advance but is absent from the source-text and copy/accessibility model.
+// Until LayoutResult can represent that generated run explicitly, accepting it
+// would make measured breaks diverge from the host DOM (for example footnote
+// brackets emitted around an inline anchor).
+private fun generatedPseudoContentIssue(element: Element): String? {
+    for (pseudo in listOf("::before", "::after")) {
+        val content = flowParticipatingPseudoContent(element, pseudo)?.trim()
+        if (content != null) {
+            return "${element.tagName.lowercase()}$pseudo:$content"
+        }
+    }
+    return null
+}
+
 private fun computedInlineStyle(element: Element, fallback: InlineStyle): InlineStyle {
     val computed = computedTextStyle(element, fallback.textStyle)
     val localBaselineShift = computedInlineBaselineShift(element)
@@ -2440,6 +2466,16 @@ private external fun measuredOpaqueInlineObjectGeometry(element: Element): Strin
 private external fun isCloneSafeOpaqueInlineObject(element: Element): Boolean
 @JsFun("(element, property) => getComputedStyle(element).getPropertyValue(property)")
 private external fun computedStyle(element: Element, property: String): String
+@JsFun(
+    """(element, pseudo) => {
+      const style = getComputedStyle(element, pseudo);
+      const content = style.getPropertyValue('content').trim();
+      if (!content || content === 'none' || content === 'normal' || content === '""' || content === "''") return null;
+      if (style.display === 'none' || style.position === 'absolute' || style.position === 'fixed') return null;
+      return content;
+    }""",
+)
+private external fun flowParticipatingPseudoContent(element: Element, pseudo: String): String?
 @JsFun(
     """(element) => {
       const fonts = document.fonts;

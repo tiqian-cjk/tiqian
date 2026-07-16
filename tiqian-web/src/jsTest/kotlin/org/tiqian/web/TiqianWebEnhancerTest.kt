@@ -1311,6 +1311,40 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
+    fun generatedInlineContentThatLayoutResultCannotModelStaysNative() {
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 320px">
+              <style>
+                .generated-footnote::before { content: "["; }
+                .generated-footnote::after { content: "]"; }
+                .absolute-decoration::before { content: "•"; position: absolute; }
+              </style>
+              <p>正文<a class="generated-footnote" href="#note">1</a>继续。</p>
+              <p>正文<span class="absolute-decoration">装饰</span>继续。</p>
+            </div>
+            """.trimIndent(),
+        )
+        val paragraph = root.querySelector("p") as HTMLElement
+        val originalHtml = paragraph.innerHTML
+
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+        assertEquals(originalHtml, paragraph.innerHTML)
+        assertNull(paragraph.getAttribute("data-tq-rendered"))
+        assertEquals(
+            "UnsupportedGeneratedInlineContent",
+            paragraph.getAttribute("data-tiqian-capability-issue"),
+        )
+        assertTrue(
+            paragraph.getAttribute("data-tiqian-capability-detail")
+                ?.startsWith("a::before:") == true,
+        )
+        val decorated = root.querySelector("p:last-of-type") as HTMLElement
+        assertEquals("true", decorated.getAttribute("data-tq-rendered"))
+        assertNull(decorated.getAttribute("data-tiqian-capability-issue"))
+    }
+
+    @Test
     fun zeroWidthSpaceSoftBreakEnhancesAndCopiesSourceFaithfully() {
         val source = "A.\u200B.\u200B.Complete？AaFont？"
         val root = mount(
@@ -1505,7 +1539,7 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
-    fun preservesSuperscriptBaselineGeneratedContentAndUniqueId() {
+    fun keepsSuperscriptGeneratedContentNativeAndPreservesUniqueId() {
         val root = mount(
             """
             <div data-tiqian-root="true" style="width: 220px">
@@ -1518,7 +1552,7 @@ class TiqianWebEnhancerTest {
             """.trimIndent(),
         )
 
-        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+        assertEquals(0, TiqianWeb.enhance(root, testOptions()))
 
         val paragraph = root.querySelector("p") as HTMLElement
         val sup = paragraph.querySelector("sup") as? HTMLElement
@@ -1526,7 +1560,15 @@ class TiqianWebEnhancerTest {
         assertEquals("-5px", computedStyleValue(sup, "top"))
         assertEquals(1, paragraph.querySelectorAll("#fnref-1").length)
         assertNotNull(paragraph.querySelector("a.fn[href='#fn-1']"))
-        assertNull(paragraph.getAttribute("data-tiqian-capability-issue"))
+        assertNull(paragraph.getAttribute("data-tq-rendered"))
+        assertEquals(
+            "UnsupportedGeneratedInlineContent",
+            paragraph.getAttribute("data-tiqian-capability-issue"),
+        )
+        assertTrue(
+            paragraph.getAttribute("data-tiqian-capability-detail")
+                ?.startsWith("a::before:") == true,
+        )
     }
 
     @Test
