@@ -2196,31 +2196,6 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
-    fun responsiveTypographyRefreshRebuildsSynchronouslyWithoutProgressiveFrames() {
-        val root = mount(
-            "<div data-tiqian-root='true' style='width: 220px'>" +
-                "<p style='font-size: 18px; line-height: 30px; font-weight: 400'>" +
-                "响应式字重变化不能把长文逐段擦写。</p></div>",
-        )
-        TiqianWeb.install()
-        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
-        val paragraph = root.querySelector("p") as HTMLElement
-        val previousRenderedChild = assertNotNull(paragraph.firstChild)
-        var readyCount = 0
-        root.addEventListener("tiqian:relayout-ready", { readyCount += 1 })
-
-        installTestAnimationFrames()
-        paragraph.style.fontWeight = "700"
-        dispatchAtomicEnhance(root)
-
-        assertEquals(0, pendingTestAnimationFrameCount())
-        assertEquals(1, readyCount)
-        assertFalse(paragraph.firstChild === previousRenderedChild)
-        assertEquals("700", computedStyleValue(paragraph, "font-weight"))
-        assertEquals("true", paragraph.getAttribute("data-tq-rendered"))
-    }
-
-    @Test
     fun relayoutCommitFailureRollsBackRenderedNodesAndStillCompletesTheJob() {
         installExactFontSessionFixture(failShaping = false)
         try {
@@ -2550,8 +2525,6 @@ private external fun dispatchEnhanceWithoutOptions(root: HTMLElement)
 private external fun dispatchEnhanceWithStrongAsEmphasisMarks(root: HTMLElement)
 @JsFun("(root) => document.dispatchEvent(new CustomEvent('tiqian:relayout', { detail: { root } }))")
 private external fun dispatchRelayout(root: HTMLElement)
-@JsFun("(root) => document.dispatchEvent(new CustomEvent('tiqian:enhance-atomically', { detail: { root } }))")
-private external fun dispatchAtomicEnhance(root: HTMLElement)
 @JsFun("(element, type) => element.dispatchEvent(new Event(type))")
 private external fun dispatchDomEvent(element: HTMLElement, type: String)
 @JsFun(

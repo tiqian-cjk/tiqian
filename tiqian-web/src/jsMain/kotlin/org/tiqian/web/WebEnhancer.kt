@@ -78,10 +78,6 @@ object TiqianWeb {
             val root = eventRoot(event) ?: document.body ?: return@listener
             enhanceProgressively(root, optionsFromJs(eventOptions(event)))
         })
-        document.addEventListener("tiqian:enhance-atomically", listener@{ event: Event ->
-            val root = eventRoot(event) ?: document.body ?: return@listener
-            enhanceAtomically(root, optionsFromJs(eventOptions(event)))
-        })
         document.addEventListener("tiqian:destroy", listener@{ event: Event ->
             val root = eventRoot(event) ?: document.body ?: return@listener
             destroy(root)
@@ -193,47 +189,6 @@ object TiqianWeb {
         states[root] = state
         publishState(state, keepEmpty = true)
         startProgressiveJob(job)
-    }
-
-    /**
-     * ResponsiveTypographyAtomicRefresh: an already rendered root must not be
-     * restored and rebuilt across multiple paints when a resize breakpoint
-     * changes shaping inputs. Re-lower and render synchronously in one event
-     * callback; the reported max slice is the full long-task cost so callers can
-     * distinguish this safety boundary from ordinary progressive loading.
-     */
-    private fun enhanceAtomically(root: HTMLElement, options: EnhanceOptions) {
-        val startedAt = performanceNow()
-        try {
-            val enhancedCount = enhance(root, options)
-            val duration = performanceNow() - startedAt
-            dispatchTiqianRelayoutReady(
-                root = root,
-                enhancedCount = enhancedCount,
-                issueCount = states[root]?.issues?.size ?: 0,
-                durationMs = duration,
-                maxSliceMs = duration,
-                failed = false,
-                error = null,
-                stale = false,
-            )
-        } catch (error: Throwable) {
-            val detail = (error.message ?: error.toString()).take(CAPABILITY_DETAIL_LIMIT)
-            destroy(root)
-            root.setAttribute(RELAYOUT_ERROR_ATTRIBUTE, detail)
-            val duration = performanceNow() - startedAt
-            dispatchTiqianProgressiveError(root, ProgressiveJobKind.Relayout.name, detail, duration, duration)
-            dispatchTiqianRelayoutReady(
-                root = root,
-                enhancedCount = 0,
-                issueCount = 1,
-                durationMs = duration,
-                maxSliceMs = duration,
-                failed = true,
-                error = detail,
-                stale = false,
-            )
-        }
     }
 
     fun destroy(root: HTMLElement) {

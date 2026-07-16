@@ -348,6 +348,22 @@ test("the custom element validates a snapshot before dynamically loading the bro
   );
   assert.match(
     elementSource,
+    /#observeTypography\(\)[\s\S]*?addEventListener\("loadingdone", this\.#fontLoadingSettledListener\)[\s\S]*?addEventListener\("loadingerror", this\.#fontLoadingSettledListener\)/u,
+  );
+  assert.match(
+    elementSource,
+    /#stopTypographyObservation\(\)[\s\S]*?removeEventListener\("loadingdone", this\.#fontLoadingSettledListener\)[\s\S]*?removeEventListener\("loadingerror", this\.#fontLoadingSettledListener\)/u,
+  );
+  assert.match(
+    elementSource,
+    /#observeLayoutWorkInputs\(\)[\s\S]*?addEventListener\("loadingdone", this\.#layoutWorkFontLoadingSettledListener\)[\s\S]*?addEventListener\("loadingerror", this\.#layoutWorkFontLoadingSettledListener\)/u,
+  );
+  assert.match(
+    elementSource,
+    /#stopLayoutWorkInputObservation\(\)[\s\S]*?removeEventListener\([\s\S]*?"loadingdone"[\s\S]*?this\.#layoutWorkFontLoadingSettledListener[\s\S]*?removeEventListener\([\s\S]*?"loadingerror"[\s\S]*?this\.#layoutWorkFontLoadingSettledListener/u,
+  );
+  assert.match(
+    elementSource,
     /LatestObservedAttributeGeneration[\s\S]*?if \(!this\.#hasDispatched\) \{[\s\S]*?this\.#restartConnectedLifecycle\(\)/u,
   );
   assert.match(

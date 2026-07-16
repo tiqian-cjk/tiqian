@@ -183,7 +183,7 @@ class TiqianProseElement extends HTMLElementBase {
   #acceptLayoutCompletion = false;
   #connected = false;
   #deferredTypographyCheck = false;
-  #fontLoadingDoneListener = null;
+  #fontLoadingSettledListener = null;
   #geometryRevision = 0;
   #generation = 0;
   #hasDispatched = false;
@@ -197,7 +197,7 @@ class TiqianProseElement extends HTMLElementBase {
   #layoutWorkMeasureSignature = "";
   #layoutWorkTypographySignature = "";
   #layoutWorkTypographyObserver = null;
-  #layoutWorkFontLoadingDoneListener = null;
+  #layoutWorkFontLoadingSettledListener = null;
   #layoutWorkUsesCapturedMeasure = false;
   #layoutOperation = 0;
   #layoutWorkRevision = 0;
@@ -1392,7 +1392,7 @@ class TiqianProseElement extends HTMLElementBase {
       });
     }
     if (document.fonts) {
-      this.#fontLoadingDoneListener = (event) => {
+      this.#fontLoadingSettledListener = (event) => {
         const snapshotAdopted = this.#snapshotAdopted || isLoadedSnapshotAdopted(this);
         const snapshotLiveIssue = snapshotAdopted
           ? loadedAdoptedSnapshotLiveIssue(this)
@@ -1414,16 +1414,18 @@ class TiqianProseElement extends HTMLElementBase {
         const force = this.#forceTypographyRefresh || relevantFaceLoaded;
         if (this.#deferredTypographyCheck || force) this.#scheduleTypographyCheck(force);
       };
-      document.fonts.addEventListener("loadingdone", this.#fontLoadingDoneListener);
+      document.fonts.addEventListener("loadingdone", this.#fontLoadingSettledListener);
+      document.fonts.addEventListener("loadingerror", this.#fontLoadingSettledListener);
     }
   }
 
   #stopTypographyObservation() {
     this.#typographyObserver?.disconnect();
     this.#typographyObserver = null;
-    if (this.#fontLoadingDoneListener) {
-      document.fonts?.removeEventListener("loadingdone", this.#fontLoadingDoneListener);
-      this.#fontLoadingDoneListener = null;
+    if (this.#fontLoadingSettledListener) {
+      document.fonts?.removeEventListener("loadingdone", this.#fontLoadingSettledListener);
+      document.fonts?.removeEventListener("loadingerror", this.#fontLoadingSettledListener);
+      this.#fontLoadingSettledListener = null;
     }
     if (this.#typographyFrame) cancelAnimationFrame(this.#typographyFrame);
     this.#typographyFrame = 0;
@@ -1456,25 +1458,30 @@ class TiqianProseElement extends HTMLElementBase {
       this.#layoutWorkTypographyObserver.observe(ancestor, { attributes: true });
     }
     if (document.fonts) {
-      this.#layoutWorkFontLoadingDoneListener = (event) => {
+      this.#layoutWorkFontLoadingSettledListener = (event) => {
         if (
           this.#layoutWorkInFlight && this.#layoutWorkUsesCapturedMeasure &&
           fontLoadingAffectsTypography(event, this.#typographyElements())
         ) this.#cancelCapturedLayoutForTypographyChange();
       };
-      document.fonts.addEventListener("loadingdone", this.#layoutWorkFontLoadingDoneListener);
+      document.fonts.addEventListener("loadingdone", this.#layoutWorkFontLoadingSettledListener);
+      document.fonts.addEventListener("loadingerror", this.#layoutWorkFontLoadingSettledListener);
     }
   }
 
   #stopLayoutWorkInputObservation() {
     this.#layoutWorkTypographyObserver?.disconnect();
     this.#layoutWorkTypographyObserver = null;
-    if (this.#layoutWorkFontLoadingDoneListener) {
+    if (this.#layoutWorkFontLoadingSettledListener) {
       document.fonts?.removeEventListener(
         "loadingdone",
-        this.#layoutWorkFontLoadingDoneListener,
+        this.#layoutWorkFontLoadingSettledListener,
       );
-      this.#layoutWorkFontLoadingDoneListener = null;
+      document.fonts?.removeEventListener(
+        "loadingerror",
+        this.#layoutWorkFontLoadingSettledListener,
+      );
+      this.#layoutWorkFontLoadingSettledListener = null;
     }
   }
 
