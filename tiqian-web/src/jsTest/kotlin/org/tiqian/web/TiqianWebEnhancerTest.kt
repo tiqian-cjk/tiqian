@@ -413,7 +413,7 @@ class TiqianWebEnhancerTest {
         assertNotNull(paragraph)
         assertEquals("true", paragraph.getAttribute("data-tq-rendered"))
         assertNull(root.querySelector(".tq-paragraph"))
-        assertTrue(paragraph.textContent?.contains("中文粗体italiccode链接换行。") == true)
+        assertEquals("中文粗体italiccode链接\n换行。", copySelection(paragraph))
         assertNotNull(paragraph.querySelector("strong"))
         assertNotNull(paragraph.querySelector("em"))
         assertNotNull(paragraph.querySelector("code"))
@@ -1448,7 +1448,7 @@ class TiqianWebEnhancerTest {
         val links = paragraph.querySelectorAll("a.host-link[href='/pull/4479']")
         assertEquals(1, links.length, "one source link must stay one semantic wrapper per line")
         val link = links.item(0) as HTMLElement
-        assertEquals("添加windows-reactor的PR", link.textContent)
+        assertEquals("添加windows-reactor的PR", copySelection(link))
         assertTrue(link.children.length > 1, "geometry fragments should live inside the host link")
     }
 
@@ -1732,7 +1732,7 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
-    fun positiveGapAfterMultiCharacterRunUsesOnlyItsFinalGrapheme() {
+    fun positiveGapAfterMultiCharacterRunUsesSelectableCarrierWithoutBreakingShaping() {
         assertEquals(DomRunSpacing.TrailingLetter(9f), resolveDomRunSpacing("C++", 9f))
 
         val root = mount(
@@ -1752,17 +1752,21 @@ class TiqianWebEnhancerTest {
         var spacingFragment: HTMLElement? = null
         for (index in 0 until fragments.length) {
             val fragment = fragments.item(index) as HTMLElement
-            val tail = fragment.lastElementChild as? HTMLElement
-            if (tail != null && cssPx(computedStyleValue(tail, "letter-spacing")) > 0.1f) {
+            val carrier = fragment.querySelector("[data-tq-spacing-carrier]") as? HTMLElement
+            if (carrier != null && elementWidth(carrier) > 0.1) {
                 spacingFragment = fragment
             }
         }
         val fragment = assertNotNull(spacingFragment)
-        assertEquals("bug", fragment.textContent)
-        assertEquals("g", fragment.lastElementChild?.textContent)
+        val carrier = assertNotNull(fragment.querySelector("[data-tq-spacing-carrier]") as? HTMLElement)
+        assertEquals("bug", fragment.firstChild?.textContent)
+        assertEquals("\u00A0", carrier.textContent)
+        assertEquals("true", carrier.getAttribute("data-tq-copy-ignore"))
+        assertEquals("true", carrier.getAttribute("aria-hidden"))
+        assertEquals("inline-block", computedStyleValue(carrier, "display"))
         assertEquals(0f, cssPx(computedStyleValue(fragment, "padding-right")))
         assertTrue(
-            kotlin.math.abs(selectionTrailingGap(fragment)) < 0.1,
+            selectionCoversElement(fragment, carrier),
             "engine spacing must remain inside the native Range selection: ${fragment.outerHTML}",
         )
         assertEquals("bug", copySelection(link))
@@ -2664,13 +2668,15 @@ private external fun computedStyleValue(element: HTMLElement, property: String):
 @JsFun("(element, property) => getComputedStyle(element).getPropertyValue(property)")
 private external fun computedStyleValueElement(element: Element, property: String): String
 @JsFun(
-    """(element) => {
+    """(container, target) => {
       const range = document.createRange();
-      range.selectNodeContents(element);
-      return element.getBoundingClientRect().right - range.getBoundingClientRect().right;
+      range.selectNodeContents(container);
+      const selected = range.getBoundingClientRect();
+      const expected = target.getBoundingClientRect();
+      return selected.left <= expected.left + 0.1 && selected.right >= expected.right - 0.1;
     }""",
 )
-private external fun selectionTrailingGap(element: HTMLElement): Double
+private external fun selectionCoversElement(container: HTMLElement, target: HTMLElement): Boolean
 @JsFun("(element) => element.getBoundingClientRect().width")
 private external fun elementWidth(element: HTMLElement): Double
 

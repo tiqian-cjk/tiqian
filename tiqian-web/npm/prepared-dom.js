@@ -286,14 +286,11 @@ function preparedSpacing(display, naturalWidth, trailingGap) {
     return { kind: "letter", px: trailingGap };
   }
   if (trailingGap < 0) return { kind: "overlap", px: trailingGap };
-  // MultiCharacterTrailingLetterDistribution: CSS applies letter-spacing once
-  // per rendered character, including the final character in the inline box.
-  // The layout wire carries one gap after the whole shaping cluster, so divide
-  // that gap across the cluster's code points to preserve its total advance.
-  // This keeps positive adjustment inside native selectable text without
-  // letting a multi-character Latin cluster multiply the layout decision.
-  const units = Math.max(1, Array.from(display).length);
-  return { kind: "trailing-letter", px: trailingGap / units };
+  // MultiCharacterSelectableGapCarrier: this is one layout gap after the whole
+  // shaping cluster, not tracking distributed through the word. A dedicated
+  // selectable carrier preserves the uninterrupted shaping run and owns the
+  // full flow advance; splitting off the final grapheme would break kerning.
+  return { kind: "trailing-letter", px: trailingGap };
 }
 
 function preparedFeatureSignature(run) {
@@ -343,12 +340,36 @@ function renderRun(run, styleClassFor) {
   }
   if (run.source !== run.display) attributes["data-tq-src"] = run.source;
   const styles = [];
-  if (run.spacing.kind === "letter" || run.spacing.kind === "trailing-letter") {
+  if (run.spacing.kind === "letter") {
     styles.push(`letter-spacing:${px(run.spacing.px)}!important`);
   } else if (run.spacing.kind === "overlap") {
     styles.push(`margin-right:${px(run.spacing.px)}!important`);
   }
   applyDynamicStyles(attributes, styles, styleClassFor);
+  if (run.spacing.kind === "trailing-letter") {
+    const container = renderedContainer("span", attributes);
+    container.children.push(renderedText(run.display));
+    const carrierAttributes = {
+      "aria-hidden": "true",
+      "data-tq-copy-ignore": "true",
+      "data-tq-geometry": "true",
+      "data-tq-spacing-carrier": "true",
+    };
+    applyDynamicStyles(
+      carrierAttributes,
+      [
+        "display:inline-block!important",
+        `inline-size:${px(run.spacing.px)}!important`,
+        `letter-spacing:${px(run.spacing.px)}!important`,
+        "overflow:hidden!important",
+        "vertical-align:baseline!important",
+        "white-space:pre!important",
+      ],
+      styleClassFor,
+    );
+    container.children.push(renderedElement("span", carrierAttributes, "\u00A0"));
+    return container;
+  }
   return renderedElement("span", attributes, run.display);
 }
 

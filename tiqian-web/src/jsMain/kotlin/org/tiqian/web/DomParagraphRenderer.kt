@@ -3,7 +3,6 @@
 package org.tiqian.web
 
 import kotlin.JsFun
-import kotlin.js.JsAny
 import kotlinx.browser.document
 import org.tiqian.core.BopomofoDecisionInfo
 import org.tiqian.core.BopomofoGlyphRole
@@ -43,13 +42,14 @@ import org.w3c.dom.events.Event
  * `SelectableGapSpacing`: that gap must land in a box the SELECTION covers, or the
  * highlight gets a hole at every stretched space (as positive `margin` does). So
  * the trailing gap is `letter-spacing` for single-code-point glyphs (CJK /
- * punctuation / spaces — seamless, negative for half-width punctuation). For a
- * positive gap after a multi-letter Latin word, only its final grapheme gets that
- * letter-spacing: applying it to the whole word would splay `the`→`t h e`, while
- * `padding-right` is excluded from native Range selection and breaks both the
- * highlight and inherited underline. A negative gap after a multi-letter word uses
- * `margin-right`; overlap cannot create a selection hole. The first glyph's 段首缩进
- * is a leading `margin-left`.
+ * punctuation / spaces — seamless, negative for half-width punctuation). A
+ * positive gap after a multi-letter Latin word uses a clipped, selectable NBSP
+ * carrier after the uninterrupted shaping run: applying letter-spacing to the
+ * whole word would splay `the`→`t h e`, while splitting off its last grapheme
+ * breaks kerning. `padding-right` is excluded from native Range selection and
+ * breaks both the highlight and inherited underline. A negative gap after a
+ * multi-letter word uses `margin-right`; overlap cannot create a selection hole.
+ * The first glyph's 段首缩进 is a leading `margin-left`.
  *
  * `CopyTransparentSpacingSpans`: copy is reconstructed by the page's `copy`
  * handler from `textContent` (which ignores block boundaries → no injected
@@ -72,8 +72,6 @@ import org.w3c.dom.events.Event
  * geometry-only spans inside it still carry autospace / justification deltas.
  */
 object DomParagraphRenderer {
-    private val graphemeSegmenter: JsAny? = createGraphemeSegmenter()
-
     data class Options(
         val inlineCodeBackgroundArgb: Int = INLINE_CODE_BACKGROUND,
     )
@@ -744,16 +742,23 @@ object DomParagraphRenderer {
             leaf.textContent = text
             return false
         }
-        val tailStart = trailingGraphemeStart(graphemeSegmenter, text).coerceIn(0, text.lastIndex)
         leaf.textContent = ""
-        if (tailStart > 0) {
-            leaf.appendChild(document.createTextNode(text.substring(0, tailStart)))
+        leaf.appendChild(document.createTextNode(text))
+        val carrier = document.createElement("span") as HTMLElement
+        carrier.textContent = "\u00A0"
+        carrier.setAttribute("aria-hidden", "true")
+        carrier.setAttribute("data-tq-copy-ignore", "true")
+        carrier.setAttribute(SPACING_CARRIER_ATTRIBUTE, "true")
+        resetEngineInline(carrier)
+        carrier.style.apply {
+            setProperty("display", "inline-block", "important")
+            setProperty("inline-size", "${letterSpacing}px", "important")
+            setProperty("letter-spacing", "${letterSpacing}px", "important")
+            setProperty("overflow", "hidden", "important")
+            setProperty("vertical-align", "baseline", "important")
+            setProperty("white-space", "pre", "important")
         }
-        val tail = document.createElement("span") as HTMLElement
-        tail.textContent = text.substring(tailStart)
-        resetEngineInline(tail)
-        tail.style.setProperty("letter-spacing", "${letterSpacing}px", "important")
-        leaf.appendChild(tail)
+        leaf.appendChild(carrier)
         return true
     }
 
@@ -1198,6 +1203,7 @@ object DomParagraphRenderer {
     private const val INLINE_OBJECT_ATTRIBUTE = "data-tq-inline-object"
     private const val SOURCE_SEMANTIC_ATTRIBUTE = "data-tq-source-semantic"
     private const val GEOMETRY_SPAN_ATTRIBUTE = "data-tq-geometry"
+    private const val SPACING_CARRIER_ATTRIBUTE = "data-tq-spacing-carrier"
     private const val CJK_STRONG_ATTRIBUTE = "data-tq-cjk-emphasis"
     private const val DASH_STRATEGY_ATTRIBUTE = "data-tq-dash-strategy"
     private const val DASH_ADVANCE_ATTRIBUTE = "data-tq-dash-advance"
@@ -1229,24 +1235,6 @@ object DomParagraphRenderer {
     private const val DASH_DOM_RELATIVE_TOLERANCE = 0.03f
 
 }
-@JsFun(
-    """() => typeof Intl !== 'undefined' && Intl.Segmenter
-      ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
-      : null""",
-)
-private external fun createGraphemeSegmenter(): JsAny?
-@JsFun(
-    """(segmenter, text) => {
-      if (segmenter) {
-        let last = 0;
-        for (const item of segmenter.segment(text)) last = item.index;
-        return last;
-      }
-      const points = Array.from(text);
-      return points.length === 0 ? 0 : text.length - points[points.length - 1].length;
-    }""",
-)
-private external fun trailingGraphemeStart(segmenter: JsAny?, text: String): Int
 @JsFun("(element, marginRight) => element.style.setProperty('margin-right', marginRight + 'px', 'important')")
 private external fun setInlineObjectTrailingMargin(element: Element, marginRight: Float)
 @JsFun("(element) => { const range = document.createRange(); range.selectNodeContents(element); return range.getBoundingClientRect().width; }")

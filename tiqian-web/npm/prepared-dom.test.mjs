@@ -349,7 +349,7 @@ test("a single-cell overlap preserves its glyph width and carries negative flow 
   assert.doesNotMatch(lowered.html, /letter-spacing:-5px!important/u);
 });
 
-test("a multi-character cluster applies one total trailing adjustment", () => {
+test("a multi-character cluster preserves shaping and carries selectable trailing space", () => {
   const plan = fixturePlan();
   plan.lines[0].rangeEnd = 4;
   plan.lines[0].visualWidth = 51;
@@ -372,9 +372,11 @@ test("a multi-character cluster applies one total trailing adjustment", () => {
   }];
 
   const lowered = renderPreparedParagraphArtifact(plan, "zh-Hans");
-  assert.match(lowered.html, /letter-spacing:1px!important/u);
+  assert.match(lowered.html, /letter-spacing:3px!important/u);
+  assert.match(lowered.html, /inline-size:3px!important/u);
   assert.match(lowered.html, /data-tq-advance="33"/u);
-  assert.doesNotMatch(lowered.html, /letter-spacing:3px!important/u);
+  assert.match(lowered.html, />App<span[^>]*data-tq-spacing-carrier="true"[^>]*> <\/span><\/span>/u);
+  assert.doesNotMatch(lowered.html, /letter-spacing:1px!important/u);
 });
 
 test("independently shaped multi-character cells remain separate browser shaping runs", () => {
@@ -513,7 +515,7 @@ test("global runtime bridge delegates to the canonical lowering and browser repl
   const host = fakeHost();
 
   assert.equal(bridge.layoutRevision, "tiqian-layout-v2");
-  assert.equal(bridge.renderRevision, "prebroken-dom-v13");
+  assert.equal(bridge.renderRevision, "prebroken-dom-v14");
   assert.deepEqual(bridge.lower(JSON.stringify(plan), "zh-Hans"), expected);
   assert.equal(bridge.render(host, plan, { locale: "zh-Hans" }).html, expected.html);
   assert.equal(host.innerHTML, expected.html);

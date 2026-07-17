@@ -1,6 +1,6 @@
 export const SNAPSHOT_SCHEMA = 1;
 export const LAYOUT_REVISION = "tiqian-layout-v2";
-export const RENDER_REVISION = "prebroken-dom-v13";
+export const RENDER_REVISION = "prebroken-dom-v14";
 export const FONT_SOURCE_POLICY = "compatible-local-render-family-v2";
 export const FONT_BACKEND_REVISION = "tiqian-shared-harfbuzz-v5";
 export const FONT_REPLAY_REVISION = "tiqian-server-shaping-replay-v1";
