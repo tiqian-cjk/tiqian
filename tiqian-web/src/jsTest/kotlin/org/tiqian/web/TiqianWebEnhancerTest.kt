@@ -85,6 +85,33 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
+    fun exactFaceEvidenceDoesNotFragmentOrdinaryDomText() {
+        installExactFontSessionFixture(failShaping = false, varyFaceByText = true)
+        try {
+            val root = mount(
+                """
+                <div data-tiqian-root="true" style="width: 700px">
+                  <p style="font-family: 'Fixture CJK'; font-size: 18px; line-height: 30px">中文正文</p>
+                </div>
+                """.trimIndent(),
+            )
+            val options = exactTestOptions().copy(paragraphSelector = "p")
+
+            assertEquals(1, TiqianWeb.enhance(root, options))
+
+            val paragraph = root.querySelector("p") as HTMLElement
+            assertEquals(
+                0,
+                paragraph.querySelectorAll(":scope > span[data-tq-geometry]:not(.tq-line)").length,
+                "font replay evidence must not create a visible shaping boundary: ${paragraph.innerHTML}",
+            )
+            assertEquals("中文正文", copySelection(paragraph))
+        } finally {
+            clearExactFontSessionFixture()
+        }
+    }
+
+    @Test
     fun semanticParagraphFallsBackPerUnsupportedFontRunWithoutAbandoningExactLayout() {
         installExactFontSessionFixture(failShaping = false, failFamily = "Fixture Mono")
         try {
@@ -1760,6 +1787,7 @@ class TiqianWebEnhancerTest {
         val fragment = assertNotNull(spacingFragment)
         val carrier = assertNotNull(fragment.querySelector("[data-tq-spacing-carrier]") as? HTMLElement)
         assertEquals("bug", fragment.firstChild?.textContent)
+        assertEquals("", fragment.getAttribute("data-tq-shaping-boundary"))
         assertEquals("\u00A0", carrier.textContent)
         assertEquals("true", carrier.getAttribute("data-tq-copy-ignore"))
         assertEquals("true", carrier.getAttribute("aria-hidden"))
@@ -2468,11 +2496,12 @@ private fun installExactFontSessionFixture(
     failShaping: Boolean,
     failFamily: String? = null,
     failText: String? = null,
+    varyFaceByText: Boolean = false,
 ) {
-    installExactFontSessionFixtureBridge(failShaping, failFamily, failText)
+    installExactFontSessionFixtureBridge(failShaping, failFamily, failText, varyFaceByText)
 }
 @JsFun(
-    """(failShaping, failFamily, failText) => {
+    """(failShaping, failFamily, failText, varyFaceByText) => {
       const shapes = new Map();
       const metrics = new Map();
       let nextHandle = 1;
@@ -2505,7 +2534,12 @@ private fun installExactFontSessionFixture(
           const features = role === "LatinText" && /[‘’“”]/u.test(displayText)
             ? ["pwid", "palt"]
             : [];
-          shapes.set(handle, { glyphs, advance: glyphs.length * fontSize, features });
+          shapes.set(handle, {
+            glyphs,
+            advance: glyphs.length * fontSize,
+            features,
+            faceId: varyFaceByText ? `Fixture CJK:${'$'}{displayText}` : "Fixture CJK",
+          });
           return handle;
         },
         shapeGlyphCount: (handle) => shapes.get(handle).glyphs.length,
@@ -2515,7 +2549,7 @@ private fun installExactFontSessionFixture(
         shapeGlyphY: (handle, index) => shapes.get(handle).glyphs[index].y,
         shapeGlyphBound: (handle, index, edge) => shapes.get(handle).glyphs[index].bounds[edge],
         shapeAdvance: (handle) => shapes.get(handle).advance,
-        shapeFaceId: () => "Fixture CJK",
+        shapeFaceId: (handle) => shapes.get(handle).faceId,
         shapeFontInstanceId: () => "fixture:0:default",
         shapeScript: () => "Hani",
         shapeFeatureCount: (handle) => shapes.get(handle).features.length,
@@ -2550,6 +2584,7 @@ private external fun installExactFontSessionFixtureBridge(
     failShaping: Boolean,
     failFamily: String?,
     failText: String?,
+    varyFaceByText: Boolean,
 )
 @JsFun("() => globalThis.__TiqianExactFontShapeCount || 0")
 private external fun exactFontShapeCount(): Int

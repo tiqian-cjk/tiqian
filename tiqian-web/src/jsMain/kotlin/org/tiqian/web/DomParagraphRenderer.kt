@@ -312,6 +312,14 @@ object DomParagraphRenderer {
                 val spacing = resolveDomRunSpacing(display, trailingGap)
                 val shapingDecision = shapingDecisionByRange[cluster.range]
                 val punctuationDecision = punctuationDecisionByRange[cluster.range]
+                // VisibleDomShapingBoundaryOnly: HarfBuzz's resolved face id and
+                // requested language are diagnostic evidence for ordinary runs;
+                // neither changes the CSS family/style that the DOM paints. Using
+                // those values as run identity fragments a mixed replay/fallback
+                // line into one span per font subset and changes browser advances.
+                // Exact dash replay is the exception: its pinned face/language are
+                // part of the visible DOM contract and stay on an isolated run.
+                val exactDomDecision = shapingDecision?.takeIf { it.strategy != null }
                 val run = RenderRun(
                     range = cluster.range,
                     text = display,
@@ -323,8 +331,12 @@ object DomParagraphRenderer {
                     italic = italic,
                     renderFontFamily = renderFontFamily[cluster.range],
                     openTypeFeatures = openTypeFeaturesByRange[cluster.range].orEmpty(),
-                    shapingLanguage = shapingDecision?.language,
-                    resolvedFace = shapingDecision?.resolvedFace,
+                    // MultiCodeUnitShapingBoundary mirrors the canonical prepared
+                    // plan: an independently shaped word / emoji remains one DOM
+                    // shaping run even when its visible CSS matches its neighbors.
+                    shapingBoundary = cluster.range.end - cluster.range.start > 1,
+                    shapingLanguage = exactDomDecision?.language,
+                    resolvedFace = exactDomDecision?.resolvedFace,
                     dashStrategy = shapingDecision?.strategy,
                     expectedShapedAdvance = shapingDecision?.strategy?.let { glyphWidth },
                     glyphIds = shapingDecision?.strategy?.let {
@@ -441,6 +453,7 @@ object DomParagraphRenderer {
         val italic: Boolean,
         val renderFontFamily: String? = null,
         val openTypeFeatures: List<String> = emptyList(),
+        val shapingBoundary: Boolean = false,
         val shapingLanguage: String? = null,
         val resolvedFace: String? = null,
         val dashStrategy: String? = null,
@@ -454,6 +467,8 @@ object DomParagraphRenderer {
         fun canMerge(other: RenderRun): Boolean =
             dashStrategy == null &&
                 other.dashStrategy == null &&
+                !shapingBoundary &&
+                !other.shapingBoundary &&
             leadingMargin == 0f &&
                 other.leadingMargin == 0f &&
                 range.end == other.range.start &&
@@ -464,8 +479,6 @@ object DomParagraphRenderer {
                 italic == other.italic &&
                 renderFontFamily == other.renderFontFamily &&
                 openTypeFeatures == other.openTypeFeatures &&
-                shapingLanguage == other.shapingLanguage &&
-                resolvedFace == other.resolvedFace &&
                 punctuationInkFloor == other.punctuationInkFloor &&
                 punctuationBodyWidth == other.punctuationBodyWidth
 
@@ -490,6 +503,7 @@ object DomParagraphRenderer {
                 !(italic && !textStyle.italic) &&
                 renderFontFamily == null &&
                 openTypeFeatures.isEmpty() &&
+                !shapingBoundary &&
                 shapingLanguage == null &&
                 dashStrategy == null &&
                 punctuationInkFloor == null &&
@@ -633,6 +647,7 @@ object DomParagraphRenderer {
         if (run.openTypeFeatures.isNotEmpty()) {
             leaf.setAttribute("data-tq-open-type-features", run.openTypeFeatures.joinToString(","))
         }
+        if (run.shapingBoundary) leaf.setAttribute("data-tq-shaping-boundary", "")
         run.shapingLanguage?.let { leaf.setAttribute("lang", it) }
         run.dashStrategy?.let { strategy ->
             leaf.setAttribute(DASH_STRATEGY_ATTRIBUTE, strategy)
