@@ -6,7 +6,7 @@ test("published package includes the generated runtime and no repository-only bi
   const manifest = JSON.parse(await readFile(new URL("./package.json", import.meta.url), "utf8"));
 
   assert.equal(manifest.name, "@tiqian/prose");
-  assert.equal(manifest.version, "0.1.0-alpha.0");
+  assert.equal(manifest.version, "0.1.0-alpha.1");
   assert.equal(manifest.license, "MPL-2.0");
   assert.equal(manifest.types, "./api.d.ts");
   assert.equal(manifest.engines.node, ">=22");
