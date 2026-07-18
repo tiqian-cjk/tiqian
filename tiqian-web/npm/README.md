@@ -85,7 +85,8 @@ await destroy(article);
 桌面正文也有固定的最大版心，可以在 Node 构建阶段提前排好纯文本段落，减少首屏从原生排版切换到
 提椠排版时的变化。普通接入不需要使用这项能力。
 
-构建期预排直接读取字体文件，不需要启动 Headless Chromium：
+构建期预排直接读取网站已有的 `@font-face` 样式表和字体文件，不需要启动 Headless Chromium，
+也不会复制字体、生成别名或增加浏览器端字体请求：
 
 ```js
 import {
@@ -94,12 +95,9 @@ import {
 } from "@tiqian/prose/precompute";
 
 const precomputer = await createPrecomputer({
-  faces: [{
-    family: "Example CJK",
-    source: new URL("./ExampleCJK.woff2", import.meta.url),
-    publicUrl: "/assets/ExampleCJK-a81f0932.woff2",
-    weight: 400,
-    style: "normal",
+  fontStylesheets: [{
+    source: new URL("./static/fonts/article.css", import.meta.url),
+    publicUrl: "/fonts/article.css",
   }],
   typography: {
     fontFamilies: ["Example CJK", "sans-serif"],
@@ -129,26 +127,28 @@ precomputer.close();
 </tiqian-prose>
 ```
 
-浏览器只在正文内容、版心宽度、排版参数和字体全部匹配时采用快照；任何一项不匹配都会忽略快照，
-使用页面原文重新排版。字体的公开 URL 应包含内容 hash，以便浏览器确认它仍是构建时的版本。
+`source` 是构建机读取的本地样式表；`publicUrl` 是同一张样式表在网站上的地址，用于解析其中的
+相对字体 URL，不是提椠代理。样式表里的 `local()` 会保留为宿主自己的字体选择，提椠不会重新暴露
+本地字体，也不会为中文字体的数百个分片创建第二套 URL。需要程序化生成字体配置时，仍可使用底层
+`faces` 数组，但不能和 `fontStylesheets` 同时传入。
+
+浏览器只在正文内容、版心宽度、排版参数和宿主实际选中的字体全部匹配时采用快照；任何一项不匹配
+都会保留页面原文并在浏览器中重新排版。提椠不要求宿主字体 URL 带内容 hash。
 完整契约见
 [ADR 0040](https://github.com/tiqian-cjk/tiqian/blob/main/docs/adr/0040-build-time-web-font-snapshots.md)。
 
-上面的 inert template 不会改变浏览器首次绘制。如果希望首屏直接使用预排结果，可以改用
-`renderSnapshotBundle()`。服务端需要：
-
-1. 把 `entries[].html` 写入对应的 keyed `<p>`；
-2. 把 `rootAttributes` 应用到 `<tiqian-prose>`；
-3. 把 `fontPreloads`、`initialStyle` 和 manifest template 写入 `<head>`。
+上面的 inert template 不会改变浏览器首次绘制。响应式 SSR 必须保留原始 `<p>`；服务端不知道
+客户端的实际版心宽度，也无法预先证明 `local()` 最终选中的字形，因此不应把 `entries[].html`
+直接替换成首屏可见内容。需要同时拿到初始样式和客户端导航契约时，可以使用
+`renderSnapshotBundle()`，把它的 `initialStyle` 与 `inertTemplate` 写入 `<head>`。
 
 客户端导航仍应传递原始正文 HTML。创建新的 `<tiqian-prose>` 前，可以用
 `@tiqian/prose/snapshot-client` 的 `registerSnapshotBundle()` 注册 `clientTemplate`，复用同一份
-快照而不重复传输整篇预排 HTML。用于精确绘制的 `@font-face` 必须使用默认
-`font-display: auto` 或显式 `block`，不能使用 `optional` 或 `swap`。
+快照而不重复传输整篇预排 HTML。字体的加载与 preload 策略始终由宿主样式表决定。
 
-当一个正文根包含暂时无法预排的富文本，但仍希望浏览器使用构建时验证过的字体字节和度量时，
-使用 `renderFontContractBundle()`。它只输出紧凑的精确字体契约，不输出可采用的段落几何，也不会
-要求宿主把正文标记成已使用快照；浏览器仍从原始语义 DOM 完成全部段落布局。
+当一个正文根包含暂时无法预排的富文本，但仍希望浏览器复用构建时生成的 shaping 与度量证据时，
+使用 `renderFontContractBundle()`。它只输出紧凑的宿主字体契约和 server replay 数据，不输出可采用
+的段落几何，也不会要求宿主把正文标记成已使用快照；浏览器仍从原始语义 DOM 完成全部段落布局。
 
 ## 运行环境
 
