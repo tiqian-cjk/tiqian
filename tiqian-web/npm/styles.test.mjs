@@ -5,6 +5,7 @@ import test from "node:test";
 const stylesheet = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 
 test("static stylesheet exposes a runtime readiness marker", () => {
+  assert.match(stylesheet, /:is\(tiqian-prose, \[data-tiqian-root\]\)/u);
   assert.match(stylesheet, /--tq-styles-ready:\s*1/u);
 });
 
@@ -23,10 +24,10 @@ test("web lists keep native markers on a stable two-character body indent", () =
   assert.doesNotMatch(stylesheet, /data-tq-list-marker/u);
 });
 
-test("exact prepared DOM renders through the manifest font family contract", () => {
-  assert.match(stylesheet, /ExactPreparedDomFontProjection/u);
+test("prepared DOM inherits the host font family contract", () => {
+  assert.match(stylesheet, /Prepared DOM inherits the host's font-family unchanged/u);
   assert.match(stylesheet, /data-tiqian-exact-render-font="true"/u);
-  assert.match(stylesheet, /var\(--tq-exact-render-font-family\)/u);
+  assert.doesNotMatch(stylesheet, /--tq-(?:snapshot|runtime)-render-font-family/u);
   assert.match(stylesheet, /:not\(\[data-tiqian-exact-layout-fallback\]\)/u);
   assert.match(stylesheet, /\[data-tq-canonical-plain="true"\]/u);
   assert.match(stylesheet, /\[data-tq-exact-prepared-dom="true"\]/u);
@@ -47,6 +48,14 @@ test("shaping boundaries outrank the generic geometry span reset", () => {
   assert.match(
     stylesheet,
     /\[data-tq-rendered="true"\] span\[data-tq-shaping-boundary\] \{/u,
+  );
+  assert.match(
+    stylesheet,
+    /span\[data-tq-shaping-boundary\][^{]*\{[^}]*display:\s*inline\s*!important/u,
+  );
+  assert.doesNotMatch(
+    stylesheet,
+    /span\[data-tq-shaping-boundary\][^{]*\{[^}]*display:\s*inline-block\s*!important/u,
   );
 });
 

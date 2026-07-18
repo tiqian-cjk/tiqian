@@ -121,6 +121,7 @@ class TiqianWebCopyTest {
         val wrapper = document.createElement("div") as HTMLElement
         wrapper.innerHTML = html
         val root = wrapper.firstElementChild as HTMLElement
+        root.style.setProperty("--tq-styles-ready", "1")
         document.body!!.appendChild(root)
         mounted += root
         return root

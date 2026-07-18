@@ -22,6 +22,23 @@ function tableIndex(table, indexes, value) {
   return index;
 }
 
+function replayTableIndex(table, indexes, value, conflictIssue) {
+  if (!value || typeof value.key !== "string" || !value.key) {
+    throw new Error(conflictIssue.replace("Conflict", "Invalid"));
+  }
+  const existing = indexes.get(value.key);
+  if (existing != null) {
+    if (stableStringify(table[existing]) !== stableStringify(value)) {
+      throw new Error(conflictIssue);
+    }
+    return existing;
+  }
+  const index = table.length;
+  table.push(value);
+  indexes.set(value.key, index);
+  return index;
+}
+
 function replayKeyParts(key, expectedLength, issue) {
   let parts;
   try {
@@ -223,10 +240,20 @@ export function compactSnapshotManifest(entries, metadata) {
       throw new Error(`SnapshotFontReplayInvalid:${entry.key}`);
     }
     for (const shape of evidence.replay.shapes) {
-      tableIndex(replayShapes, replayShapeIndexes, shape);
+      replayTableIndex(
+        replayShapes,
+        replayShapeIndexes,
+        shape,
+        "SnapshotFontReplayShapeConflict",
+      );
     }
     for (const metric of evidence.replay.metrics) {
-      tableIndex(replayMetrics, replayMetricIndexes, metric);
+      replayTableIndex(
+        replayMetrics,
+        replayMetricIndexes,
+        metric,
+        "SnapshotFontReplayMetricsConflict",
+      );
     }
     backendRevision ??= evidence.backendRevision;
     harfbuzzVersion ??= evidence.harfbuzzVersion;

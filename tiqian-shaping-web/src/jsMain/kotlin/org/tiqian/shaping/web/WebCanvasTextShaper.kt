@@ -18,6 +18,7 @@ import org.tiqian.font.StubFontMetricsResolver
 import org.tiqian.shaping.ShapingInput
 import org.tiqian.shaping.ShapingResult
 import org.tiqian.shaping.TextShaper
+import org.tiqian.shaping.UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE_ISSUE
 import org.w3c.dom.CanvasRenderingContext2D
 import org.w3c.dom.HTMLCanvasElement
 import org.w3c.dom.HTMLElement
@@ -279,7 +280,7 @@ class WebCanvasTextShaper(
         if (isUnverifiedEllipsisDisplaySubstitution(source, input.displayText)) {
             return shapeWithCanvas(
                 input,
-                capabilityIssue = UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE to
+                capabilityIssue = UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE_ISSUE to
                     "CanvasCannotVerifySameFaceU+22EFCoverage",
             )
         }
@@ -291,10 +292,15 @@ class WebCanvasTextShaper(
 
     private fun dashCapabilityIssue(): Pair<String, String> {
         val capability = cjkDashCapability
-        return "NoConformingCjkDashGlyph" to when {
+        val detail = when {
             capability == null -> "CjkDashFontShapingNotPrepared"
             capability.detail.isNullOrBlank() -> "status=${capability.status}"
             else -> "status=${capability.status}; ${capability.detail}"
+        }
+        return if (capability?.status == "conforming") {
+            "ConformingCjkDashRequiresExactFontSession" to detail
+        } else {
+            "NoConformingCjkDashGlyph" to detail
         }
     }
 
@@ -507,8 +513,6 @@ internal fun normalizeSubpixelCanvasInkOverhang(
 }
 
 private const val CANVAS_INK_OVERHANG_EVIDENCE_THRESHOLD_PX = 1f
-private const val UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE = "UnverifiedDisplaySubstitutionCoverage"
-
 /**
  * ContextualWebCurlyQuoteFeatures: the common classifier has already resolved
  * whether a shared curly quote belongs to Latin or CJK context. The browser

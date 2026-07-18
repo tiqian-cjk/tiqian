@@ -97,6 +97,7 @@ import org.tiqian.shaping.ExplainableStubTextShaper
 import org.tiqian.shaping.ShapingInput
 import org.tiqian.shaping.ShapingResult
 import org.tiqian.shaping.TextShaper
+import org.tiqian.shaping.UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE_ISSUE
 
 private val COMBINING_MARK_CATEGORIES = setOf(
     CharCategory.NON_SPACING_MARK,
@@ -346,7 +347,7 @@ class ExplainableStubParagraphLayoutEngine(
             val rollbackCause = when {
                 substitution.displayText == sourceText -> null
                 shaped.decisions.any {
-                    it.capabilityIssue == UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE
+                    it.capabilityIssue == UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE_ISSUE
                 } -> "SubstitutionRollbackOnUnverifiedGlyphCoverage"
                 shaped.decisions.any { it.missingGlyphs > 0 } -> "SubstitutionRollbackOnMissingGlyph"
                 shaped.dashInkCoverageDeficient(substitution.displayText, segmentStyle.fontSize) ->
@@ -2343,13 +2344,15 @@ class ExplainableStubParagraphLayoutEngine(
                 }
             }
 
-            // `GraphemeExtendStaysWithBaseCluster`: Unicode combining marks and
-            // variation selectors modify the preceding scalar. Shaping an Mn,
-            // Mc, or Me scalar as an independent Unknown run loses its base
-            // context and produces a legitimate zero advance which web capability
-            // validation then mistakes for a broken visible glyph. Keep the source
-            // range intact and send the base plus every extending mark through one
-            // font decision and shaping call.
+            // `GraphemeExtendStaysWithBaseCluster`: common code can classify
+            // BMP Mn/Mc/Me marks through Char.category; BMP and supplementary
+            // variation selectors are covered explicitly. Shaping one of those
+            // extenders as an independent Unknown run loses its base context and
+            // produces a legitimate zero advance which web capability validation
+            // then mistakes for a broken visible glyph. Keep the source range
+            // intact and send the base plus every covered extending mark through
+            // one font decision and shaping call. Other supplementary combining
+            // categories remain outside this deliberately narrow helper.
             while (index < text.length && index !in spanBoundaries) {
                 val extender = text.codePointAtCompat(index)
                 if (!extender.isCombiningMarkCodePoint() && !extender.isVariationSelectorCodePoint()) break
@@ -3451,7 +3454,6 @@ private const val BOPOMOFO_FONT_WEIGHT_BOOST = 300
 private const val MANDATORY_BREAK_FONT_KEY = "mandatory-break"
 private const val ZERO_WIDTH_SOFT_BREAK_FONT_KEY = "zero-width-space"
 private const val INLINE_OBJECT_FONT_KEY = "inline-object"
-private const val UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE = "UnverifiedDisplaySubstitutionCoverage"
 /** `DashSubstitutionInkCoverageRollback`: keep `⸺` only if its ink fills ≥85% of the 2em advance (Pixel Noto ≈80% rolls back; Source Han ≈94% keeps). */
 private const val DASH_SUBSTITUTION_MIN_INK_COVERAGE = 0.85f
 private const val DASH_SUBSTITUTION_TARGET_EM = 2f

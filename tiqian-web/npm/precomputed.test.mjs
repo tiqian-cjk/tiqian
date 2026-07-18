@@ -4,14 +4,18 @@ import test from "node:test";
 
 import {
   adoptedPrecomputedSnapshotLiveIssue,
+  detachPrecomputedSnapshot,
   isPrecomputedSnapshotAdopted,
   precomputedSnapshotMaximumMeasureMatches,
   renderedPreparedParagraphIssue,
   restorePrecomputedSnapshot,
   tryAdoptPrecomputedSnapshot,
+  validatePrecomputedExactFontReplayContract,
+  validatePrecomputedExactFontReplayLiveContract,
+  validatePrecomputedExactFontReplayRuntimeContract,
   validatePrecomputedSnapshotExactFontContract,
 } from "./precomputed.js";
-import { stableStringify } from "./snapshot-schema.js";
+import { FONT_REPLAY_REVISION, stableStringify } from "./snapshot-schema.js";
 
 function matchesSelector(element, selector) {
   if (selector === "*") return element.nodeType === 1;
@@ -155,6 +159,17 @@ class FakeElement extends FakeNode {
   }
 
   getBoundingClientRect() {
+    if (this._fixtureProbeWidth != null && this.style.cssText.includes("position:absolute!important")) {
+      this._onFixtureProbeMeasure?.(this.style.cssText);
+      return {
+        width: this._fixtureProbeWidth,
+        left: 0,
+        right: this._fixtureProbeWidth,
+        top: 0,
+        bottom: 0,
+        height: 0,
+      };
+    }
     return {
       width: this.width,
       left: this.left,
@@ -234,11 +249,13 @@ function fixtureComputedStyle(element, _pseudo, overrides = {}) {
   const canonicalPreparedFlow = element?.closest?.("[data-tq-canonical-plain]") != null ||
     element?.closest?.("[data-tq-canonical-source]") != null;
   return {
-    display: boundary || engineHyphen
-      ? "inline-block"
-      : measuredGeometry
-        ? "inline"
-        : element?.tagName === "LI" ? "list-item" : "block",
+    display: boundary
+      ? "inline"
+      : engineHyphen
+        ? "inline-block"
+        : measuredGeometry
+          ? "inline"
+          : element?.tagName === "LI" ? "list-item" : "block",
     whiteSpace: boundary || engineHyphen ? "pre" : "normal",
     verticalAlign: "baseline",
     direction: "ltr",
@@ -304,6 +321,7 @@ function fixture({
   boundaryFeatureSignature = null,
   shapingBoundary = true,
   semanticGeometry = false,
+  renderFontProjection = false,
   nativeText = false,
   fontDisplay = "block",
   entrySource = undefined,
@@ -322,6 +340,8 @@ function fixture({
     createElement(tagName) {
       const element = new FakeElement(tagName);
       element.ownerDocument = documentObject;
+      element._fixtureProbeWidth = probeWidth;
+      element._onFixtureProbeMeasure = (style) => measuredProbeStyles.push(style);
       return element;
     },
     createRange() {
@@ -410,6 +430,7 @@ function fixture({
   if (!nativeText) {
     rendered.setAttribute("data-tq-advance", "36");
     rendered.setAttribute("data-tq-geometry", "true");
+    if (renderFontProjection) rendered.setAttribute("data-tq-render-font-projection", "true");
     if (shapingBoundary) rendered.setAttribute("data-tq-shaping-boundary", "current-segment");
     if (boundaryFeatureSignature != null) {
       rendered.setAttribute("data-tq-open-type-features", boundaryFeatureSignature);
@@ -436,7 +457,7 @@ function fixture({
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
     renderRevision: "prebroken-dom-v14",
-    fontSourcePolicy: "compatible-local-render-family-v2",
+    fontSourcePolicy: "host-compatible-stylesheet-v1",
     ...(entrySource === undefined ? {} : { entrySource }),
     renderFontFamilies: ["Fixture CJK"],
     paragraphSelector,
@@ -453,6 +474,11 @@ function fixture({
         ...Object.fromEntries(Object.entries(evidence).filter(([key]) =>
           key !== "coverageText" && key !== "probe")),
       }],
+    },
+    fontReplay: {
+      revision: FONT_REPLAY_REVISION,
+      shapes: [],
+      metrics: [],
     },
     entries: [{
       key: "p-1",
@@ -515,7 +541,7 @@ test("exact runtime fallback accepts a width miss only while every live input st
   const previousGetComputedStyle = globalThis.getComputedStyle;
   globalThis.getComputedStyle = fixtureComputedStyle;
   try {
-    const { root, paragraph } = fixture();
+    const { documentObject, root, paragraph } = fixture();
     paragraph.width = 240;
 
     assert.deepEqual(await validatePrecomputedSnapshotExactFontContract(root), {
@@ -529,6 +555,52 @@ test("exact runtime fallback accepts a width miss only while every live input st
     assert.deepEqual(await validatePrecomputedSnapshotExactFontContract(root), {
       matches: false,
       reason: "SnapshotSourceMismatch",
+    });
+    assert.deepEqual(await validatePrecomputedExactFontReplayContract(root), {
+      matches: true,
+      reason: null,
+      paragraphSelector: "p[data-tq-snapshot-key]",
+      compatibleLocalDeclared: false,
+    });
+    assert.deepEqual(validatePrecomputedExactFontReplayLiveContract(root), {
+      matches: true,
+      reason: null,
+      paragraphSelector: "p[data-tq-snapshot-key]",
+      compatibleLocalDeclared: false,
+    });
+    documentObject.styleSheets[0].cssRules[0].style = styleDeclaration({
+      "font-family": "\"Fixture CJK\"",
+      "font-style": "normal",
+      "font-weight": "400",
+      "font-display": "block",
+      "unicode-range": "U+4E00-9FFF",
+      src: 'url("/assets/changed-feedface.woff2")',
+    });
+    assert.deepEqual(validatePrecomputedExactFontReplayLiveContract(root), {
+      matches: false,
+      reason: "FontFaceContractChangedDuringFontPreparation",
+    });
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
+test("runtime font replay validates the same host CSS contract as snapshots", async () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = fixtureComputedStyle;
+  try {
+    const { root } = fixture();
+    assert.deepEqual(await validatePrecomputedExactFontReplayRuntimeContract(root), {
+      matches: true,
+      reason: null,
+      paragraphSelector: "p[data-tq-snapshot-key]",
+      compatibleLocalDeclared: false,
+    });
+    assert.deepEqual(validatePrecomputedExactFontReplayLiveContract(root), {
+      matches: true,
+      reason: null,
+      paragraphSelector: "p[data-tq-snapshot-key]",
+      compatibleLocalDeclared: false,
     });
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;
@@ -691,6 +763,106 @@ test("a compact client font contract enables the exact runtime without claiming 
   }
 });
 
+test("article-sized exact font evidence loads by face and shares one layout snapshot", async () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = fixtureComputedStyle;
+  try {
+    const { documentObject, root, measuredProbeStyles } = fixture({
+      entrySource: "font-contract-v1",
+      paragraphSelector: "p",
+    });
+    const template = documentObject.elements.get("tq-page");
+    const manifestScript = template.content.querySelector("[data-tq-snapshot-manifest]");
+    const manifest = JSON.parse(manifestScript.textContent);
+    const original = manifest.entries[0];
+    for (let index = 1; index < 40; index += 1) {
+      manifest.entries.push({
+        ...original,
+        key: `p-${index + 1}`,
+        fontFaceEvidence: [{
+          ...original.fontFaceEvidence[0],
+          coverageText: `中国${String.fromCodePoint(0x4e00 + index)}`,
+          probe: {
+            ...original.fontFaceEvidence[0].probe,
+            text: `中国${String.fromCodePoint(0x4e00 + index)}`,
+          },
+        }],
+      });
+    }
+    manifestScript.textContent = JSON.stringify(manifest);
+
+    let fontLoads = 0;
+    documentObject.fonts.load = async () => {
+      fontLoads += 1;
+      return [{}];
+    };
+    let maximumAttachedProbes = 0;
+    const createElement = documentObject.createElement;
+    documentObject.createElement = (tagName) => {
+      const element = createElement(tagName);
+      const getBoundingClientRect = element.getBoundingClientRect.bind(element);
+      element.getBoundingClientRect = () => {
+        maximumAttachedProbes = Math.max(
+          maximumAttachedProbes,
+          documentObject.body.childNodes.length,
+        );
+        return getBoundingClientRect();
+      };
+      return element;
+    };
+
+    assert.deepEqual(await validatePrecomputedSnapshotExactFontContract(root), {
+      matches: true,
+      reason: null,
+      paragraphSelector: "p",
+      compatibleLocalDeclared: false,
+    });
+    assert.equal(fontLoads, 1);
+    assert.equal(maximumAttachedProbes, 40);
+    assert.equal(measuredProbeStyles.length, 40);
+    assert.equal(documentObject.body.childNodes.length, 0);
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
+test("one host typography variant cannot poison a sibling runtime font replay", async () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  try {
+    const { documentObject, root } = fixture({
+      entrySource: "font-contract-v1",
+      paragraphSelector: "p",
+    });
+    const halfWidthParagraph = documentObject.createElement("p");
+    halfWidthParagraph.textContent = "使用半宽字形的宿主段落";
+    root.appendChild(halfWidthParagraph);
+    globalThis.getComputedStyle = (element, pseudo) => fixtureComputedStyle(
+      element,
+      pseudo,
+      element === halfWidthParagraph
+        ? {
+            fontFeatureSettings: '"hwid" 1',
+            fontVariantEastAsian: "proportional-width",
+          }
+        : {},
+    );
+
+    assert.deepEqual(await validatePrecomputedSnapshotExactFontContract(root), {
+      matches: true,
+      reason: null,
+      paragraphSelector: "p",
+      compatibleLocalDeclared: false,
+    });
+    assert.equal(root.getAttribute("data-tiqian-snapshot-typography-issue"), null);
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), {
+      adopted: false,
+      reason: "SnapshotLayoutArtifactUnavailable",
+    });
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
 test("shared prepared DOM validator reports the same vertical gate used for SSR adoption", () => {
   const previousGetComputedStyle = globalThis.getComputedStyle;
   globalThis.getComputedStyle = fixtureComputedStyle;
@@ -737,13 +909,13 @@ test("shared prepared DOM validator accepts the isolated engine hyphen contract"
   }
 });
 
-test("shared prepared DOM validator compares vertical geometry only between inline fragments", () => {
+test("shared prepared DOM validator compares vertical geometry across inline fragments", () => {
   const previousGetComputedStyle = globalThis.getComputedStyle;
   globalThis.getComputedStyle = fixtureComputedStyle;
   try {
     const { paragraph, entry } = fixture({ shapingBoundary: true });
     const boundary = entry.querySelector("[data-tq-shaping-boundary]");
-    boundary.top = 8;
+    boundary.top = 0;
     boundary.setAttribute("data-tq-advance", "18");
     boundary.width = 18;
     const sentinel = entry.querySelector("[data-tq-line-end-sentinel]");
@@ -838,10 +1010,17 @@ test("strict snapshot adoption preserves and restores the original SSR node iden
     assert.deepEqual(adopted, { adopted: true, count: 1 });
     assert.equal(isPrecomputedSnapshotAdopted(root), true);
     assert.equal(root.dataset.tiqianSnapshotFontPolicy, "url-only");
+    assert.equal(root.getAttribute("data-tiqian-enhanced-count"), "1");
+    assert.equal(root.getAttribute("data-tiqian-snapshot-count"), "1");
     assert.equal(paragraph.getAttribute("data-tq-rendered"), "true");
     assert.equal(paragraph.getAttribute("data-tq-canonical-source"), "true");
     assert.equal(paragraph.getAttribute("data-tq-exact-prepared-dom"), "true");
     assert.notStrictEqual(paragraph.firstChild, originalText);
+
+    const preparedNode = paragraph.firstChild;
+    assert.equal(detachPrecomputedSnapshot(root), true);
+    assert.equal(isPrecomputedSnapshotAdopted(root), true);
+    assert.strictEqual(paragraph.firstChild, preparedNode);
 
     assert.equal(restorePrecomputedSnapshot(root), true);
     assert.equal(isPrecomputedSnapshotAdopted(root), false);
@@ -850,6 +1029,7 @@ test("strict snapshot adoption preserves and restores the original SSR node iden
     assert.equal(paragraph.getAttribute("data-tq-canonical-source"), null);
     assert.equal(paragraph.getAttribute("data-tq-exact-prepared-dom"), null);
     assert.equal(root.dataset.tiqianSnapshotFontPolicy, undefined);
+    assert.equal(root.getAttribute("data-tiqian-snapshot-count"), null);
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;
   }
@@ -1085,10 +1265,10 @@ test("snapshot adoption accepts a wider container in the same line-length grid c
 
     assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), { adopted: true, count: 1 });
     assert.equal(root.dataset.tiqianSnapshot, "maximum-measure");
-    assert.equal(adoptedPrecomputedSnapshotLiveIssue(root), null);
+    assert.equal(await adoptedPrecomputedSnapshotLiveIssue(root), null);
 
     paragraph.width = 378;
-    assert.equal(adoptedPrecomputedSnapshotLiveIssue(root), "SnapshotWidthMismatch");
+    assert.equal(await adoptedPrecomputedSnapshotLiveIssue(root), "SnapshotWidthMismatch");
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;
   }
@@ -1129,6 +1309,25 @@ test("prepared geometry inherits shaping styles from its nearest semantic source
   );
   try {
     const { root } = fixture({ semanticGeometry: true });
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), { adopted: true, count: 1 });
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
+test("prepared geometry may carry an artifact-owned exact render-font projection", async () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = (element, pseudo) => fixtureComputedStyle(
+    element,
+    pseudo,
+    element.hasAttribute?.("data-tq-render-font-projection")
+      ? { fontFamily: '"Tiqian Exact Inline"' }
+      : element.closest?.("[data-tq-source-semantic]")
+        ? { fontFamily: '"Host Inline"' }
+        : {},
+  );
+  try {
+    const { root } = fixture({ semanticGeometry: true, renderFontProjection: true });
     assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), { adopted: true, count: 1 });
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;
@@ -1474,7 +1673,7 @@ test("generated pseudo content is outside the plain-text snapshot contract", asy
   }
 });
 
-test("host pseudo rules targeting generated geometry trigger atomic restoration", async () => {
+test("prepared pseudo isolation avoids per-node pseudo probes after adoption", async () => {
   const previousGetComputedStyle = globalThis.getComputedStyle;
   globalThis.getComputedStyle = (element, pseudo) => fixtureComputedStyle(element, pseudo, {
     content: element.hasAttribute?.("data-tq-geometry") && pseudo === "::before" ? '"※"' : "none",
@@ -1482,12 +1681,9 @@ test("host pseudo rules targeting generated geometry trigger atomic restoration"
   try {
     const { root, paragraph, originalText } = fixture();
     const adopted = await tryAdoptPrecomputedSnapshot(root);
-    assert.deepEqual(adopted, {
-      adopted: false,
-      reason: "SnapshotAdoptionFailed:RenderedSnapshotGeometryMismatch:GeneratedContent",
-    });
-    assert.strictEqual(paragraph.firstChild, originalText);
-    assert.equal(isPrecomputedSnapshotAdopted(root), false);
+    assert.deepEqual(adopted, { adopted: true, count: 1 });
+    assert.notStrictEqual(paragraph.firstChild, originalText);
+    assert.equal(isPrecomputedSnapshotAdopted(root), true);
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;
   }
@@ -1559,5 +1755,39 @@ test("a superseded async validation never mutates the live paragraph", async () 
     assert.equal(isPrecomputedSnapshotAdopted(root), false);
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
+test("a superseded post-adoption proof rolls back only its provisional DOM", async () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  const previousPerformance = globalThis.performance;
+  const previousScheduler = globalThis.scheduler;
+  globalThis.getComputedStyle = fixtureComputedStyle;
+  try {
+    const { root, paragraph, originalText } = fixture();
+    let current = true;
+    let clock = 0;
+    Object.defineProperty(globalThis, "performance", {
+      configurable: true,
+      value: { now: () => (clock += 10) },
+    });
+    globalThis.scheduler = {
+      async yield() {
+        if (paragraph.firstChild !== originalText) current = false;
+      },
+    };
+
+    const adopted = await tryAdoptPrecomputedSnapshot(root, () => current);
+    assert.deepEqual(adopted, { adopted: false, reason: "superseded" });
+    assert.strictEqual(paragraph.firstChild, originalText);
+    assert.equal(isPrecomputedSnapshotAdopted(root), false);
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+    Object.defineProperty(globalThis, "performance", {
+      configurable: true,
+      value: previousPerformance,
+    });
+    if (previousScheduler === undefined) delete globalThis.scheduler;
+    else globalThis.scheduler = previousScheduler;
   }
 });

@@ -7,6 +7,7 @@ import {
   installPreparedValueStyles,
   releasePreparedParagraphStyles,
   releasePreparedRenderFontStyle,
+  releasePreparedValueStyleRoot,
   renderPreparedParagraphArtifact,
   renderPreparedParagraphInto,
 } from "./prepared-dom.js";
@@ -247,6 +248,16 @@ test("browser replay installs the same canonical HTML and returns its line marke
   assert.equal(rendered.markers.length, expected.markerCount);
 });
 
+test("browser replay preserves controlled inline semantics supplied by a Worker plan", () => {
+  const host = fakeHost();
+  renderPreparedParagraphInto(host, fixturePlan(), "zh-Hans", {
+    sourceText: "中文",
+    semantics: [{ start: 0, end: 2, tagName: "strong", attributes: [] }],
+  });
+
+  assert.match(host.innerHTML, /<strong data-tq-source-semantic="true">中文<\/strong>/u);
+});
+
 test("browser replay moves dynamic prepared values into one root-scoped stylesheet", () => {
   const { host, head, attributes } = styleBackedHost();
   const rendered = renderPreparedParagraphInto(host, fixturePlan(), "zh-Hans");
@@ -290,18 +301,47 @@ test("runtime value classes cannot inherit unrelated snapshot declarations", () 
   );
 });
 
-test("exact runtime font families share the prepared root stylesheet lifecycle", () => {
+test("host-compatible runtime families do not allocate a projection stylesheet", () => {
   const { root, head, attributes } = styleBackedHost();
 
-  assert.equal(installPreparedRenderFontStyle(root, ["Tiqian Fixture Sans"]), true);
-  assert.equal(head.childNodes.length, 1);
-  assert.match(
-    head.childNodes[0].textContent,
-    /--tq-exact-render-font-family:"Tiqian Fixture Sans"/u,
-  );
-  assert.ok(attributes.has("data-tq-value-style-scope"));
+  assert.equal(installPreparedRenderFontStyle(root, ["Fixture Sans"]), false);
+  assert.equal(head.childNodes.length, 0);
+  assert.equal(attributes.has("data-tq-value-style-scope"), false);
 
-  assert.equal(releasePreparedRenderFontStyle(root), true);
+  assert.equal(releasePreparedRenderFontStyle(root), false);
+  assert.equal(head.childNodes.length, 0);
+  assert.equal(attributes.has("data-tq-value-style-scope"), false);
+});
+
+test("prepared semantic font runs replay their explicit host-family projection", () => {
+  const valueStyles = [];
+  const rendered = renderPreparedParagraphArtifact(fixturePlan(), "zh-Hans", {
+    sourceText: "中文",
+    styleClassFor: (value) => {
+      valueStyles.push(value);
+      return `tqv-${valueStyles.length - 1}`;
+    },
+    renderTextSpans: [{
+      start: 0,
+      end: 2,
+      fontFamilies: ["Tiqian Exact Mono"],
+    }],
+  });
+
+  assert.match(rendered.html, /class="tqv-[^"]+"[^>]*>中文<\/span>/u);
+  assert.match(rendered.html, /data-tq-render-font-projection="true"/u);
+  assert.ok(valueStyles.some((value) =>
+    value.includes('font-family:"Tiqian Exact Mono"!important')));
+});
+
+test("snapshot and runtime host families never become root projection variables", () => {
+  const { root, head, attributes } = styleBackedHost();
+
+  assert.equal(installPreparedValueStyles(root, [], ["Snapshot Sans"]), false);
+  assert.equal(installPreparedRenderFontStyle(root, ["Runtime Sans"]), false);
+  assert.equal(head.childNodes.length, 0);
+  assert.equal(releasePreparedRenderFontStyle(root), false);
+  assert.equal(releasePreparedValueStyleRoot(root), false);
   assert.equal(head.childNodes.length, 0);
   assert.equal(attributes.has("data-tq-value-style-scope"), false);
 });
@@ -374,6 +414,8 @@ test("a multi-character cluster preserves shaping and carries selectable trailin
   const lowered = renderPreparedParagraphArtifact(plan, "zh-Hans");
   assert.match(lowered.html, /letter-spacing:3px!important/u);
   assert.match(lowered.html, /inline-size:3px!important/u);
+  assert.match(lowered.html, /height:0!important/u);
+  assert.match(lowered.html, /line-height:0!important/u);
   assert.match(lowered.html, /data-tq-advance="33"/u);
   assert.match(lowered.html, />App<span[^>]*data-tq-spacing-carrier="true"[^>]*> <\/span><\/span>/u);
   assert.doesNotMatch(lowered.html, /letter-spacing:1px!important/u);

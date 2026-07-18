@@ -46,14 +46,15 @@ function snapshotFixturePlan() {
   };
 }
 
-test("exact font aliases resolve the host family from the OpenType name table", () => {
+test("build faces use the host family and compatible OpenType names without aliases", () => {
   const record = {
-    family: "Tiqian Internal IBM Plex Sans SC",
+    family: "IBM Plex Sans SC",
     localNames: ["IBM Plex Sans SC", "IBM Plex Sans SC Medium", "IBMPlexSansSC-Medium"],
   };
 
   assert.equal(fontRecordMatchesFamily(record, "IBM Plex Sans SC"), true);
-  assert.equal(fontRecordMatchesFamily(record, "tiqian internal ibm plex sans sc"), true);
+  assert.equal(fontRecordMatchesFamily(record, "IBMPlexSansSC-Medium"), true);
+  assert.equal(fontRecordMatchesFamily(record, "Host IBM Plex Sans SC"), false);
   assert.equal(fontRecordMatchesFamily(record, "A Different Font"), false);
 });
 
@@ -360,20 +361,20 @@ test("snapshot bundle exposes compact SSR artifacts without inline geometry", ()
   assert.equal(bundle.entries[0].key, "p-1");
   assert.match(bundle.entries[0].html, /class="tq-line tqv-0"/u);
   assert.doesNotMatch(bundle.entries[0].html, / style=/u);
+  assert.match(bundle.initialStyle, /SharedRuntimeGeometryCss/u);
+  assert.match(bundle.initialStyle, /SharedLineMetricStrutCss/u);
+  assert.match(bundle.initialStyle, /text-wrap-mode:\s*nowrap\s*!important/u);
   assert.match(bundle.initialStyle, /tiqian-prose\[snapshot-ref="tq-page"\]/u);
-  assert.match(bundle.initialStyle, /--tq-exact-render-font-family:"Snapshot Sans"/u);
-  assert.match(
-    bundle.initialStyle,
-    /\[data-tiqian-exact-render-font=true\].*\[data-tq-rendered=true\]:is\(\[data-tq-canonical-plain=true\],\[data-tq-exact-prepared-dom=true\]\)\{font-family:var\(--tq-exact-render-font-family\)!important;font-kerning:normal!important;font-optical-sizing:none!important\}/u,
-  );
+  assert.doesNotMatch(bundle.initialStyle, /font-family\s*:|--tq-.*render-font-family/u);
+  assert.match(bundle.initialStyle, /font-kerning:normal!important;font-optical-sizing:none!important/u);
   assert.match(bundle.initialStyle, /\.tqv-0\{/u);
   assert.deepEqual(bundle.renderFontFamilies, ["Snapshot Sans"]);
-  assert.deepEqual(bundle.fontPreloads, ["/fonts/fixture-deadbeef.woff2"]);
+  assert.deepEqual(bundle.fontPreloads, []);
   assert.deepEqual(bundle.rootAttributes, { "data-tiqian-exact-render-font": "true" });
   assert.match(bundle.template, /^<template /u);
-  assert.match(bundle.template, /server-dom-v1/u);
+  assert.equal(bundle.template, bundle.inertTemplate);
   assert.match(bundle.template, /:is\(p, li\)\[data-tq-snapshot-key\]/u);
-  assert.doesNotMatch(bundle.template, /data-tq-entry=/u);
+  assert.match(bundle.template, /data-tq-entry=/u);
   assert.match(bundle.inertTemplate, /^<template /u);
   assert.match(bundle.inertTemplate, /data-tq-entry="p-1"/u);
   assert.doesNotMatch(bundle.inertTemplate, /server-dom-v1/u);
@@ -396,7 +397,7 @@ test("snapshot bundle exposes compact SSR artifacts without inline geometry", ()
     },
   };
   const boundedPreloads = renderSnapshotBundle([prepared, laterFace], { id: "tq-page-two" });
-  assert.deepEqual(boundedPreloads.fontPreloads, ["/fonts/fixture-deadbeef.woff2"]);
+  assert.deepEqual(boundedPreloads.fontPreloads, []);
 
   const semanticContract = renderSnapshotBundle([prepared], {
     id: "tq-page-semantic",

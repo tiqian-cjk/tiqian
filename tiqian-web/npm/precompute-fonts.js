@@ -5,6 +5,20 @@ import {
   metricReplayKey,
   shapeReplayKey,
 } from "./snapshot-schema.js";
+import {
+  cssWeightMatched,
+  cssWeightPreference,
+  fontRecordMatchesFamily,
+  parseUnicodeRange,
+  sourceBoundariesForSelectedFace,
+  unicodeRangeContains,
+} from "./font-face-boundaries.js";
+
+export {
+  cssWeightPreference,
+  fontRecordMatchesFamily,
+  parseUnicodeRange,
+} from "./font-face-boundaries.js";
 
 const FAMILY_SEPARATOR = "\u001f";
 export { FONT_BACKEND_REVISION };
@@ -71,38 +85,6 @@ function faceLocalNames(face) {
   return Array.from(names).sort();
 }
 
-/** CSS Fonts weight matching rank for one face descriptor range. */
-export function cssWeightPreference(range, requested) {
-  const low = Number(range?.[0]);
-  const high = Number(range?.[1]);
-  if (!Number.isFinite(low) || !Number.isFinite(high) || high < low) {
-    return [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
-  }
-  if (requested >= low && requested <= high) return [0, 0];
-  if (requested >= 400 && requested <= 500) {
-    if (low > requested && low <= 500) return [1, low - requested];
-    if (high < requested) return [2, requested - high];
-    return [3, low - 500];
-  }
-  if (requested < 400) {
-    return high < requested ? [1, requested - high] : [2, low - requested];
-  }
-  return low > requested ? [1, low - requested] : [2, requested - high];
-}
-
-function cssWeightMatched(records, requested, rangeOf) {
-  if (records.length <= 1) return records;
-  const ranked = records.map((record) => ({
-    record,
-    rank: cssWeightPreference(rangeOf(record), requested),
-  }));
-  ranked.sort((left, right) =>
-    left.rank[0] - right.rank[0] || left.rank[1] - right.rank[1]);
-  const best = ranked[0].rank;
-  return ranked.filter(({ rank }) => rank[0] === best[0] && rank[1] === best[1])
-    .map(({ record }) => record);
-}
-
 function orderedFaceSpecs(faceSpecs) {
   const seen = new Set();
   return faceSpecs.map((spec, inputOrder) => {
@@ -117,42 +99,6 @@ function orderedFaceSpecs(faceSpecs) {
     return { ...spec, sourceOrder, inputOrder };
   }).sort((left, right) =>
     left.sourceOrder - right.sourceOrder || left.inputOrder - right.inputOrder);
-}
-
-export function parseUnicodeRange(value) {
-  const serialized = String(value ?? "").trim();
-  if (!serialized) return null;
-  const ranges = [];
-  for (const item of serialized.split(",")) {
-    const token = item.trim().toUpperCase();
-    if (!token.startsWith("U+")) continue;
-    const body = token.slice(2);
-    if (/^[0-9A-F?]{1,6}$/.test(body) && body.includes("?")) {
-      ranges.push([
-        Number.parseInt(body.replaceAll("?", "0"), 16),
-        Number.parseInt(body.replaceAll("?", "F"), 16),
-      ]);
-      continue;
-    }
-    const match = /^([0-9A-F]{1,6})(?:-([0-9A-F]{1,6}))?$/.exec(body);
-    if (!match) continue;
-    const start = Number.parseInt(match[1], 16);
-    ranges.push([start, Number.parseInt(match[2] ?? match[1], 16)]);
-  }
-  return ranges;
-}
-
-function unicodeRangeContains(ranges, codePoint) {
-  return ranges == null || ranges.some(([start, end]) => codePoint >= start && codePoint <= end);
-}
-
-function isContentAddressedUrl(value) {
-  try {
-    const pathname = new URL(value, "https://tiqian.invalid/").pathname;
-    return /(?:^|[._/-])[a-f0-9]{8,}(?=[._/-]|$)/iu.test(pathname);
-  } catch {
-    return false;
-  }
 }
 
 function sourceBytes(source) {
@@ -256,24 +202,9 @@ function faceCovers(record, points) {
 }
 
 /**
- * A build/session family is allowed to be an internal CSS alias while the
- * paragraph keeps the host's original family name. The alias is evidence for
- * exact URL bytes; OpenType name-table entries are the authoritative bridge
- * back to the host family. This keeps measurement deterministic without
- * rewriting the host's computed font-family or disabling its local() path.
- */
-export function fontRecordMatchesFamily(record, requestedFamily) {
-  const requested = String(requestedFamily ?? "").trim().toLowerCase();
-  if (!requested) return false;
-  return record.family.toLowerCase() === requested ||
-    record.localNames.some((name) => name.trim().toLowerCase() === requested);
-}
-
-/**
- * ExactRenderFontFamilyProjection: translate the host-facing family stack to
- * the CSS aliases backed by the exact font bytes in this session. The order is
- * inherited from the host stack; source order only orders faces within one
- * family and never becomes an accidental fallback policy.
+ * Return only host families backed by the build corpus, preserving the host's
+ * fallback order. Prepared DOM inherits these family names instead of exposing
+ * a package-owned alias.
  */
 function renderFamiliesFor(session, requestedFamilies) {
   const result = [];
@@ -295,34 +226,18 @@ function renderFamiliesFor(session, requestedFamilies) {
 
 /** ExactSubsetCoverageBoundary: split shaping runs when CSS unicode-range selects another face. */
 function sourceBoundariesFor(session, textValue, baseStyle, textSpans = []) {
-  const text = String(textValue);
-  const spans = Array.from(textSpans ?? []);
-  const boundaries = [];
-  let offset = 0;
-  let previousSignature = null;
-  for (const point of text) {
-    const style = [...spans].reverse().find((span) =>
-      offset >= span.start && offset < span.end) ?? baseStyle;
-    const record = selectFace(
+  return sourceBoundariesForSelectedFace(
+    textValue,
+    baseStyle,
+    textSpans,
+    (style, point) => selectFace(
       session,
       style.fontFamilies,
       style.fontWeight,
       style.italic,
       point,
-    );
-    const signature = [
-      record.faceId,
-      style.fontFamilies.join(FAMILY_SEPARATOR),
-      style.fontSizePx,
-      style.fontWeight,
-      style.italic,
-      style.baselineShiftPx ?? 0,
-    ].join("|");
-    if (previousSignature != null && signature !== previousSignature) boundaries.push(offset);
-    previousSignature = signature;
-    offset += point.length;
-  }
-  return boundaries;
+    ),
+  );
 }
 
 function faceCandidates(session, families, requestedWeight, italic) {
@@ -348,7 +263,11 @@ function findFace(session, families, requestedWeight, italic, text) {
       requestedWeight,
       (record) => record.weightRange,
     );
-    for (const record of weightMatched) if (faceCovers(record, points)) return record;
+    // CSS Fonts composite faces with the same descriptors use the later
+    // @font-face rule for overlapping unicode-range coverage.
+    for (const record of weightMatched.toReversed()) {
+      if (faceCovers(record, points)) return record;
+    }
   }
   return null;
 }
@@ -558,7 +477,14 @@ function instanceId(record, requestedWeight) {
 }
 
 function normalizedReplayNumber(value, fontSize) {
-  return Number.isFinite(value) ? value / fontSize : null;
+  if (!Number.isFinite(value)) return null;
+  // FontSizeIndependentReplayCanonicalization: the replay key deliberately
+  // omits font size because em geometry is scalable. Dividing the same sfnt
+  // result at 13px and 15.5px can nevertheless leave different IEEE-754 tail
+  // bits; canonicalize those non-semantic tails before manifests merge runs
+  // captured by paragraph and footnote precomputers.
+  const normalized = Number((value / fontSize).toFixed(12));
+  return Object.is(normalized, -0) ? 0 : normalized;
 }
 
 function captureShapeReplay(session, input, result) {
@@ -749,9 +675,6 @@ async function loadRecord(spec, hb, decompressWoff2) {
   if (!family) throw new Error("MissingFontFaceFamily");
   const publicUrl = String(spec.publicUrl ?? "").trim();
   if (!publicUrl) throw new Error(`MissingPublicFontUrl:${family}`);
-  if (!isContentAddressedUrl(publicUrl)) {
-    throw new Error(`NonContentAddressedFontUrl:${publicUrl}`);
-  }
   const source = sourceBytes(spec.source);
   const decompressed = isWoff2(source) ? await decompressWoff2(source) : source;
   const sfnt = decompressed instanceof Uint8Array ? decompressed : new Uint8Array(decompressed);

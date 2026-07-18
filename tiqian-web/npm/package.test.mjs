@@ -18,11 +18,14 @@ test("published package includes the generated runtime and no repository-only bi
   assert.ok(manifest.files.includes("precompute-node-fonts.js"));
   assert.ok(manifest.files.includes("browser-font-replay.js"));
   assert.ok(manifest.files.includes("browser-fonts.js"));
+  assert.ok(manifest.files.includes("font-face-boundaries.js"));
   assert.ok(manifest.files.includes("lazy-capabilities.js"));
+  assert.ok(manifest.files.includes("layout-worker.js"));
   assert.ok(manifest.files.includes("prepared-dom.js"));
   assert.ok(manifest.files.includes("snapshot-manifest.js"));
   assert.ok(manifest.files.includes("snapshot-source.js"));
   assert.ok(manifest.files.includes("snapshot-client.js"));
+  assert.ok(manifest.files.includes("worker-layout.js"));
   assert.equal(manifest.exports["./precompute"].default, "./precompute.js");
   assert.equal(manifest.exports["./snapshot-client"].default, "./snapshot-client.js");
   assert.equal(manifest.bin, undefined);
@@ -93,6 +96,7 @@ test("the custom element validates a snapshot before dynamically loading the bro
   const apiSource = await readFile(new URL("./api.js", import.meta.url), "utf8");
   const apiDeclarations = await readFile(new URL("./api.d.ts", import.meta.url), "utf8");
   const browserFontsSource = await readFile(new URL("./browser-fonts.js", import.meta.url), "utf8");
+  const layoutWorkerSource = await readFile(new URL("./layout-worker.js", import.meta.url), "utf8");
   const precomputeFontsSource = await readFile(new URL("./precompute-fonts.js", import.meta.url), "utf8");
   const lazyCapabilitiesSource = await readFile(new URL("./lazy-capabilities.js", import.meta.url), "utf8");
   const runtimeSource = await readFile(new URL("./runtime.js", import.meta.url), "utf8");
@@ -118,6 +122,12 @@ test("the custom element validates a snapshot before dynamically loading the bro
     mixedCompletionStart,
   );
   const mixedCompletionSource = elementSource.slice(mixedCompletionStart, mixedCompletionEnd);
+  const viewportListenerStart = elementSource.indexOf("  #ensureViewportResizeListener() {");
+  const viewportListenerEnd = elementSource.indexOf(
+    "  #handleResponsiveGeometryChange() {",
+    viewportListenerStart,
+  );
+  const viewportListenerSource = elementSource.slice(viewportListenerStart, viewportListenerEnd);
 
   assert.ok(adoption >= 0);
   assert.match(initialSnapshotSource, /#beginLayoutWork\(\{ captureSignatures: false \}\)/u);
@@ -133,8 +143,9 @@ test("the custom element validates a snapshot before dynamically loading the bro
   );
   assert.match(
     elementSource,
-    /this\.hasAttribute\("snapshot-ref"\) &&[\s\S]*?!strongEmphasisRuntimeRequired && !initialCompletionSelector[\s\S]*?\? null[\s\S]*?: loadTiqianRuntime\(\)/u,
+    /SnapshotFirstInputBeforeRuntimeCompile[\s\S]*?this\.hasAttribute\("snapshot-ref"\) &&[\s\S]*?!strongEmphasisRuntimeRequired[\s\S]*?\? null[\s\S]*?: loadTiqianRuntime\(\)/u,
   );
+  assert.doesNotMatch(initialSnapshotSource, /initialCompletionSelector/u);
   assert.match(
     elementSource,
     /if \(!strongEmphasisRuntimeRequired\) \{[\s\S]*?tryAdoptRequestedSnapshot\(/u,
@@ -143,6 +154,7 @@ test("the custom element validates a snapshot before dynamically loading the bro
   assert.doesNotMatch(elementSource, /from "\.\/runtime\/tiqian-web\.js"/u);
   assert.match(elementSource, /import\("\.\/browser-fonts\.js"\)/u);
   assert.match(elementSource, /import\("\.\/prepared-dom\.js"\)/u);
+  assert.match(elementSource, /import\("\.\/worker-layout\.js"\)/u);
   assert.match(elementSource, /preparedDom\.installPreparedDomRendererBridge\(\)/u);
   assert.match(apiSource, /preparedDom\.installPreparedDomRendererBridge\(\)/u);
   assert.doesNotMatch(elementSource, /from "\.\/browser-fonts\.js"/u);
@@ -153,20 +165,35 @@ test("the custom element validates a snapshot before dynamically loading the bro
   assert.match(lazyCapabilitiesSource, /import\("\.\/precomputed\.js"\)/u);
   assert.doesNotMatch(lazyCapabilitiesSource, /font-shaping\.js/u);
   assert.doesNotMatch(browserFontsSource, /precompute-fonts\.js/u);
+  assert.doesNotMatch(layoutWorkerSource, /precompute-fonts\.js|harfbuzzjs|woff2-encoder/u);
+  assert.match(layoutWorkerSource, /workerExactSubsetSourceBoundaries\(session\.faces, request\)/u);
   assert.doesNotMatch(browserFontsSource, /harfbuzzjs|woff2-encoder/u);
   assert.doesNotMatch(elementSource, /tiqian:retry-cjk-dash/u);
   assert.match(elementSource, /BrowserDashCapabilityBeforeDispatch/u);
   assert.doesNotMatch(elementSource, /#exactFontSession\?\.reference === reference/u);
   assert.doesNotMatch(apiSource, /existing\?\.reference === reference/u);
-  assert.match(browserFontsSource, /await requireExactContract\(root\)/u);
+  assert.match(browserFontsSource, /await requirePreparedOrExactContract\(root\)/u);
+  assert.match(
+    browserFontsSource,
+    /if \(prepared\?\.matches\) return prepared;[\s\S]*?return requireExactContract\(root\)/u,
+  );
   assert.match(browserFontsSource, /ExistingSessionLiveContractRevalidation/u);
-  assert.match(browserFontsSource, /Promise\.all\(context\.faces\.map/u);
+  assert.match(browserFontsSource, /ServerReplayNeedsNoBrowserFontBytes/u);
+  assert.doesNotMatch(browserFontsSource, /fetchImplementation|createRenderFontFace/u);
   assert.match(browserFontsSource, /export const prepareBrowserRenderFonts/u);
   assert.match(elementSource, /ExactFontSessionLiveRevalidation/u);
   assert.match(elementSource, /await existing\.revalidate\(this, existing\.handle\)/u);
   assert.match(
     elementSource,
-    /ExactRenderFontReadyBeforeCommit[\s\S]*?await this\.#exactFontSession\.prepareRenderFont\(this, exactFontSession\)/u,
+    /HostRenderFontReadyBeforeCommit[\s\S]*?await this\.#exactFontSession\.prepareRenderFont\(this, exactFontSession\)/u,
+  );
+  assert.match(
+    elementSource,
+    /await prepareWorkerLayouts\([\s\S]*?dispatch\("tiqian:enhance-progressively"/u,
+  );
+  assert.match(
+    elementSource,
+    /const layoutOperation = this\.#beginLayoutWork\(\{ usesCapturedMeasure: true \}\)[\s\S]*?request === this\.#enhanceRequest && layoutOperation === this\.#layoutOperation/u,
   );
   assert.match(
     elementSource,
@@ -232,14 +259,19 @@ test("the custom element validates a snapshot before dynamically loading the bro
   assert.doesNotMatch(stylesSource, /tq-inline-size-probe/u);
   assert.match(elementSource, /#paragraphWidthSignature\(\)/u);
   assert.doesNotMatch(elementSource, /RESPONSIVE_LAYOUT_SETTLE_MS|#resizeSettleTimer/u);
-  assert.doesNotMatch(elementSource, /RESPONSIVE_LATEST_RETARGET_QUIET_MS|setTimeout/u);
+  assert.doesNotMatch(elementSource, /RESPONSIVE_LATEST_RETARGET_QUIET_MS/u);
   assert.match(
     elementSource,
     /#scheduleResponsiveRetarget\(\)[\s\S]*?#responsiveRetargetFrame = requestAnimationFrame/u,
   );
+  assert.match(viewportListenerSource, /ViewportResizeValidatesCapturedLayoutInputs/u);
   assert.match(
-    elementSource,
-    /ViewportResizeCancelsCapturedProgressiveWork[\s\S]*?#cancelCapturedLayoutForLatestGeometry\(\)/u,
+    viewportListenerSource,
+    /#layoutWorkInFlight && this\.#layoutWorkUsesCapturedMeasure[\s\S]*?#responsiveCommitRequired = true[\s\S]*?#scheduleResponsiveRetarget\(\)/u,
+  );
+  assert.doesNotMatch(
+    viewportListenerSource,
+    /#cancelCapturedLayoutForLatestGeometry|#cancelPendingLayoutForLatestGeometry|#restoreRuntimeSourceForRetarget/u,
   );
   assert.match(
     elementSource,
@@ -248,6 +280,18 @@ test("the custom element validates a snapshot before dynamically loading the bro
   assert.match(
     elementSource,
     /TypographyRetargetMustRestart[\s\S]*?#responsiveRelayoutRequired = true/u,
+  );
+  assert.match(
+    elementSource,
+    /ProgressiveOutputTypographyBaseline[\s\S]*?#layoutWorkTypographySignature = this\.#typographySignature\(\)/u,
+  );
+  assert.match(
+    elementSource,
+    /NativeSourceViewportTypographySignature[\s\S]*?!element\.isConnected[\s\S]*?element\.closest\("\[data-tq-rendered='true'\]"\)[\s\S]*?#elementTypographySignature\(element, includeGenerated, properties\) !== signature/u,
+  );
+  assert.match(
+    elementSource,
+    /ROOT_VIEWPORT_TYPOGRAPHY_PROPERTIES = TYPOGRAPHY_PROPERTIES\.filter\([\s\S]*?property !== "margin-left" && property !== "margin-right"/u,
   );
   assert.match(
     elementSource,
@@ -271,7 +315,7 @@ test("the custom element validates a snapshot before dynamically loading the bro
   );
   assert.match(
     elementSource,
-    /ResponsiveRuntimeRollbackAtFirstSafeSignal[\s\S]*?#refreshRuntimeFromSource\(\)/u,
+    /ResponsiveRuntimeRollbackAtFirstSafeSignal[\s\S]*?#restoreRuntimeSourceForRetarget\(\)[\s\S]*?#scheduleResponsiveGeometryCommit\(\)/u,
   );
   assert.match(
     elementSource,
@@ -279,7 +323,7 @@ test("the custom element validates a snapshot before dynamically loading the bro
   );
   assert.match(
     elementSource,
-    /ReadoptionMissMustReclaimSource[\s\S]*?!this\.#runtimeStateActive[\s\S]*?#dispatchProgressiveEnhance\(generation\)/u,
+    /if \(!this\.#runtimeStateActive\) \{[\s\S]*?ReadoptionMissMustReclaimSource[\s\S]*?#dispatchProgressiveEnhance\(generation\)/u,
   );
   assert.match(elementSource, /PreparedSnapshotTransition/u);
   assert.match(
@@ -288,7 +332,19 @@ test("the custom element validates a snapshot before dynamically loading the bro
   );
   assert.match(
     elementSource,
-    /ResponsiveNativeBacking[\s\S]*?"tiqian:destroy"[\s\S]*?#dispatchProgressiveEnhance\(generation\)/u,
+    /ResponsiveNativeBacking[\s\S]*?"tiqian:destroy"[\s\S]*?#dispatchProgressiveEnhance\(generation, \{ revalidateExactFont \}\)/u,
+  );
+  assert.match(
+    elementSource,
+    /const exactFontSessionAlreadyPrepared = !revalidateExactFont[\s\S]*?this\.#exactFontSession\?\.reference/u,
+  );
+  assert.match(
+    elementSource,
+    /WidthOnlyExactFontSessionReuse[\s\S]*?if \(!exactFontSessionAlreadyPrepared\)/u,
+  );
+  assert.match(
+    elementSource,
+    /ResponsiveNativeRetargetSingleFlight[\s\S]*?#responsiveRelayoutRequired && !this\.#runtimeStateActive/u,
   );
   assert.match(elementSource, /this\.addEventListener\("tiqian:relayout-ready"/u);
   assert.match(elementSource, /loadedSnapshotMaximumMeasureMatches\(this\)/u);
@@ -348,22 +404,6 @@ test("the custom element validates a snapshot before dynamically loading the bro
   );
   assert.match(
     elementSource,
-    /#observeTypography\(\)[\s\S]*?addEventListener\("loadingdone", this\.#fontLoadingSettledListener\)[\s\S]*?addEventListener\("loadingerror", this\.#fontLoadingSettledListener\)/u,
-  );
-  assert.match(
-    elementSource,
-    /#stopTypographyObservation\(\)[\s\S]*?removeEventListener\("loadingdone", this\.#fontLoadingSettledListener\)[\s\S]*?removeEventListener\("loadingerror", this\.#fontLoadingSettledListener\)/u,
-  );
-  assert.match(
-    elementSource,
-    /#observeLayoutWorkInputs\(\)[\s\S]*?addEventListener\("loadingdone", this\.#layoutWorkFontLoadingSettledListener\)[\s\S]*?addEventListener\("loadingerror", this\.#layoutWorkFontLoadingSettledListener\)/u,
-  );
-  assert.match(
-    elementSource,
-    /#stopLayoutWorkInputObservation\(\)[\s\S]*?removeEventListener\([\s\S]*?"loadingdone"[\s\S]*?this\.#layoutWorkFontLoadingSettledListener[\s\S]*?removeEventListener\([\s\S]*?"loadingerror"[\s\S]*?this\.#layoutWorkFontLoadingSettledListener/u,
-  );
-  assert.match(
-    elementSource,
     /LatestObservedAttributeGeneration[\s\S]*?if \(!this\.#hasDispatched\) \{[\s\S]*?this\.#restartConnectedLifecycle\(\)/u,
   );
   assert.match(
@@ -379,6 +419,7 @@ test("the custom element validates a snapshot before dynamically loading the bro
     /disconnectedCallback\(\)[\s\S]*?\+\+this\.#generation[\s\S]*?this\.#clearInitialFontRetry\(\)/u,
   );
   assert.match(stylesSource, /\[data-tq-geometry="true"\]::before/u);
+  assert.match(stylesSource, /\[data-tq-rendered="true"\]::before,[\s\S]*?content: none !important/u);
   assert.match(
     stylesSource,
     /\[data-tq-rendered="true"\] span\[data-tq-geometry="true"\][\s\S]*?all: unset !important/u,
@@ -392,6 +433,7 @@ test("the custom element validates a snapshot before dynamically loading the bro
     /svg\[data-tq-geometry="true"\] circle\[data-tq-decoration-dot\][\s\S]*?fill: var\(--tq-decoration-color\) !important/u,
   );
   assert.match(stylesSource, /\[data-tq-shaping-boundary\]::first-letter/u);
+  assert.match(stylesSource, /\[data-tq-rendered="true"\]::first-letter,[\s\S]*?all: unset !important/u);
   assert.match(stylesSource, /text-spacing-trim: space-all !important/u);
   assert.match(
     stylesSource,

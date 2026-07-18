@@ -1,5 +1,8 @@
 tiqian-prose {
   display: block;
+}
+
+:is(tiqian-prose, [data-tiqian-root]) {
   --tq-styles-ready: 1;
 }
 
@@ -21,13 +24,11 @@ tiqian-prose [data-tq-rendered="true"] {
   position: relative;
 }
 
-/* ExactPreparedDomFontProjection: prepared canonical DOM draws through the
-   content-addressed family captured by build-time HarfBuzz. Runtime DOM can
-   mix exact replay runs with Canvas-measured fallbacks: exact runs carry their
-   own render family, while browser runs must retain the host stack that
-   measured them. */
+/* Prepared DOM inherits the host's font-family unchanged. Tiqian only fixes
+   shaping features that are part of the measured layout contract. */
 :is(tiqian-prose, [data-tiqian-root])[data-tiqian-exact-render-font="true"]:not([data-tiqian-exact-layout-fallback]) [data-tq-rendered="true"]:is([data-tq-canonical-plain="true"], [data-tq-exact-prepared-dom="true"]) {
-  font-family: var(--tq-exact-render-font-family) !important;
+  font-kerning: normal !important;
+  font-optical-sizing: none !important;
 }
 
 /* SharedRuntimeGeometryCss: runtime geometry leaves need the same host-CSS
@@ -165,6 +166,8 @@ tiqian-prose [data-tq-rendered="true"] {
   word-break: normal !important;
 }
 
+[data-tq-rendered="true"]::before,
+[data-tq-rendered="true"]::after,
 [data-tq-rendered="true"] [data-tq-geometry="true"]::before,
 [data-tq-rendered="true"] [data-tq-shaping-boundary]::before,
 [data-tq-rendered="true"] [data-tq-geometry="true"]::after,
@@ -175,7 +178,11 @@ tiqian-prose [data-tq-rendered="true"] {
 
 [data-tq-rendered="true"] span[data-tq-shaping-boundary] {
   all: unset !important;
-  display: inline-block !important;
+  /* NativeSelectionBoundaryFlow: the boundary preserves one shaping run, but
+     must remain an inline participant. An inline-block becomes an atomic
+     selection island; with the paragraph's engine-owned zero line-height,
+     Chromium also exposes a zero-height box between adjacent Latin shards. */
+  display: inline !important;
   white-space: pre !important;
   text-spacing-trim: space-all !important;
   vertical-align: baseline !important;
@@ -200,6 +207,8 @@ tiqian-prose [data-tq-rendered="true"] {
   font-feature-settings: "palt" 1 !important;
 }
 
+[data-tq-rendered="true"]::first-letter,
+[data-tq-rendered="true"]::first-line,
 [data-tq-rendered="true"] [data-tq-shaping-boundary]::first-letter,
 [data-tq-rendered="true"] [data-tq-shaping-boundary]::first-line {
   all: unset !important;

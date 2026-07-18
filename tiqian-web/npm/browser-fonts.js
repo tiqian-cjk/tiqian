@@ -1,5 +1,4 @@
 import { createServerReplayFontSession } from "./browser-font-replay.js";
-import { sha256 } from "./digest.js";
 import {
   FONT_BACKEND_REVISION,
   FONT_REPLAY_REVISION,
@@ -9,12 +8,15 @@ import {
   SNAPSHOT_SCHEMA,
 } from "./snapshot-schema.js";
 import { parseSnapshotManifest } from "./snapshot-manifest.js";
-import { validatePrecomputedSnapshotExactFontContract } from "./precomputed.js";
+import {
+  validatePrecomputedExactFontReplayContract,
+  validatePrecomputedExactFontReplayLiveContract,
+} from "./precomputed.js";
 
 const HASH_PATTERN = /^[a-f0-9]{64}$/u;
-const CONTENT_ADDRESS_PATTERN = /(?:^|[._/-])[a-f0-9]{8,}(?=[._/-]|$)/iu;
 const HANDLE_STATE = Symbol("tiqian.browserFontSession");
 const PARSER_PENDING_CONTRACT_REASONS = new Set([
+  "SnapshotTemplateMissing",
   "SnapshotCandidateSetMismatch",
   "SnapshotCandidateKeyInvalid",
   "SnapshotEntryMissing",
@@ -116,10 +118,6 @@ function faceDescriptorKey(face) {
 
 function sameValue(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function cssString(value) {
-  return `"${String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }
 
 function evidenceFace(value) {
@@ -295,24 +293,11 @@ function snapshotContext(root) {
   }
   const collected = collectManifestFaces(manifest);
   return {
+    documentObject,
     template,
     manifestText: script.textContent,
-    baseUrl: documentObject?.baseURI ?? globalThis.location?.href,
     ...collected,
   };
-}
-
-function resolvedFontUrl(publicUrl, baseUrl) {
-  let resolved;
-  try {
-    resolved = new URL(publicUrl, baseUrl);
-  } catch (error) {
-    fail("SnapshotFontUrlInvalid", publicUrl, error);
-  }
-  if (!CONTENT_ADDRESS_PATTERN.test(resolved.pathname)) {
-    fail("SnapshotFontUrlNotContentAddressed", publicUrl);
-  }
-  return resolved.href;
 }
 
 function actualFaceKey(face) {
@@ -364,9 +349,15 @@ function validateSession(session, expected) {
 
 export function createBrowserFontSessionLoader(options = {}) {
   const createSession = options.createFontSession ?? createServerReplayFontSession;
-  const digest = options.sha256 ?? sha256;
-  const fetchImplementation = options.fetch ?? ((...args) => globalThis.fetch(...args));
-  const validateContract = options.validateContract ?? validatePrecomputedSnapshotExactFontContract;
+  const preferPreparedContract = options.validateContract == null ||
+    options.validatePreparedContract != null;
+  const validateContract = options.validateContract ??
+    validatePrecomputedExactFontReplayContract;
+  const validatePreparedContract = options.validatePreparedContract ?? (
+    options.validateContract
+      ? validateContract
+      : validatePrecomputedExactFontReplayLiveContract
+  );
   const cache = new WeakMap();
 
   async function validateExactContract(root) {
@@ -377,6 +368,32 @@ export function createBrowserFontSessionLoader(options = {}) {
       fail("SnapshotExactFontContractValidationFailed", undefined, error);
     }
     return result;
+  }
+
+  async function validateExactPreparedContract(root) {
+    let result;
+    try {
+      result = await validatePreparedContract(root);
+    } catch (error) {
+      fail("SnapshotExactFontContractValidationFailed", undefined, error);
+    }
+    if (!result?.matches) {
+      fail("SnapshotExactFontContractMismatch", result?.reason ?? "unknown");
+    }
+    return result;
+  }
+
+  async function requirePreparedOrExactContract(root) {
+    if (preferPreparedContract) {
+      let prepared;
+      try {
+        prepared = await validatePreparedContract(root);
+      } catch (error) {
+        fail("SnapshotExactFontContractValidationFailed", undefined, error);
+      }
+      if (prepared?.matches) return prepared;
+    }
+    return requireExactContract(root);
   }
 
   async function waitForParserContract(root, initialResult) {
@@ -437,6 +454,10 @@ export function createBrowserFontSessionLoader(options = {}) {
       const onParserComplete = () => void revalidate({ parserComplete: true });
       const observer = new MutationObserverConstructor(() => void revalidate());
       observer.observe(root, { attributes: true, childList: true, characterData: true, subtree: true });
+      const documentRoot = documentObject.documentElement;
+      if (documentRoot && documentRoot !== root) {
+        observer.observe(documentRoot, { childList: true, subtree: true });
+      }
       documentObject.addEventListener("DOMContentLoaded", onParserComplete, { once: true });
       // Close the gap between the first validation and installing observers.
       void revalidate();
@@ -458,66 +479,23 @@ export function createBrowserFontSessionLoader(options = {}) {
       if (state.versions.get(state.cacheKey) === state) {
         state.versions.delete(state.cacheKey);
       }
+      globalThis.__TiqianLayoutWorker?.release?.(state.session?.id);
       state.session?.close();
     }
   }
 
   async function load(context) {
-    const bytesByUrl = new Map();
-    const fetchFontBytes = async (url) => {
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        let response;
-        try {
-          response = await fetchImplementation(url, {
-            credentials: "same-origin",
-            ...(attempt === 0 ? {} : { cache: "reload" }),
-          });
-        } catch (error) {
-          // ContentAddressedFontFetchRetry: a navigation or responsive
-          // transition can race a conditional-cache response even though the
-          // immutable shard is healthy. Retry once from the origin without a
-          // fixed delay; integrity validation below still rejects wrong bytes.
-          if (attempt === 0) continue;
-          fail("FontFetchFailed", url, error);
-        }
-        if (!response?.ok || typeof response.arrayBuffer !== "function") {
-          const status = response?.status ?? "invalid-response";
-          const retryable = status === 304 || status === 408 || status === 429 ||
-            (typeof status === "number" && status >= 500);
-          if (attempt === 0 && retryable) continue;
-          fail("FontFetchFailed", `${url}:${status}`);
-        }
-        try {
-          return new Uint8Array(await response.arrayBuffer());
-        } catch (error) {
-          if (attempt === 0) continue;
-          fail("FontFetchFailed", url, error);
-        }
-      }
-      fail("FontFetchFailed", url);
-    };
-    const faceSpecs = await Promise.all(context.faces.map(async (face) => {
-      const url = resolvedFontUrl(face.publicUrl, context.baseUrl);
-      let bytesPromise = bytesByUrl.get(url);
-      if (!bytesPromise) {
-        bytesPromise = fetchFontBytes(url);
-        bytesByUrl.set(url, bytesPromise);
-      }
-      const bytes = await bytesPromise;
-      const actualSourceSha256 = await digest(bytes);
-      if (actualSourceSha256 !== face.sourceSha256) {
-        fail("FontSourceDigestMismatch", face.publicUrl);
-      }
-      return {
-        family: face.family,
-        style: face.style,
-        weight: [...face.weight],
-        unicodeRange: face.unicodeRange,
-        publicUrl: face.publicUrl,
-        faceIndex: face.faceIndex,
-        sourceOrder: face.sourceOrder,
-        source: bytes.slice(),
-      };
+    // ServerReplayNeedsNoBrowserFontBytes: glyph ids, advances and metrics are
+    // already embedded in the manifest. Browser paint remains owned by the
+    // host @font-face/local() cascade and is proven before this session starts.
+    const faceSpecs = context.faces.map((face) => ({
+      family: face.family,
+      style: face.style,
+      weight: [...face.weight],
+      unicodeRange: face.unicodeRange,
+      publicUrl: face.publicUrl,
+      faceIndex: face.faceIndex,
+      sourceOrder: face.sourceOrder,
     }));
 
     let session;
@@ -543,9 +521,11 @@ export function createBrowserFontSessionLoader(options = {}) {
   }
 
   async function prepare(root) {
-    await requireExactContract(root);
+    // HostCompatibleReplayContract: both snapshots and runtime replay paint
+    // through the host family, so the same live CSS/probe proof gates both.
+    await requirePreparedOrExactContract(root);
     const context = snapshotContext(root);
-    const cacheKey = `${context.baseUrl ?? ""}\u0000${context.manifestText}`;
+    const cacheKey = context.manifestText;
     let versions = cache.get(context.template);
     if (!versions) {
       versions = new Map();
@@ -557,6 +537,7 @@ export function createBrowserFontSessionLoader(options = {}) {
         references: 0,
         versions,
         cacheKey,
+        manifestText: context.manifestText,
         session: null,
         renderFontFaces: context.faces.map((face) => ({
           family: face.family,
@@ -564,6 +545,8 @@ export function createBrowserFontSessionLoader(options = {}) {
           weight: face.loadWeight,
           text: face.coverageText,
         })),
+        renderFontFamilies: context.renderFontFamilies,
+        renderFontsPromise: null,
       };
       state.promise = load(context).then((session) => {
         state.session = session;
@@ -578,11 +561,10 @@ export function createBrowserFontSessionLoader(options = {}) {
     let session;
     try {
       session = await state.promise;
-      await requireExactContract(root);
+      await validateExactPreparedContract(root);
       const current = snapshotContext(root);
       if (
-        current.template !== context.template || current.manifestText !== context.manifestText ||
-        current.baseUrl !== context.baseUrl
+        current.template !== context.template || current.manifestText !== context.manifestText
       ) fail("SnapshotManifestChangedDuringFontPreparation");
     } catch (error) {
       releaseStateReference(state);
@@ -592,7 +574,7 @@ export function createBrowserFontSessionLoader(options = {}) {
     return Object.freeze({
       id: session.id,
       paragraphSelector: context.paragraphSelector,
-      renderFontFamilies: Object.freeze([...context.renderFontFamilies]),
+      renderFontFamilies: Object.freeze([...state.renderFontFamilies]),
       [HANDLE_STATE]: token,
     });
   }
@@ -602,17 +584,17 @@ export function createBrowserFontSessionLoader(options = {}) {
     if (!token || token.released || !token.state.session) {
       fail("BrowserFontSessionHandleInvalid");
     }
-    // ExistingSessionLiveContractRevalidation: the server-replay session and
-    // verified source bytes are immutable, but the host source, cascade and
-    // declared font contract remain live. The contract validator already
-    // rechecks those inputs after its asynchronous font probes, so one pass is
-    // sufficient when no font fetch/session creation occurs between checks.
-    await requireExactContract(root);
+    // ExistingSessionLiveContractRevalidation: replay data is immutable, but
+    // the host font cascade remains a live rendering dependency.
+    await requirePreparedOrExactContract(root);
     const context = snapshotContext(root);
-    const cacheKey = `${context.baseUrl ?? ""}\u0000${context.manifestText}`;
+    const cacheKey = context.manifestText;
     const { state } = token;
-    if (cacheKey !== state.cacheKey || state.versions.get(cacheKey) !== state) {
-      fail("SnapshotManifestChangedDuringFontPreparation");
+    if (cacheKey !== state.cacheKey) {
+      fail("SnapshotManifestChangedDuringFontPreparation", "cache-key");
+    }
+    if (state.versions.get(cacheKey) !== state) {
+      fail("SnapshotManifestChangedDuringFontPreparation", "session-evicted");
     }
     return handle;
   }
@@ -622,22 +604,23 @@ export function createBrowserFontSessionLoader(options = {}) {
     if (!token || token.released || !token.state.session) {
       fail("BrowserFontSessionHandleInvalid");
     }
+    const { state } = token;
     const fontSet = root?.ownerDocument?.fonts;
     if (typeof fontSet?.load !== "function") fail("RenderFontFaceSetUnavailable");
-    let results;
-    try {
-      results = await Promise.all(token.state.renderFontFaces.map((face) => fontSet.load(
-        `${face.style} ${face.weight} 16px ${cssString(face.family)}`,
-        face.text,
-      )));
-    } catch (error) {
+    state.renderFontsPromise ??= Promise.all(state.renderFontFaces.map((face) => fontSet.load(
+      `${face.style} ${face.weight} 16px ${JSON.stringify(face.family)}`,
+      face.text,
+    ))).then((results) => {
+      const missing = results.findIndex((faces) => !faces || faces.length === 0);
+      if (missing >= 0) {
+        fail("RenderFontFaceLoadFailed", state.renderFontFaces[missing].family);
+      }
+      return true;
+    }).catch((error) => {
+      if (error instanceof BrowserFontSessionError) throw error;
       fail("RenderFontFaceLoadFailed", undefined, error);
-    }
-    const missing = results.findIndex((faces) => !faces || faces.length === 0);
-    if (missing >= 0) {
-      fail("RenderFontFaceLoadFailed", token.state.renderFontFaces[missing].family);
-    }
-    return true;
+    });
+    return state.renderFontsPromise;
   }
 
   function release(handle) {
@@ -650,6 +633,25 @@ export function createBrowserFontSessionLoader(options = {}) {
   }
 
   return Object.freeze({ prepare, revalidate, prepareRenderFonts, release });
+}
+
+/** Internal handoff used by the module Worker without exposing font bytes. */
+export function browserFontSessionWorkerContract(handle) {
+  const token = handle?.[HANDLE_STATE];
+  if (!token || token.released || !token.state.session) {
+    fail("BrowserFontSessionHandleInvalid");
+  }
+  return Object.freeze({
+    sessionKey: token.state.session.id,
+    manifestText: snapshotContextFromState(token.state),
+  });
+}
+
+function snapshotContextFromState(state) {
+  if (typeof state.manifestText !== "string" || state.manifestText.length === 0) {
+    fail("BrowserFontSessionWorkerContractUnavailable");
+  }
+  return state.manifestText;
 }
 
 const defaultLoader = createBrowserFontSessionLoader();

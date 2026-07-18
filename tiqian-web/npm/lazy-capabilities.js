@@ -190,9 +190,9 @@ export function isLoadedSnapshotAdopted(root) {
   return precomputedModule?.isPrecomputedSnapshotAdopted(root) ?? false;
 }
 
-export function loadedAdoptedSnapshotLiveIssue(root) {
+export async function loadedAdoptedSnapshotLiveIssue(root, isCurrent = () => true) {
   return precomputedModule
-    ? precomputedModule.adoptedPrecomputedSnapshotLiveIssue(root)
+    ? precomputedModule.adoptedPrecomputedSnapshotLiveIssue(root, isCurrent)
     : "SnapshotModuleUnavailable";
 }
 
@@ -202,6 +202,10 @@ export function loadedSnapshotMaximumMeasureMatches(root) {
 
 export function restoreLoadedSnapshot(root) {
   return precomputedModule?.restorePrecomputedSnapshot(root) ?? false;
+}
+
+export function detachLoadedSnapshot(root) {
+  return precomputedModule?.detachPrecomputedSnapshot(root) ?? false;
 }
 
 export async function restoreAdoptedSnapshot(root) {

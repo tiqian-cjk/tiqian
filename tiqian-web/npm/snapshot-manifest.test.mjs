@@ -105,6 +105,24 @@ test("shared manifest tables keep typography and face descriptors once", () => {
   });
 });
 
+test("shared replay tables deduplicate identical keys and reject conflicts", () => {
+  const first = preparedEntry("a", "中国", "中");
+  const duplicate = preparedEntry("b", "正文", "正");
+  duplicate.fontEvidence.replay = structuredClone(first.fontEvidence.replay);
+  const compact = compactSnapshotManifest([first, duplicate], { schema: 1 });
+
+  assert.equal(compact.fontReplay.shapes.length, 1);
+  assert.equal(compact.fontReplay.metrics.length, 1);
+
+  const conflict = preparedEntry("c", "冲突", "冲");
+  conflict.fontEvidence.replay = structuredClone(first.fontEvidence.replay);
+  conflict.fontEvidence.replay.shapes[0].result.advanceEm = 2;
+  assert.throws(
+    () => compactSnapshotManifest([first, conflict], { schema: 1 }),
+    /SnapshotFontReplayShapeConflict/u,
+  );
+});
+
 test("invalid compact table references fail closed", () => {
   const compact = compactSnapshotManifest([preparedEntry("a", "中国", "中")], {
     schema: 1,

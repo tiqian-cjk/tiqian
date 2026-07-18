@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   BrowserFontSessionError,
+  browserFontSessionWorkerContract,
   createBrowserFontSessionLoader,
 } from "./browser-fonts.js";
 import {
@@ -67,8 +68,8 @@ function manifestWithFaces(
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
     renderRevision: "prebroken-dom-v14",
-    fontSourcePolicy: "compatible-local-render-family-v2",
-    renderFontFamilies: ["Fixture Sans"],
+    fontSourcePolicy: "host-compatible-stylesheet-v1",
+    renderFontFamilies: ["Fixture CJK"],
     paragraphSelector: "p[data-tq-snapshot-key]",
     valueStyles: [],
     valueStylesSha256: "fixture",
@@ -121,6 +122,13 @@ function harness(manifest, options = {}) {
   const createCalls = [];
   const sessions = [];
   const contractCalls = [];
+  const preparedContractCalls = [];
+  const renderFaceCreates = [];
+  const renderFaceAdds = [];
+  const renderFaceDeletes = [];
+  const renderFontSourceCreates = [];
+  const renderFontSourceReleases = [];
+  const fontLoads = [];
   let closeCount = 0;
   const fetch = async (url, init) => {
     requests.push({ url, init });
@@ -142,18 +150,11 @@ function harness(manifest, options = {}) {
       id: `browser-session-${createCalls.length}`,
       backendRevision: options.backendRevision ?? FONT_BACKEND_REVISION,
       harfbuzzVersion: options.harfbuzzVersion ?? "fixture-hb",
-      faces: specs.map((spec) => ({
-        family: spec.family,
-        style: spec.style,
-        weight: [...spec.weight],
-        unicodeRange: spec.unicodeRange,
-        publicUrl: spec.publicUrl,
-        sourceSha256: digest(spec.source),
-        sfntSha256: "b".repeat(64),
-        faceIndex: spec.faceIndex,
-        sourceOrder: spec.sourceOrder,
-        axisTags: ["wght"],
-        localNames: ["Fixture CJK", "FixtureCJK"],
+      faces: createOptions.faceMetadata.map((face) => ({
+        ...face,
+        weight: [...face.weight],
+        axisTags: Object.keys(face.axes ?? {}).sort(),
+        localNames: [...face.localNames],
       })),
       close() {
         closeCount += 1;
@@ -163,23 +164,74 @@ function harness(manifest, options = {}) {
     sessions.push(session);
     return session;
   };
+  const fontSet = options.documentOverrides?.fonts ?? {
+    async load(descriptor, text) {
+      fontLoads.push({ descriptor, text });
+      return [{}];
+    },
+  };
+  const createRenderFontFace = options.createRenderFontFace ?? ((family, source, descriptors) => {
+    if (options.renderFaceCreateError) throw options.renderFaceCreateError;
+    const face = {
+      family,
+      source,
+      descriptors,
+      status: "unloaded",
+      async load() {
+        if (options.renderFaceLoadError) throw options.renderFaceLoadError;
+        this.status = "loaded";
+        return this;
+      },
+    };
+    renderFaceCreates.push(face);
+    return face;
+  });
+  const createRenderFontSource = options.createRenderFontSource ?? ((source) => {
+    renderFontSourceCreates.push(source);
+    const url = `blob:fixture-font-${renderFontSourceCreates.length}`;
+    let released = false;
+    return {
+      source: `url("${url}")`,
+      release() {
+        if (released) return false;
+        released = true;
+        renderFontSourceReleases.push(url);
+        return true;
+      },
+    };
+  });
   const loader = createBrowserFontSessionLoader({
     ...(options.useDefaultSession ? {} : { createFontSession }),
     fetch,
     sha256: async (value) => digest(value),
+    createRenderFontFace,
+    createRenderFontSource,
     validateContract: async (root) => {
       contractCalls.push(root);
       const result = options.contractResults?.shift?.();
       return result ?? { matches: true, reason: null };
     },
+    ...(options.preparedContractResults ? {
+      validatePreparedContract: async (root) => {
+        preparedContractCalls.push(root);
+        return options.preparedContractResults.shift() ?? { matches: true, reason: null };
+      },
+    } : {}),
   });
   return {
     loader,
-    root: snapshotRoot(manifest, options.documentOverrides),
+    root: snapshotRoot(manifest, { ...options.documentOverrides, fonts: fontSet }),
     requests,
     createCalls,
     sessions,
     contractCalls,
+    preparedContractCalls,
+    renderFaceCreates,
+    renderFaceAdds,
+    renderFaceDeletes,
+    renderFontSourceCreates,
+    renderFontSourceReleases,
+    fontLoads,
     closeCount: () => closeCount,
   };
 }
@@ -209,9 +261,7 @@ test("browser font sessions aggregate manifest evidence and close after the fina
   assert.equal(first.id, "browser-session-1");
   assert.equal(second.id, first.id);
   assert.equal(first.paragraphSelector, "p[data-tq-snapshot-key]");
-  assert.equal(state.requests.length, 1);
-  assert.equal(state.requests[0].url, "https://example.test/assets/fixture-deadbeef.woff2");
-  assert.deepEqual(state.requests[0].init, { credentials: "same-origin" });
+  assert.equal(state.requests.length, 0);
   assert.equal(state.createCalls.length, 1);
   assert.equal(state.contractCalls.length, 4);
   assert.equal(state.createCalls[0].specs.length, 1);
@@ -222,15 +272,204 @@ test("browser font sessions aggregate manifest evidence and close after the fina
   assert.equal(state.loader.release(first), true);
   assert.equal(state.loader.release(first), false);
   assert.equal(state.closeCount(), 0);
+  assert.equal(state.renderFaceDeletes.length, 0);
   assert.equal(state.loader.release(second), true);
   assert.equal(state.closeCount(), 1);
+  assert.equal(state.renderFaceDeletes.length, 0);
 
   const next = await state.loader.prepare(state.root);
   assert.equal(next.id, "browser-session-2");
-  assert.equal(state.requests.length, 2);
+  assert.equal(state.requests.length, 0);
   assert.equal(state.createCalls.length, 2);
   assert.equal(state.loader.release(next), true);
   assert.equal(state.closeCount(), 2);
+});
+
+test("browser font sessions reuse a live adoption proof before probing again", async () => {
+  const bytes = new TextEncoder().encode("fixture-font-source");
+  const sourceSha256 = digest(bytes);
+  const state = harness(manifestWithFaces([[faceEvidence(sourceSha256)]]), {
+    bytes,
+    preparedContractResults: [
+      { matches: true, reason: null },
+      { matches: true, reason: null },
+      { matches: true, reason: null },
+    ],
+  });
+
+  const handle = await state.loader.prepare(state.root);
+  assert.equal(state.contractCalls.length, 0);
+  assert.equal(state.preparedContractCalls.length, 2);
+
+  assert.strictEqual(await state.loader.revalidate(state.root, handle), handle);
+  assert.equal(state.contractCalls.length, 0);
+  assert.equal(state.preparedContractCalls.length, 3);
+  assert.equal(state.loader.release(handle), true);
+});
+
+test("browser font sessions expose only replay identity to the layout Worker", async () => {
+  const bytes = new TextEncoder().encode("fixture-font-source");
+  const manifest = manifestWithFaces([[faceEvidence(digest(bytes))]]);
+  const state = harness(manifest, { bytes });
+
+  const handle = await state.loader.prepare(state.root);
+  const contract = browserFontSessionWorkerContract(handle);
+
+  assert.deepEqual(contract, {
+    sessionKey: handle.id,
+    manifestText: JSON.stringify(manifest),
+  });
+  assert.equal(state.loader.release(handle), true);
+  assert.throws(() => browserFontSessionWorkerContract(handle), assertCode("BrowserFontSessionHandleInvalid"));
+});
+
+test("layout Worker plans survive duplicate module instances and reach the runtime bridge", async () => {
+  const bytes = new TextEncoder().encode("fixture-font-source");
+  const state = harness(manifestWithFaces([[faceEvidence(digest(bytes))]]), { bytes });
+  const handle = await state.loader.prepare(state.root);
+  const originalWorker = globalThis.Worker;
+  const originalInnerHeight = globalThis.innerHeight;
+  const originalApi = globalThis.TiqianWeb;
+  const originalBridge = globalThis.__TiqianLayoutWorker;
+  const coordinatorKey = Symbol.for("@tiqian/prose.layout-worker-coordinator.v1");
+  const originalCoordinator = globalThis[coordinatorKey];
+  const element = {
+    closest: () => state.root,
+    getBoundingClientRect: () => ({ top: 0, bottom: 24 }),
+  };
+  const selectors = [];
+  state.root.querySelectorAll = (selector) => {
+    selectors.push(selector);
+    return [element];
+  };
+  let requestText = "first";
+  const completionSelector = ":is(p, li):not([data-tq-snapshot-key])";
+
+  class FixtureWorker {
+    listeners = new Map();
+
+    addEventListener(type, listener) {
+      this.listeners.set(type, listener);
+    }
+
+    postMessage(message) {
+      queueMicrotask(() => this.listeners.get("message")?.({
+        data: message.type === "layout"
+          ? message.request.text === "failure"
+            ? { id: message.id, ok: false, error: "fixture replay miss" }
+            : { id: message.id, ok: true, plan: { fixture: message.request.text } }
+          : { id: message.id, ok: true },
+      }));
+    }
+
+    terminate() {}
+  }
+
+  try {
+    delete globalThis[coordinatorKey];
+    delete globalThis.__TiqianLayoutWorker;
+    globalThis.Worker = FixtureWorker;
+    globalThis.innerHeight = 800;
+    globalThis.TiqianWeb = {
+      workerLayoutRequest: () => JSON.stringify({
+        text: requestText,
+        maxWidthPx: 320,
+        semantics: [],
+        renderInlineBoxes: [],
+      }),
+    };
+
+    const firstModule = await import(`./worker-layout.js?fixture=first-${Date.now()}`);
+    assert.equal(await firstModule.prepareWorkerLayouts(state.root, handle, {
+      paragraphSelector: completionSelector,
+    }), 1);
+    const firstRequest = globalThis.TiqianWeb.workerLayoutRequest();
+    assert.equal(
+      JSON.parse(globalThis.__TiqianLayoutWorker.take(element, handle.id, firstRequest)).plan.fixture,
+      "first",
+    );
+    const semanticOnlyChange = JSON.stringify({
+      ...JSON.parse(firstRequest),
+      semantics: [{ start: 0, end: 5, tagName: "a", attributes: [["href", "/latest"]] }],
+      renderInlineBoxes: [{ start: 0, end: 5, inlineStart: 1, inlineEnd: 2 }],
+    });
+    const semanticRecord = JSON.parse(
+      globalThis.__TiqianLayoutWorker.take(element, handle.id, semanticOnlyChange),
+    );
+    assert.equal(semanticRecord.plan.fixture, "first");
+    assert.deepEqual(semanticRecord.semantics, [{
+      start: 0,
+      end: 5,
+      tagName: "a",
+      attributes: [["href", "/latest"]],
+    }]);
+    assert.deepEqual(semanticRecord.inlineBoxes, [
+      { start: 0, end: 5, inlineStart: 1, inlineEnd: 2 },
+    ]);
+    const changedMeasure = JSON.stringify({
+      ...JSON.parse(firstRequest),
+      maxWidthPx: 319,
+    });
+    assert.equal(
+      globalThis.__TiqianLayoutWorker.take(element, handle.id, changedMeasure),
+      null,
+    );
+
+    requestText = "second";
+    const secondModule = await import(`./worker-layout.js?fixture=second-${Date.now()}`);
+    assert.equal(await secondModule.prepareWorkerLayouts(state.root, handle, {
+      paragraphSelector: completionSelector,
+    }), 1);
+    const secondRequest = globalThis.TiqianWeb.workerLayoutRequest();
+    assert.equal(
+      JSON.parse(globalThis.__TiqianLayoutWorker.take(element, handle.id, secondRequest)).plan.fixture,
+      "second",
+    );
+    assert.equal(globalThis.__TiqianLayoutWorker.issue(element, handle.id, secondRequest), null);
+
+    requestText = "failure";
+    assert.equal(await secondModule.prepareWorkerLayouts(state.root, handle, {
+      paragraphSelector: completionSelector,
+    }), 0);
+    const failedRequest = globalThis.TiqianWeb.workerLayoutRequest();
+    assert.equal(globalThis.__TiqianLayoutWorker.take(element, handle.id, failedRequest), null);
+    assert.equal(
+      globalThis.__TiqianLayoutWorker.issue(element, handle.id, failedRequest),
+      "fixture replay miss",
+    );
+
+    requestText = "default-runtime-set";
+    assert.equal(await secondModule.prepareWorkerLayouts(state.root, handle, {}), 1);
+    const defaultRequest = globalThis.TiqianWeb.workerLayoutRequest();
+    assert.equal(
+      JSON.parse(globalThis.__TiqianLayoutWorker.take(element, handle.id, defaultRequest)).plan.fixture,
+      "default-runtime-set",
+    );
+
+    assert.equal(state.loader.release(handle), true);
+    assert.equal(globalThis.__TiqianLayoutWorker.take(element, handle.id, firstRequest), null);
+    assert.equal(globalThis.__TiqianLayoutWorker.take(element, handle.id, secondRequest), null);
+    assert.equal(globalThis.__TiqianLayoutWorker.issue(element, handle.id, failedRequest), null);
+    assert.deepEqual(selectors, [
+      completionSelector,
+      completionSelector,
+      completionSelector,
+      "p, li",
+    ]);
+  } finally {
+    globalThis[coordinatorKey]?.worker?.terminate?.();
+    if (originalCoordinator === undefined) delete globalThis[coordinatorKey];
+    else globalThis[coordinatorKey] = originalCoordinator;
+    if (originalBridge === undefined) delete globalThis.__TiqianLayoutWorker;
+    else globalThis.__TiqianLayoutWorker = originalBridge;
+    if (originalWorker === undefined) delete globalThis.Worker;
+    else globalThis.Worker = originalWorker;
+    if (originalInnerHeight === undefined) delete globalThis.innerHeight;
+    else globalThis.innerHeight = originalInnerHeight;
+    if (originalApi === undefined) delete globalThis.TiqianWeb;
+    else globalThis.TiqianWeb = originalApi;
+    state.loader.release(handle);
+  }
 });
 
 test("browser font sessions retain whitespace-only glyph evidence", async () => {
@@ -256,7 +495,7 @@ test("browser font sessions retain whitespace-only glyph evidence", async () => 
   assert.equal(state.loader.release(handle), true);
 });
 
-test("browser font sessions retry one transient content-addressed fetch", async () => {
+test("browser font sessions never fetch font bytes for server replay", async () => {
   const bytes = new TextEncoder().encode("fixture-font-source");
   const manifest = manifestWithFaces([[faceEvidence(digest(bytes))]]);
   const state = harness(manifest, {
@@ -266,9 +505,7 @@ test("browser font sessions retry one transient content-addressed fetch", async 
 
   const handle = await state.loader.prepare(state.root);
 
-  assert.equal(state.requests.length, 2);
-  assert.deepEqual(state.requests[0].init, { credentials: "same-origin" });
-  assert.deepEqual(state.requests[1].init, { credentials: "same-origin", cache: "reload" });
+  assert.equal(state.requests.length, 0);
   assert.equal(state.loader.release(handle), true);
 });
 
@@ -312,37 +549,29 @@ test("browser font sessions include runtime-only semantic contract entries", asy
   const handle = await state.loader.prepare(state.root);
 
   assert.equal(state.createCalls[0].specs.length, 2);
-  assert.equal(state.requests.length, 2);
+  assert.equal(state.requests.length, 0);
   assert.equal(state.loader.release(handle), true);
 });
 
-test("exact render aliases load before progressive DOM can commit", async () => {
+test("runtime replay loads and preserves the host render family", async () => {
   const bytes = new TextEncoder().encode("fixture-font-source");
   const manifest = manifestWithFaces([[faceEvidence(digest(bytes))]]);
-  const loads = [];
-  const state = harness(manifest, {
-    bytes,
-    documentOverrides: {
-      fonts: {
-        async load(descriptor, text) {
-          loads.push({ descriptor, text });
-          return [{}];
-        },
-      },
-    },
-  });
+  const state = harness(manifest, { bytes });
   const handle = await state.loader.prepare(state.root);
 
+  assert.deepEqual(handle.renderFontFamilies, ["Fixture CJK"]);
+  assert.equal(state.renderFaceCreates.length, 0);
+  assert.equal(state.renderFaceAdds.length, 0);
   assert.equal(await state.loader.prepareRenderFonts(state.root, handle), true);
-
-  assert.deepEqual(loads, [{
+  assert.deepEqual(state.fontLoads, [{
     descriptor: 'normal 400 16px "Fixture CJK"',
     text: "中国",
   }]);
   assert.equal(state.loader.release(handle), true);
+  assert.equal(state.renderFaceDeletes.length, 0);
 });
 
-test("live snapshot font contract is required before fetching exact font bytes", async () => {
+test("live snapshot font contract is required before creating replay state", async () => {
   const bytes = new TextEncoder().encode("fixture-font-source");
   const manifest = manifestWithFaces([[faceEvidence(digest(bytes))]]);
   const state = harness(manifest, {
@@ -395,7 +624,7 @@ test("parser-time source mismatch retries as soon as the snapshot source becomes
   mutationCallback();
   const handle = await pending;
 
-  assert.equal(state.requests.length, 1);
+  assert.equal(state.requests.length, 0);
   assert.equal(state.createCalls.length, 1);
   assert.equal(state.loader.release(handle), true);
 });
@@ -453,9 +682,26 @@ test("live snapshot font contract is revalidated after asynchronous font prepara
     state.loader.prepare(state.root),
     assertCode("SnapshotExactFontContractMismatch"),
   );
-  assert.equal(state.requests.length, 1);
+  assert.equal(state.requests.length, 0);
   assert.equal(state.createCalls.length, 1);
   assert.equal(state.closeCount(), 1);
+});
+
+test("same-document navigation keeps a root-relative font session valid", async () => {
+  const bytes = new TextEncoder().encode("fixture-font-source");
+  const manifest = manifestWithFaces([[faceEvidence(digest(bytes))]]);
+  let state;
+  state = harness(manifest, {
+    bytes,
+    mutateSession() {
+      state.root.ownerDocument.baseURI = "https://example.test/another/article/";
+    },
+  });
+
+  const handle = await state.loader.prepare(state.root);
+
+  assert.equal(state.requests.length, 0);
+  assert.equal(state.loader.release(handle), true);
 });
 
 test("an existing font session revalidates live inputs without loading bytes again", async () => {
@@ -466,7 +712,7 @@ test("an existing font session revalidates live inputs without loading bytes aga
 
   assert.strictEqual(await state.loader.revalidate(state.root, handle), handle);
   assert.equal(state.contractCalls.length, 3);
-  assert.equal(state.requests.length, 1);
+  assert.equal(state.requests.length, 0);
   assert.equal(state.createCalls.length, 1);
   assert.equal(state.closeCount(), 0);
 
@@ -477,16 +723,14 @@ test("an existing font session revalidates live inputs without loading bytes aga
   );
 });
 
-test("source bytes are checked before a HarfBuzz session is created and failed loads are evicted", async () => {
+test("runtime replay trusts captured manifest digests without refetching font bytes", async () => {
   const manifest = manifestWithFaces([[faceEvidence("0".repeat(64))]]);
   const state = harness(manifest);
 
-  await assert.rejects(state.loader.prepare(state.root), assertCode("FontSourceDigestMismatch"));
-  await assert.rejects(state.loader.prepare(state.root), assertCode("FontSourceDigestMismatch"));
-
-  assert.equal(state.requests.length, 2);
-  assert.equal(state.createCalls.length, 0);
-  assert.equal(state.closeCount(), 0);
+  const handle = await state.loader.prepare(state.root);
+  assert.equal(state.requests.length, 0);
+  assert.equal(state.createCalls.length, 1);
+  assert.equal(state.loader.release(handle), true);
 });
 
 for (const [name, expectedCode, options] of [
@@ -556,7 +800,7 @@ test("the shared manifest HarfBuzz version must match the loaded session", async
   const state = harness(manifest, { bytes });
 
   await assert.rejects(state.loader.prepare(state.root), assertCode("HarfBuzzVersionMismatch"));
-  assert.equal(state.requests.length, 1);
+  assert.equal(state.requests.length, 0);
 });
 
 test("sourceOrder restores the build face priority before creating the browser session", async () => {

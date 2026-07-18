@@ -62,7 +62,10 @@ object TiqianWeb {
         ".not-prose, pre, table, .katex, .katex-display, .expressive-code, .tq-paragraph, [data-tiqian-skip]"
 
     private var installed = false
-    private val states = LinkedHashMap<HTMLElement, RootState>()
+    // DetachedRootWeakOwnership: navigation can discard a rendered article
+    // without reconstructing its semantic DOM. Weak ownership retains the
+    // source fragments only if a host later reconnects that exact element.
+    private val states: dynamic = js("new WeakMap()")
     private val progressiveJobs = LinkedHashMap<HTMLElement, ProgressiveJob>()
 
     fun install() {
@@ -82,6 +85,10 @@ object TiqianWeb {
             val root = eventRoot(event) ?: document.body ?: return@listener
             destroy(root)
         })
+        document.addEventListener("tiqian:detach", listener@{ event: Event ->
+            val root = eventRoot(event) ?: return@listener
+            detach(root)
+        })
         document.addEventListener("tiqian:enhance-all", { event: Event ->
             enhanceAll(optionsFromJs(eventOptions(event)))
         })
@@ -92,6 +99,14 @@ object TiqianWeb {
         document.addEventListener("tiqian:cancel-layout-work", listener@{ event: Event ->
             val root = eventRoot(event) ?: return@listener
             cancelProgressiveJob(root)
+        })
+        document.addEventListener("tiqian:worker-layout-request", listener@{ event: Event ->
+            val root = eventRoot(event) ?: return@listener
+            val paragraph = eventParagraph(event) ?: return@listener
+            setEventResult(
+                event,
+                workerLayoutRequest(root, paragraph, optionsFromJs(eventOptions(event))),
+            )
         })
         document.addEventListener("tiqian:refresh", listener@{ event: Event ->
             val root = eventRoot(event) ?: return@listener
@@ -113,7 +128,9 @@ object TiqianWeb {
         installTiqianCopyHandler()
         destroy(root)
         val state = createRootState(root, options)
-        for (paragraph in paragraphCandidates(root, state.options.paragraphSelector)) {
+        val candidates = paragraphCandidates(root, state.options.paragraphSelector)
+        if (rejectMissingSharedRuntimeStyles(state, candidates)) return 0
+        for (paragraph in candidates) {
             processParagraph(paragraph, state)
         }
         publishState(state)
@@ -136,7 +153,9 @@ object TiqianWeb {
         installTiqianCopyHandler()
         destroy(root)
         val state = createRootState(root, options)
-        val candidates = paragraphCandidates(root, state.options.paragraphSelector)
+        val sourceCandidates = paragraphCandidates(root, state.options.paragraphSelector)
+        if (rejectMissingSharedRuntimeStyles(state, sourceCandidates)) return
+        val candidates = sourceCandidates
             .withIndex()
             .sortedWith(
                 compareBy<IndexedValue<HTMLElement>> {
@@ -145,22 +164,11 @@ object TiqianWeb {
             )
             .map { it.value }
         val capturedMeasures = candidates.map { paragraph ->
-            val fontSize = state.options.fontSize
-                ?: parseCssPx(computedStyle(paragraph, "font-size"))
-                ?: DEFAULT_FONT_SIZE
-            effectiveLineMeasure(sourceParagraphWidth(paragraph), fontSize)
+            responsiveSourceMeasure(paragraph, state.options.fontSize)
         }
         var stale = false
-        fun liveMeasure(index: Int): Float {
-            val paragraph = candidates[index]
-            val fontSize = state.options.fontSize
-                ?: parseCssPx(computedStyle(paragraph, "font-size"))
-                ?: DEFAULT_FONT_SIZE
-            return effectiveLineMeasure(
-                sourceParagraphWidth(paragraph),
-                fontSize,
-            )
-        }
+        fun liveMeasure(index: Int): Float =
+            responsiveSourceMeasure(candidates[index], state.options.fontSize)
         val job = ProgressiveJob(
             state = state,
             kind = kind,
@@ -184,16 +192,44 @@ object TiqianWeb {
                 }
             },
             stale = { stale },
+            shouldScheduleIdle = { index ->
+                candidates.getOrNull(index)?.let(::paragraphIsWithinProgressiveForegroundRange) == false
+            },
             startedAt = performanceNow(),
         )
-        states[root] = state
+        states.set(root, state)
         publishState(state, keepEmpty = true)
         startProgressiveJob(job)
     }
 
+    /**
+     * SharedRuntimeStylesCapabilityGate: renderer-owned geometry depends on the
+     * package stylesheet for its line strut, reset, and nowrap invariants. The
+     * public ESM entry waits for that stylesheet; direct Kotlin callers must do
+     * the same instead of silently painting a second browser-owned layout.
+     */
+    private fun rejectMissingSharedRuntimeStyles(
+        state: RootState,
+        candidates: List<HTMLElement>,
+    ): Boolean {
+        if (computedStyle(state.root, "--tq-styles-ready").trim() == "1") return false
+        for (paragraph in candidates) {
+            val issue = CapabilityIssue(
+                name = "MissingSharedRuntimeStyles",
+                detail = "Load @tiqian/prose/styles.css before TiqianWeb.enhance",
+                element = paragraph,
+            )
+            state.issues += issue
+            reportIssue(issue)
+        }
+        publishState(state)
+        return true
+    }
+
     fun destroy(root: HTMLElement) {
         cancelProgressiveJob(root)
-        val state = states.remove(root)
+        val state = states.get(root) as? RootState
+        states.delete(root)
         if (state != null) {
             for (paragraph in state.paragraphs) {
                 restoreParagraph(paragraph)
@@ -206,11 +242,27 @@ object TiqianWeb {
             // belongs to the snapshot owner and must survive that no-op destroy.
             releasePreparedRootDomStyles(root)
         }
-        root.removeAttribute("data-tiqian-enhanced")
-        root.removeAttribute("data-tiqian-enhanced-count")
+        val snapshotCount = observableSnapshotCount(root)
+        if (snapshotCount > 0) {
+            root.setAttribute("data-tiqian-enhanced", "true")
+            root.setAttribute("data-tiqian-enhanced-count", "$snapshotCount")
+        } else {
+            root.removeAttribute("data-tiqian-enhanced")
+            root.removeAttribute("data-tiqian-enhanced-count")
+        }
         root.removeAttribute("data-tiqian-issue-count")
         root.removeAttribute(RELAYOUT_ERROR_ATTRIBUTE)
         root.removeAttribute(EXACT_PREPARED_FALLBACK_ATTRIBUTE)
+    }
+
+    /**
+     * Cancels a detached root and releases its document-scoped value styles
+     * without rebuilding paragraph DOM that the router is about to discard.
+     * The weak state remains available to [destroy] if the same node reconnects.
+     */
+    fun detach(root: HTMLElement) {
+        cancelProgressiveJob(root)
+        releasePreparedRootDomStyles(root)
     }
 
     private fun createRootState(root: HTMLElement, options: EnhanceOptions): RootState {
@@ -284,8 +336,74 @@ object TiqianWeb {
         }
     }
 
+    /**
+     * WorkerLayoutInputContract keeps DOM ownership on the main thread while
+     * serializing only the immutable layout model. The Worker runs the existing
+     * Lookahead engine against the already-proven exact replay session; any
+     * unsupported semantic, decoration or inline object remains native when an
+     * exact session is active; exact layout must never fall back to synchronous
+     * Kotlin/JS on the navigation thread.
+     */
+    private fun workerLayoutRequest(
+        root: HTMLElement,
+        paragraph: HTMLElement,
+        options: EnhanceOptions,
+    ): String? {
+        if (!belongsToRootScope(paragraph, root, ROOT_SELECTOR) || !shouldTryParagraph(paragraph)) {
+            return null
+        }
+        if (!options.allowsSnapshotExactLayout()) return null
+        val resolved = options.withRootDefaults(root)
+        val lowered = try {
+            MarkdownParagraphLowerer.lower(paragraph, resolved)
+        } catch (_: Throwable) {
+            null
+        } ?: return null
+        return workerLayoutRequest(paragraph, lowered, resolved)
+    }
+
+    private fun workerLayoutRequest(
+        paragraph: HTMLElement,
+        lowered: LoweredParagraph,
+        options: EnhanceOptions,
+    ): String? {
+        if (options.conformingExactFontSessionId() == null) return null
+        if (
+            lowered.decorations.isNotEmpty() || lowered.inlineObjects.isNotEmpty() ||
+            lowered.domInlineObjects.isNotEmpty() || lowered.sourceSpans.any { span ->
+                span.inlineBoxStyle.boxDecorationBreak == "clone" &&
+                    (kotlin.math.abs(span.inlineBoxStyle.inlineStart) >= INLINE_EDGE_EPSILON ||
+                        kotlin.math.abs(span.inlineBoxStyle.inlineEnd) >= INLINE_EDGE_EPSILON)
+            } || lowered.spans.any { it.style.locale != lowered.textStyle.locale }
+        ) return null
+        val rawWidth = sourceParagraphWidth(paragraph)
+        if (!rawWidth.isFinite() || rawWidth <= 0f) return null
+        // WorkerLineMeasureMatchesResponsiveGrid: the responsive coordinator
+        // intentionally treats widths within the same floor(width / fontSize)
+        // cell count as one layout input. Serialize that effective measure,
+        // not the transient CSS width observed while a window is being dragged,
+        // so preparation and commit use the same Worker plan inside the grid.
+        val measure = effectiveLineMeasure(rawWidth, lowered.textStyle.fontSize)
+        return workerLayoutRequestJson(
+            paragraph = paragraph,
+            lowered = lowered,
+            width = measure,
+            firstLineIndentIc = if (paragraph.tagName.uppercase() == "LI") {
+                0f
+            } else {
+                options.firstLineIndentIc
+            },
+        )
+    }
+
     private fun processParagraph(paragraph: HTMLElement, state: RootState) {
         if (!shouldTryParagraph(paragraph)) return
+        // Capture host-owned inline typography before any computed-style probe.
+        // CSSStyleDeclaration can leave an empty style attribute after a
+        // temporary property is removed even when the source had no attribute.
+        val originalStyleAttribute = paragraph.getAttribute("style")
+        val originalFontSize = paragraph.style.getPropertyValue("font-size")
+        val originalFontSizePriority = paragraph.style.getPropertyPriority("font-size")
         val lowered = try {
             MarkdownParagraphLowerer.lower(paragraph, state.options)
         } catch (error: Throwable) {
@@ -312,14 +430,63 @@ object TiqianWeb {
         val originalRenderedAttribute = paragraph.getAttribute("data-tq-rendered")
         val originalPreparedFlowAttribute = paragraph.getAttribute("data-tq-canonical-plain")
         val originalCanonicalSourceAttribute = paragraph.getAttribute(CANONICAL_SOURCE_ATTRIBUTE)
+        val originalExactPreparedDomAttribute = paragraph.getAttribute(EXACT_PREPARED_DOM_ATTRIBUTE)
         val originalLangAttribute = paragraph.getAttribute("lang")
-        val originalStyleAttribute = paragraph.getAttribute("style")
         val originalPosition = paragraph.style.getPropertyValue("position")
         val originalPositionPriority = paragraph.style.getPropertyPriority("position")
         val originalInlineSize = paragraph.style.getPropertyValue("inline-size")
         val originalInlineSizePriority = paragraph.style.getPropertyPriority("inline-size")
         val originalHostInlineSizeAttribute = paragraph.getAttribute(HOST_INLINE_SIZE_ATTRIBUTE)
+        val hostFontSizeApplied = applyConfiguredHostFontSize(paragraph, state.options.fontSize)
         val sourceInlineSize = captureSourceInlineSize(paragraph)
+        val activeOptions = state.activeOptions()
+        val workerRequest = workerLayoutRequest(paragraph, lowered, activeOptions)
+        val workerPlan = workerRequest?.let { request ->
+            takePreparedWorkerLayoutPlan(
+                paragraph,
+                activeOptions.conformingExactFontSessionId()!!,
+                request,
+            )
+        }
+        val workerIssue = if (workerRequest != null && workerPlan == null) {
+            preparedWorkerLayoutIssue(
+                paragraph,
+                activeOptions.conformingExactFontSessionId()!!,
+                workerRequest,
+            )
+        } else {
+            null
+        }
+        // WorkerIneligibleRichRunBrowserFallback: SSR and the exact Worker
+        // still fail closed when a semantic run has no replayable font
+        // evidence. In the live browser, a rich paragraph can shape just that
+        // unsupported run through its resolved host font while covered runs
+        // remain on the exact session. The progressive scheduler bounds this
+        // main-thread fallback to the individual paragraph slice.
+        val canUseRichBrowserFallback =
+            !lowered.isCanonicalPlainParagraph() &&
+                workerIssue?.let(::isExactFontSessionCapabilityFailureDetail) == true
+        if (
+            activeOptions.requireExactLayoutWorker &&
+            workerRequest != null &&
+            workerPlan == null &&
+            !canUseRichBrowserFallback
+        ) {
+            if (originalStyleAttribute == null) {
+                paragraph.removeAttribute("style")
+            } else {
+                paragraph.setAttribute("style", originalStyleAttribute)
+            }
+            val detail = workerIssue ?: "the exact layout Worker produced no reusable plan"
+            val issue = CapabilityIssue(
+                name = "ExactLayoutWorkerPlanUnavailable",
+                detail = detail,
+                element = paragraph,
+            )
+            state.issues += issue
+            reportIssue(issue)
+            return
+        }
         val originalContent = document.createDocumentFragment()
         while (paragraph.firstChild != null) {
             originalContent.appendChild(paragraph.firstChild!!)
@@ -329,6 +496,7 @@ object TiqianWeb {
             sourceInlineSize,
         )
         paragraph.setAttribute("data-tq-rendered", "true")
+        paragraph.setAttribute(RUNTIME_RENDER_FONT_ATTRIBUTE, "true")
         val item = EnhancedParagraph(
             source = paragraph,
             originalContent = originalContent,
@@ -336,24 +504,36 @@ object TiqianWeb {
             originalRenderedAttribute = originalRenderedAttribute,
             originalPreparedFlowAttribute = originalPreparedFlowAttribute,
             originalCanonicalSourceAttribute = originalCanonicalSourceAttribute,
+            originalExactPreparedDomAttribute = originalExactPreparedDomAttribute,
             originalLangAttribute = originalLangAttribute,
             originalStyleAttribute = originalStyleAttribute,
             originalPosition = originalPosition,
             originalPositionPriority = originalPositionPriority,
             originalInlineSize = originalInlineSize,
             originalInlineSizePriority = originalInlineSizePriority,
+            originalFontSize = originalFontSize,
+            originalFontSizePriority = originalFontSizePriority,
             originalHostInlineSizeAttribute = originalHostInlineSizeAttribute,
             hostInlineSizeApplied = hostInlineSizeApplied,
+            hostFontSizeApplied = hostFontSizeApplied,
         )
         val layoutIssue = try {
-            layoutParagraph(
-                paragraph = item,
-                options = state.activeOptions(),
-                engine = state.activeEngine(),
-                semanticExactEngine = state.activeSemanticExactEngine(),
-                browserFallbackEngine = state.activeExactFallbackEngine(),
-                onExactPreparedDomFallback = state::disableExactPreparedDom,
-            )
+            if (workerPlan == null) {
+                layoutParagraph(
+                    paragraph = item,
+                    options = activeOptions,
+                    engine = state.activeEngine(),
+                    semanticExactEngine = state.activeSemanticExactEngine(),
+                    browserFallbackEngine = state.activeExactFallbackEngine(),
+                    onExactPreparedDomFallback = state::disableExactPreparedDom,
+                )
+            } else {
+                commitWorkerPreparedParagraph(
+                    paragraph = item,
+                    workerPlan = workerPlan,
+                    onExactPreparedDomFallback = state::disableExactPreparedDom,
+                )
+            }
         } catch (error: Throwable) {
             CapabilityIssue(
                 "WebEnhancementFailure",
@@ -373,15 +553,18 @@ object TiqianWeb {
     private fun publishState(state: RootState, keepEmpty: Boolean = false) {
         val hasWork = state.paragraphs.isNotEmpty() || state.issues.isNotEmpty()
         if (!hasWork && !keepEmpty) {
-            states.remove(state.root)
+            states.delete(state.root)
             state.root.removeAttribute("data-tiqian-enhanced")
             state.root.removeAttribute("data-tiqian-enhanced-count")
             state.root.removeAttribute("data-tiqian-issue-count")
             return
         }
-        states[state.root] = state
+        states.set(state.root, state)
         state.root.setAttribute("data-tiqian-enhanced", "true")
-        state.root.setAttribute("data-tiqian-enhanced-count", "${state.paragraphs.size}")
+        state.root.setAttribute(
+            "data-tiqian-enhanced-count",
+            "${state.paragraphs.size + observableSnapshotCount(state.root)}",
+        )
         if (state.issues.isEmpty()) {
             state.root.removeAttribute("data-tiqian-issue-count")
         } else {
@@ -390,9 +573,11 @@ object TiqianWeb {
     }
 
     private fun scheduleProgressiveSlice(job: ProgressiveJob) {
-        job.frameId = window.requestAnimationFrame {
-            runProgressiveSlice(job)
-        }
+        val idle = job.shouldScheduleIdle(job.nextIndex)
+        job.scheduledSliceToken = scheduleProgressiveCallback(
+            callback = { runProgressiveSlice(job, idle) },
+            idle = idle,
+        )
     }
 
     private fun startProgressiveJob(job: ProgressiveJob) {
@@ -413,12 +598,12 @@ object TiqianWeb {
     }
 
     private fun cancelProgressiveJob(root: HTMLElement) {
-        progressiveJobs.remove(root)?.frameId?.let { window.cancelAnimationFrame(it) }
+        progressiveJobs.remove(root)?.scheduledSliceToken?.let(::cancelProgressiveCallback)
     }
 
-    private fun runProgressiveSlice(job: ProgressiveJob) {
+    private fun runProgressiveSlice(job: ProgressiveJob, idleSlice: Boolean) {
         if (progressiveJobs[job.state.root] !== job) return
-        job.frameId = null
+        job.scheduledSliceToken = null
         val sliceStartedAt = performanceNow()
         var processedInSlice = 0
         try {
@@ -429,7 +614,10 @@ object TiqianWeb {
             } while (
                 job.nextIndex < job.itemCount &&
                 processedInSlice < MAX_PROGRESSIVE_ITEMS_PER_SLICE &&
-                performanceNow() - sliceStartedAt < MAX_PROGRESSIVE_SLICE_MS
+                performanceNow() - sliceStartedAt < MAX_PROGRESSIVE_SLICE_MS &&
+                (!idleSlice || processedInSlice < MAX_PROGRESSIVE_IDLE_ITEMS_PER_SLICE) &&
+                !job.shouldScheduleIdle(job.nextIndex) &&
+                !progressiveInputIsPending()
             )
         } catch (error: Throwable) {
             job.onFailure?.invoke()
@@ -460,10 +648,14 @@ object TiqianWeb {
         if (progressiveJobs.remove(job.state.root) !== job) return
         job.state.root.removeAttribute(RELAYOUT_ERROR_ATTRIBUTE)
         publishState(job.state)
+        val runtimeEnhancedCount = job.state.paragraphs.size
+        val snapshotCount = observableSnapshotCount(job.state.root)
         if (job.kind == ProgressiveJobKind.Relayout) {
             dispatchTiqianRelayoutReady(
                 root = job.state.root,
-                enhancedCount = job.state.paragraphs.size,
+                enhancedCount = runtimeEnhancedCount + snapshotCount,
+                runtimeEnhancedCount = runtimeEnhancedCount,
+                snapshotCount = snapshotCount,
                 issueCount = job.state.issues.size,
                 durationMs = performanceNow() - job.startedAt,
                 maxSliceMs = job.maxSliceDuration,
@@ -474,7 +666,9 @@ object TiqianWeb {
         } else {
             dispatchTiqianReady(
                 root = job.state.root,
-                enhancedCount = job.state.paragraphs.size,
+                enhancedCount = runtimeEnhancedCount + snapshotCount,
+                runtimeEnhancedCount = runtimeEnhancedCount,
+                snapshotCount = snapshotCount,
                 issueCount = job.state.issues.size,
                 durationMs = performanceNow() - job.startedAt,
                 maxSliceMs = job.maxSliceDuration,
@@ -495,10 +689,14 @@ object TiqianWeb {
             durationMs = performanceNow() - job.startedAt,
             maxSliceMs = job.maxSliceDuration,
         )
+        val runtimeEnhancedCount = job.state.paragraphs.size
+        val snapshotCount = observableSnapshotCount(job.state.root)
         if (job.kind == ProgressiveJobKind.Relayout) {
             dispatchTiqianRelayoutReady(
                 root = job.state.root,
-                enhancedCount = job.state.paragraphs.size,
+                enhancedCount = runtimeEnhancedCount + snapshotCount,
+                runtimeEnhancedCount = runtimeEnhancedCount,
+                snapshotCount = snapshotCount,
                 issueCount = job.state.issues.size,
                 durationMs = performanceNow() - job.startedAt,
                 maxSliceMs = job.maxSliceDuration,
@@ -509,7 +707,9 @@ object TiqianWeb {
         } else {
             dispatchTiqianReady(
                 root = job.state.root,
-                enhancedCount = job.state.paragraphs.size,
+                enhancedCount = runtimeEnhancedCount + snapshotCount,
+                runtimeEnhancedCount = runtimeEnhancedCount,
+                snapshotCount = snapshotCount,
                 issueCount = job.state.issues.size,
                 durationMs = performanceNow() - job.startedAt,
                 maxSliceMs = job.maxSliceDuration,
@@ -528,7 +728,7 @@ object TiqianWeb {
             enhanceProgressively(root, runningJob.state.options)
             return
         }
-        val state = states[root] ?: return
+        val state = states.get(root) as? RootState ?: return
         val activeOptions = state.activeOptions()
         val activeEngine = state.activeEngine()
         val activeExactFallbackEngine = state.activeExactFallbackEngine()
@@ -595,6 +795,11 @@ object TiqianWeb {
                 onItemsFinished = commitSession::finish,
                 onFailure = commitSession::rollback,
                 stale = { commitSession.stale },
+                shouldScheduleIdle = { index ->
+                    workOrder.getOrNull(index)
+                        ?.let { paragraphIndex -> paragraphs[paragraphIndex].source }
+                        ?.let(::paragraphIsWithinProgressiveForegroundRange) == false
+                },
                 startedAt = performanceNow(),
             ),
         )
@@ -607,7 +812,7 @@ object TiqianWeb {
      * while light DOM paints the new one, producing clipped whole-line overflow.
      */
     internal fun refresh(root: HTMLElement, progressively: Boolean = true) {
-        val options = states[root]?.options ?: return
+        val options = (states.get(root) as? RootState)?.options ?: return
         if (progressively) {
             enhanceProgressively(root, options)
         } else {
@@ -650,6 +855,56 @@ object TiqianWeb {
                 is ParagraphCommitResult.Unsupported -> commit.issue
             }
         }
+    }
+
+    private fun commitWorkerPreparedParagraph(
+        paragraph: EnhancedParagraph,
+        workerPlan: String,
+        onExactPreparedDomFallback: (String) -> Unit,
+    ): CapabilityIssue? {
+        val width = paragraphWidth(paragraph)
+        paragraph.source.setAttribute(EXACT_PREPARED_DOM_ATTRIBUTE, "true")
+        paragraph.source.setAttribute(CANONICAL_SOURCE_ATTRIBUTE, "true")
+        if (paragraph.lowered.sourceSpans.isEmpty()) {
+            paragraph.source.setAttribute("data-tq-canonical-plain", "true")
+        } else {
+            paragraph.source.removeAttribute("data-tq-canonical-plain")
+        }
+        paragraph.source.setAttribute("lang", paragraph.lowered.textStyle.locale)
+        renderPreparedWorkerParagraphDom(
+            paragraph.source,
+            workerPlan,
+            paragraph.lowered.textStyle.locale,
+            paragraph.lowered.text,
+        )
+        val preparedDomIssue = validatePreparedParagraphDom(paragraph.source, width.toDouble())
+        if (preparedDomIssue != null) {
+            onExactPreparedDomFallback(preparedDomIssue)
+            releasePreparedParagraphDomStyles(paragraph.source)
+            restoreAttribute(
+                paragraph.source,
+                EXACT_PREPARED_DOM_ATTRIBUTE,
+                paragraph.originalExactPreparedDomAttribute,
+            )
+            restoreAttribute(
+                paragraph.source,
+                "data-tq-canonical-plain",
+                paragraph.originalPreparedFlowAttribute,
+            )
+            restoreAttribute(
+                paragraph.source,
+                CANONICAL_SOURCE_ATTRIBUTE,
+                paragraph.originalCanonicalSourceAttribute,
+            )
+            restoreAttribute(paragraph.source, "lang", paragraph.originalLangAttribute)
+            return CapabilityIssue(
+                name = "WorkerPreparedDomContractMismatch",
+                detail = preparedDomIssue,
+                element = paragraph.source,
+            )
+        }
+        paragraph.lastMeasure = effectiveLineMeasure(width, paragraph.lowered.textStyle.fontSize)
+        return null
     }
 
     private fun paragraphWidth(paragraph: EnhancedParagraph): Float {
@@ -698,7 +953,10 @@ object TiqianWeb {
                 sourceBoundaries = paragraph.lowered.sourceBoundaries,
             ),
             textStyle = paragraph.lowered.textStyle,
-            constraints = LayoutConstraints(maxWidth = width),
+            // EngineLineMeasureMatchesResponsiveGrid: retain the raw width in
+            // ParagraphLayoutPreparation for host-box validation, but feed the
+            // same quantized measure to every synchronous/Worker layout path.
+            constraints = LayoutConstraints(maxWidth = measure),
             paragraphStyle = ParagraphStyle(
                 lineHeight = paragraph.lowered.lineHeight,
                 firstLineIndent = if (
@@ -801,6 +1059,11 @@ object TiqianWeb {
     }
 
     private fun effectiveLineMeasure(width: Float, fontSize: Float): Float {
+        // InvalidTypographyPreservesCapabilityDiagnosis: a zero/non-finite
+        // host font size has no meaningful character grid. Keep the positive
+        // host width so shaping can report its precise zero-advance capability
+        // issue instead of failing earlier with an unrelated maxWidth error.
+        if (!fontSize.isFinite() || fontSize <= 0f) return width
         val gridCells = kotlin.math.floor(width / fontSize).toInt().coerceAtLeast(1)
         return (gridCells * fontSize).coerceAtMost(width)
     }
@@ -983,6 +1246,7 @@ object TiqianWeb {
             renderedAttribute = paragraph.source.getAttribute("data-tq-rendered"),
             preparedFlowAttribute = paragraph.source.getAttribute("data-tq-canonical-plain"),
             canonicalSourceAttribute = paragraph.source.getAttribute(CANONICAL_SOURCE_ATTRIBUTE),
+            exactPreparedDomAttribute = paragraph.source.getAttribute(EXACT_PREPARED_DOM_ATTRIBUTE),
             langAttribute = paragraph.source.getAttribute("lang"),
             styleAttribute = paragraph.source.getAttribute("style"),
             capabilityNameAttribute = paragraph.source.getAttribute("data-tiqian-capability-issue"),
@@ -1026,6 +1290,11 @@ object TiqianWeb {
                 CANONICAL_SOURCE_ATTRIBUTE,
                 snapshot.canonicalSourceAttribute,
             )
+            restoreAttribute(
+                paragraph.source,
+                EXACT_PREPARED_DOM_ATTRIBUTE,
+                snapshot.exactPreparedDomAttribute,
+            )
             restoreAttribute(paragraph.source, "lang", snapshot.langAttribute)
             restoreAttribute(paragraph.source, "style", snapshot.styleAttribute)
             restoreAttribute(
@@ -1064,7 +1333,27 @@ object TiqianWeb {
         ) {
             return false
         }
+        // PureBlockImageParagraphExclusion: Markdown commonly wraps a
+        // standalone image in <p>. A block image owns no inline text flow for
+        // Tiqian to lay out, so leave the host wrapper native without reporting
+        // a capability issue. Text mixed with a block image still enters the
+        // lowerer and fails atomically as an unsupported formatting context.
+        if (isPureBlockImageParagraph(paragraph)) return false
         if (paragraph.textContent?.isBlank() != false && !hasOpaqueInlineCandidate(paragraph)) return false
+        return true
+    }
+
+    private fun isPureBlockImageParagraph(paragraph: HTMLElement): Boolean {
+        if (paragraph.tagName.uppercase() != "P" || paragraph.textContent?.isBlank() != true) return false
+        val children = paragraph.querySelectorAll(":scope > *")
+        if (children.length == 0) return false
+        for (index in 0 until children.length) {
+            val child = children.item(index) as? Element ?: return false
+            if (
+                child.tagName.uppercase() != "IMG" ||
+                computedStyle(child, "display").trim().lowercase() != "block"
+            ) return false
+        }
         return true
     }
 
@@ -1111,6 +1400,7 @@ object TiqianWeb {
             ?: DEFAULT_EMPHASIS_DOT_GAP_EM
         val strongAsEmphasisMarks = optionBoolean(options, "strongAsEmphasisMarks") ?: false
         val paragraphSelector = optionString(options, "paragraphSelector") ?: DEFAULT_PARAGRAPH_SELECTOR
+        val requireExactLayoutWorker = optionBoolean(options, "requireExactLayoutWorker") ?: false
         val dashCapabilityObject = optionObject(options, "cjkDashCapability")
         val dashCapability = dashCapabilityObject?.let { capability ->
             WebCjkDashCapability(
@@ -1128,7 +1418,6 @@ object TiqianWeb {
         }
         return EnhanceOptions(
             fontFamilies = FontFamilyOptions(cjk, latin, monospace, cjkSerif, latinSerif),
-            monospaceFontContractExplicit = monospace != null,
             fontSize = fontSize,
             lineHeight = lineHeight,
             firstLineIndentIc = firstLineIndent,
@@ -1137,6 +1426,7 @@ object TiqianWeb {
             paragraphSelector = paragraphSelector,
             cjkDashCapability = dashCapability,
             exactFontSession = exactFontSession,
+            requireExactLayoutWorker = requireExactLayoutWorker,
         )
     }
 
@@ -1147,7 +1437,6 @@ object TiqianWeb {
 
     data class EnhanceOptions(
         val fontFamilies: FontFamilyOptions = FontFamilyOptions(),
-        internal val monospaceFontContractExplicit: Boolean = false,
         val fontSize: Float? = null,
         val lineHeight: Float? = null,
         val firstLineIndentIc: Float = 0f,
@@ -1156,17 +1445,24 @@ object TiqianWeb {
         val paragraphSelector: String = DEFAULT_PARAGRAPH_SELECTOR,
         val cjkDashCapability: WebCjkDashCapability? = null,
         val exactFontSession: ExactFontSessionCapability? = null,
+        /**
+         * Internal custom-element contract: every Worker-representable exact
+         * layout must commit its prepared plan. Rich paragraphs outside that
+         * contract retain the sliced browser-shaping path.
+         */
+        val requireExactLayoutWorker: Boolean = false,
     ) {
         lateinit var fonts: WebFontFamilies
             private set
 
         fun withRootDefaults(root: HTMLElement): EnhanceOptions {
+            require(fontSize == null || (fontSize.isFinite() && fontSize > 0f)) {
+                "InvalidFontSize"
+            }
             val inheritedFontFamily = computedStyle(root, "font-family").trim().takeIf { it.isNotBlank() }
             val resolvedCjk = fontFamilies.cjk ?: inheritedFontFamily ?: DEFAULT_CJK_FONT_FAMILY
             val resolvedLatin = fontFamilies.latin ?: inheritedFontFamily ?: DEFAULT_LATIN_FONT_FAMILY
             val resolved = copy(
-                monospaceFontContractExplicit =
-                    monospaceFontContractExplicit || fontFamilies.monospace != null,
                 fontFamilies = fontFamilies.copy(
                     cjk = resolvedCjk,
                     latin = resolvedLatin,
@@ -1262,9 +1558,10 @@ object TiqianWeb {
         val onItemsFinished: (() -> Unit)? = null,
         val onFailure: (() -> Unit)? = null,
         val stale: (() -> Boolean)? = null,
+        val shouldScheduleIdle: (Int) -> Boolean = { false },
         val startedAt: Double,
         var nextIndex: Int = 0,
-        var frameId: Int? = null,
+        var scheduledSliceToken: JsAny? = null,
         var maxSliceDuration: Double = 0.0,
         var commitSkipped: Boolean = false,
     )
@@ -1295,16 +1592,20 @@ object TiqianWeb {
         val originalRenderedAttribute: String?,
         val originalPreparedFlowAttribute: String?,
         val originalCanonicalSourceAttribute: String?,
+        val originalExactPreparedDomAttribute: String?,
         val originalLangAttribute: String?,
         val originalStyleAttribute: String?,
         val originalPosition: String,
         val originalPositionPriority: String,
         val originalInlineSize: String,
         val originalInlineSizePriority: String,
+        val originalFontSize: String,
+        val originalFontSizePriority: String,
         val originalHostInlineSizeAttribute: String?,
         var lastMeasure: Float? = null,
         var containingBlockApplied: Boolean = false,
         var hostInlineSizeApplied: String? = null,
+        val hostFontSizeApplied: String? = null,
     )
 
     private data class SourceInlineSize(
@@ -1319,6 +1620,7 @@ object TiqianWeb {
         val renderedAttribute: String?,
         val preparedFlowAttribute: String?,
         val canonicalSourceAttribute: String?,
+        val exactPreparedDomAttribute: String?,
         val langAttribute: String?,
         val styleAttribute: String?,
         val capabilityNameAttribute: String?,
@@ -1355,6 +1657,31 @@ object TiqianWeb {
             borderBoxSizing =
                 computedStyle(paragraph, "box-sizing").trim().lowercase() == "border-box",
         )
+
+    private fun applyConfiguredHostFontSize(paragraph: HTMLElement, fontSize: Float?): String? {
+        if (fontSize == null) return null
+        paragraph.style.setProperty("font-size", "${fontSize}px", "important")
+        return paragraph.style.getPropertyValue("font-size")
+    }
+
+    private fun responsiveSourceMeasure(paragraph: HTMLElement, configuredFontSize: Float?): Float {
+        if (configuredFontSize == null) {
+            val computedFontSize = parseCssPx(computedStyle(paragraph, "font-size"))
+                ?: DEFAULT_FONT_SIZE
+            return effectiveLineMeasure(sourceParagraphWidth(paragraph), computedFontSize)
+        }
+        val originalStyle = paragraph.getAttribute("style")
+        paragraph.style.setProperty("font-size", "${configuredFontSize}px", "important")
+        return try {
+            effectiveLineMeasure(sourceParagraphWidth(paragraph), configuredFontSize)
+        } finally {
+            if (originalStyle == null) {
+                paragraph.removeAttribute("style")
+            } else {
+                paragraph.setAttribute("style", originalStyle)
+            }
+        }
+    }
 
     private fun stabilizeContentSizedItemInlineSize(
         paragraph: HTMLElement,
@@ -1407,6 +1734,12 @@ object TiqianWeb {
             CANONICAL_SOURCE_ATTRIBUTE,
             paragraph.originalCanonicalSourceAttribute,
         )
+        restoreAttribute(
+            paragraph.source,
+            EXACT_PREPARED_DOM_ATTRIBUTE,
+            paragraph.originalExactPreparedDomAttribute,
+        )
+        paragraph.source.removeAttribute(RUNTIME_RENDER_FONT_ATTRIBUTE)
         restoreAttribute(paragraph.source, "lang", paragraph.originalLangAttribute)
         if (paragraph.containingBlockApplied &&
             paragraph.source.style.getPropertyValue("position") == "relative" &&
@@ -1439,13 +1772,31 @@ object TiqianWeb {
                 )
             }
         }
+        val appliedFontSize = paragraph.hostFontSizeApplied
+        if (
+            appliedFontSize != null &&
+            paragraph.source.style.getPropertyValue("font-size") == appliedFontSize &&
+            paragraph.source.style.getPropertyPriority("font-size") == "important"
+        ) {
+            if (paragraph.originalFontSize.isEmpty()) {
+                paragraph.source.style.removeProperty("font-size")
+            } else {
+                paragraph.source.style.setProperty(
+                    "font-size",
+                    paragraph.originalFontSize,
+                    paragraph.originalFontSizePriority,
+                )
+            }
+        }
         restoreAttribute(
             paragraph.source,
             HOST_INLINE_SIZE_ATTRIBUTE,
             paragraph.originalHostInlineSizeAttribute,
         )
         if (paragraph.originalStyleAttribute == null) {
-            removeEmptyStyleAttribute(paragraph.source)
+            if (paragraph.source.getAttribute("style")?.isBlank() != false) {
+                paragraph.source.removeAttribute("style")
+            }
         }
         paragraph.containingBlockApplied = false
         paragraph.hostInlineSizeApplied = null
@@ -1479,12 +1830,40 @@ private object MarkdownParagraphLowerer {
         val canonicalPrepared =
             paragraph.getAttribute("data-tq-rendered") == "true" &&
                 paragraph.getAttribute("data-tq-canonical-plain") == "true"
-        return if (canonicalPrepared) {
-            withCanonicalPreparedHostStyleProbe(paragraph) {
-                lowerWithCurrentStyles(paragraph, options, canonicalPrepared = true)
+        return withConfiguredFontSizeProbe(paragraph, options.fontSize) {
+            if (canonicalPrepared) {
+                withCanonicalPreparedHostStyleProbe(paragraph) {
+                    lowerWithCurrentStyles(paragraph, options, canonicalPrepared = true)
+                }
+            } else {
+                lowerWithCurrentStyles(paragraph, options, canonicalPrepared = false)
             }
-        } else {
-            lowerWithCurrentStyles(paragraph, options, canonicalPrepared = false)
+        }
+    }
+
+    /**
+     * ConfiguredFontSizeSingleSource: an explicit engine font size must be live
+     * while descendant computed styles are sampled. Otherwise inherited links
+     * and code runs are lowered at the host size even though the base run is
+     * measured at the override. The host is restored before custody transfer;
+     * the renderer then applies the same size for the enhanced paragraph.
+     */
+    private fun <T> withConfiguredFontSizeProbe(
+        paragraph: HTMLElement,
+        fontSize: Float?,
+        block: () -> T,
+    ): T {
+        if (fontSize == null) return block()
+        val originalStyle = paragraph.getAttribute("style")
+        paragraph.style.setProperty("font-size", "${fontSize}px", "important")
+        return try {
+            block()
+        } finally {
+            if (originalStyle == null) {
+                paragraph.removeAttribute("style")
+            } else {
+                paragraph.setAttribute("style", originalStyle)
+            }
         }
     }
 
@@ -1536,7 +1915,6 @@ private object MarkdownParagraphLowerer {
             baseInlineStyle = baseInlineStyle,
             baseLineHeight = lineHeight,
             strongAsEmphasisMarks = options.strongAsEmphasisMarks,
-            monospaceFontContractExplicit = options.monospaceFontContractExplicit,
         )
         if (!builder.appendChildren(paragraph, baseInlineStyle, depth = 0)) {
             return null
@@ -1580,7 +1958,6 @@ private object MarkdownParagraphLowerer {
         private val baseInlineStyle: InlineStyle,
         private val baseLineHeight: Float,
         private val strongAsEmphasisMarks: Boolean,
-        private val monospaceFontContractExplicit: Boolean,
     ) {
         val text = StringBuilder()
         private val spans = mutableListOf<TextSpan>()
@@ -1620,9 +1997,6 @@ private object MarkdownParagraphLowerer {
                 appendRawText("\n", style.whiteSpace)
                 return true
             }
-            generatedPseudoContentIssue(element)?.let { detail ->
-                return unsupported("UnsupportedGeneratedInlineContent", detail)
-            }
             val display = computedStyle(element, "display").trim().lowercase()
             val opaqueCandidate = tag in NON_TEXT_INLINE_TAGS ||
                 tag.contains('-') ||
@@ -1645,22 +2019,11 @@ private object MarkdownParagraphLowerer {
                     "${tag.lowercase()}:$display",
                 )
             }
-            // InlineCodeRequiresKnownFontFace: the browser may resolve a
-            // generic monospace fallback that is absent from the shaping
-            // contract. Its advances cannot be replayed reliably. Accept a
-            // code run only when the caller explicitly supplied the
-            // monospace contract or the computed family names a loaded CSS
-            // FontFace; otherwise keep the whole semantic paragraph native.
-            if (
-                tag == "CODE" &&
-                !monospaceFontContractExplicit &&
-                !hasLoadedDeclaredFontFace(element)
-            ) {
-                return unsupported(
-                    "InlineCodeFontFaceUnavailable",
-                    computedStyle(element, "font-family").trim(),
-                )
-            }
+            // RuntimeInlineCodeUsesResolvedBrowserFont: build-time snapshots
+            // must fail closed without exact monospace font/box evidence, but
+            // the live browser already exposes the resolved host font and box
+            // metrics. Lower that run normally and let the sliced browser
+            // shaping fallback handle Worker-ineligible rich paragraphs.
             inlineShapingStyleIssue(element, sourceElement)?.let { property ->
                 return unsupported(
                     "UnsupportedInlineShapingStyle",
@@ -1926,6 +2289,100 @@ data class LoweredParagraph(
     val sourceBoundaries: Set<Int>,
 )
 
+private const val WORKER_RECORD_SEPARATOR = '\u001e'
+private const val WORKER_FIELD_SEPARATOR = '\u001d'
+private const val WORKER_FAMILY_SEPARATOR = '\u001f'
+
+private fun workerLayoutRequestJson(
+    paragraph: HTMLElement,
+    lowered: LoweredParagraph,
+    width: Float,
+    firstLineIndentIc: Float,
+): String {
+    val textSpans = lowered.spans.joinToString(WORKER_RECORD_SEPARATOR.toString()) { span ->
+        listOf(
+            span.range.start,
+            span.range.end,
+            span.style.fontFamilies.joinToString(WORKER_FAMILY_SEPARATOR.toString()),
+            span.style.fontSize,
+            span.style.fontWeight,
+            span.style.italic,
+            span.style.baselineShift,
+        ).joinToString(WORKER_FIELD_SEPARATOR.toString())
+    }
+    val inlineBoxes = lowered.inlineBoxes.joinToString(WORKER_RECORD_SEPARATOR.toString()) { box ->
+        listOf(
+            box.range.start,
+            box.range.end,
+            box.inlineStart,
+            box.inlineEnd,
+        ).joinToString(WORKER_FIELD_SEPARATOR.toString())
+    }
+    return buildString {
+        append('{')
+        append("\"text\":").appendWorkerJsonString(lowered.text).append(',')
+        append("\"maxWidthPx\":").append(width).append(',')
+        append("\"fontFamilies\":").appendWorkerJsonString(
+            lowered.textStyle.fontFamilies.joinToString(WORKER_FAMILY_SEPARATOR.toString()),
+        ).append(',')
+        append("\"fontSizePx\":").append(lowered.textStyle.fontSize).append(',')
+        append("\"lineHeightPx\":").append(lowered.lineHeight).append(',')
+        append("\"locale\":").appendWorkerJsonString(lowered.textStyle.locale).append(',')
+        append("\"fontWeight\":").append(lowered.textStyle.fontWeight).append(',')
+        append("\"italic\":").append(lowered.textStyle.italic).append(',')
+        append("\"firstLineIndentIc\":").append(firstLineIndentIc).append(',')
+        append("\"sourceBoundaries\":").appendWorkerJsonString(
+            lowered.sourceBoundaries.sorted().joinToString(","),
+        ).append(',')
+        append("\"textSpans\":").appendWorkerJsonString(textSpans).append(',')
+        append("\"inlineBoxes\":").appendWorkerJsonString(inlineBoxes).append(',')
+        append("\"semantics\":[")
+        lowered.sourceSpans.forEachIndexed { index, span ->
+            if (index > 0) append(',')
+            append('{')
+            append("\"start\":").append(span.range.start).append(',')
+            append("\"end\":").append(span.range.end).append(',')
+            append("\"tagName\":").appendWorkerJsonString(span.element.tagName.lowercase()).append(',')
+            append("\"attributes\":").append(elementAttributesJson(span.element)).append(',')
+            append("\"order\":").append(index)
+            append('}')
+        }
+        append("],\"renderInlineBoxes\":[")
+        lowered.inlineBoxes.forEachIndexed { index, box ->
+            if (index > 0) append(',')
+            append('{')
+            append("\"start\":").append(box.range.start).append(',')
+            append("\"end\":").append(box.range.end).append(',')
+            append("\"inlineStartPx\":").append(box.inlineStart).append(',')
+            append("\"inlineEndPx\":").append(box.inlineEnd)
+            append('}')
+        }
+        append("],\"sourceTag\":").appendWorkerJsonString(paragraph.tagName.lowercase())
+        append('}')
+    }
+}
+
+private fun StringBuilder.appendWorkerJsonString(value: String): StringBuilder {
+    append('"')
+    for (char in value) {
+        when (char) {
+            '"' -> append("\\\"")
+            '\\' -> append("\\\\")
+            '\b' -> append("\\b")
+            '\u000c' -> append("\\f")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            else -> if (char.code < 0x20) {
+                append("\\u").append(char.code.toString(16).padStart(4, '0'))
+            } else {
+                append(char)
+            }
+        }
+    }
+    return append('"')
+}
+
 private fun LoweredParagraph.isCanonicalPlainParagraph(): Boolean =
     spans.isEmpty() &&
         decorations.isEmpty() &&
@@ -1935,9 +2392,11 @@ private fun LoweredParagraph.isCanonicalPlainParagraph(): Boolean =
         sourceSpans.isEmpty()
 
 private fun isExactFontSessionCapabilityFailure(error: Throwable): Boolean {
-    val detail = error.message.orEmpty()
-    return EXACT_FONT_SESSION_CAPABILITY_FAILURES.any(detail::contains)
+    return isExactFontSessionCapabilityFailureDetail(error.message.orEmpty())
 }
+
+private fun isExactFontSessionCapabilityFailureDetail(detail: String): Boolean =
+    EXACT_FONT_SESSION_CAPABILITY_FAILURES.any(detail::contains)
 
 /**
  * SemanticExactRunFallback: rich paragraphs may intentionally introduce a
@@ -2241,11 +2700,11 @@ private fun inlineShapingStyleIssue(element: Element, paragraph: Element): Strin
             computedStyle(paragraph, property).trim().lowercase()
     }
 
-// GeneratedInlineContentMustStayNative: CSS ::before/::after content occupies
-// line advance but is absent from the source-text and copy/accessibility model.
-// Until LayoutResult can represent that generated run explicitly, accepting it
-// would make measured breaks diverge from the host DOM (for example footnote
-// brackets emitted around an inline anchor).
+// RootGeneratedInlineContentMustStayNative: a pseudo directly on the paragraph
+// has no source range to which InlineBoxSpan can attach. Descendant semantic
+// elements are supported instead: measuredInlineEdge() reserves their actual
+// ::before/::after advance while the one cloned semantic element keeps the host
+// pseudo, copy, accessibility and interaction behavior intact.
 private fun generatedPseudoContentIssue(element: Element): String? {
     for (pseudo in listOf("::before", "::after")) {
         val content = flowParticipatingPseudoContent(element, pseudo)?.trim()
@@ -2345,8 +2804,12 @@ private fun parseCssItalic(value: String): Boolean? {
 }
 @JsFun("(event) => event.detail && event.detail.root ? event.detail.root : null")
 private external fun eventRoot(event: Event): HTMLElement?
+@JsFun("(event) => event.detail && event.detail.paragraph ? event.detail.paragraph : null")
+private external fun eventParagraph(event: Event): HTMLElement?
 @JsFun("(event) => event.detail && event.detail.options ? event.detail.options : null")
 private external fun eventOptions(event: Event): JsAny?
+@JsFun("(event, value) => { if (event.detail) event.detail.result = value; }")
+private external fun setEventResult(event: Event, value: String?)
 @JsFun("(options, name) => options && options[name] != null ? String(options[name]) : null")
 private external fun optionString(options: JsAny?, name: String): String?
 @JsFun("(options, name) => { if (!options || options[name] == null) return NaN; const number = Number(options[name]); return Number.isFinite(number) ? number : NaN; }")
@@ -2360,6 +2823,41 @@ private external fun renderPreparedParagraphDom(
     host: HTMLElement,
     planJson: String,
     locale: String,
+): JsAny?
+@JsFun("(element) => JSON.stringify(Array.from(element.attributes || [], (attribute) => [attribute.name, attribute.value]))")
+private external fun elementAttributesJson(element: Element): String
+@JsFun("(element, sessionKey, requestText) => globalThis.__TiqianLayoutWorker && typeof globalThis.__TiqianLayoutWorker.take === 'function' ? globalThis.__TiqianLayoutWorker.take(element, sessionKey, requestText) : null")
+private external fun takePreparedWorkerLayoutPlan(
+    element: HTMLElement,
+    sessionKey: String,
+    requestText: String,
+): String?
+@JsFun("(element, sessionKey, requestText) => globalThis.__TiqianLayoutWorker && typeof globalThis.__TiqianLayoutWorker.issue === 'function' ? globalThis.__TiqianLayoutWorker.issue(element, sessionKey, requestText) : null")
+private external fun preparedWorkerLayoutIssue(
+    element: HTMLElement,
+    sessionKey: String,
+    requestText: String,
+): String?
+@JsFun(
+    """(host, recordJson, locale, sourceText) => {
+      const record = JSON.parse(recordJson);
+      return globalThis.__TiqianPreparedDomRenderer.render(
+        host,
+        record.plan,
+        locale,
+        {
+          sourceText,
+          semantics: record.semantics || [],
+          inlineBoxes: record.inlineBoxes || []
+        }
+      );
+    }""",
+)
+private external fun renderPreparedWorkerParagraphDom(
+    host: HTMLElement,
+    recordJson: String,
+    locale: String,
+    sourceText: String,
 ): JsAny?
 @JsFun("(host) => !!(globalThis.__TiqianPreparedDomRenderer && globalThis.__TiqianPreparedDomRenderer.release && globalThis.__TiqianPreparedDomRenderer.release(host) === true)")
 private external fun releasePreparedParagraphDomStyles(host: HTMLElement): Boolean
@@ -2376,8 +2874,90 @@ private external fun validatePreparedParagraphDom(host: HTMLElement, width: Doub
     }""",
 )
 private external fun paragraphViewportDistance(element: HTMLElement): Double
+@JsFun(
+    """(element) => {
+      const rect = element.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+      return rect.bottom >= 0 && rect.top <= viewportHeight;
+    }""",
+)
+private external fun paragraphIsWithinProgressiveForegroundRange(element: HTMLElement): Boolean
+@JsFun(
+    """() => {
+      try {
+        return typeof navigator !== "undefined" && navigator.scheduling &&
+          typeof navigator.scheduling.isInputPending === "function" &&
+          navigator.scheduling.isInputPending({ includeContinuous: true }) === true;
+      } catch (error) {
+        return false;
+      }
+    }""",
+)
+private external fun progressiveInputIsPending(): Boolean
+@JsFun(
+    """(callback, idle) => {
+      const MINIMUM_IDLE_BUDGET_MS = 8;
+      const token = { kind: "cooperative", idleId: 0, frameId: 0 };
+      const inputIsPending = () => {
+        try {
+          return typeof navigator !== "undefined" && navigator.scheduling &&
+            typeof navigator.scheduling.isInputPending === "function" &&
+            navigator.scheduling.isInputPending({ includeContinuous: true }) === true;
+        } catch (error) {
+          return false;
+        }
+      };
+      const scheduleFrame = (continuation) => {
+        token.frameId = requestAnimationFrame(() => {
+          token.frameId = 0;
+          if (inputIsPending()) scheduleFrame(continuation);
+          else continuation();
+        });
+      };
+      if (idle) {
+        // PendingInputAwareIdleTail: layout is already complete in the Worker;
+        // each callback commits at most one offscreen paragraph. A normal
+        // 60 Hz idle period cannot provide the old 20 ms threshold, so waiting
+        // for it made a quiet resized article advance only once per timeout.
+        // Require one 8 ms commit slice, and yield only to input that is still
+        // pending rather than to an arbitrary post-scroll quiet window.
+        const requestWhenIdle = () => {
+          if (typeof requestIdleCallback === "function" &&
+              typeof cancelIdleCallback === "function") {
+            token.idleId = requestIdleCallback((deadline) => {
+              token.idleId = 0;
+              if (inputIsPending() || (!deadline.didTimeout &&
+                  deadline.timeRemaining() < MINIMUM_IDLE_BUDGET_MS)) {
+                scheduleFrame(requestWhenIdle);
+              } else {
+                callback();
+              }
+            }, { timeout: 1000 });
+          } else {
+            scheduleFrame(callback);
+          }
+        };
+        requestWhenIdle();
+        return token;
+      }
+      scheduleFrame(callback);
+      return token;
+    }""",
+)
+private external fun scheduleProgressiveCallback(callback: () -> Unit, idle: Boolean): JsAny
+@JsFun(
+    """(token) => {
+      if (token.idleId && typeof cancelIdleCallback === "function") cancelIdleCallback(token.idleId);
+      if (token.frameId) cancelAnimationFrame(token.frameId);
+    }""",
+)
+private external fun cancelProgressiveCallback(token: JsAny)
 @JsFun("(element) => { const style = getComputedStyle(element); const number = (value) => Number.parseFloat(value) || 0; return element.getBoundingClientRect().width - number(style.paddingLeft) - number(style.paddingRight) - number(style.borderLeftWidth) - number(style.borderRightWidth); }")
 private external fun elementContentWidth(element: HTMLElement): Double
+// NestedInlineBoxEdgeOwnership: compare an inline's flow edge with its direct
+// in-flow content boundary. A descendant semantic box owns its own padding,
+// margins and pseudo content, so an outer <sup>/<span> must not reserve that
+// same edge again merely because Range.getClientRects() ends on a deep text leaf.
 @JsFun(
     """(element, side) => {
       const style = getComputedStyle(element);
@@ -2386,14 +2966,48 @@ private external fun elementContentWidth(element: HTMLElement): Double
       ) || 0;
       const boxes = Array.from(element.getClientRects()).filter((rect) => rect.width || rect.height);
       if (!boxes.length) return margin;
-      const range = document.createRange();
-      range.selectNodeContents(element);
-      const content = Array.from(range.getClientRects()).filter((rect) => rect.width || rect.height);
-      if (!content.length) return margin;
-      const edge = side === "start"
-        ? Math.max(0, content[0].left - boxes[0].left)
-        : Math.max(0, boxes[boxes.length - 1].right - content[content.length - 1].right);
-      return edge + margin;
+      const boundary = (node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          const rects = Array.from(range.getClientRects()).filter((rect) => rect.width || rect.height);
+          if (!rects.length) return null;
+          return side === "start" ? rects[0].left : rects[rects.length - 1].right;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) return null;
+        const childStyle = getComputedStyle(node);
+        if (childStyle.display === "none" || childStyle.position === "absolute" ||
+            childStyle.position === "fixed") return null;
+        const rects = Array.from(node.getClientRects()).filter((rect) => rect.width || rect.height);
+        if (rects.length) {
+          const rect = side === "start" ? rects[0] : rects[rects.length - 1];
+          const childMargin = Number.parseFloat(
+            side === "start" ? childStyle.marginLeft : childStyle.marginRight
+          ) || 0;
+          return side === "start" ? rect.left - childMargin : rect.right + childMargin;
+        }
+        const children = Array.from(node.childNodes);
+        if (side === "end") children.reverse();
+        for (const child of children) {
+          const value = boundary(child);
+          if (value != null) return value;
+        }
+        return null;
+      };
+      const children = Array.from(element.childNodes);
+      if (side === "end") children.reverse();
+      let contentBoundary = null;
+      for (const child of children) {
+        contentBoundary = boundary(child);
+        if (contentBoundary != null) break;
+      }
+      if (contentBoundary == null) return margin;
+      const flowEdge = side === "start"
+        ? boxes[0].left - margin
+        : boxes[boxes.length - 1].right + margin;
+      return side === "start"
+        ? Math.max(0, contentBoundary - flowEdge)
+        : Math.max(0, flowEdge - contentBoundary);
     }""",
 )
 private external fun measuredInlineEdge(element: Element, side: String): Double
@@ -2477,45 +3091,6 @@ private external fun computedStyle(element: Element, property: String): String
 )
 private external fun flowParticipatingPseudoContent(element: Element, pseudo: String): String?
 @JsFun(
-    """(element) => {
-      const fonts = document.fonts;
-      if (!fonts || typeof fonts[Symbol.iterator] !== "function") return false;
-      const normalize = (family) => String(family || "")
-        .trim()
-        .replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, (_, doubleQuoted, singleQuoted) =>
-          doubleQuoted != null ? doubleQuoted : (singleQuoted != null ? singleQuoted : ""))
-        .normalize("NFC")
-        .toLocaleLowerCase("en-US");
-      const requested = new Set();
-      let token = "";
-      let quote = null;
-      for (const character of getComputedStyle(element).fontFamily) {
-        if (quote && character === quote) {
-          quote = null;
-          token += character;
-        } else if (quote) {
-          token += character;
-        } else if (character === "'" || character === '"') {
-          quote = character;
-          token += character;
-        } else if (character === ",") {
-          requested.add(normalize(token));
-          token = "";
-        } else {
-          token += character;
-        }
-      }
-      requested.add(normalize(token));
-      requested.delete("");
-      return Array.from(fonts).some((face) =>
-        face && face.status === "loaded" && requested.has(normalize(face.family))
-      );
-    }""",
-)
-private external fun hasLoadedDeclaredFontFace(element: Element): Boolean
-@JsFun("(element) => { if (!(element.getAttribute('style') || '').trim()) element.removeAttribute('style'); }")
-private external fun removeEmptyStyleAttribute(element: HTMLElement)
-@JsFun(
     """() => typeof Intl !== 'undefined' && Intl.Segmenter
       ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
       : null""",
@@ -2550,19 +3125,25 @@ private external fun belongsToRootScope(paragraph: HTMLElement, root: HTMLElemen
 private external fun consoleWarn(message: String)
 @JsFun("() => performance.now()")
 private external fun performanceNow(): Double
-@JsFun("(root, enhancedCount, issueCount, durationMs, maxSliceMs, stale) => root.dispatchEvent(new CustomEvent('tiqian:ready', { detail: { enhancedCount, issueCount, durationMs, maxSliceMs, stale } }))")
+@JsFun("(root) => { const value = Number(root.getAttribute('data-tiqian-snapshot-count')); return Number.isSafeInteger(value) && value > 0 ? value : 0; }")
+private external fun observableSnapshotCount(root: HTMLElement): Int
+@JsFun("(root, enhancedCount, runtimeEnhancedCount, snapshotCount, issueCount, durationMs, maxSliceMs, stale) => root.dispatchEvent(new CustomEvent('tiqian:ready', { detail: { enhancedCount, runtimeEnhancedCount, snapshotCount, issueCount, durationMs, maxSliceMs, stale } }))")
 private external fun dispatchTiqianReady(
     root: HTMLElement,
     enhancedCount: Int,
+    runtimeEnhancedCount: Int,
+    snapshotCount: Int,
     issueCount: Int,
     durationMs: Double,
     maxSliceMs: Double,
     stale: Boolean,
 )
-@JsFun("(root, enhancedCount, issueCount, durationMs, maxSliceMs, failed, error, stale) => root.dispatchEvent(new CustomEvent('tiqian:relayout-ready', { detail: { enhancedCount, issueCount, durationMs, maxSliceMs, relayout: true, failed, error, stale } }))")
+@JsFun("(root, enhancedCount, runtimeEnhancedCount, snapshotCount, issueCount, durationMs, maxSliceMs, failed, error, stale) => root.dispatchEvent(new CustomEvent('tiqian:relayout-ready', { detail: { enhancedCount, runtimeEnhancedCount, snapshotCount, issueCount, durationMs, maxSliceMs, relayout: true, failed, error, stale } }))")
 private external fun dispatchTiqianRelayoutReady(
     root: HTMLElement,
     enhancedCount: Int,
+    runtimeEnhancedCount: Int,
+    snapshotCount: Int,
     issueCount: Int,
     durationMs: Double,
     maxSliceMs: Double,
@@ -2595,6 +3176,16 @@ private fun installTiqianGlobalApiBridge() {
                 detail: { root: root || document.body, options: options || {} }
               }));
               return root || document.body;
+            },
+            workerLayoutRequest(root, paragraph, options) {
+              var detail = {
+                root: root || document.body,
+                paragraph: paragraph,
+                options: options || {},
+                result: null
+              };
+              document.dispatchEvent(new CustomEvent("tiqian:worker-layout-request", { detail }));
+              return detail.result;
             },
             destroy(root) {
               document.dispatchEvent(new CustomEvent("tiqian:destroy", {
@@ -2751,7 +3342,14 @@ private const val ZERO_ADVANCE_EPSILON = 0.01f
 private const val CAPABILITY_DETAIL_LIMIT = 512
 private const val MAX_PROGRESSIVE_SLICE_MS = 8.0
 private const val MAX_PROGRESSIVE_ITEMS_PER_SLICE = 8
+// ViewportForegroundIdleTail: visible and one-viewport-adjacent paragraphs
+// receive frame-budgeted work. The remaining native source stays responsive
+// and advances one paragraph per input-gapped idle callback so long articles
+// cannot occupy every animation frame during scrolling or window resizing.
+private const val MAX_PROGRESSIVE_IDLE_ITEMS_PER_SLICE = 1
 private const val CANONICAL_SOURCE_ATTRIBUTE = "data-tq-canonical-source"
+private const val EXACT_PREPARED_DOM_ATTRIBUTE = "data-tq-exact-prepared-dom"
+private const val RUNTIME_RENDER_FONT_ATTRIBUTE = "data-tq-runtime-render-font"
 private const val HOST_INLINE_SIZE_ATTRIBUTE = "data-tq-host-inline-size"
 private const val RELAYOUT_ERROR_ATTRIBUTE = "data-tiqian-relayout-error"
 private const val EXACT_PREPARED_FALLBACK_ATTRIBUTE = "data-tiqian-exact-layout-fallback"

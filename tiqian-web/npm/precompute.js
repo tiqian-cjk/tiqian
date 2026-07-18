@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 import { createBuildFontSession } from "./precompute-node-fonts.js";
 import { requiredCjkDashContractInput } from "./font-contract.js";
@@ -23,6 +24,7 @@ const FIELD_SEPARATOR = "\u001d";
 const PLAIN_PARAGRAPH_SELECTOR = ":is(p, li)[data-tq-snapshot-key]";
 const RUNTIME_PARAGRAPH_SELECTOR = ":is(p, li):not([data-tiqian-skip])";
 const SNAPSHOT_LOCALE = "zh-Hans";
+const SHARED_RUNTIME_STYLE = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 const PARAGRAPH_CAPABILITY_ISSUES = [
   "NoExactFontFace",
   "MissingGlyph",
@@ -212,12 +214,10 @@ function cssString(value) {
   return `"${String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }
 
-function exactRenderFontStyle(id, renderFontFamilies) {
+function exactRenderFontStyle(id) {
   const root = `:is(tiqian-prose,[data-tiqian-root])[snapshot-ref=${cssString(id)}]`;
   const prepared = `${root}[data-tiqian-exact-render-font=true]:not([data-tiqian-exact-layout-fallback]) [data-tq-rendered=true]:is([data-tq-canonical-plain=true],[data-tq-exact-prepared-dom=true])`;
-  return `${root}{--tq-exact-render-font-family:${renderFontFamilies.map(cssString).join(",")}}` +
-    `${prepared}{font-family:var(--tq-exact-render-font-family)!important;` +
-    `font-kerning:normal!important;font-optical-sizing:none!important}`;
+  return `${prepared}{font-kerning:normal!important;font-optical-sizing:none!important}`;
 }
 
 function clientFontContractManifest(manifest) {
@@ -270,7 +270,10 @@ export { renderPreparedParagraph } from "./prepared-dom.js";
 
 export async function createPrecomputer(options = {}) {
   const typography = normalizeTypography(options.typography);
-  const fontSession = await createBuildFontSession(options.faces, {
+  const fontSession = await createBuildFontSession({
+    faces: options.faces,
+    fontStylesheets: options.fontStylesheets,
+  }, {
     baseFeatures: typography.fontVariantNumeric === "lining-nums" ? ["lnum"] : [],
   });
   const renderFontFamilies = fontSession.renderFamilies(typography.fontFamilies);
@@ -302,6 +305,12 @@ export async function createPrecomputer(options = {}) {
     );
     if (semanticMetricIssue) return unsupportedParagraph(key, semanticMetricIssue);
     const textSpans = normalizeTextSpans(text, input.textSpans, typography);
+    const renderTextSpans = textSpans.flatMap((span) => {
+      const families = fontSession.renderFamilies(span.fontFamilies);
+      return stableStringify(families) === stableStringify(renderFontFamilies)
+        ? []
+        : [{ start: span.start, end: span.end, fontFamilies: families }];
+    });
     const inlineBoxes = normalizeInlineBoxes(text, input.inlineBoxes);
     if (snapshotCandidate) {
       const issue = snapshotPlainTextIssue(text);
@@ -360,6 +369,7 @@ export async function createPrecomputer(options = {}) {
       rendered = renderPreparedParagraphArtifact(plan, typography, {
         semantics,
         inlineBoxes,
+        renderTextSpans,
         sourceText: text,
       });
     } catch (error) {
@@ -378,6 +388,7 @@ export async function createPrecomputer(options = {}) {
       sourceArtifactSha256: sha256(snapshotSourceArtifactString(text, semantics)),
       semantics,
       inlineBoxes,
+      renderTextSpans,
       typography,
       renderFontFamilies,
       typographySha256,
@@ -459,6 +470,7 @@ function buildSnapshotBundle(
       styleClassFor,
       semantics: entry.semantics,
       inlineBoxes: entry.inlineBoxes,
+      renderTextSpans: entry.renderTextSpans,
       sourceText: entry.sourceText,
     });
     return {
@@ -491,13 +503,10 @@ function buildSnapshotBundle(
   const inertTemplate = `<template id="${escapeAttribute(id)}" data-tq-snapshot-schema="${SNAPSHOT_SCHEMA}" ` +
     `data-tq-layout-revision="${LAYOUT_REVISION}" data-tq-render-revision="${RENDER_REVISION}" ` +
     `data-pagefind-ignore><script type="application/json" data-tq-snapshot-manifest>${manifestJson}</script>${body}</template>`;
-  const serverManifestJson = JSON.stringify({
-    ...manifest,
-    entrySource: "server-dom-v1",
-  }).replaceAll("<", "\\u003c");
-  const template = `<template id="${escapeAttribute(id)}" data-tq-snapshot-schema="${SNAPSHOT_SCHEMA}" ` +
-    `data-tq-layout-revision="${LAYOUT_REVISION}" data-tq-render-revision="${RENDER_REVISION}" ` +
-    `data-pagefind-ignore><script type="application/json" data-tq-snapshot-manifest>${serverManifestJson}</script></template>`;
+  // The compatibility alias deliberately remains inert. Package output never
+  // advertises a server-dom manifest because host-compatible SSR cannot prove
+  // the client's local font or content width before first paint.
+  const template = inertTemplate;
   // RuntimeSemanticFontContract: prepared DOM remains limited to canonical
   // plain paragraphs, while the browser server-replay session must also cover text
   // that is replayed through semantic DOM (links, code siblings, etc.).
@@ -506,17 +515,16 @@ function buildSnapshotBundle(
   const clientTemplate = `<template id="${escapeAttribute(id)}" data-tq-snapshot-schema="${SNAPSHOT_SCHEMA}" ` +
     `data-tq-layout-revision="${LAYOUT_REVISION}" data-tq-render-revision="${RENDER_REVISION}" ` +
     `data-pagefind-ignore><script type="application/json" data-tq-snapshot-manifest>${clientManifestJson}</script></template>`;
-  const initialStyle = exactRenderFontStyle(id, renderFontFamilies) + valueStyles.map((declaration, index) =>
+  // SharedSsrFirstPaintCss: prepared DOM is already live before the custom
+  // element runtime loads. Its line strut, geometry reset, and nowrap contract
+  // therefore belong in the server-injected first-paint style as well as the
+  // package stylesheet used after hydration.
+  const initialStyle = SHARED_RUNTIME_STYLE + exactRenderFontStyle(id) + valueStyles.map((declaration, index) =>
     `tiqian-prose[snapshot-ref="${escapeAttribute(id)}"] [data-tq-rendered="true"] .tqv-${index.toString(36)}{${declaration}}`
   ).join("");
-  // FirstPreparedParagraphFontPreload: a CJK article can touch dozens of
-  // unicode-range subsets. Preloading the whole article promotes every
-  // below-fold face to critical bandwidth; the first prepared paragraph is
-  // the bounded evidence set needed for the initial prose viewport. Remaining
-  // faces keep their content-addressed @font-face demand-loading contract.
-  const fontPreloads = Array.from(new Set(renderedEntries[0].fontEvidence.faces
-    .map((face) => face.publicUrl)
-    .filter((url) => typeof url === "string" && url.length > 0)));
+  // Font loading and preload policy belong to the host stylesheet. Tiqian
+  // validates the selected host face but does not promote CJK shards itself.
+  const fontPreloads = [];
   return Object.freeze({
     id,
     template,
@@ -559,7 +567,7 @@ export function renderFontContractBundle(preparedParagraphs, options = {}) {
     ...snapshotBundle,
     template,
     inertTemplate: template,
-    initialStyle: exactRenderFontStyle(snapshotBundle.id, snapshotBundle.renderFontFamilies),
+    initialStyle: exactRenderFontStyle(snapshotBundle.id),
     rootAttributes: Object.freeze({}),
     entries: Object.freeze([]),
   });

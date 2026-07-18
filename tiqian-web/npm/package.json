@@ -48,8 +48,10 @@
     "digest.js",
     "element.d.ts",
     "element.js",
+    "font-face-boundaries.js",
     "font-contract.js",
     "lazy-capabilities.js",
+    "layout-worker.js",
     "precompute.d.ts",
     "precompute.js",
     "precompute-fonts.js",
@@ -65,7 +67,8 @@
     "snapshot-client.js",
     "snapshot-schema.js",
     "styles.css",
-    "styles.js"
+    "styles.js",
+    "worker-layout.js"
   ],
   "exports": {
     ".": {

@@ -1,4 +1,5 @@
 import org.gradle.api.tasks.Sync
+import org.gradle.language.jvm.tasks.ProcessResources
 
 plugins {
     kotlin("multiplatform")
@@ -23,6 +24,10 @@ kotlin {
             implementation(kotlin("test"))
         }
     }
+}
+
+tasks.named<ProcessResources>("jsProcessResources") {
+    from(layout.projectDirectory.file("npm/styles.css"))
 }
 
 tasks.register<Sync>("assembleNpmPackage") {

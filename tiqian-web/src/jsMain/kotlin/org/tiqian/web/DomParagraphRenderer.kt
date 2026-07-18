@@ -768,6 +768,8 @@ object DomParagraphRenderer {
         carrier.style.apply {
             setProperty("display", "inline-block", "important")
             setProperty("inline-size", "${letterSpacing}px", "important")
+            setProperty("height", "0", "important")
+            setProperty("line-height", "0", "important")
             setProperty("letter-spacing", "${letterSpacing}px", "important")
             setProperty("overflow", "hidden", "important")
             setProperty("vertical-align", "baseline", "important")

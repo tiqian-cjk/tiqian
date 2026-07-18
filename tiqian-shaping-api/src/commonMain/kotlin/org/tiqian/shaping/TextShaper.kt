@@ -8,6 +8,10 @@ import org.tiqian.core.TextRange
 import org.tiqian.core.TextStyle
 import org.tiqian.font.FontDecision
 
+/** Cross-module capability contract for display substitutions lacking face evidence. */
+const val UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE_ISSUE =
+    "UnverifiedDisplaySubstitutionCoverage"
+
 data class ShapingInput(
     val text: String,
     val range: TextRange,

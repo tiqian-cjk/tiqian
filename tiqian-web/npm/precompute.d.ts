@@ -1,4 +1,5 @@
 export interface BuildFontFace {
+  /** Host CSS family used for both build-time measurement and browser paint. */
   family: string;
   source: string | URL | Uint8Array | ArrayBuffer;
   publicUrl: string;
@@ -6,6 +7,13 @@ export interface BuildFontFace {
   weight?: number | readonly [number, number];
   style?: "normal" | "italic";
   unicodeRange?: string;
+}
+
+export interface BuildFontStylesheet {
+  /** Local CSS file read by the Node precomputer. */
+  source: string | URL;
+  /** URL where the host serves that same stylesheet; relative font URLs resolve from here. */
+  publicUrl?: string;
 }
 
 export interface SnapshotTypography {
@@ -34,6 +42,11 @@ export interface PreparedParagraph {
   readonly sourceArtifactSha256: string;
   readonly semantics: readonly SnapshotSemanticSpan[];
   readonly inlineBoxes: readonly SnapshotInlineBox[];
+  readonly renderTextSpans: readonly {
+    readonly start: number;
+    readonly end: number;
+    readonly fontFamilies: readonly string[];
+  }[];
   readonly typographySha256: string;
   readonly maxWidthPx: number;
   readonly typography: SnapshotTypography;
@@ -99,7 +112,10 @@ export interface Precomputer {
 }
 
 export declare function createPrecomputer(options: {
-  faces: readonly BuildFontFace[];
+  /** Normal integration: reuse the host's existing @font-face stylesheet. */
+  fontStylesheets?: readonly BuildFontStylesheet[];
+  /** Low-level integration for generated font systems. Mutually exclusive with fontStylesheets. */
+  faces?: readonly BuildFontFace[];
   typography: SnapshotTypography;
 }): Promise<Precomputer>;
 
@@ -107,7 +123,7 @@ export declare function renderPreparedParagraph(plan: unknown, typography: Snaps
 export declare function snapshotPlainTextIssue(text: string): string | null;
 export interface SnapshotBundle {
   readonly id: string;
-  /** Manifest-only template for HTML that already contains `entries`. */
+  /** Backward-compatible alias of inertTemplate. */
   readonly template: string;
   /** Inert manifest and prepared DOM adopted only after live geometry validation. */
   readonly inertTemplate: string;

@@ -1,5 +1,6 @@
 import {
   FONT_BACKEND_REVISION,
+  FONT_REPLAY_REVISION,
   FONT_SOURCE_POLICY,
   LAYOUT_REVISION,
   RENDER_REVISION,
@@ -43,6 +44,74 @@ const INLINE_POSITION_TOLERANCE_PX = PROBE_ABSOLUTE_TOLERANCE_PX +
   BROWSER_SUBPIXEL_QUANTIZATION_PX + GEOMETRY_COMPARISON_EPSILON_PX;
 const LINE_VERTICAL_TOLERANCE_PX = 0.75;
 const PREPARED_VERTICAL_TOLERANCE_PX = 0.02;
+const exactFontReplayProofs = new WeakMap();
+const FONT_FACE_LIVE_SIGNATURE_PROPERTIES = Object.freeze([
+  "font-family",
+  "font-style",
+  "font-weight",
+  "font-stretch",
+  "unicode-range",
+  "src",
+  "size-adjust",
+  "ascent-override",
+  "descent-override",
+  "line-gap-override",
+  "font-feature-settings",
+  "font-variation-settings",
+  "font-language-override",
+  "font-named-instance",
+  "font-display",
+]);
+const VALIDATION_SLICE_BUDGET_MS = 8;
+// Direct SSR is already exact, readable DOM; its proof can favor input and
+// host rendering more aggressively without delaying a visible takeover.
+const DIRECT_SSR_VALIDATION_SLICE_BUDGET_MS = 4;
+const unicodeRangeCache = new Map();
+
+async function yieldValidationIfNeeded(sliceStartedAt) {
+  if (performance.now() - sliceStartedAt < VALIDATION_SLICE_BUDGET_MS) {
+    return sliceStartedAt;
+  }
+  if (typeof globalThis.scheduler?.yield === "function") {
+    await globalThis.scheduler.yield();
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return performance.now();
+}
+
+async function yieldDirectSsrValidationIfNeeded(sliceStartedAt) {
+  if (performance.now() - sliceStartedAt < DIRECT_SSR_VALIDATION_SLICE_BUDGET_MS) {
+    return sliceStartedAt;
+  }
+  // DirectSsrBackgroundProof: the exact server DOM is already live and needs
+  // no client takeover. Continue its proof below input/rendering priority;
+  // unlike scheduler.yield(), this cannot chain user-visible continuations
+  // ahead of wheel frames under Edge JITless.
+  if (
+    typeof globalThis.requestAnimationFrame === "function" &&
+    globalThis.document?.visibilityState !== "hidden"
+  ) {
+    await new Promise((resolve) => globalThis.requestAnimationFrame(() => {
+      if (typeof globalThis.scheduler?.postTask === "function") {
+        void globalThis.scheduler.postTask(resolve, { priority: "background" });
+      } else {
+        setTimeout(resolve, 0);
+      }
+    }));
+  } else if (typeof globalThis.scheduler?.postTask === "function") {
+    await globalThis.scheduler.postTask(() => {}, { priority: "background" });
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return performance.now();
+}
+
+function yieldSnapshotValidationIfNeeded(sliceStartedAt, serverRenderedEntries) {
+  return serverRenderedEntries
+    ? yieldDirectSsrValidationIfNeeded(sliceStartedAt)
+    : yieldValidationIfNeeded(sliceStartedAt);
+}
 const RENDER_FLOW_EPSILON_PX = 0.01;
 const PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE = "pwid,palt";
 export const EXACT_RENDER_FONT_ATTRIBUTE = "data-tiqian-exact-render-font";
@@ -95,6 +164,8 @@ function snapshotEntryWidthMatches(width, entry) {
 function parseUnicodeRange(value) {
   const serialized = String(value ?? "").trim();
   if (!serialized) return null;
+  const cached = unicodeRangeCache.get(serialized);
+  if (cached) return cached;
   const ranges = [];
   for (const item of serialized.split(",")) {
     const token = item.trim().toUpperCase();
@@ -112,10 +183,58 @@ function parseUnicodeRange(value) {
     const start = Number.parseInt(match[1], 16);
     ranges.push([start, Number.parseInt(match[2] ?? match[1], 16)]);
   }
-  return ranges;
+  ranges.sort((left, right) => left[0] - right[0] || left[1] - right[1]);
+  const merged = [];
+  for (const range of ranges) {
+    const previous = merged.at(-1);
+    if (previous && range[0] <= previous[1] + 1) {
+      previous[1] = Math.max(previous[1], range[1]);
+    } else {
+      merged.push([...range]);
+    }
+  }
+  // Parsed CSS descriptors are immutable contract data and repeat across
+  // article manifests. Keep a bounded module-level cache so client navigation
+  // does not repeatedly tokenize the same unicode-range shards.
+  if (unicodeRangeCache.size >= 4_096) unicodeRangeCache.clear();
+  unicodeRangeCache.set(serialized, merged);
+  return merged;
 }
 
-function unicodeRangeContains(ranges, codePoint) {
+function unicodeRangesIntersectCoverage(ranges, codePoints) {
+  if (ranges == null) return true;
+  // UnicodeRangeFaceGroupIntersection: both inputs are sorted and parsed CSS
+  // ranges are merged. Search whichever collection is smaller in the other
+  // collection's index: unicode-range shards often have only a handful of
+  // intervals, while a CJK article can have hundreds of distinct code points.
+  if (ranges.length <= codePoints.length) {
+    for (const range of ranges) {
+      let low = 0;
+      let high = codePoints.length;
+      while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (codePoints[middle] < range[0]) low = middle + 1;
+        else high = middle;
+      }
+      if (low < codePoints.length && codePoints[low] <= range[1]) return true;
+    }
+  } else {
+    for (const point of codePoints) {
+      let low = 0;
+      let high = ranges.length;
+      while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (ranges[middle][0] <= point) low = middle + 1;
+        else high = middle;
+      }
+      const candidate = ranges[low - 1];
+      if (candidate && point <= candidate[1]) return true;
+    }
+  }
+  return false;
+}
+
+function unicodeRangesContainCodePoint(ranges, codePoint) {
   return ranges == null || ranges.some(([start, end]) => codePoint >= start && codePoint <= end);
 }
 
@@ -168,7 +287,7 @@ function compatibleLocalSources(face, evidence) {
     allowed.has(canonicalLocalFontName(name)));
 }
 
-function collectFontFaces(documentObject) {
+function collectFontFaces(documentObject, requestedFamilies = null) {
   const faces = [];
   let unverifiable = false;
   const visit = (rules, fallbackBaseUrl) => {
@@ -176,10 +295,12 @@ function collectFontFaces(documentObject) {
     for (const rule of rules) {
       if (rule.type === 5 && rule.style) {
         const style = rule.style;
+        const family = unquote(style.getPropertyValue("font-family"));
+        if (requestedFamilies && !requestedFamilies.has(family.toLowerCase())) continue;
         const baseUrl = rule.parentStyleSheet?.href || fallbackBaseUrl;
         const source = style.getPropertyValue("src");
         faces.push({
-          family: unquote(style.getPropertyValue("font-family")),
+          family,
           style: style.getPropertyValue("font-style") || "normal",
           weight: style.getPropertyValue("font-weight") || "400",
           stretch: style.getPropertyValue("font-stretch") || "normal",
@@ -214,6 +335,116 @@ function collectFontFaces(documentObject) {
     }
   }
   return { faces, unverifiable };
+}
+
+async function collectFontFacesCooperatively(
+  documentObject,
+  requestedFamilies = null,
+  isCurrent = () => true,
+  yieldIfNeeded = yieldValidationIfNeeded,
+) {
+  const faces = [];
+  let unverifiable = false;
+  let sliceStartedAt = performance.now();
+  const visit = async (rules, fallbackBaseUrl) => {
+    if (!rules) return true;
+    for (const rule of rules) {
+      if (rule.type === 5 && rule.style) {
+        const style = rule.style;
+        const family = unquote(style.getPropertyValue("font-family"));
+        if (!requestedFamilies || requestedFamilies.has(family.toLowerCase())) {
+          const baseUrl = rule.parentStyleSheet?.href || fallbackBaseUrl;
+          const source = style.getPropertyValue("src");
+          faces.push({
+            family,
+            style: style.getPropertyValue("font-style") || "normal",
+            weight: style.getPropertyValue("font-weight") || "400",
+            stretch: style.getPropertyValue("font-stretch") || "normal",
+            unicodeRanges: parseUnicodeRange(style.getPropertyValue("unicode-range")),
+            urls: sourceUrls(source, baseUrl),
+            hasLocalSource: /local\s*\(/iu.test(source),
+            localNames: sourceLocalNames(source),
+            sizeAdjust: style.getPropertyValue("size-adjust"),
+            ascentOverride: style.getPropertyValue("ascent-override"),
+            descentOverride: style.getPropertyValue("descent-override"),
+            lineGapOverride: style.getPropertyValue("line-gap-override"),
+            featureSettings: style.getPropertyValue("font-feature-settings"),
+            variationSettings: style.getPropertyValue("font-variation-settings"),
+            languageOverride: style.getPropertyValue("font-language-override"),
+            namedInstance: style.getPropertyValue("font-named-instance"),
+            display: style.getPropertyValue("font-display"),
+          });
+        }
+      } else {
+        try {
+          if (rule.cssRules && !await visit(
+            rule.cssRules,
+            rule.parentStyleSheet?.href || fallbackBaseUrl,
+          )) return false;
+        } catch {
+          unverifiable = true;
+        }
+      }
+      sliceStartedAt = await yieldIfNeeded(sliceStartedAt);
+      if (!isCurrent()) return false;
+    }
+    return true;
+  };
+  for (const sheet of documentObject.styleSheets ?? []) {
+    try {
+      if (!await visit(sheet.cssRules, sheet.href || documentObject.baseURI)) {
+        return { faces, unverifiable, superseded: true };
+      }
+    } catch {
+      unverifiable = true;
+    }
+  }
+  return { faces, unverifiable, superseded: !isCurrent() };
+}
+
+function relevantFontFaceLiveSignature(documentObject, requestedFamilies) {
+  const descriptors = [];
+  let unverifiable = false;
+  const visit = (rules, fallbackBaseUrl) => {
+    if (!rules) return;
+    for (const rule of rules) {
+      if (rule.type === 5 && rule.style) {
+        const family = unquote(rule.style.getPropertyValue("font-family"));
+        if (!requestedFamilies.has(family.toLowerCase())) continue;
+        descriptors.push([
+          rule.parentStyleSheet?.href || fallbackBaseUrl,
+          ...FONT_FACE_LIVE_SIGNATURE_PROPERTIES.map((property) =>
+            rule.style.getPropertyValue(property)),
+        ]);
+      } else {
+        try {
+          if (rule.cssRules) visit(rule.cssRules, rule.parentStyleSheet?.href || fallbackBaseUrl);
+        } catch {
+          unverifiable = true;
+        }
+      }
+    }
+  };
+  for (const sheet of documentObject.styleSheets ?? []) {
+    try {
+      visit(sheet.cssRules, sheet.href || documentObject.baseURI);
+    } catch {
+      unverifiable = true;
+    }
+  }
+  return { signature: stableStringify(descriptors), unverifiable };
+}
+
+function manifestFontFamilies(manifest) {
+  const families = new Set();
+  for (const entry of [...(manifest.entries ?? []), ...(manifest.fontContractEntries ?? [])]) {
+    for (const face of entry?.fontEvidence?.faces ?? []) {
+      if (typeof face?.family === "string" && face.family.trim()) {
+        families.add(face.family.trim().toLowerCase());
+      }
+    }
+  }
+  return families;
 }
 
 function numericWeight(value) {
@@ -498,12 +729,19 @@ function generatedGeometryIssue(element, paragraph) {
   const shapingBoundary = element.hasAttribute("data-tq-shaping-boundary");
   const measuredGeometry = element.hasAttribute("data-tq-advance");
   const engineHyphen = element.hasAttribute("data-tq-engine-hyphen");
+  const projectedRenderFont = element.getAttribute("data-tq-render-font-projection") === "true";
   if (!shapingBoundary && !element.textContent) {
-    return pseudoGeneratedContentIsEmpty(element) ? null : "GeneratedContent";
+    // PreparedPseudoIsolationCss owns ::before/::after for every generated
+    // geometry leaf. The source paragraph is checked before adoption; probing
+    // four pseudo styles on every emitted leaf after adoption only re-proves a
+    // package invariant and turns an exact snapshot into a main-thread scan.
+    return null;
   }
   if (shapingBoundary) {
     const contract = {
-      display: "inline-block",
+      // NativeSelectionBoundaryFlow: prepared shaping runs stay inline so
+      // browser selection remains character-continuous across adjacent runs.
+      display: "inline",
       whiteSpace: "pre",
       verticalAlign: "baseline",
       direction: "ltr",
@@ -521,7 +759,8 @@ function generatedGeometryIssue(element, paragraph) {
       // also carry layout adjustment. Their serialized advance is checked
       // against the real border-box immediately below, so inherited equality
       // would reject correct engine geometry without adding protection.
-      .filter((property) => property !== "letterSpacing");
+      .filter((property) => property !== "letterSpacing" &&
+        (!projectedRenderFont || property !== "fontFamily"));
     const inheritedMismatch = inheritedProperties.find((property) =>
       String(style[property] ?? "") !== String(inheritedStyle[property] ?? ""));
     if (inheritedMismatch) return `Boundary:${inheritedMismatch}`;
@@ -545,11 +784,12 @@ function generatedGeometryIssue(element, paragraph) {
       if (stableMismatch) return `Geometry:${stableMismatch[0]}`;
     }
     const inheritedMismatch = BOUNDARY_STYLE_PROPERTIES
-      .filter((property) => property !== "letterSpacing")
+      .filter((property) => property !== "letterSpacing" &&
+        (!projectedRenderFont || property !== "fontFamily"))
       .find((property) => String(style[property] ?? "") !== String(inheritedStyle[property] ?? ""));
     if (inheritedMismatch) return `Geometry:${inheritedMismatch}`;
   }
-  return pseudoTypographyIssue(element, style);
+  return null;
 }
 
 function renderedBoundaryAdvanceIssue(paragraph) {
@@ -609,7 +849,7 @@ function renderedLineAdvanceIssue(paragraph, contentWidth) {
     const markerRect = marker.getBoundingClientRect();
     const markerMarginLeft = numericCssPx(markerStyle.marginLeft) || 0;
     const origin = markerRect.left - markerMarginLeft;
-    let contributorTop = null;
+    const contributorTops = new Map();
     let contributorIndex = 0;
     for (let index = markerIndex + 1; index < sentinelIndex; index += 1) {
       const node = children[index];
@@ -644,8 +884,19 @@ function renderedLineAdvanceIssue(paragraph, contentWidth) {
       // naturally differs from glyph-bearing inline spans. Their stable CSS,
       // serialized x/advance, and the line baseline are checked independently.
       if (style.display === "inline") {
-        if (contributorTop == null) contributorTop = rect.top;
-        if (Math.abs(rect.top - contributorTop) > LINE_VERTICAL_TOLERANCE_PX) {
+        // InlineVerticalStyleGroupConsistency: smaller inline-code faces,
+        // superscripts, and other modeled baseline shifts legitimately have a
+        // different fragment top. Compare only fragments that share the same
+        // shaping and vertical-placement style; the serialized line marker,
+        // baseline sentinel, and paragraph height still validate the common
+        // line geometry below.
+        const verticalSignature = stableStringify(Object.fromEntries([
+          "fontFamily", "fontSize", "fontWeight", "fontStyle", "lineHeight",
+          "verticalAlign", "fontVariantPosition",
+        ].map((property) => [property, String(style[property] ?? "")])));
+        const contributorTop = contributorTops.get(verticalSignature);
+        if (contributorTop == null) contributorTops.set(verticalSignature, rect.top);
+        else if (Math.abs(rect.top - contributorTop) > LINE_VERTICAL_TOLERANCE_PX) {
           const text = JSON.stringify(String(node.textContent ?? "").slice(0, 8));
           return issue(`contributor-top;index=${currentContributorIndex};text=${text};expected=${contributorTop};actual=${rect.top};display=${style.display};verticalAlign=${style.verticalAlign};lineHeight=${style.lineHeight}`);
         }
@@ -776,17 +1027,14 @@ function computedTypographyIssue(
 ) {
   const style = getComputedStyle(paragraph);
   const actualFamilies = parseFontFamilies(style.fontFamily).map((family) => family.toLowerCase());
-  const expectedFamilies = (canonicalPreparedFlow && Array.isArray(renderFontFamilies)
-    ? renderFontFamilies
-    : contract.fontFamilies).map((family) => family.toLowerCase());
+  const expectedFamilies = contract.fontFamilies.map((family) => family.toLowerCase());
   if (actualFamilies.length !== expectedFamilies.length ||
       actualFamilies.some((family, index) => family !== expectedFamilies[index])) {
     const root = paragraph.closest(ROOT_SELECTOR);
     const projection = root?.getAttribute(EXACT_RENDER_FONT_ATTRIBUTE) ?? "missing";
-    const variable = style.getPropertyValue("--tq-exact-render-font-family").trim() || "missing";
     const fallback = root?.hasAttribute("data-tiqian-exact-layout-fallback") ?? false;
     const rendered = paragraph.getAttribute("data-tq-rendered") ?? "missing";
-    return `fontFamily:${actualFamilies.join("|")}!=${expectedFamilies.join("|")};projection=${projection};variable=${variable};fallback=${fallback};rendered=${rendered}`;
+    return `fontFamily:${actualFamilies.join("|")}!=${expectedFamilies.join("|")};projection=${projection};fallback=${fallback};rendered=${rendered}`;
   }
   if (!allowLiveFontSizeAndLineHeight &&
       Math.abs(numericCssPx(style.fontSize) - contract.fontSizePx) > 0.01) return "fontSize";
@@ -851,6 +1099,11 @@ function computedTypographyIssue(
   if ((style.direction || "ltr") !== "ltr") return "direction";
   if ((style.writingMode || "horizontal-tb") !== "horizontal-tb") return "writingMode";
   if (!ancestorFragmentationIsSafe(paragraph)) return "ancestorFragmentation";
+  // PreparedPseudoIsolationCss resets paragraph and shaping-boundary pseudos.
+  // Native source still takes the strict pseudo gate above, before any DOM
+  // mutation; canonical prepared DOM is instead verified by its real segment,
+  // line pen, baseline and paragraph-height geometry below.
+  if (canonicalPreparedFlow) return null;
   const pseudoIssue = pseudoTypographyIssue(paragraph, style);
   return pseudoIssue == null ? null : `pseudo:${pseudoIssue}`;
 }
@@ -882,17 +1135,27 @@ function unicodeRangesMatch(left, right) {
 function cssFaceContract(evidence, faces, documentObject, requireExactFirstPaintDisplay = true) {
   const expectedUrl = new URL(evidence.publicUrl, documentObject.baseURI).href;
   const coverageText = evidence.coverageText || evidence.probe.text;
-  const coveragePoints = Array.from(coverageText, (point) => point.codePointAt(0));
+  const coveragePoints = Array.from(
+    new Set(Array.from(coverageText, (point) => point.codePointAt(0))),
+  ).sort((left, right) => left - right);
   const expectedRanges = parseUnicodeRange(evidence.unicodeRange);
   const familyCandidates = faces.filter((face) =>
     face.family.toLowerCase() === evidence.family.toLowerCase() &&
     styleMatches(face.style, evidence.probe.italic) &&
-    coveragePoints.some((point) => unicodeRangeContains(face.unicodeRanges, point)));
-  const candidates = cssWeightMatchedFaces(familyCandidates, evidence.probe.fontWeight);
+    unicodeRangesIntersectCoverage(face.unicodeRanges, coveragePoints));
+  const weightedCandidates = cssWeightMatchedFaces(familyCandidates, evidence.probe.fontWeight);
+  // CSS Fonts composite faces resolve an overlapping code point to the later
+  // rule with otherwise equal descriptors. Validate the effective face instead
+  // of requiring every shadowed shard to have the selected shard's range/URL.
+  const candidates = Array.from(new Set(coveragePoints.map((codePoint) =>
+    weightedCandidates.findLast((face) =>
+      unicodeRangesContainCodePoint(face.unicodeRanges, codePoint))))).filter(Boolean);
   const defaultDescriptor = (value, defaults) => defaults.has(String(value ?? "").trim().toLowerCase());
   const exactFirstPaintDisplay = (value) => new Set(["", "auto", "block"])
     .has(String(value ?? "").trim().toLowerCase());
-  const matches = candidates.length > 0 && candidates.every((face) =>
+  const matches = candidates.length > 0 && coveragePoints.every((codePoint) =>
+    candidates.some((face) => unicodeRangesContainCodePoint(face.unicodeRanges, codePoint))) &&
+    candidates.every((face) =>
     weightRangeMatches(face.weight, evidence.weight) &&
     unicodeRangesMatch(face.unicodeRanges, expectedRanges) &&
     compatibleLocalSources(face, evidence) && face.urls.length === 1 && face.urls[0] === expectedUrl &&
@@ -912,16 +1175,7 @@ function cssFaceContract(evidence, faces, documentObject, requireExactFirstPaint
   };
 }
 
-function matchingCssFace(evidence, faces, documentObject, requireExactFirstPaintDisplay) {
-  return cssFaceContract(
-    evidence,
-    faces,
-    documentObject,
-    requireExactFirstPaintDisplay,
-  ).matches;
-}
-
-async function measureProbe(evidence, documentObject, featureContract) {
+function createFontEvidenceProbe(evidence, documentObject, featureContract) {
   const probe = documentObject.createElement("span");
   probe.textContent = evidence.probe.text;
   probe.setAttribute("aria-hidden", "true");
@@ -944,37 +1198,135 @@ async function measureProbe(evidence, documentObject, featureContract) {
     "letter-spacing:normal!important",
   ].join(";");
   probe.lang = evidence.probe.language;
-  documentObject.body.append(probe);
-  try {
-    const range = documentObject.createRange();
-    range.selectNodeContents(probe);
-    return range.getBoundingClientRect().width;
-  } finally {
-    probe.remove();
-  }
+  return probe;
 }
 
-async function validateFontEvidence(
-  evidence,
-  faces,
-  documentObject,
-  requireExactFirstPaintDisplay,
-) {
-  if (!matchingCssFace(evidence, faces, documentObject, requireExactFirstPaintDisplay)) {
-    return "FontFaceContractMismatch";
+async function observeFontEvidenceProbeWidths(probes, documentObject) {
+  const ResizeObserverConstructor = documentObject.defaultView?.ResizeObserver ??
+    globalThis.ResizeObserver;
+  if (typeof ResizeObserverConstructor !== "function") {
+    return probes.map((probe) => probe.getBoundingClientRect().width);
   }
-  const featureContract = openTypeFeatureContract(evidence.probe.features);
-  if (!featureContract) return "FontProbeFeaturesUnsupported";
-  const descriptor = `${evidence.probe.italic ? "italic" : "normal"} ${evidence.probe.fontWeight} ` +
-    `${evidence.probe.fontSizePx}px ${cssFamilyToken(evidence.family)}`;
-  const loaded = await documentObject.fonts?.load?.(descriptor, evidence.probe.text);
-  if (!loaded || loaded.length === 0) return "FontFaceLoadFailed";
-  const actual = await measureProbe(evidence, documentObject, featureContract);
-  const expected = evidence.probe.advancePx;
-  const tolerance = Math.max(PROBE_ABSOLUTE_TOLERANCE_PX, expected * PROBE_RELATIVE_TOLERANCE);
-  return Number.isFinite(actual) && Math.abs(actual - expected) <= tolerance
-    ? null
-    : "FontAdvanceProbeMismatch";
+  return new Promise((resolve) => {
+    const widths = new Map();
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      observer.disconnect();
+      resolve(value);
+    };
+    const observer = new ResizeObserverConstructor((entries) => {
+      for (const entry of entries) {
+        const borderBox = Array.isArray(entry.borderBoxSize)
+          ? entry.borderBoxSize[0]
+          : entry.borderBoxSize;
+        const width = borderBox?.inlineSize ?? entry.contentRect?.width;
+        if (Number.isFinite(width)) widths.set(entry.target, width);
+      }
+      if (widths.size === probes.length) {
+        finish(probes.map((probe) => widths.get(probe)));
+      }
+    });
+    const timeout = setTimeout(() => finish(null), 5_000);
+    for (const probe of probes) observer.observe(probe, { box: "border-box" });
+  });
+}
+
+/**
+ * BatchedFontEvidenceValidation keeps the exact compatible-local contract but
+ * avoids one style/layout flush for every shaping run in an article. A compact
+ * font contract can carry hundreds of distinct probes; under Edge JITless,
+ * appending, measuring, and removing them one at a time can monopolize the
+ * main thread for tens of seconds. Load each face/descriptor coverage once,
+ * append every hidden probe before the first geometry read, and then validate
+ * all original advances against the same single layout snapshot.
+ */
+async function validateFontEvidenceGroups(
+  evidenceGroups,
+  documentObject,
+  isCurrent = () => true,
+  yieldIfNeeded = yieldValidationIfNeeded,
+) {
+  const validations = [];
+  const loadRequests = new Map();
+  let groupIndex = 0;
+  let sliceStartedAt = performance.now();
+  for (const group of evidenceGroups.values()) {
+    for (const evidence of group.probes.values()) {
+      // FaceGroupContractOwnership: family/style/weight range/unicode range,
+      // URL and compatible-local identity are invariant across every probe in
+      // this group and were already validated against aggregate coverage by
+      // validateManifestFontContract(). Repeating that CSSOM proof for each
+      // shaping run is quadratic article work and adds no evidence.
+      const featureContract = openTypeFeatureContract(evidence.probe.features);
+      if (!featureContract) return "FontProbeFeaturesUnsupported";
+      const descriptor = `${evidence.probe.italic ? "italic" : "normal"} ` +
+        `${evidence.probe.fontWeight} ${evidence.probe.fontSizePx}px ` +
+        cssFamilyToken(evidence.family);
+      const loadKey = `${groupIndex}\u0000${descriptor}`;
+      let request = loadRequests.get(loadKey);
+      if (!request) {
+        request = { descriptor, coverage: new Set() };
+        loadRequests.set(loadKey, request);
+      }
+      for (const point of evidence.probe.text) request.coverage.add(point);
+      validations.push({ evidence, featureContract });
+    }
+    groupIndex += 1;
+    sliceStartedAt = await yieldIfNeeded(sliceStartedAt);
+    if (!isCurrent()) return "superseded";
+  }
+
+  const loaded = await Promise.all(Array.from(loadRequests.values(), async (request) =>
+    documentObject.fonts?.load?.(
+      request.descriptor,
+      Array.from(request.coverage).join(""),
+    )));
+  if (loaded.some((faces) => !faces || faces.length === 0)) return "FontFaceLoadFailed";
+  if (!isCurrent()) return "superseded";
+
+  const probes = [];
+  for (const { evidence, featureContract } of validations) {
+    probes.push(createFontEvidenceProbe(evidence, documentObject, featureContract));
+    sliceStartedAt = await yieldIfNeeded(sliceStartedAt);
+    if (!isCurrent()) return "superseded";
+  }
+  try {
+    for (const probe of probes) {
+      documentObject.body.append(probe);
+      sliceStartedAt = await yieldIfNeeded(sliceStartedAt);
+      if (!isCurrent()) return "superseded";
+    }
+    // AsyncProbeGeometryBatch: ResizeObserver lets the rendering pipeline
+    // compute every box in one lifecycle update and returns all widths in one
+    // callback. Hundreds of synchronous geometry reads remain a single giant
+    // task under Edge JITless even when the DOM was appended in one batch.
+    const widths = await observeFontEvidenceProbeWidths(probes, documentObject);
+    if (!widths) return "FontProbeObservationTimeout";
+    if (!isCurrent()) return "superseded";
+    for (let index = 0; index < validations.length; index += 1) {
+      const { evidence } = validations[index];
+      // AbsoluteProbeBoxAdvance: the probe is a shrink-to-fit, unpadded,
+      // single-line `white-space: pre` box, so its observed border-box width is
+      // the complete text advance and preserves trailing whitespace.
+      const actual = widths[index];
+      const expected = evidence.probe.advancePx;
+      const tolerance = Math.max(
+        PROBE_ABSOLUTE_TOLERANCE_PX,
+        expected * PROBE_RELATIVE_TOLERANCE,
+      );
+      if (!Number.isFinite(actual) || Math.abs(actual - expected) > tolerance) {
+        return "FontAdvanceProbeMismatch";
+      }
+      sliceStartedAt = await yieldIfNeeded(sliceStartedAt);
+      if (!isCurrent()) return "superseded";
+    }
+    return null;
+  } finally {
+    for (const probe of probes) probe.remove();
+  }
 }
 
 function templateManifest(template) {
@@ -1008,43 +1360,7 @@ function fontContractOnlyManifest(manifest) {
 }
 
 function liveRenderFontFamilies(root, manifest, paragraph) {
-  return canonicalPreparedFlow(paragraph) && root.getAttribute(EXACT_RENDER_FONT_ATTRIBUTE) === "true"
-    ? manifest.renderFontFamilies
-    : null;
-}
-
-function fontContractTypographyIssue(root, manifest, options = {}) {
-  const contracts = Array.from(manifest?.typographies ?? [], (entry) => entry?.value)
-    .filter((value) => value && Array.isArray(value.fontFamilies));
-  if (contracts.length === 0) return "manifestTypography";
-  // RuntimeFontContractCandidateParity: exact-font validation covers the same
-  // paragraph-shaped owners as the Kotlin runtime. Container list items and
-  // explicitly skipped subtrees are not shaping inputs and must not invalidate
-  // an otherwise exact session merely because they carry host-owned typography.
-  const paragraphs = rootParagraphs(root, manifest.paragraphSelector).filter((paragraph) => {
-    if (paragraph.closest(
-      ".not-prose, pre, table, .katex, .katex-display, .expressive-code, .tq-paragraph, [data-tiqian-skip]",
-    )) return false;
-    return paragraph.tagName !== "LI" || !paragraph.querySelector(
-      ":scope > p, :scope > ul, :scope > ol, :scope > blockquote, :scope > pre, :scope > table",
-    );
-  });
-  if (paragraphs.length === 0) return "paragraphCandidate";
-  for (const paragraph of paragraphs) {
-    const issues = contracts.map((contract) => computedTypographyIssue(
-      paragraph,
-      contract,
-      canonicalPreparedFlow(paragraph),
-      liveRenderFontFamilies(root, manifest, paragraph),
-      options,
-    ));
-    if (!issues.some((issue) => issue == null)) return issues[0] ?? "unknown";
-  }
   return null;
-}
-
-function fontContractTypographyMatches(root, manifest) {
-  return fontContractTypographyIssue(root, manifest) == null;
 }
 
 function templateEntry(template, key, root = null) {
@@ -1054,13 +1370,22 @@ function templateEntry(template, key, root = null) {
   return directServerArtifacts.get(root)?.get(key) ?? null;
 }
 
-function captureServerRenderedSnapshotArtifacts(root, manifest, paragraphsByKey) {
+async function captureServerRenderedSnapshotArtifacts(
+  root,
+  manifest,
+  paragraphsByKey,
+  isCurrent = () => true,
+) {
   const artifacts = new Map();
+  let sliceStartedAt = performance.now();
   for (const entry of manifest.entries) {
     const paragraph = paragraphsByKey.get(entry?.key);
     if (paragraph) artifacts.set(entry.key, paragraph.cloneNode(true));
+    sliceStartedAt = await yieldDirectSsrValidationIfNeeded(sliceStartedAt);
+    if (!isCurrent()) return false;
   }
   if (artifacts.size > 0) directServerArtifacts.set(root, artifacts);
+  return true;
 }
 
 function templateSourceEntry(documentObject, reference, key) {
@@ -1156,43 +1481,83 @@ function miss(root, reason) {
 function groupedFontEvidence(manifest) {
   const evidenceGroups = new Map();
   for (const entry of [...manifest.entries, ...(manifest.fontContractEntries ?? [])]) {
-    if (!entry?.fontEvidence || !Array.isArray(entry.fontEvidence.faces) ||
-        entry.fontEvidence.faces.length === 0) return null;
-    for (const evidence of entry.fontEvidence.faces) {
-      const key = [
-        evidence.sfntSha256,
-        evidence.faceIndex,
-        evidence.sourceOrder,
-        JSON.stringify(evidence.axes),
-        JSON.stringify(evidence.localNames),
-        evidence.family,
-        evidence.style,
-        JSON.stringify(evidence.weight),
-        evidence.unicodeRange,
-        evidence.publicUrl,
-      ].join(":");
-      let group = evidenceGroups.get(key);
-      if (!group) {
-        group = { representative: evidence, coverage: new Set(), probes: new Map() };
-        evidenceGroups.set(key, group);
-      }
-      for (const point of evidence.coverageText || evidence.probe.text) group.coverage.add(point);
-      const probeKey = JSON.stringify(evidence.probe);
-      if (!group.probes.has(probeKey)) group.probes.set(probeKey, evidence);
-    }
+    if (!addFontEvidenceEntry(evidenceGroups, entry)) return null;
   }
   return evidenceGroups;
 }
 
-async function validateManifestFontContract(manifest, documentObject) {
+function addFontEvidenceEntry(evidenceGroups, entry) {
+  if (!entry?.fontEvidence || !Array.isArray(entry.fontEvidence.faces) ||
+      entry.fontEvidence.faces.length === 0) return false;
+  for (const evidence of entry.fontEvidence.faces) {
+    const key = [
+      evidence.sfntSha256,
+      evidence.faceIndex,
+      evidence.sourceOrder,
+      JSON.stringify(evidence.axes),
+      JSON.stringify(evidence.localNames),
+      evidence.family,
+      evidence.style,
+      JSON.stringify(evidence.weight),
+      evidence.unicodeRange,
+      evidence.publicUrl,
+    ].join(":");
+    let group = evidenceGroups.get(key);
+    if (!group) {
+      group = { representative: evidence, coverage: new Set(), probes: new Map() };
+      evidenceGroups.set(key, group);
+    }
+    for (const point of evidence.coverageText || evidence.probe.text) group.coverage.add(point);
+    const probeKey = JSON.stringify(evidence.probe);
+    if (!group.probes.has(probeKey)) group.probes.set(probeKey, evidence);
+  }
+  return true;
+}
+
+async function groupedFontEvidenceCooperatively(
+  manifest,
+  isCurrent = () => true,
+  yieldIfNeeded = yieldValidationIfNeeded,
+) {
+  const evidenceGroups = new Map();
+  let sliceStartedAt = performance.now();
+  for (const entry of [...manifest.entries, ...(manifest.fontContractEntries ?? [])]) {
+    if (!addFontEvidenceEntry(evidenceGroups, entry)) return { evidenceGroups: null };
+    sliceStartedAt = await yieldIfNeeded(sliceStartedAt);
+    if (!isCurrent()) return { evidenceGroups: null, superseded: true };
+  }
+  return { evidenceGroups };
+}
+
+async function validateManifestFontContract(
+  manifest,
+  documentObject,
+  isCurrent = () => true,
+  yieldIfNeeded = yieldValidationIfNeeded,
+) {
+  let sliceStartedAt = performance.now();
   if ([...manifest.entries, ...(manifest.fontContractEntries ?? [])].some((entry) =>
     entry?.fontEvidence?.backendRevision !== FONT_BACKEND_REVISION)) {
     return { reason: "SnapshotFontBackendRevisionMismatch" };
   }
-  const evidenceGroups = groupedFontEvidence(manifest);
+  const grouped = await groupedFontEvidenceCooperatively(manifest, isCurrent, yieldIfNeeded);
+  if (grouped.superseded) return { reason: "superseded" };
+  const evidenceGroups = grouped.evidenceGroups;
   if (!evidenceGroups) return { reason: "SnapshotFontEvidenceInvalid" };
-  const cssFaceCollection = collectFontFaces(documentObject);
+  sliceStartedAt = await yieldIfNeeded(sliceStartedAt);
+  if (!isCurrent()) return { reason: "superseded" };
+  const requestedFamilies = new Set(Array.from(evidenceGroups.values(), (group) =>
+    String(group.representative.family).toLowerCase()));
+  const cssFaceCollection = await collectFontFacesCooperatively(
+    documentObject,
+    requestedFamilies,
+    isCurrent,
+    yieldIfNeeded,
+  );
+  if (cssFaceCollection.superseded) return { reason: "superseded" };
   if (cssFaceCollection.unverifiable) return { reason: "FontFaceCssomUnverifiable" };
+  sliceStartedAt = await yieldIfNeeded(sliceStartedAt);
+  if (!isCurrent()) return { reason: "superseded" };
   const cssFaces = cssFaceCollection.faces;
   const requireExactFirstPaintDisplay = manifest.entrySource === "server-dom-v1";
   let compatibleLocalDeclared = false;
@@ -1206,22 +1571,25 @@ async function validateManifestFontContract(manifest, documentObject) {
     );
     if (!faceContract.matches) return { reason: "FontFaceContractMismatch" };
     compatibleLocalDeclared ||= faceContract.compatibleLocalDeclared;
-    for (const evidence of group.probes.values()) {
-      const issue = await validateFontEvidence(
-        evidence,
-        cssFaces,
-        documentObject,
-        requireExactFirstPaintDisplay,
-      );
-      if (issue) return { reason: issue };
-    }
+    sliceStartedAt = await yieldIfNeeded(sliceStartedAt);
+    if (!isCurrent()) return { reason: "superseded" };
   }
+  const evidenceIssue = await validateFontEvidenceGroups(
+    evidenceGroups,
+    documentObject,
+    isCurrent,
+    yieldIfNeeded,
+  );
+  if (evidenceIssue) return { reason: evidenceIssue };
   return { reason: null, compatibleLocalDeclared };
 }
 
 /**
- * Validates every live input that lets exact manifest bytes remain a truthful
- * measure source when snapshot adoption misses only for responsive geometry.
+ * Validates immutable exact-font evidence and, for a real layout snapshot,
+ * every live input needed to adopt that snapshot. A compact runtime font
+ * contract is instead a reusable replay corpus: the exact shaper's ShapingInput
+ * lookup is the paragraph/run eligibility gate, and an uncovered host style
+ * falls back without poisoning covered paragraphs in the same root.
  */
 export async function validatePrecomputedSnapshotExactFontContract(root, isCurrent = () => true) {
   root?.removeAttribute?.(TYPOGRAPHY_ISSUE_ATTRIBUTE);
@@ -1248,23 +1616,15 @@ export async function validatePrecomputedSnapshotExactFontContract(root, isCurre
   }
 
   if (fontContractOnlyManifest(manifest)) {
-    const initialTypographyIssue = fontContractTypographyIssue(root, manifest, {
-      allowLiveFontSizeAndLineHeight: true,
-    });
-    if (initialTypographyIssue) {
-      root.setAttribute(TYPOGRAPHY_ISSUE_ATTRIBUTE, initialTypographyIssue);
-      return { matches: false, reason: "SnapshotTypographyMismatch" };
-    }
-    const fontContract = await validateManifestFontContract(manifest, documentObject);
+    // RuntimeFontContractRunEligibility: a host may intentionally vary
+    // typography between paragraphs (for example `font-feature-settings:
+    // "hwid"`). The replay table is keyed by the complete shaping input, so a
+    // mismatching paragraph cannot consume a matching replay accidentally.
+    // Keep the root session available for sibling paragraphs whose runs do
+    // match instead of turning one host style into an article-wide miss.
+    const fontContract = await validateManifestFontContract(manifest, documentObject, isCurrent);
     if (fontContract.reason) return { matches: false, reason: fontContract.reason };
     if (!isCurrent()) return { matches: false, reason: "superseded" };
-    const revalidatedTypographyIssue = fontContractTypographyIssue(root, manifest, {
-      allowLiveFontSizeAndLineHeight: true,
-    });
-    if (revalidatedTypographyIssue) {
-      root.setAttribute(TYPOGRAPHY_ISSUE_ATTRIBUTE, revalidatedTypographyIssue);
-      return { matches: false, reason: "SnapshotTypographyChangedDuringValidation" };
-    }
     return {
       matches: true,
       reason: null,
@@ -1284,6 +1644,7 @@ export async function validatePrecomputedSnapshotExactFontContract(root, isCurre
   if (byKey.size !== paragraphs.length) {
     return { matches: false, reason: "SnapshotCandidateKeyInvalid" };
   }
+  let sliceStartedAt = performance.now();
   for (const entry of manifest.entries) {
     if (
       !entry || typeof entry.key !== "string" || typeof entry.sourceSha256 !== "string" ||
@@ -1310,8 +1671,17 @@ export async function validatePrecomputedSnapshotExactFontContract(root, isCurre
       root.setAttribute(TYPOGRAPHY_ISSUE_ATTRIBUTE, typographyIssue);
       return { matches: false, reason: "SnapshotTypographyMismatch" };
     }
+    sliceStartedAt = await yieldValidationIfNeeded(sliceStartedAt);
+    if (!isCurrent()) return { matches: false, reason: "superseded" };
   }
-  const fontContract = await validateManifestFontContract(manifest, documentObject);
+  const fontContract = await validateManifestFontContract(
+    manifest,
+    documentObject,
+    isCurrent,
+    manifest.entrySource === "server-dom-v1"
+      ? yieldDirectSsrValidationIfNeeded
+      : yieldValidationIfNeeded,
+  );
   if (fontContract.reason) return { matches: false, reason: fontContract.reason };
   if (!isCurrent()) return { matches: false, reason: "superseded" };
   const currentParagraphs = rootParagraphs(root, manifest.paragraphSelector);
@@ -1325,6 +1695,7 @@ export async function validatePrecomputedSnapshotExactFontContract(root, isCurre
   if (currentByKey.size !== currentParagraphs.length) {
     return { matches: false, reason: "SnapshotCandidateKeyChangedDuringValidation" };
   }
+  sliceStartedAt = performance.now();
   for (const entry of manifest.entries) {
     const paragraph = currentByKey.get(entry.key);
     const source = paragraph == null ? null : plainParagraphSource(paragraph);
@@ -1345,6 +1716,8 @@ export async function validatePrecomputedSnapshotExactFontContract(root, isCurre
       root.setAttribute(TYPOGRAPHY_ISSUE_ATTRIBUTE, typographyIssue);
       return { matches: false, reason: "SnapshotTypographyChangedDuringValidation" };
     }
+    sliceStartedAt = await yieldValidationIfNeeded(sliceStartedAt);
+    if (!isCurrent()) return { matches: false, reason: "superseded" };
   }
   if (!isCurrent()) return { matches: false, reason: "superseded" };
   return {
@@ -1352,6 +1725,122 @@ export async function validatePrecomputedSnapshotExactFontContract(root, isCurre
     reason: null,
     paragraphSelector: manifest.paragraphSelector,
     compatibleLocalDeclared: fontContract.compatibleLocalDeclared,
+  };
+}
+
+/**
+ * Validates the host-font contract needed to replay server geometry directly.
+ * This is intentionally strict and comparatively expensive: an adopted SSR
+ * snapshot paints through the host's @font-face rules, so both the CSS face
+ * inventory and browser advances are part of the first-paint proof.
+ */
+export async function validatePrecomputedExactFontReplayContract(root, isCurrent = () => true) {
+  root?.removeAttribute?.(TYPOGRAPHY_ISSUE_ATTRIBUTE);
+  if (!isCurrent()) return { matches: false, reason: "superseded" };
+  const reference = root?.getAttribute?.("snapshot-ref");
+  if (!reference) return { matches: false, reason: "SnapshotReferenceMissing" };
+  const documentObject = root.ownerDocument || document;
+  const template = documentObject.getElementById(reference);
+  if (!template?.content) return { matches: false, reason: "SnapshotTemplateMissing" };
+  const manifestScript = template.content.querySelector?.("[data-tq-snapshot-manifest]");
+  const manifestText = manifestScript?.textContent;
+  let manifest;
+  try {
+    manifest = templateManifest(template);
+  } catch {
+    return { matches: false, reason: "SnapshotManifestInvalid" };
+  }
+  if (
+    manifest.schema !== SNAPSHOT_SCHEMA || manifest.layoutRevision !== LAYOUT_REVISION ||
+    manifest.renderRevision !== RENDER_REVISION || manifest.fontSourcePolicy !== FONT_SOURCE_POLICY ||
+    !Array.isArray(manifest.entries) || typeof manifest.paragraphSelector !== "string" ||
+    !manifestRenderFontFamiliesAreValid(manifest)
+  ) return { matches: false, reason: "SnapshotRevisionMismatch" };
+  if (!manifestEntryKeysAreUnique(manifest)) {
+    return { matches: false, reason: "SnapshotManifestEntryKeyInvalid" };
+  }
+
+  const requestedFamilies = manifestFontFamilies(manifest);
+  if (requestedFamilies.size === 0) {
+    return { matches: false, reason: "SnapshotFontEvidenceInvalid" };
+  }
+  const initialCss = relevantFontFaceLiveSignature(documentObject, requestedFamilies);
+  if (initialCss.unverifiable) {
+    return { matches: false, reason: "FontFaceCssomUnverifiable" };
+  }
+  const fontContract = await validateManifestFontContract(
+    manifest,
+    documentObject,
+    isCurrent,
+    manifest.entrySource === "server-dom-v1"
+      ? yieldDirectSsrValidationIfNeeded
+      : yieldValidationIfNeeded,
+  );
+  if (fontContract.reason) return { matches: false, reason: fontContract.reason };
+  if (!isCurrent()) return { matches: false, reason: "superseded" };
+  const currentTemplate = documentObject.getElementById(reference);
+  const currentManifestText = currentTemplate?.content
+    ?.querySelector?.("[data-tq-snapshot-manifest]")?.textContent;
+  if (currentTemplate !== template || currentManifestText !== manifestText) {
+    return { matches: false, reason: "SnapshotManifestChangedDuringFontValidation" };
+  }
+  const currentCss = relevantFontFaceLiveSignature(documentObject, requestedFamilies);
+  if (currentCss.unverifiable || currentCss.signature !== initialCss.signature) {
+    return { matches: false, reason: "FontFaceContractChangedDuringValidation" };
+  }
+  exactFontReplayProofs.set(root, {
+    reference,
+    template,
+    manifestText,
+    requestedFamilies,
+    cssSignature: currentCss.signature,
+    paragraphSelector: manifest.paragraphSelector,
+    compatibleLocalDeclared: fontContract.compatibleLocalDeclared,
+    renderSource: "host-css",
+  });
+  return {
+    matches: true,
+    reason: null,
+    paragraphSelector: manifest.paragraphSelector,
+    compatibleLocalDeclared: fontContract.compatibleLocalDeclared,
+  };
+}
+
+/**
+ * Backward-compatible name for runtime callers. Runtime replay now paints via
+ * the host font family, so it must prove the same live CSS and advance contract
+ * as snapshot adoption.
+ */
+export function validatePrecomputedExactFontReplayRuntimeContract(
+  root,
+  isCurrent = () => true,
+) {
+  return validatePrecomputedExactFontReplayContract(root, isCurrent);
+}
+
+/** Rechecks the live identity of an already proven replay contract without repeating probes. */
+export function validatePrecomputedExactFontReplayLiveContract(root, isCurrent = () => true) {
+  if (!isCurrent()) return { matches: false, reason: "superseded" };
+  const proof = exactFontReplayProofs.get(root);
+  if (!proof) return { matches: false, reason: "ExactFontReplayProofMissing" };
+  const reference = root?.getAttribute?.("snapshot-ref");
+  const documentObject = root.ownerDocument || document;
+  const template = reference ? documentObject.getElementById(reference) : null;
+  const manifestText = template?.content
+    ?.querySelector?.("[data-tq-snapshot-manifest]")?.textContent;
+  if (
+    reference !== proof.reference || template !== proof.template ||
+    manifestText !== proof.manifestText
+  ) return { matches: false, reason: "SnapshotManifestChangedDuringFontPreparation" };
+  const currentCss = relevantFontFaceLiveSignature(documentObject, proof.requestedFamilies);
+  if (currentCss.unverifiable || currentCss.signature !== proof.cssSignature) {
+    return { matches: false, reason: "FontFaceContractChangedDuringFontPreparation" };
+  }
+  return {
+    matches: true,
+    reason: null,
+    paragraphSelector: proof.paragraphSelector,
+    compatibleLocalDeclared: proof.compatibleLocalDeclared,
   };
 }
 
@@ -1366,7 +1855,8 @@ export function isPrecomputedSnapshotAdopted(root) {
  * `loadingdone` handler would create another loading cycle. A changed CSS face
  * contract or any resulting prepared geometry drift still fails closed.
  */
-export function adoptedPrecomputedSnapshotLiveIssue(root) {
+export async function adoptedPrecomputedSnapshotLiveIssue(root, isCurrent = () => true) {
+  if (!isCurrent()) return "superseded";
   const state = states.get(root);
   const manifest = state?.manifest;
   if (!manifest) return "SnapshotStateMissing";
@@ -1377,9 +1867,12 @@ export function adoptedPrecomputedSnapshotLiveIssue(root) {
   const evidenceGroups = groupedFontEvidence(manifest);
   if (!evidenceGroups) return "SnapshotFontEvidenceInvalid";
   const documentObject = root.ownerDocument || document;
-  const cssFaceCollection = collectFontFaces(documentObject);
+  const requestedFamilies = new Set(Array.from(evidenceGroups.values(), (group) =>
+    String(group.representative.family).toLowerCase()));
+  const cssFaceCollection = collectFontFaces(documentObject, requestedFamilies);
   if (cssFaceCollection.unverifiable) return "FontFaceCssomUnverifiable";
   const requireExactFirstPaintDisplay = manifest.entrySource === "server-dom-v1";
+  let sliceStartedAt = performance.now();
   for (const group of evidenceGroups.values()) {
     const aggregate = {
       ...group.representative,
@@ -1391,6 +1884,8 @@ export function adoptedPrecomputedSnapshotLiveIssue(root) {
       documentObject,
       requireExactFirstPaintDisplay,
     ).matches) return "FontFaceContractMismatch";
+    sliceStartedAt = await yieldValidationIfNeeded(sliceStartedAt);
+    if (!isCurrent()) return "superseded";
   }
 
   const paragraphs = rootParagraphs(root, manifest.paragraphSelector);
@@ -1413,6 +1908,11 @@ export function adoptedPrecomputedSnapshotLiveIssue(root) {
     )) return "SnapshotTypographyMismatch";
     const geometryIssue = renderedPreparedParagraphIssue(paragraph, width);
     if (geometryIssue) return geometryIssue.replace("RenderedPreparedParagraph", "RenderedSnapshot");
+    // CooperativeAdoptedSnapshotAudit: a FontFaceSet event can arrive while the
+    // reader is already scrolling. The exact DOM remains valid and visible
+    // while its independent paragraph contracts are audited across tasks.
+    sliceStartedAt = await yieldValidationIfNeeded(sliceStartedAt);
+    if (!isCurrent()) return "superseded";
   }
   return null;
 }
@@ -1497,8 +1997,22 @@ export function restorePrecomputedSnapshot(root) {
   }
   root.removeAttribute("data-tiqian-enhanced");
   root.removeAttribute("data-tiqian-enhanced-count");
+  root.removeAttribute("data-tiqian-snapshot-count");
   delete root.dataset.tiqianSnapshot;
   delete root.dataset.tiqianSnapshotFontPolicy;
+  return true;
+}
+
+/**
+ * Releases document-scoped snapshot styles after a root leaves the document
+ * without rebuilding DOM that is no longer visible. The WeakMap state retains
+ * the semantic backing if the same custom element is later reconnected; when
+ * the detached tree becomes unreachable, the backing is collected with it.
+ */
+export function detachPrecomputedSnapshot(root) {
+  const state = states.get(root);
+  if (!state) return false;
+  if (state.valueStylesInstalled) releasePreparedValueStyleRoot(root);
   return true;
 }
 
@@ -1543,9 +2057,17 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
   const serverRenderedEntries = manifest.entrySource === "server-dom-v1" &&
     root.getAttribute("data-tq-ssr-snapshot") === reference;
   if (serverRenderedEntries) {
-    captureServerRenderedSnapshotArtifacts(root, manifest, byKey);
+    // DirectSsrFirstInputHandoff: service the navigation frame before cloning
+    // immutable responsive backing. The already-rendered server DOM remains
+    // authoritative while this cooperative cache is assembled.
+    await yieldDirectSsrValidationIfNeeded(0);
+    if (!isCurrent()) return { adopted: false, reason: "superseded" };
+    if (!await captureServerRenderedSnapshotArtifacts(root, manifest, byKey, isCurrent)) {
+      return { adopted: false, reason: "superseded" };
+    }
   }
   const prepared = [];
+  let sliceStartedAt = performance.now();
   for (const entry of manifest.entries) {
     if (
       !entry || typeof entry.key !== "string" || typeof entry.sourceSha256 !== "string" ||
@@ -1585,16 +2107,29 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
       return miss(root, "SnapshotTypographyMismatch");
     }
     prepared.push({ paragraph, snapshot, sourceSnapshot, entry });
+    // CooperativeSnapshotPreflight: digest, computed-style and width reads are
+    // non-mutating. Keep them outside one monolithic navigation task while the
+    // responsive SSR source remains the only visible paragraph DOM.
+    sliceStartedAt = await yieldSnapshotValidationIfNeeded(
+      sliceStartedAt,
+      serverRenderedEntries,
+    );
+    if (!isCurrent()) return { adopted: false, reason: "superseded" };
   }
 
-  const fontContract = await validateManifestFontContract(manifest, documentObject);
-  if (fontContract.reason) return miss(root, fontContract.reason);
+  // SnapshotFontProofHandoff: adoption and the runtime replay session consume
+  // the same exact face evidence. Publish the successful proof on this root so
+  // mixed snapshot/runtime completion does not immediately repeat every
+  // browser font probe.
+  const fontContract = await validatePrecomputedExactFontReplayContract(root, isCurrent);
+  if (!fontContract.matches) return miss(root, fontContract.reason);
   const compatibleLocalDeclared = fontContract.compatibleLocalDeclared;
   if (!isCurrent()) return { adopted: false, reason: "superseded" };
 
   // Font loading and probe measurement are asynchronous. The responsive page
   // may have crossed a breakpoint while they ran, before observers are active.
   // Revalidate every live input immediately before the first DOM mutation.
+  sliceStartedAt = performance.now();
   for (const { paragraph, entry } of prepared) {
     const source = plainParagraphSource(paragraph);
     if (source == null || await sha256Text(source) !== entry.sourceSha256) {
@@ -1615,19 +2150,43 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
     )) {
       return miss(root, "SnapshotTypographyChangedDuringValidation");
     }
+    sliceStartedAt = await yieldSnapshotValidationIfNeeded(
+      sliceStartedAt,
+      serverRenderedEntries,
+    );
+    if (!isCurrent()) return { adopted: false, reason: "superseded" };
   }
   if (!isCurrent()) return { adopted: false, reason: "superseded" };
 
   const adopted = [];
   let valueStylesInstalled = false;
   const originalExactRenderFontAttribute = root.getAttribute(EXACT_RENDER_FONT_ATTRIBUTE);
+  const adoptionState = {
+    paragraphs: adopted,
+    manifest,
+    valueStylesInstalled,
+    originalExactRenderFontAttribute,
+    serverRenderedEntries,
+  };
   try {
     valueStylesInstalled = installPreparedValueStyles(
       root,
       manifest.valueStyles,
-      manifest.renderFontFamilies,
     );
+    adoptionState.valueStylesInstalled = valueStylesInstalled;
+    root.setAttribute(EXACT_RENDER_FONT_ATTRIBUTE, "true");
+    // ProgressiveSnapshotCommitProof: preflight has already proven the whole
+    // source/font/typography contract. Publish one provisional owner before
+    // touching live DOM, then commit and prove one paragraph at a time. Each
+    // geometry read now flushes only that paragraph's pending layout instead
+    // of forcing a single full-article reflow after every entry was replaced.
+    states.set(root, adoptionState);
+    sliceStartedAt = performance.now();
     for (const { paragraph, snapshot, sourceSnapshot, entry } of prepared) {
+      if (!isCurrent() || states.get(root) !== adoptionState) {
+        if (states.get(root) === adoptionState) restorePrecomputedSnapshot(root);
+        return { adopted: false, reason: "superseded" };
+      }
       const originalContent = documentObject.createDocumentFragment();
       if (serverRenderedEntries) {
         for (const child of Array.from(sourceSnapshot?.childNodes ?? paragraph.childNodes)) {
@@ -1668,9 +2227,6 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
         const clone = snapshot.cloneNode(true);
         while (clone.firstChild) paragraph.appendChild(clone.firstChild);
       }
-    }
-    root.setAttribute(EXACT_RENDER_FONT_ATTRIBUTE, "true");
-    for (const { paragraph, entry } of prepared) {
       const width = contentBoxWidth(paragraph);
       if (
         !snapshotEntryWidthMatches(width, entry) ||
@@ -1678,26 +2234,24 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
       ) throw new Error("RenderedSnapshotHostContractMismatch");
       const issue = renderedPreparedParagraphIssue(paragraph, width);
       if (issue) throw new Error(issue.replace("RenderedPreparedParagraph", "RenderedSnapshot"));
+      sliceStartedAt = await yieldSnapshotValidationIfNeeded(
+        sliceStartedAt,
+        serverRenderedEntries,
+      );
     }
   } catch (error) {
-    states.set(root, {
-      paragraphs: adopted,
-      valueStylesInstalled,
-      originalExactRenderFontAttribute,
-      serverRenderedEntries,
-    });
-    restorePrecomputedSnapshot(root);
+    const currentState = states.get(root);
+    if (currentState?.paragraphs === adopted) restorePrecomputedSnapshot(root);
     return miss(root, `SnapshotAdoptionFailed:${error instanceof Error ? error.message : String(error)}`);
   }
-  states.set(root, {
-    paragraphs: adopted,
-    manifest,
-    valueStylesInstalled,
-    originalExactRenderFontAttribute,
-    serverRenderedEntries,
-  });
+  if (!isCurrent()) {
+    const currentState = states.get(root);
+    if (currentState?.paragraphs === adopted) restorePrecomputedSnapshot(root);
+    return { adopted: false, reason: "superseded" };
+  }
   root.setAttribute("data-tiqian-enhanced", "true");
   root.setAttribute("data-tiqian-enhanced-count", String(adopted.length));
+  root.setAttribute("data-tiqian-snapshot-count", String(adopted.length));
   root.dataset.tiqianSnapshot = "maximum-measure";
   root.dataset.tiqianSnapshotFontPolicy = compatibleLocalDeclared ? "compatible-local" : "url-only";
   root.removeAttribute(EXACT_LAYOUT_ISSUE_ATTRIBUTE);

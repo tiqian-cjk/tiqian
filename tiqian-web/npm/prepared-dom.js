@@ -13,7 +13,6 @@ const ROOT_SELECTOR = "tiqian-prose, [data-tiqian-root]";
 const VALUE_STYLE_SCOPE_ATTRIBUTE = "data-tq-value-style-scope";
 const VALUE_STYLE_ELEMENT_ATTRIBUTE = "data-tq-prepared-value-styles";
 const SNAPSHOT_STYLE_OWNER = Object.freeze({});
-const EXACT_RENDER_FONT_OWNER = Object.freeze({});
 const preparedStyleStates = new WeakMap();
 const preparedStyleRootsByHost = new WeakMap();
 let nextPreparedStyleScope = 1;
@@ -75,8 +74,6 @@ function createPreparedStyleState(root) {
     declarations: [],
     indexes: new Map(),
     owners: new Map(),
-    renderFontFamilies: null,
-    renderFontOwners: new Set(),
     dirty: false,
   };
   preparedStyleStates.set(root, state);
@@ -100,13 +97,10 @@ function registerPreparedValueStyle(state, declaration) {
 function syncPreparedValueStyles(state) {
   if (!state.dirty) return;
   const rootScope = `[${VALUE_STYLE_SCOPE_ATTRIBUTE}="${state.scope}"]`;
-  const renderFontRule = state.renderFontFamilies == null
-    ? ""
-    : `${rootScope}{--tq-exact-render-font-family:${state.renderFontFamilies.map(cssString).join(",")}}`;
   const snapshotValuesActive = state.owners.has(SNAPSHOT_STYLE_OWNER);
   const runtimeValuesActive = Array.from(state.owners.keys()).some((owner) =>
     owner !== SNAPSHOT_STYLE_OWNER);
-  state.styleElement.textContent = renderFontRule + state.declarations.map((declaration, index) => {
+  state.styleElement.textContent = state.declarations.map((declaration, index) => {
     // PreparedValueNamespaceIsolation: build-time snapshot CSS remains live in
     // the document so it can restore exact first-paint nodes. Runtime lowering
     // must use a distinct class namespace; otherwise the same compact index can
@@ -141,7 +135,7 @@ export function installPreparedValueStyles(root, declarations, renderFontFamilie
   if (!Array.isArray(renderFontFamilies) || renderFontFamilies.some((family) =>
     typeof family !== "string" || !family.trim())) throw new Error("InvalidPreparedRenderFontFamilies");
   releasePreparedValueStyleRoot(root);
-  if (declarations.length === 0 && renderFontFamilies.length === 0) return false;
+  if (declarations.length === 0) return false;
   const state = preparedStyleState(root);
   if (!state) throw new Error("PreparedValueStyleHostUnavailable");
   try {
@@ -154,11 +148,6 @@ export function installPreparedValueStyles(root, declarations, renderFontFamilie
       return index;
     });
     state.owners.set(SNAPSHOT_STYLE_OWNER, new Set(indexes));
-    if (renderFontFamilies.length > 0) {
-      state.renderFontFamilies = Object.freeze([...renderFontFamilies]);
-      state.renderFontOwners.add(SNAPSHOT_STYLE_OWNER);
-      state.dirty = true;
-    }
     syncPreparedValueStyles(state);
     return true;
   } catch (error) {
@@ -167,36 +156,20 @@ export function installPreparedValueStyles(root, declarations, renderFontFamilie
   }
 }
 
-/** Keeps the exact render family available across responsive runtime layout. */
+/**
+ * Kept as an internal compatibility hook. Host-compatible replay inherits the
+ * existing font-family, so installing a package-owned family style is a no-op.
+ */
 export function installPreparedRenderFontStyle(root, renderFontFamilies) {
   if (!Array.isArray(renderFontFamilies) || renderFontFamilies.length === 0 ||
       renderFontFamilies.some((family) => typeof family !== "string" || !family.trim())) {
     throw new Error("InvalidPreparedRenderFontFamilies");
   }
-  const state = preparedStyleState(root);
-  if (!state) throw new Error("PreparedValueStyleHostUnavailable");
-  const signature = JSON.stringify(renderFontFamilies);
-  if (state.renderFontFamilies != null && JSON.stringify(state.renderFontFamilies) !== signature) {
-    throw new Error("PreparedRenderFontFamilyConflict");
-  }
-  state.renderFontFamilies ??= Object.freeze([...renderFontFamilies]);
-  state.renderFontOwners.add(EXACT_RENDER_FONT_OWNER);
-  state.dirty = true;
-  syncPreparedValueStyles(state);
-  return true;
+  return false;
 }
 
 export function releasePreparedRenderFontStyle(root) {
-  const state = preparedStyleStates.get(root);
-  if (!state || !state.renderFontOwners.delete(EXACT_RENDER_FONT_OWNER)) return false;
-  if (state.renderFontOwners.size === 0) state.renderFontFamilies = null;
-  if (state.owners.size === 0 && state.renderFontOwners.size === 0) {
-    removePreparedStyleState(state);
-  } else {
-    state.dirty = true;
-    syncPreparedValueStyles(state);
-  }
-  return true;
+  return false;
 }
 
 export function releasePreparedParagraphStyles(host) {
@@ -206,7 +179,7 @@ export function releasePreparedParagraphStyles(host) {
   const state = preparedStyleStates.get(root);
   if (!state) return false;
   state.owners.delete(host);
-  if (state.owners.size === 0 && state.renderFontOwners.size === 0) removePreparedStyleState(state);
+  if (state.owners.size === 0) removePreparedStyleState(state);
   return true;
 }
 
@@ -297,11 +270,16 @@ function preparedFeatureSignature(run) {
   return Array.from(run.openTypeFeatures ?? [], String).join(",");
 }
 
+function preparedRenderFontSignature(run) {
+  return Array.from(run.renderFontFamilies ?? [], String).join("\u001f");
+}
+
 function canMergePreparedRun(left, right) {
   if (left.rangeEnd !== right.rangeStart ||
       left.semanticSignature !== right.semanticSignature ||
       left.shapingBoundary || right.shapingBoundary ||
-      preparedFeatureSignature(left) !== preparedFeatureSignature(right)) {
+      preparedFeatureSignature(left) !== preparedFeatureSignature(right) ||
+      preparedRenderFontSignature(left) !== preparedRenderFontSignature(right)) {
     return false;
   }
   if (left.spacing.kind === "none" && right.spacing.kind === "none") return true;
@@ -319,8 +297,9 @@ function mergePreparedRun(left, right) {
 
 function renderRun(run, styleClassFor) {
   const featureSignature = preparedFeatureSignature(run);
+  const renderFontFamilies = Array.from(run.renderFontFamilies ?? [], String);
   const needsElement = run.shapingBoundary || featureSignature ||
-    run.source !== run.display || run.spacing.kind !== "none";
+    renderFontFamilies.length > 0 || run.source !== run.display || run.spacing.kind !== "none";
   if (!needsElement) return renderedText(run.display);
   const attributes = {
     "data-tq-advance": String(
@@ -340,6 +319,10 @@ function renderRun(run, styleClassFor) {
   }
   if (run.source !== run.display) attributes["data-tq-src"] = run.source;
   const styles = [];
+  if (renderFontFamilies.length > 0) {
+    attributes["data-tq-render-font-projection"] = "true";
+    styles.push(`font-family:${renderFontFamilies.map(cssString).join(",")}!important`);
+  }
   if (run.spacing.kind === "letter") {
     styles.push(`letter-spacing:${px(run.spacing.px)}!important`);
   } else if (run.spacing.kind === "overlap") {
@@ -360,6 +343,8 @@ function renderRun(run, styleClassFor) {
       [
         "display:inline-block!important",
         `inline-size:${px(run.spacing.px)}!important`,
+        "height:0!important",
+        "line-height:0!important",
         `letter-spacing:${px(run.spacing.px)}!important`,
         "overflow:hidden!important",
         "vertical-align:baseline!important",
@@ -394,6 +379,18 @@ export function renderPreparedParagraphArtifact(
   }
   const sourceText = plan.lines.flatMap((line) => line.cells).map((cell) => cell.source).join("");
   const semantics = normalizeSnapshotSemantics(options.sourceText ?? sourceText, options.semantics ?? []);
+  const renderTextSpans = Array.from(options.renderTextSpans ?? [], (span) => {
+    const start = Number(span?.start);
+    const end = Number(span?.end);
+    const fontFamilies = Array.from(span?.fontFamilies ?? [], String)
+      .map((family) => family.trim())
+      .filter(Boolean);
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start ||
+        end > (options.sourceText ?? sourceText).length || fontFamilies.length === 0) {
+      throw new Error("InvalidPreparedRenderTextSpan");
+    }
+    return { start, end, fontFamilies };
+  });
   const inlineBoxes = Array.from(options.inlineBoxes ?? []);
   const inlineStartByOffset = new Map();
   const inlineEndByOffset = new Map();
@@ -405,6 +402,16 @@ export function renderPreparedParagraphArtifact(
     rangeStart >= span.start && rangeEnd <= span.end);
   const semanticSpansCrossing = (offset) => semantics.filter((span) =>
     offset > span.start && offset < span.end);
+  const renderFontFamiliesFor = (rangeStart, rangeEnd) => {
+    const owners = renderTextSpans.filter((span) =>
+      rangeStart >= span.start && rangeEnd <= span.end);
+    if (owners.length === 0) return [];
+    const signature = JSON.stringify(owners[0].fontFamilies);
+    if (owners.some((span) => JSON.stringify(span.fontFamilies) !== signature)) {
+      throw new Error("ConflictingPreparedRenderTextSpan");
+    }
+    return owners[0].fontFamilies;
+  };
   const nodes = [];
   let activeSemantics = [];
   let activeContainers = [];
@@ -455,6 +462,7 @@ export function renderPreparedParagraphArtifact(
         naturalWidth: cell.naturalWidth,
         shapingBoundary: cell.shapingBoundary === true,
         openTypeFeatures: cell.openTypeFeatures,
+        renderFontFamilies: renderFontFamiliesFor(cell.rangeStart, cell.rangeEnd),
         trailingGap,
         spacing: preparedSpacing(cell.display, cell.naturalWidth, trailingGap),
         semanticPath: semanticSpansFor(cell.rangeStart, cell.rangeEnd),
@@ -591,7 +599,12 @@ export function renderPreparedParagraph(planOrJson, typographyOrLocale = DEFAULT
  * the browser HTML parser, matching the DOM produced when the same string is
  * delivered inside an SSR snapshot template.
  */
-export function renderPreparedParagraphInto(host, planOrJson, typographyOrLocale = DEFAULT_LOCALE) {
+export function renderPreparedParagraphInto(
+  host,
+  planOrJson,
+  typographyOrLocale = DEFAULT_LOCALE,
+  options = {},
+) {
   if (host == null || !("innerHTML" in Object(host)) || typeof host.querySelectorAll !== "function") {
     throw new Error("InvalidPreparedParagraphHost");
   }
@@ -601,6 +614,7 @@ export function renderPreparedParagraphInto(host, planOrJson, typographyOrLocale
   let lowered;
   try {
     lowered = renderPreparedParagraphArtifact(planOrJson, typographyOrLocale, {
+      ...options,
       styleClassFor: state
         ? (declaration) => {
           const index = registerPreparedValueStyle(state, declaration);
