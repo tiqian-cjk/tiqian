@@ -30,6 +30,7 @@ private val demoOptions = TiqianWeb.EnhanceOptions(
     fontFamilies = TiqianWeb.FontFamilyOptions(
         cjk = "\"Source Han Sans SC\", \"Noto Sans CJK SC\", \"PingFang SC\", sans-serif",
         latin = "\"Inter\", \"Source Han Sans SC\", \"Noto Sans CJK SC\", \"PingFang SC\", sans-serif",
+        monospace = "ui-monospace, \"SFMono-Regular\", Menlo, Consolas, monospace",
     ),
 )
 
