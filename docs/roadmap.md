@@ -19,6 +19,17 @@ Node + HarfBuzz 中跑同一条 Tiqian layout pipeline；桌面最大版心的 s
 `renderFontFamilies` 显式使用同一绘制字体，失配则回到现有 Kotlin/JS host-font 路径。完整取舍见
 [ADR 0040](adr/0040-build-time-web-font-snapshots.md)。
 
+并行推进 **全段动态规划断行**（2026-07-17，[ADR 0041](adr/0041-paragraph-dp-line-breaking.md)）：
+`ParagraphDpLineBreaker` 以 ADR 0038 的同一代价做全段精确 DP，推入以压缩边进解
+（`CompressionAsDpEdge`）。2026-07-18 真实语料目检否决转默认：全局最优暴露出
+代价模型四缺陷——邻行差项在自然密排处的过零行为造成松散传染、总 gap 平均掩盖
+中西间距集中拉伸、末行免检、压缩被平坦罚分定成最后手段（与 CLREQ 先挤压后拉伸
+相反）。二次目检再证伪邻行差项本身：v3 换 `StretchRunSparsity`（可见拉伸行
+游程递增罚）。三轮目检后**收档冻结**：v3 下 DP 与 lookahead 在真实语料基本
+收敛，残余收益不足以转默认——lookahead + ADR 0031/0038 已接近修正后感知
+模型的最优。DP 保留为实验策略与代价模型试验台，`CatastropheGuard` 留作
+回归；解冻条件见 ADR 0041。
+
 已经命名但尚未开工的候选：
 
 - `WidthIndependentAnnotationCache`：让不依赖行宽的 annotation 结果在 resize 重排时复用。

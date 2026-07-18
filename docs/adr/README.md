@@ -58,6 +58,7 @@ ADR 记录已经做出的架构与排版决定。它们按编号保留当时的 
 - [0038 邻行均摊](0038-neighbor-amortized-adjustment.md)
 - [0039 Web 渲染路径与真实站点接入](0039-web-rendering-path.md)
 - [0040 构建期 Web 字体证据与最大版心快照](0040-build-time-web-font-snapshots.md)
+- [0041 全段动态规划断行](0041-paragraph-dp-line-breaking.md)
 
 ## 早期状态说明
 
