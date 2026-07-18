@@ -805,3 +805,405 @@ spacing 168-170 '」。' inner=8.0->0.0 target=168-169
 autospace 99-100 side=gap boundary=CjkText reduction=6.0
 edgetrim 184-185 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== paragraph-dp ==
+size 320.0x240.0
+kinsoku measure=20.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:20字→Basic
+line[0] 0-18 indent=32.0 natural=288.0 adjusted=288.0 visual=288.0 repair=- candidates=- justify=-
+line[1] 18-38 natural=320.0 adjusted=320.0 visual=320.0 repair=- candidates=- justify=-
+line[2] 38-57 natural=304.0 adjusted=304.0 visual=320.0 repair=- candidates=- justify=deficit=16.0->0.0 CjkInterChar@38+0.9,CjkInterChar@39+0.9,CjkInterChar@40+0.9,CjkInterChar@41+0.9,CjkInterChar@42+0.9,CjkInterChar@43+0.9,CjkInterChar@44+0.9,CjkInterChar@45+0.9,CjkInterChar@46+0.9,CjkInterChar@47+0.9,CjkInterChar@48+0.9,CjkInterChar@49+0.9,CjkInterChar@50+0.9,CjkInterChar@51+0.9,CjkInterChar@52+0.9,CjkInterChar@53+0.9,CjkInterChar@54+0.9,CjkInterChar@55+0.9
+line[3] 57-77 natural=320.0 adjusted=320.0 visual=320.0 repair=- candidates=- justify=-
+line[4] 77-97 natural=320.0 adjusted=320.0 visual=320.0 repair=- candidates=- justify=-
+line[5] 97-118 natural=322.0 adjusted=320.0 visual=320.0 repair=PushIn(LineAdjustmentPushIn shrink=2.0) candidates=PushIn+ justify=-
+line[6] 118-138 natural=320.0 adjusted=320.0 visual=320.0 repair=- candidates=- justify=-
+line[7] 138-159 natural=336.0 adjusted=320.0 visual=320.0 repair=PushIn(LineAdjustmentPushIn shrink=8.0) candidates=PushIn+ justify=-
+line[8] 159-180 natural=336.0 adjusted=320.0 visual=320.0 repair=PushIn(LineAdjustmentPushIn shrink=8.0) candidates=PushIn+ justify=-
+line[9] 180-185 natural=80.0 adjusted=72.0 visual=72.0 repair=- candidates=- justify=-
+cluster 0-1 '咖' adv=16.0
+cluster 1-2 '啡' adv=16.0
+cluster 2-3 '（' adv=16.0
+cluster 3-9 'coffee' adv=96.0
+cluster 9-10 '）' adv=16.0
+cluster 10-11 '在' adv=16.0
+cluster 11-12 '十' adv=16.0
+cluster 12-13 '七' adv=16.0
+cluster 13-14 '世' adv=16.0
+cluster 14-15 '纪' adv=16.0
+cluster 15-16 '经' adv=16.0
+cluster 16-17 '威' adv=16.0
+cluster 17-18 '尼' adv=16.0
+cluster 18-19 '斯' adv=16.0
+cluster 19-20 '传' adv=16.0
+cluster 20-21 '入' adv=16.0
+cluster 21-22 '欧' adv=16.0
+cluster 22-23 '洲' adv=16.0
+cluster 23-24 '。' adv=16.0
+cluster 24-25 '最' adv=16.0
+cluster 25-26 '初' adv=16.0
+cluster 26-27 '它' adv=16.0
+cluster 27-28 '被' adv=16.0
+cluster 28-29 '当' adv=16.0
+cluster 29-30 '作' adv=16.0
+cluster 30-31 '药' adv=16.0
+cluster 31-32 '物' adv=16.0
+cluster 32-33 '出' adv=16.0
+cluster 33-34 '售' adv=16.0
+cluster 34-35 '，' adv=16.0
+cluster 35-36 '价' adv=16.0
+cluster 36-37 '格' adv=16.0
+cluster 37-38 '高' adv=16.0
+cluster 38-39 '得' adv=16.9
+cluster 39-40 '吓' adv=16.9
+cluster 40-41 '人' adv=16.9
+cluster 41-42 '，' adv=16.9
+cluster 42-43 '真' adv=16.9
+cluster 43-44 '正' adv=16.9
+cluster 44-45 '让' adv=16.9
+cluster 45-46 '它' adv=16.9
+cluster 46-47 '流' adv=16.9
+cluster 47-48 '行' adv=16.9
+cluster 48-49 '起' adv=16.9
+cluster 49-50 '来' adv=16.9
+cluster 50-51 '的' adv=16.9
+cluster 51-52 '是' adv=16.9
+cluster 52-53 '随' adv=16.9
+cluster 53-54 '后' adv=16.9
+cluster 54-55 '遍' adv=16.9
+cluster 55-56 '地' adv=16.9
+cluster 56-57 '开' adv=16.0
+cluster 57-58 '花' adv=16.0
+cluster 58-59 '的' adv=16.0
+cluster 59-60 '咖' adv=16.0
+cluster 60-61 '啡' adv=16.0
+cluster 61-62 '馆' adv=16.0
+cluster 62-64 '⸺' adv=32.0
+cluster 64-65 '读' adv=16.0
+cluster 65-66 '报' adv=16.0
+cluster 66-67 '、' adv=16.0
+cluster 67-68 '辩' adv=16.0
+cluster 68-69 '论' adv=16.0
+cluster 69-70 '、' adv=16.0
+cluster 70-71 '下' adv=16.0
+cluster 71-72 '棋' adv=16.0
+cluster 72-73 '、' adv=16.0
+cluster 73-74 '写' adv=16.0
+cluster 74-75 '作' adv=16.0
+cluster 75-77 '⸺' adv=32.0
+cluster 77-78 '城' adv=16.0
+cluster 78-79 '市' adv=16.0
+cluster 79-80 '生' adv=16.0
+cluster 80-81 '活' adv=16.0
+cluster 81-82 '忽' adv=16.0
+cluster 82-83 '然' adv=16.0
+cluster 83-84 '多' adv=16.0
+cluster 84-85 '出' adv=16.0
+cluster 85-86 '一' adv=16.0
+cluster 86-87 '个' adv=16.0
+cluster 87-88 '公' adv=16.0
+cluster 88-89 '共' adv=16.0
+cluster 89-90 '客' adv=16.0
+cluster 90-91 '厅' adv=16.0
+cluster 91-92 '。' adv=16.0
+cluster 92-93 '意' adv=16.0
+cluster 93-94 '大' adv=16.0
+cluster 94-95 '利' adv=16.0
+cluster 95-96 '人' adv=16.0
+cluster 96-97 '做' adv=16.0
+cluster 97-98 '出' adv=16.0
+cluster 98-99 '了' adv=16.0
+cluster 99-100 ' ' adv=2.0
+cluster 100-108 'espresso' adv=128.0
+cluster 108-109 '，' adv=14.0
+cluster 109-110 '维' adv=16.0
+cluster 110-111 '也' adv=16.0
+cluster 111-112 '纳' adv=16.0
+cluster 112-113 '人' adv=16.0
+cluster 113-114 '往' adv=16.0
+cluster 114-115 '杯' adv=16.0
+cluster 115-116 '里' adv=16.0
+cluster 116-117 '加' adv=16.0
+cluster 117-118 '奶' adv=16.0
+cluster 118-119 '油' adv=16.0
+cluster 119-120 '，' adv=16.0
+cluster 120-121 '土' adv=16.0
+cluster 121-122 '耳' adv=16.0
+cluster 122-123 '其' adv=16.0
+cluster 123-124 '人' adv=16.0
+cluster 124-125 '坚' adv=16.0
+cluster 125-126 '持' adv=16.0
+cluster 126-127 '连' adv=16.0
+cluster 127-128 '渣' adv=16.0
+cluster 128-129 '同' adv=16.0
+cluster 129-130 '煮' adv=16.0
+cluster 130-132 '⋯⋯' adv=32.0
+cluster 132-133 '每' adv=16.0
+cluster 133-134 '座' adv=16.0
+cluster 134-135 '城' adv=16.0
+cluster 135-136 '市' adv=16.0
+cluster 136-137 '都' adv=16.0
+cluster 137-138 '相' adv=16.0
+cluster 138-139 '信' adv=16.0
+cluster 139-140 '自' adv=16.0
+cluster 140-141 '己' adv=16.0
+cluster 141-142 '手' adv=16.0
+cluster 142-143 '里' adv=16.0
+cluster 143-144 '那' adv=16.0
+cluster 144-145 '一' adv=16.0
+cluster 145-146 '杯' adv=16.0
+cluster 146-147 '才' adv=16.0
+cluster 147-148 '是' adv=16.0
+cluster 148-149 '正' adv=16.0
+cluster 149-150 '统' adv=16.0
+cluster 150-151 '。' adv=16.0
+cluster 151-152 '有' adv=16.0
+cluster 152-153 '人' adv=16.0
+cluster 153-154 '说' adv=16.0
+cluster 154-155 '：' adv=8.0
+cluster 155-156 '「' adv=8.0
+cluster 156-157 '先' adv=16.0
+cluster 157-158 '有' adv=16.0
+cluster 158-159 '咖' adv=16.0
+cluster 159-160 '啡' adv=16.0
+cluster 160-161 '馆' adv=16.0
+cluster 161-162 '，' adv=12.0
+cluster 162-163 '后' adv=16.0
+cluster 163-164 '有' adv=16.0
+cluster 164-165 '启' adv=16.0
+cluster 165-166 '蒙' adv=16.0
+cluster 166-167 '运' adv=16.0
+cluster 167-168 '动' adv=16.0
+cluster 168-169 '」' adv=8.0
+cluster 169-170 '。' adv=16.0
+cluster 170-171 '这' adv=16.0
+cluster 171-172 '话' adv=16.0
+cluster 172-173 '说' adv=16.0
+cluster 173-174 '得' adv=16.0
+cluster 174-175 '夸' adv=16.0
+cluster 175-176 '张' adv=16.0
+cluster 176-177 '，' adv=12.0
+cluster 177-178 '但' adv=16.0
+cluster 178-179 '也' adv=16.0
+cluster 179-180 '不' adv=16.0
+cluster 180-181 '算' adv=16.0
+cluster 181-182 '太' adv=16.0
+cluster 182-183 '离' adv=16.0
+cluster 183-184 '谱' adv=16.0
+cluster 184-185 '。' adv=8.0
+font 0-1 role=CjkText key=cjk-primary display='咖' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='啡' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkPunctuation key=cjk-primary display='（' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-9 role=LatinText key=latin-primary display='coffee' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 9-10 role=CjkPunctuation key=cjk-primary display='）' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 10-11 role=CjkText key=cjk-primary display='在' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-12 role=CjkText key=cjk-primary display='十' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 12-13 role=CjkText key=cjk-primary display='七' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 13-14 role=CjkText key=cjk-primary display='世' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 14-15 role=CjkText key=cjk-primary display='纪' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 15-16 role=CjkText key=cjk-primary display='经' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 16-17 role=CjkText key=cjk-primary display='威' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 17-18 role=CjkText key=cjk-primary display='尼' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 18-19 role=CjkText key=cjk-primary display='斯' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 19-20 role=CjkText key=cjk-primary display='传' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 20-21 role=CjkText key=cjk-primary display='入' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 21-22 role=CjkText key=cjk-primary display='欧' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 22-23 role=CjkText key=cjk-primary display='洲' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 23-24 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 24-25 role=CjkText key=cjk-primary display='最' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 25-26 role=CjkText key=cjk-primary display='初' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 26-27 role=CjkText key=cjk-primary display='它' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 27-28 role=CjkText key=cjk-primary display='被' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 28-29 role=CjkText key=cjk-primary display='当' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 29-30 role=CjkText key=cjk-primary display='作' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 30-31 role=CjkText key=cjk-primary display='药' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 31-32 role=CjkText key=cjk-primary display='物' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 32-33 role=CjkText key=cjk-primary display='出' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 33-34 role=CjkText key=cjk-primary display='售' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 34-35 role=CjkPunctuation key=cjk-primary display='，' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 35-36 role=CjkText key=cjk-primary display='价' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 36-37 role=CjkText key=cjk-primary display='格' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 37-38 role=CjkText key=cjk-primary display='高' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 38-39 role=CjkText key=cjk-primary display='得' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 39-40 role=CjkText key=cjk-primary display='吓' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 40-41 role=CjkText key=cjk-primary display='人' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 41-42 role=CjkPunctuation key=cjk-primary display='，' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 42-43 role=CjkText key=cjk-primary display='真' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 43-44 role=CjkText key=cjk-primary display='正' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 44-45 role=CjkText key=cjk-primary display='让' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 45-46 role=CjkText key=cjk-primary display='它' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 46-47 role=CjkText key=cjk-primary display='流' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 47-48 role=CjkText key=cjk-primary display='行' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 48-49 role=CjkText key=cjk-primary display='起' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 49-50 role=CjkText key=cjk-primary display='来' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 50-51 role=CjkText key=cjk-primary display='的' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 51-52 role=CjkText key=cjk-primary display='是' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 52-53 role=CjkText key=cjk-primary display='随' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 53-54 role=CjkText key=cjk-primary display='后' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 54-55 role=CjkText key=cjk-primary display='遍' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 55-56 role=CjkText key=cjk-primary display='地' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 56-57 role=CjkText key=cjk-primary display='开' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 57-58 role=CjkText key=cjk-primary display='花' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 58-59 role=CjkText key=cjk-primary display='的' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 59-60 role=CjkText key=cjk-primary display='咖' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 60-61 role=CjkText key=cjk-primary display='啡' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 61-62 role=CjkText key=cjk-primary display='馆' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 62-64 role=CjkPunctuation key=cjk-primary display='⸺' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:U+2014+U+2014->U+2E3A
+font 64-65 role=CjkText key=cjk-primary display='读' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 65-66 role=CjkText key=cjk-primary display='报' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 66-67 role=CjkPunctuation key=cjk-primary display='、' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 67-68 role=CjkText key=cjk-primary display='辩' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 68-69 role=CjkText key=cjk-primary display='论' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 69-70 role=CjkPunctuation key=cjk-primary display='、' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 70-71 role=CjkText key=cjk-primary display='下' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 71-72 role=CjkText key=cjk-primary display='棋' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 72-73 role=CjkPunctuation key=cjk-primary display='、' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 73-74 role=CjkText key=cjk-primary display='写' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 74-75 role=CjkText key=cjk-primary display='作' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 75-77 role=CjkPunctuation key=cjk-primary display='⸺' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:U+2014+U+2014->U+2E3A
+font 77-78 role=CjkText key=cjk-primary display='城' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 78-79 role=CjkText key=cjk-primary display='市' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 79-80 role=CjkText key=cjk-primary display='生' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 80-81 role=CjkText key=cjk-primary display='活' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 81-82 role=CjkText key=cjk-primary display='忽' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 82-83 role=CjkText key=cjk-primary display='然' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 83-84 role=CjkText key=cjk-primary display='多' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 84-85 role=CjkText key=cjk-primary display='出' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 85-86 role=CjkText key=cjk-primary display='一' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 86-87 role=CjkText key=cjk-primary display='个' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 87-88 role=CjkText key=cjk-primary display='公' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 88-89 role=CjkText key=cjk-primary display='共' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 89-90 role=CjkText key=cjk-primary display='客' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 90-91 role=CjkText key=cjk-primary display='厅' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 91-92 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 92-93 role=CjkText key=cjk-primary display='意' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 93-94 role=CjkText key=cjk-primary display='大' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 94-95 role=CjkText key=cjk-primary display='利' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 95-96 role=CjkText key=cjk-primary display='人' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 96-97 role=CjkText key=cjk-primary display='做' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 97-98 role=CjkText key=cjk-primary display='出' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 98-99 role=CjkText key=cjk-primary display='了' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 99-108 role=LatinText key=latin-primary display=' espresso' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 108-109 role=CjkPunctuation key=cjk-primary display='，' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 109-110 role=CjkText key=cjk-primary display='维' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 110-111 role=CjkText key=cjk-primary display='也' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 111-112 role=CjkText key=cjk-primary display='纳' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 112-113 role=CjkText key=cjk-primary display='人' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 113-114 role=CjkText key=cjk-primary display='往' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 114-115 role=CjkText key=cjk-primary display='杯' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 115-116 role=CjkText key=cjk-primary display='里' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 116-117 role=CjkText key=cjk-primary display='加' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 117-118 role=CjkText key=cjk-primary display='奶' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 118-119 role=CjkText key=cjk-primary display='油' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 119-120 role=CjkPunctuation key=cjk-primary display='，' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 120-121 role=CjkText key=cjk-primary display='土' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 121-122 role=CjkText key=cjk-primary display='耳' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 122-123 role=CjkText key=cjk-primary display='其' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 123-124 role=CjkText key=cjk-primary display='人' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 124-125 role=CjkText key=cjk-primary display='坚' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 125-126 role=CjkText key=cjk-primary display='持' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 126-127 role=CjkText key=cjk-primary display='连' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 127-128 role=CjkText key=cjk-primary display='渣' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 128-129 role=CjkText key=cjk-primary display='同' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 129-130 role=CjkText key=cjk-primary display='煮' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 130-132 role=CjkPunctuation key=cjk-primary display='⋯⋯' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:U+2026+U+2026->U+22EF+U+22EF
+font 132-133 role=CjkText key=cjk-primary display='每' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 133-134 role=CjkText key=cjk-primary display='座' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 134-135 role=CjkText key=cjk-primary display='城' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 135-136 role=CjkText key=cjk-primary display='市' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 136-137 role=CjkText key=cjk-primary display='都' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 137-138 role=CjkText key=cjk-primary display='相' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 138-139 role=CjkText key=cjk-primary display='信' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 139-140 role=CjkText key=cjk-primary display='自' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 140-141 role=CjkText key=cjk-primary display='己' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 141-142 role=CjkText key=cjk-primary display='手' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 142-143 role=CjkText key=cjk-primary display='里' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 143-144 role=CjkText key=cjk-primary display='那' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 144-145 role=CjkText key=cjk-primary display='一' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 145-146 role=CjkText key=cjk-primary display='杯' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 146-147 role=CjkText key=cjk-primary display='才' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 147-148 role=CjkText key=cjk-primary display='是' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 148-149 role=CjkText key=cjk-primary display='正' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 149-150 role=CjkText key=cjk-primary display='统' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 150-151 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 151-152 role=CjkText key=cjk-primary display='有' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 152-153 role=CjkText key=cjk-primary display='人' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 153-154 role=CjkText key=cjk-primary display='说' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 154-155 role=CjkPunctuation key=cjk-primary display='：' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 155-156 role=CjkPunctuation key=cjk-primary display='「' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 156-157 role=CjkText key=cjk-primary display='先' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 157-158 role=CjkText key=cjk-primary display='有' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 158-159 role=CjkText key=cjk-primary display='咖' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 159-160 role=CjkText key=cjk-primary display='啡' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 160-161 role=CjkText key=cjk-primary display='馆' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 161-162 role=CjkPunctuation key=cjk-primary display='，' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 162-163 role=CjkText key=cjk-primary display='后' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 163-164 role=CjkText key=cjk-primary display='有' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 164-165 role=CjkText key=cjk-primary display='启' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 165-166 role=CjkText key=cjk-primary display='蒙' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 166-167 role=CjkText key=cjk-primary display='运' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 167-168 role=CjkText key=cjk-primary display='动' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 168-169 role=CjkPunctuation key=cjk-primary display='」' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 169-170 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 170-171 role=CjkText key=cjk-primary display='这' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 171-172 role=CjkText key=cjk-primary display='话' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 172-173 role=CjkText key=cjk-primary display='说' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 173-174 role=CjkText key=cjk-primary display='得' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 174-175 role=CjkText key=cjk-primary display='夸' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 175-176 role=CjkText key=cjk-primary display='张' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 176-177 role=CjkPunctuation key=cjk-primary display='，' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 177-178 role=CjkText key=cjk-primary display='但' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 178-179 role=CjkText key=cjk-primary display='也' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 179-180 role=CjkText key=cjk-primary display='不' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 180-181 role=CjkText key=cjk-primary display='算' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 181-182 role=CjkText key=cjk-primary display='太' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 182-183 role=CjkText key=cjk-primary display='离' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 183-184 role=CjkText key=cjk-primary display='谱' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 184-185 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 2-3 '（' class=Opening adv=16.0 body=8.0 lead=8.0 trail=0.0 anchor=Trailing source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 9-10 '）' class=Closing adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 23-24 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 34-35 '，' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 41-42 '，' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 62-64 '⸺' class=Dash adv=32.0 body=32.0 lead=0.0 trail=0.0 anchor=Center source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 66-67 '、' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 69-70 '、' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 72-73 '、' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 75-77 '⸺' class=Dash adv=32.0 body=32.0 lead=0.0 trail=0.0 anchor=Center source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 91-92 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 108-109 '，' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 119-120 '，' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 130-131 '⋯' class=Ellipsis adv=16.0 body=16.0 lead=0.0 trail=0.0 anchor=Center source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 131-132 '⋯' class=Ellipsis adv=16.0 body=16.0 lead=0.0 trail=0.0 anchor=Center source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 150-151 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 154-155 '：' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 155-156 '「' class=Opening adv=16.0 body=8.0 lead=8.0 trail=0.0 anchor=Trailing source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 161-162 '，' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 168-169 '」' class=Closing adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 169-170 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 176-177 '，' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 184-185 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 2-3 body=8.0 lead=0.0/8.0 trail=0.0/0.0 justify=0.0 resolved=16.0
+geom 9-10 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 23-24 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 34-35 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 41-42 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.9 resolved=16.9
+geom 62-64 body=32.0 lead=0.0/0.0 trail=0.0/0.0 justify=0.0 resolved=32.0
+geom 66-67 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 69-70 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 72-73 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 75-77 body=32.0 lead=0.0/0.0 trail=0.0/0.0 justify=0.0 resolved=32.0
+geom 91-92 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 108-109 body=8.0 lead=0.0/0.0 trail=2.0/8.0 justify=0.0 resolved=14.0
+geom 119-120 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 130-132 body=32.0 lead=0.0/0.0 trail=0.0/0.0 justify=0.0 resolved=32.0
+geom 150-151 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 154-155 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+geom 155-156 body=8.0 lead=8.0/8.0 trail=0.0/0.0 justify=0.0 resolved=8.0
+geom 161-162 body=8.0 lead=0.0/0.0 trail=4.0/8.0 justify=0.0 resolved=12.0
+geom 168-169 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+geom 169-170 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 176-177 body=8.0 lead=0.0/0.0 trail=4.0/8.0 justify=0.0 resolved=12.0
+geom 184-185 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+spacing 154-156 '：「' inner=16.0->8.0 target=154-155
+spacing 168-170 '」。' inner=8.0->0.0 target=168-169
+autospace 99-100 side=gap boundary=CjkText reduction=6.0
+edgetrim 184-185 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

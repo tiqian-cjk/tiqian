@@ -1101,7 +1101,7 @@ internal fun applyKinsokuRepairs(
     return LineSolution(mutable, totalBadness = totalBadness)
 }
 
-private data class PushInResult(
+internal data class PushInResult(
     val previous: LineCandidate,
     val current: LineCandidate?,
     val candidate: RepairCandidate,
@@ -1127,7 +1127,7 @@ private data class PushInResult(
  *     (`totalShrink < overflow`), update it here and rely on it as the
  *     only knob; do not reintroduce a second `overflow`-based path.
  */
-private fun tryPushIn(
+internal fun tryPushIn(
     prev: LineCandidate,
     curr: LineCandidate,
     naturalClusters: List<Cluster>,

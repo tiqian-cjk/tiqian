@@ -41,3 +41,23 @@ font 5-6 role=CjkText key=cjk-primary display='二' sub=CjkPunctuationGlyphPolic
 font 6-7 role=CjkText key=cjk-primary display='行' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 mandatorybreak 3-4 afterCluster=3 reason=MandatoryBreakNoShape
 linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== paragraph-dp ==
+size 48.0x48.0
+kinsoku measure=10.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:10字→Basic+Hang
+line[0] 0-4 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
+line[1] 4-7 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
+cluster 0-1 '第' adv=16.0
+cluster 1-2 '一' adv=16.0
+cluster 2-3 '行' adv=16.0
+cluster 3-4 '' adv=0.0
+cluster 4-5 '第' adv=16.0
+cluster 5-6 '二' adv=16.0
+cluster 6-7 '行' adv=16.0
+font 0-1 role=CjkText key=cjk-primary display='第' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='一' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='行' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=CjkText key=cjk-primary display='第' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='二' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 6-7 role=CjkText key=cjk-primary display='行' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+mandatorybreak 3-4 afterCluster=3 reason=MandatoryBreakNoShape
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

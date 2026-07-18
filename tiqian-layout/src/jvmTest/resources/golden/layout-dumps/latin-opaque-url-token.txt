@@ -83,3 +83,44 @@ font 1-2 role=CjkText key=cjk-primary display='接' sub=CjkPunctuationGlyphPolic
 font 2-49 role=LatinText key=latin-primary display=' https://example.com/path/to/abc123def456ghi789' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 autospace 2-3 side=gap boundary=CjkText reduction=6.0
 linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== paragraph-dp ==
+size 160.0x144.0
+kinsoku measure=10.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:10字→Basic+Hang
+line[0] 0-10 natural=146.0 adjusted=146.0 visual=160.0 repair=- candidates=- justify=deficit=14.0->0.0 CjkLatinSpace@2+3.3,CjkInterChar@0+10.7
+line[1] 10-19 natural=144.0 adjusted=144.0 visual=144.0 repair=- candidates=- justify=deficit=16.0->16.0
+line[2] 19-28 natural=144.0 adjusted=144.0 visual=144.0 repair=- candidates=- justify=deficit=16.0->16.0
+line[3] 28-37 natural=144.0 adjusted=144.0 visual=144.0 repair=- candidates=- justify=deficit=16.0->16.0
+line[4] 37-46 natural=144.0 adjusted=144.0 visual=144.0 repair=- candidates=- justify=deficit=16.0->16.0
+line[5] 46-49 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=-
+cluster 0-1 '链' adv=26.7
+cluster 1-2 '接' adv=16.0
+cluster 2-3 ' ' adv=5.3
+cluster 3-10 'https:/' adv=112.0
+cluster 10-11 '/' adv=16.0
+cluster 11-19 'example.' adv=128.0
+cluster 19-23 'com/' adv=64.0
+cluster 23-28 'path/' adv=80.0
+cluster 28-31 'to/' adv=48.0
+cluster 31-32 'a' adv=16.0
+cluster 32-33 'b' adv=16.0
+cluster 33-34 'c' adv=16.0
+cluster 34-35 '1' adv=16.0
+cluster 35-36 '2' adv=16.0
+cluster 36-37 '3' adv=16.0
+cluster 37-38 'd' adv=16.0
+cluster 38-39 'e' adv=16.0
+cluster 39-40 'f' adv=16.0
+cluster 40-41 '4' adv=16.0
+cluster 41-42 '5' adv=16.0
+cluster 42-43 '6' adv=16.0
+cluster 43-44 'g' adv=16.0
+cluster 44-45 'h' adv=16.0
+cluster 45-46 'i' adv=16.0
+cluster 46-47 '7' adv=16.0
+cluster 47-48 '8' adv=16.0
+cluster 48-49 '9' adv=16.0
+font 0-1 role=CjkText key=cjk-primary display='链' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='接' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-49 role=LatinText key=latin-primary display=' https://example.com/path/to/abc123def456ghi789' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+autospace 2-3 side=gap boundary=CjkText reduction=6.0
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

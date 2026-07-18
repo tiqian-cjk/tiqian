@@ -59,3 +59,32 @@ geom 9-11 body=32.0 lead=0.0/0.0 trail=0.0/0.0 justify=0.0 resolved=32.0
 geom 13-14 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 13-14 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== paragraph-dp ==
+size 216.0x24.0
+kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
+line[0] 0-14 natural=224.0 adjusted=216.0 visual=216.0 repair=- candidates=- justify=-
+cluster 0-1 '提' adv=16.0
+cluster 1-2 '椠' adv=16.0
+cluster 2-4 '⋯⋯' adv=32.0
+cluster 4-9 'Hello' adv=80.0
+cluster 9-11 '⸺' adv=32.0
+cluster 11-12 '世' adv=16.0
+cluster 12-13 '界' adv=16.0
+cluster 13-14 '。' adv=8.0
+font 0-1 role=CjkText key=cjk-primary display='提' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='椠' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-4 role=CjkPunctuation key=cjk-primary display='⋯⋯' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:U+2026+U+2026->U+22EF+U+22EF
+font 4-9 role=LatinText key=latin-primary display='Hello' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 9-11 role=CjkPunctuation key=cjk-primary display='⸺' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:U+2014+U+2014->U+2E3A
+font 11-12 role=CjkText key=cjk-primary display='世' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 12-13 role=CjkText key=cjk-primary display='界' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 13-14 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 2-3 '⋯' class=Ellipsis adv=16.0 body=16.0 lead=0.0 trail=0.0 anchor=Center source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 3-4 '⋯' class=Ellipsis adv=16.0 body=16.0 lead=0.0 trail=0.0 anchor=Center source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 9-11 '⸺' class=Dash adv=32.0 body=32.0 lead=0.0 trail=0.0 anchor=Center source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 13-14 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 2-4 body=32.0 lead=0.0/0.0 trail=0.0/0.0 justify=0.0 resolved=32.0
+geom 9-11 body=32.0 lead=0.0/0.0 trail=0.0/0.0 justify=0.0 resolved=32.0
+geom 13-14 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+edgetrim 13-14 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

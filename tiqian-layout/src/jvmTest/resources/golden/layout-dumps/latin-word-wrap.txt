@@ -133,3 +133,69 @@ edgetrim 11-12 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
 edgetrim 27-28 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
 edgetrim 42-43 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
 linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== paragraph-dp ==
+size 240.0x96.0
+kinsoku measure=15.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:15字→Basic
+line[0] 0-11 natural=176.0 adjusted=176.0 visual=240.0 repair=- candidates=- justify=deficit=64.0->0.0 CjkInterChar@0+8.0,CjkInterChar@1+8.0,CjkInterChar@2+8.0,CjkInterChar@3+8.0,CjkInterChar@4+8.0,CjkInterChar@5+8.0,CjkInterChar@6+8.0,CjkInterChar@7+8.0
+line[1] 11-27 natural=232.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=deficit=16.0->16.0
+line[2] 27-43 natural=224.0 adjusted=208.0 visual=208.0 repair=- candidates=- justify=deficit=32.0->32.0
+line[3] 43-58 natural=232.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=-
+cluster 0-1 '他' adv=24.0
+cluster 1-2 '引' adv=24.0
+cluster 2-3 '用' adv=24.0
+cluster 3-4 '了' adv=24.0
+cluster 4-5 '一' adv=24.0
+cluster 5-6 '句' adv=24.0
+cluster 6-7 '话' adv=24.0
+cluster 7-8 '：' adv=24.0
+cluster 8-11 'The' adv=48.0
+cluster 11-12 ' ' adv=0.0
+cluster 12-17 'quick' adv=80.0
+cluster 17-18 ' ' adv=8.0
+cluster 18-23 'brown' adv=80.0
+cluster 23-24 ' ' adv=8.0
+cluster 24-27 'fox' adv=48.0
+cluster 27-28 ' ' adv=0.0
+cluster 28-33 'jumps' adv=80.0
+cluster 33-34 ' ' adv=8.0
+cluster 34-38 'over' adv=64.0
+cluster 38-39 ' ' adv=8.0
+cluster 39-42 'the' adv=48.0
+cluster 42-43 ' ' adv=0.0
+cluster 43-47 'lazy' adv=64.0
+cluster 47-48 ' ' adv=8.0
+cluster 48-51 'dog' adv=48.0
+cluster 51-52 '，' adv=16.0
+cluster 52-53 '然' adv=16.0
+cluster 53-54 '后' adv=16.0
+cluster 54-55 '继' adv=16.0
+cluster 55-56 '续' adv=16.0
+cluster 56-57 '讲' adv=16.0
+cluster 57-58 '。' adv=8.0
+font 0-1 role=CjkText key=cjk-primary display='他' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='引' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='用' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkText key=cjk-primary display='了' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=CjkText key=cjk-primary display='一' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='句' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 6-7 role=CjkText key=cjk-primary display='话' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 7-8 role=CjkPunctuation key=cjk-primary display='：' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 8-51 role=LatinText key=latin-primary display='The quick brown fox jumps over the lazy dog' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 51-52 role=CjkPunctuation key=cjk-primary display='，' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 52-53 role=CjkText key=cjk-primary display='然' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 53-54 role=CjkText key=cjk-primary display='后' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 54-55 role=CjkText key=cjk-primary display='继' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 55-56 role=CjkText key=cjk-primary display='续' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 56-57 role=CjkText key=cjk-primary display='讲' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 57-58 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 7-8 '：' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 51-52 '，' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 57-58 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 7-8 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=8.0 resolved=24.0
+geom 51-52 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 57-58 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+edgetrim 57-58 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+edgetrim 11-12 side=leading trim=8.0 reason=LineEdgeWordSpaceCollapse
+edgetrim 42-43 side=trailing trim=8.0 reason=LineEdgeWordSpaceCollapse
+edgetrim 27-28 side=leading trim=8.0 reason=LineEdgeWordSpaceCollapse
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

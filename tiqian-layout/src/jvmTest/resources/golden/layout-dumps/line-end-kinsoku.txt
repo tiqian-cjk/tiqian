@@ -65,3 +65,33 @@ geom 4-5 body=8.0 lead=8.0/8.0 trail=0.0/0.0 justify=2.0 resolved=10.0
 geom 7-8 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=2.0 resolved=18.0
 edgetrim 4-5 side=leading trim=8.0 reason=LineStartHalfWidthPunctuation
 linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== paragraph-dp ==
+size 80.0x48.0
+kinsoku measure=5.0字 level=Basic hang=Disabled reason=Fixed:Basic
+line[0] 0-4 natural=64.0 adjusted=64.0 visual=80.0 repair=CarryNext(ForbiddenAtLineEnd shrink=0.0) candidates=- justify=deficit=16.0->0.0 CjkInterChar@0+5.3,CjkInterChar@1+5.3,CjkInterChar@2+5.3
+line[1] 4-10 natural=96.0 adjusted=80.0 visual=80.0 repair=PushIn(LineAdjustmentPushIn shrink=16.0) candidates=PushIn+ justify=-
+cluster 0-1 '中' adv=21.3
+cluster 1-2 '文' adv=21.3
+cluster 2-3 '中' adv=21.3
+cluster 3-4 '文' adv=16.0
+cluster 4-5 '（' adv=8.0
+cluster 5-6 '中' adv=16.0
+cluster 6-7 '文' adv=16.0
+cluster 7-8 '）' adv=8.0
+cluster 8-9 '中' adv=16.0
+cluster 9-10 '文' adv=16.0
+font 0-1 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=CjkPunctuation key=cjk-primary display='（' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 6-7 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 7-8 role=CjkPunctuation key=cjk-primary display='）' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 8-9 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 9-10 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 4-5 '（' class=Opening adv=16.0 body=8.0 lead=8.0 trail=0.0 anchor=Trailing source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 7-8 '）' class=Closing adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 4-5 body=8.0 lead=8.0/8.0 trail=0.0/0.0 justify=0.0 resolved=8.0
+geom 7-8 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

@@ -67,3 +67,36 @@ geom 12-13 body=8.0 lead=0.0/8.0 trail=0.0/0.0 justify=0.0 resolved=16.0
 spacing 10-12 '’，' inner=8.0->0.0 target=10-11
 spacing 11-13 '，‘' inner=16.0->8.0 target=11-12
 linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== paragraph-dp ==
+size 192.0x24.0
+kinsoku measure=12.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:12字→Basic+Hang
+line[0] 0-13 natural=208.0 adjusted=192.0 visual=192.0 repair=- candidates=- justify=-
+cluster 0-1 '中' adv=16.0
+cluster 1-2 '‘' adv=16.0
+cluster 2-8 'that’s' adv=96.0
+cluster 8-9 '’' adv=16.0
+cluster 9-10 '中' adv=16.0
+cluster 10-11 '’' adv=8.0
+cluster 11-12 '，' adv=8.0
+cluster 12-13 '‘' adv=16.0
+font 0-1 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkPunctuation key=cjk-primary display='‘' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-8 role=LatinText key=latin-primary display='that’s' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 8-9 role=CjkPunctuation key=cjk-primary display='’' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 9-10 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 10-11 role=CjkPunctuation key=cjk-primary display='’' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-12 role=CjkPunctuation key=cjk-primary display='，' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 12-13 role=CjkPunctuation key=cjk-primary display='‘' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 1-2 '‘' class=Opening adv=16.0 body=8.0 lead=8.0 trail=0.0 anchor=Trailing source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 8-9 '’' class=Closing adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 10-11 '’' class=Closing adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 11-12 '，' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 12-13 '‘' class=Opening adv=16.0 body=8.0 lead=8.0 trail=0.0 anchor=Trailing source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 1-2 body=8.0 lead=0.0/8.0 trail=0.0/0.0 justify=0.0 resolved=16.0
+geom 8-9 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 10-11 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+geom 11-12 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+geom 12-13 body=8.0 lead=0.0/8.0 trail=0.0/0.0 justify=0.0 resolved=16.0
+spacing 10-12 '’，' inner=8.0->0.0 target=10-11
+spacing 11-13 '，‘' inner=16.0->8.0 target=11-12
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

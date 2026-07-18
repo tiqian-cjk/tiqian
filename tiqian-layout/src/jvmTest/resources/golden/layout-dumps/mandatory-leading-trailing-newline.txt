@@ -43,3 +43,24 @@ font 5-6 role=CjkText key=cjk-primary display='尾' sub=CjkPunctuationGlyphPolic
 mandatorybreak 0-1 afterCluster=0 reason=MandatoryBreakNoShape
 mandatorybreak 6-7 afterCluster=6 reason=MandatoryBreakNoShape
 linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== paragraph-dp ==
+size 80.0x72.0
+kinsoku measure=10.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:10字→Basic+Hang
+line[0] 0-1 natural=0.0 adjusted=0.0 visual=0.0 repair=- candidates=- justify=-
+line[1] 1-7 natural=80.0 adjusted=80.0 visual=80.0 repair=- candidates=- justify=-
+line[2] 7-7 natural=0.0 adjusted=0.0 visual=0.0 repair=- candidates=- justify=-
+cluster 0-1 '' adv=0.0
+cluster 1-2 '开' adv=16.0
+cluster 2-3 '头' adv=16.0
+cluster 3-4 '和' adv=16.0
+cluster 4-5 '结' adv=16.0
+cluster 5-6 '尾' adv=16.0
+cluster 6-7 '' adv=0.0
+font 1-2 role=CjkText key=cjk-primary display='开' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='头' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkText key=cjk-primary display='和' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=CjkText key=cjk-primary display='结' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='尾' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+mandatorybreak 0-1 afterCluster=0 reason=MandatoryBreakNoShape
+mandatorybreak 6-7 afterCluster=6 reason=MandatoryBreakNoShape
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

@@ -83,3 +83,44 @@ spacing 2-4 '：“' inner=16.0->8.0 target=2-3
 spacing 9-11 '。”' inner=8.0->0.0 target=9-10
 edgetrim 10-11 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== paragraph-dp ==
+size 152.0x24.0
+grid container=180.0 measure=176.0(11字) slack=4.0 body=Start@0.0
+kinsoku measure=11.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:11字→Basic+Hang
+line[0] 0-11 natural=176.0 adjusted=152.0 visual=152.0 repair=- candidates=- justify=-
+cluster 0-1 '他' adv=16.0
+cluster 1-2 '说' adv=16.0
+cluster 2-3 '：' adv=8.0
+cluster 3-4 '“' adv=16.0
+cluster 4-5 '你' adv=16.0
+cluster 5-6 '好' adv=16.0
+cluster 6-7 '，' adv=16.0
+cluster 7-8 '世' adv=16.0
+cluster 8-9 '界' adv=16.0
+cluster 9-10 '。' adv=8.0
+cluster 10-11 '”' adv=8.0
+font 0-1 role=CjkText key=cjk-primary display='他' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='说' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkPunctuation key=cjk-primary display='：' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkPunctuation key=cjk-primary display='“' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=CjkText key=cjk-primary display='你' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='好' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 6-7 role=CjkPunctuation key=cjk-primary display='，' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 7-8 role=CjkText key=cjk-primary display='世' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 8-9 role=CjkText key=cjk-primary display='界' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 9-10 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 10-11 role=CjkPunctuation key=cjk-primary display='”' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 2-3 '：' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 3-4 '“' class=Opening adv=16.0 body=8.0 lead=8.0 trail=0.0 anchor=Trailing source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 6-7 '，' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 9-10 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 10-11 '”' class=Closing adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 2-3 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+geom 3-4 body=8.0 lead=0.0/8.0 trail=0.0/0.0 justify=0.0 resolved=16.0
+geom 6-7 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 9-10 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+geom 10-11 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+spacing 2-4 '：“' inner=16.0->8.0 target=2-3
+spacing 9-11 '。”' inner=8.0->0.0 target=9-10
+edgetrim 10-11 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

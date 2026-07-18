@@ -109,3 +109,57 @@ punct 21-22 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=
 geom 21-22 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
 edgetrim 21-22 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== paragraph-dp ==
+size 144.0x72.0
+kinsoku measure=9.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:9字→Basic+Hang
+line[0] 0-9 natural=144.0 adjusted=144.0 visual=144.0 repair=- candidates=- justify=-
+line[1] 9-18 natural=144.0 adjusted=144.0 visual=144.0 repair=- candidates=- justify=-
+line[2] 18-22 natural=64.0 adjusted=56.0 visual=56.0 repair=- candidates=- justify=-
+cluster 0-1 '咖' adv=16.0
+cluster 1-2 '啡' adv=16.0
+cluster 2-3 '馆' adv=16.0
+cluster 3-4 '比' adv=16.0
+cluster 4-5 '咖' adv=16.0
+cluster 5-6 '啡' adv=16.0
+cluster 6-7 '更' adv=16.0
+cluster 7-8 '早' adv=16.0
+cluster 8-9 '地' adv=16.0
+cluster 9-10 '改' adv=16.0
+cluster 10-11 '变' adv=16.0
+cluster 11-12 '了' adv=16.0
+cluster 12-13 '城' adv=16.0
+cluster 13-14 '里' adv=16.0
+cluster 14-15 '人' adv=16.0
+cluster 15-16 '的' adv=16.0
+cluster 16-17 '作' adv=16.0
+cluster 17-18 '息' adv=16.0
+cluster 18-19 '与' adv=16.0
+cluster 19-20 '谈' adv=16.0
+cluster 20-21 '吐' adv=16.0
+cluster 21-22 '。' adv=8.0
+font 0-1 role=CjkText key=cjk-primary display='咖' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='啡' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='馆' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkText key=cjk-primary display='比' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=CjkText key=cjk-primary display='咖' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='啡' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 6-7 role=CjkText key=cjk-primary display='更' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 7-8 role=CjkText key=cjk-primary display='早' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 8-9 role=CjkText key=cjk-primary display='地' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 9-10 role=CjkText key=cjk-primary display='改' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 10-11 role=CjkText key=cjk-primary display='变' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-12 role=CjkText key=cjk-primary display='了' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 12-13 role=CjkText key=cjk-primary display='城' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 13-14 role=CjkText key=cjk-primary display='里' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 14-15 role=CjkText key=cjk-primary display='人' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 15-16 role=CjkText key=cjk-primary display='的' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 16-17 role=CjkText key=cjk-primary display='作' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 17-18 role=CjkText key=cjk-primary display='息' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 18-19 role=CjkText key=cjk-primary display='与' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 19-20 role=CjkText key=cjk-primary display='谈' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 20-21 role=CjkText key=cjk-primary display='吐' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 21-22 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 21-22 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 21-22 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+edgetrim 21-22 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

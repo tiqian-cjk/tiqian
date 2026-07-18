@@ -67,3 +67,36 @@ font 11-12 role=CjkText key=cjk-primary display='丑' sub=CjkPunctuationGlyphPol
 linespacing natural=16.0 requested=18.0 resolved=18.0 floor=0.0 applied=false reason=ExplicitLineHeight
 rubylineheight mode=PerLine base=18.0 face=16.0 ruby=8.0 available=2.0 maxExtra=6.0 extras=0.0,6.0,0.0 lines=1 reason=ConditionalRubyLineHeight
 ruby 4-5 'wù' line=1 centerX=8.0 baselineY=23.4 size=8.0 box=6.4/1.6 width=16.0 overhang=0.0
+== paragraph-dp ==
+size 64.0x60.0
+kinsoku measure=4.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:4字→Basic+Hang
+line[0] 0-4 natural=64.0 adjusted=64.0 visual=64.0 repair=- candidates=- justify=-
+line[1] 4-8 natural=64.0 adjusted=64.0 visual=64.0 repair=- candidates=- justify=-
+line[2] 8-12 natural=64.0 adjusted=64.0 visual=64.0 repair=- candidates=- justify=-
+cluster 0-1 '甲' adv=16.0
+cluster 1-2 '乙' adv=16.0
+cluster 2-3 '丙' adv=16.0
+cluster 3-4 '丁' adv=16.0
+cluster 4-5 '戊' adv=16.0
+cluster 5-6 '己' adv=16.0
+cluster 6-7 '庚' adv=16.0
+cluster 7-8 '辛' adv=16.0
+cluster 8-9 '壬' adv=16.0
+cluster 9-10 '癸' adv=16.0
+cluster 10-11 '子' adv=16.0
+cluster 11-12 '丑' adv=16.0
+font 0-1 role=CjkText key=cjk-primary display='甲' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='乙' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='丙' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkText key=cjk-primary display='丁' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=CjkText key=cjk-primary display='戊' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='己' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 6-7 role=CjkText key=cjk-primary display='庚' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 7-8 role=CjkText key=cjk-primary display='辛' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 8-9 role=CjkText key=cjk-primary display='壬' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 9-10 role=CjkText key=cjk-primary display='癸' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 10-11 role=CjkText key=cjk-primary display='子' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-12 role=CjkText key=cjk-primary display='丑' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+linespacing natural=16.0 requested=18.0 resolved=18.0 floor=0.0 applied=false reason=ExplicitLineHeight
+rubylineheight mode=PerLine base=18.0 face=16.0 ruby=8.0 available=2.0 maxExtra=6.0 extras=0.0,6.0,0.0 lines=1 reason=ConditionalRubyLineHeight
+ruby 4-5 'wù' line=1 centerX=8.0 baselineY=23.4 size=8.0 box=6.4/1.6 width=16.0 overhang=0.0

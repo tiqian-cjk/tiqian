@@ -77,3 +77,41 @@ zerowidthbreak 2-3 source='\u200B' cluster=1 reason=ZeroWidthSpaceSoftBreakNoSha
 zerowidthbreak 4-5 source='\u200B' cluster=3 reason=ZeroWidthSpaceSoftBreakNoShape
 edgetrim 21-22 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
 linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== paragraph-dp ==
+size 96.0x96.0
+kinsoku measure=6.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:6字→Basic+Hang
+line[0] 0-5 natural=48.0 adjusted=48.0 visual=48.0 repair=- candidates=- justify=deficit=48.0->48.0
+line[1] 5-11 natural=96.0 adjusted=96.0 visual=96.0 repair=- candidates=- justify=-
+line[2] 11-17 natural=96.0 adjusted=96.0 visual=96.0 repair=- candidates=- justify=-
+line[3] 17-22 natural=80.0 adjusted=72.0 visual=72.0 repair=- candidates=- justify=-
+cluster 0-2 'A.' adv=32.0
+cluster 2-3 '' adv=0.0
+cluster 3-4 '.' adv=16.0
+cluster 4-5 '' adv=0.0
+cluster 5-6 '.' adv=16.0
+cluster 6-7 'C' adv=16.0
+cluster 7-8 'o' adv=16.0
+cluster 8-9 'm' adv=16.0
+cluster 9-10 'p' adv=16.0
+cluster 10-11 'l' adv=16.0
+cluster 11-12 'e' adv=16.0
+cluster 12-13 't' adv=16.0
+cluster 13-14 'e' adv=16.0
+cluster 14-15 '？' adv=16.0
+cluster 15-17 'Aa' adv=32.0
+cluster 17-21 'Font' adv=64.0
+cluster 21-22 '？' adv=8.0
+font 0-2 role=LatinText key=latin-primary display='A.' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=LatinText key=latin-primary display='.' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-14 role=LatinText key=latin-primary display='.Complete' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 14-15 role=CjkPunctuation key=cjk-primary display='？' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 15-21 role=LatinText key=latin-primary display='AaFont' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 21-22 role=CjkPunctuation key=cjk-primary display='？' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 14-15 '？' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 21-22 '？' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 14-15 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 21-22 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+zerowidthbreak 2-3 source='\u200B' cluster=1 reason=ZeroWidthSpaceSoftBreakNoShape
+zerowidthbreak 4-5 source='\u200B' cluster=3 reason=ZeroWidthSpaceSoftBreakNoShape
+edgetrim 21-22 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

@@ -31,3 +31,18 @@ font 11-12 role=CjkText key=cjk-primary display='做' sub=CjkPunctuationGlyphPol
 autospace 1-6 side=leading boundary=CjkText reduction=-2.0
 autospace 6-11 side=trailing boundary=CjkText reduction=-2.0
 linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== paragraph-dp ==
+size 101.3x48.0
+kinsoku measure=8.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:8字→Basic+Hang
+line[0] 0-6 natural=98.0 adjusted=98.0 visual=101.3 repair=- candidates=- justify=deficit=30.0->26.7 CjkLatinSpace@0+3.3
+line[1] 6-12 natural=98.0 adjusted=98.0 visual=98.0 repair=- candidates=- justify=-
+cluster 0-1 '用' adv=19.3
+cluster 1-6 'Power' adv=82.0
+cluster 6-11 'Point' adv=82.0
+cluster 11-12 '做' adv=16.0
+font 0-1 role=CjkText key=cjk-primary display='用' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-11 role=LatinText key=latin-primary display='PowerPoint' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-12 role=CjkText key=cjk-primary display='做' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+autospace 1-6 side=leading boundary=CjkText reduction=-2.0
+autospace 6-11 side=trailing boundary=CjkText reduction=-2.0
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

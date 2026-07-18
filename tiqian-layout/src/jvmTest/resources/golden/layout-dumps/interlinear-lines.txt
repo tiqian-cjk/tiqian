@@ -95,3 +95,50 @@ decobox 0-2 kind=ProperNoun line=0 rect=0.0,21.0,32.0,21.0 open=-/- reason=Inter
 decobox 4-6 kind=BookTitle line=0 rect=64.0,21.0,96.0,21.0 open=-/- reason=InterlinearLinePerAnnotatedItem
 decobox 7-10 kind=ProperNoun line=0 rect=112.0,21.0,159.0,21.0 open=-/- reason=InterlinearLinePerAnnotatedItem;AdjacentInterlinearLineShortening
 decobox 10-13 kind=ProperNoun line=0 rect=161.0,21.0,208.0,21.0 open=-/- reason=InterlinearLinePerAnnotatedItem;AdjacentInterlinearLineShortening
+== paragraph-dp ==
+size 224.0x48.0
+kinsoku measure=14.0字 level=Basic hang=Disabled reason=MeasureAdaptiveKinsoku:14字→Basic
+line[0] 0-14 natural=224.0 adjusted=224.0 visual=224.0 repair=- candidates=- justify=-
+line[1] 14-16 natural=32.0 adjusted=24.0 visual=24.0 repair=- candidates=- justify=-
+cluster 0-1 '屈' adv=16.0
+cluster 1-2 '原' adv=16.0
+cluster 2-3 '写' adv=16.0
+cluster 3-4 '下' adv=16.0
+cluster 4-5 '离' adv=16.0
+cluster 5-6 '骚' adv=16.0
+cluster 6-7 '，' adv=16.0
+cluster 7-8 '顾' adv=16.0
+cluster 8-9 '炎' adv=16.0
+cluster 9-10 '武' adv=16.0
+cluster 10-11 '王' adv=16.0
+cluster 11-12 '夫' adv=16.0
+cluster 12-13 '之' adv=16.0
+cluster 13-14 '并' adv=16.0
+cluster 14-15 '称' adv=16.0
+cluster 15-16 '。' adv=8.0
+font 0-1 role=CjkText key=cjk-primary display='屈' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='原' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='写' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkText key=cjk-primary display='下' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=CjkText key=cjk-primary display='离' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='骚' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 6-7 role=CjkPunctuation key=cjk-primary display='，' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 7-8 role=CjkText key=cjk-primary display='顾' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 8-9 role=CjkText key=cjk-primary display='炎' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 9-10 role=CjkText key=cjk-primary display='武' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 10-11 role=CjkText key=cjk-primary display='王' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-12 role=CjkText key=cjk-primary display='夫' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 12-13 role=CjkText key=cjk-primary display='之' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 13-14 role=CjkText key=cjk-primary display='并' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 14-15 role=CjkText key=cjk-primary display='称' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 15-16 role=CjkPunctuation key=cjk-primary display='。' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+punct 6-7 '，' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+punct 15-16 '。' class=PauseOrStop adv=16.0 body=8.0 lead=0.0 trail=8.0 anchor=Leading source=ProfileDerivedWithShapedAdvance fallback=shaper-no-ink-bounds
+geom 6-7 body=8.0 lead=0.0/0.0 trail=0.0/8.0 justify=0.0 resolved=16.0
+geom 15-16 body=8.0 lead=0.0/0.0 trail=8.0/8.0 justify=0.0 resolved=8.0
+edgetrim 15-16 side=trailing trim=8.0 reason=LineEndHalfWidthPunctuation
+linespacing natural=16.0 requested=- resolved=24.0 floor=8.0 applied=false reason=CjkBodyLineHeightDefault
+decobox 0-2 kind=ProperNoun line=0 rect=0.0,21.0,32.0,21.0 open=-/- reason=InterlinearLinePerAnnotatedItem
+decobox 4-6 kind=BookTitle line=0 rect=64.0,21.0,96.0,21.0 open=-/- reason=InterlinearLinePerAnnotatedItem
+decobox 7-10 kind=ProperNoun line=0 rect=112.0,21.0,159.0,21.0 open=-/- reason=InterlinearLinePerAnnotatedItem;AdjacentInterlinearLineShortening
+decobox 10-13 kind=ProperNoun line=0 rect=161.0,21.0,208.0,21.0 open=-/- reason=InterlinearLinePerAnnotatedItem;AdjacentInterlinearLineShortening

@@ -79,3 +79,42 @@ font 13-14 role=CjkText key=cjk-primary display='版' sub=CjkPunctuationGlyphPol
 font 14-15 role=CjkText key=cjk-primary display='引' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 font 15-16 role=CjkText key=cjk-primary display='擎' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
 linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== paragraph-dp ==
+size 160.0x48.0
+firstindent 1.0字 measure=10.0字 threshold=14.0字 MeasureAdaptiveFirstLineIndent
+kinsoku measure=10.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:10字→Basic+Hang
+line[0] 0-9 indent=16.0 natural=144.0 adjusted=144.0 visual=144.0 repair=- candidates=- justify=-
+line[1] 9-16 natural=112.0 adjusted=112.0 visual=112.0 repair=- candidates=- justify=-
+cluster 0-1 '提' adv=16.0
+cluster 1-2 '椠' adv=16.0
+cluster 2-3 '是' adv=16.0
+cluster 3-4 '一' adv=16.0
+cluster 4-5 '个' adv=16.0
+cluster 5-6 '面' adv=16.0
+cluster 6-7 '向' adv=16.0
+cluster 7-8 '中' adv=16.0
+cluster 8-9 '文' adv=16.0
+cluster 9-10 '正' adv=16.0
+cluster 10-11 '文' adv=16.0
+cluster 11-12 '的' adv=16.0
+cluster 12-13 '排' adv=16.0
+cluster 13-14 '版' adv=16.0
+cluster 14-15 '引' adv=16.0
+cluster 15-16 '擎' adv=16.0
+font 0-1 role=CjkText key=cjk-primary display='提' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='椠' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='是' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkText key=cjk-primary display='一' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 4-5 role=CjkText key=cjk-primary display='个' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 5-6 role=CjkText key=cjk-primary display='面' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 6-7 role=CjkText key=cjk-primary display='向' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 7-8 role=CjkText key=cjk-primary display='中' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 8-9 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 9-10 role=CjkText key=cjk-primary display='正' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 10-11 role=CjkText key=cjk-primary display='文' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 11-12 role=CjkText key=cjk-primary display='的' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 12-13 role=CjkText key=cjk-primary display='排' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 13-14 role=CjkText key=cjk-primary display='版' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 14-15 role=CjkText key=cjk-primary display='引' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 15-16 role=CjkText key=cjk-primary display='擎' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

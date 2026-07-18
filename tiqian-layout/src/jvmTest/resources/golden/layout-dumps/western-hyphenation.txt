@@ -59,3 +59,32 @@ font 26-27 role=CjkText key=cjk-primary display='令' sub=CjkPunctuationGlyphPol
 autospace 3-4 side=gap boundary=CjkText reduction=6.0
 autospace 24-25 side=gap boundary=CjkText reduction=6.0
 linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== paragraph-dp ==
+size 160.0x72.0
+kinsoku measure=10.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:10字→Basic+Hang
+line[0] 0-9 hyphen=16.0 natural=130.0 adjusted=130.0 visual=144.0 repair=- candidates=- justify=deficit=14.0->0.0 CjkLatinSpace@3+3.3,CjkInterChar@0+5.3,CjkInterChar@1+5.3
+line[1] 9-17 hyphen=16.0 natural=128.0 adjusted=128.0 visual=128.0 repair=- candidates=- justify=deficit=16.0->16.0
+line[2] 17-27 natural=146.0 adjusted=146.0 visual=146.0 repair=- candidates=- justify=-
+cluster 0-1 '请' adv=21.3
+cluster 1-2 '运' adv=21.3
+cluster 2-3 '行' adv=16.0
+cluster 3-4 ' ' adv=5.3
+cluster 4-6 'in' adv=32.0
+cluster 6-9 'ter' adv=48.0
+cluster 9-11 'na' adv=32.0
+cluster 11-15 'tion' adv=64.0
+cluster 15-17 'al' adv=32.0
+cluster 17-20 'iza' adv=48.0
+cluster 20-24 'tion' adv=64.0
+cluster 24-25 ' ' adv=2.0
+cluster 25-26 '命' adv=16.0
+cluster 26-27 '令' adv=16.0
+font 0-1 role=CjkText key=cjk-primary display='请' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 1-2 role=CjkText key=cjk-primary display='运' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 2-3 role=CjkText key=cjk-primary display='行' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-25 role=LatinText key=latin-primary display=' internationalization ' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 25-26 role=CjkText key=cjk-primary display='命' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 26-27 role=CjkText key=cjk-primary display='令' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+autospace 3-4 side=gap boundary=CjkText reduction=6.0
+autospace 24-25 side=gap boundary=CjkText reduction=6.0
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

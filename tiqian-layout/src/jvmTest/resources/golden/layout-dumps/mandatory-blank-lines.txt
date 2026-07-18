@@ -37,3 +37,21 @@ mandatorybreak 1-2 afterCluster=1 reason=MandatoryBreakNoShape
 mandatorybreak 2-3 afterCluster=2 reason=MandatoryBreakNoShape
 mandatorybreak 4-5 afterCluster=4 reason=MandatoryBreakNoShape
 linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault
+== paragraph-dp ==
+size 16.0x96.0
+kinsoku measure=10.0字 level=Basic hang=PauseStops reason=MeasureAdaptiveKinsoku:10字→Basic+Hang
+line[0] 0-2 natural=16.0 adjusted=16.0 visual=16.0 repair=- candidates=- justify=-
+line[1] 2-3 natural=0.0 adjusted=0.0 visual=0.0 repair=- candidates=- justify=-
+line[2] 3-5 natural=16.0 adjusted=16.0 visual=16.0 repair=- candidates=- justify=-
+line[3] 5-5 natural=0.0 adjusted=0.0 visual=0.0 repair=- candidates=- justify=-
+cluster 0-1 '甲' adv=16.0
+cluster 1-2 '' adv=0.0
+cluster 2-3 '' adv=0.0
+cluster 3-4 '乙' adv=16.0
+cluster 4-5 '' adv=0.0
+font 0-1 role=CjkText key=cjk-primary display='甲' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+font 3-4 role=CjkText key=cjk-primary display='乙' sub=CjkPunctuationGlyphPolicy:PreferClreqRecommendedCodepoints:preserve
+mandatorybreak 1-2 afterCluster=1 reason=MandatoryBreakNoShape
+mandatorybreak 2-3 afterCluster=2 reason=MandatoryBreakNoShape
+mandatorybreak 4-5 afterCluster=4 reason=MandatoryBreakNoShape
+linespacing natural=16.0 requested=- resolved=24.0 floor=0.0 applied=false reason=CjkBodyLineHeightDefault

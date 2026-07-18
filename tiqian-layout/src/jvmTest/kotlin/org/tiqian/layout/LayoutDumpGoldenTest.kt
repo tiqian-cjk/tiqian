@@ -42,6 +42,7 @@ class LayoutDumpGoldenTest {
                 for ((label, breaker) in listOf(
                     "greedy" to GreedyLineBreaker(),
                     "lookahead" to LookaheadLineBreaker(),
+                    "paragraph-dp" to ParagraphDpLineBreaker(),
                 )) {
                     val hyphenator = if (fixture.useEnglishHyphenation) {
                         org.tiqian.linebreak.EnglishHyphenation.enUs
