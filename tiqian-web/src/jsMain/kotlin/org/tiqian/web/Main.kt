@@ -128,11 +128,105 @@ fun main() {
     root.appendChild(label)
     root.appendChild(slider)
     root.appendChild(stage)
+    root.appendComparisonSection()
     root.appendChild(benchmarkButton)
     root.appendChild(benchmarkResult)
     root.appendChild(benchmarkStage)
     relayout()
 }
+
+/**
+ * ADR 0041 目检区:同一批真实博客段落,同一宽度,lookahead 与 paragraph-dp
+ * 并排渲染。判据是肉眼——行内密度是否更匀、相邻行是否不再一紧一松。
+ */
+private fun HTMLElement.appendComparisonSection() {
+    val heading = (document.createElement("h2") as HTMLElement).apply {
+        textContent = "断行策略对照:lookahead(左) vs paragraph-dp(右)"
+        style.setProperty("font", "600 15px sans-serif")
+        style.setProperty("margin", "28px 0 4px")
+    }
+    val hint = (document.createElement("div") as HTMLElement).apply {
+        textContent = "真实博客语料 · 拖动改变每栏宽度"
+        style.setProperty("font", "12px sans-serif")
+        style.setProperty("color", "#999")
+        style.setProperty("margin-bottom", "8px")
+    }
+    val compareSlider = (document.createElement("input") as HTMLInputElement).apply {
+        type = "range"
+        min = "240"
+        max = "560"
+        value = "400"
+        style.setProperty("width", "560px")
+        style.setProperty("display", "block")
+        style.setProperty("margin-bottom", "12px")
+    }
+    val row = (document.createElement("div") as HTMLElement).apply {
+        style.setProperty("display", "flex")
+        style.setProperty("gap", "24px")
+        style.setProperty("align-items", "flex-start")
+    }
+
+    fun column(title: String): Pair<HTMLElement, HTMLElement> {
+        val wrap = document.createElement("div") as HTMLElement
+        val caption = (document.createElement("div") as HTMLElement).apply {
+            textContent = title
+            style.setProperty("font", "12px ui-monospace, monospace")
+            style.setProperty("color", "#666")
+            style.setProperty("margin-bottom", "6px")
+        }
+        val stage = (document.createElement("div") as HTMLElement).apply {
+            setAttribute("data-tiqian-root", "true")
+            style.setProperty("background", "#fff")
+            style.setProperty("border", "1px solid #e6e3de")
+            style.setProperty("border-radius", "6px")
+            style.setProperty("padding", "16px")
+        }
+        wrap.appendChild(caption)
+        wrap.appendChild(stage)
+        return wrap to stage
+    }
+
+    val (lookWrap, lookStage) = column("lookahead")
+    val (dpWrap, dpStage) = column("paragraph-dp")
+    row.appendChild(lookWrap)
+    row.appendChild(dpWrap)
+
+    fun relayoutComparison() {
+        val width = compareSlider.value
+        hint.textContent = "真实博客语料 · 每栏宽度 ${width}px · 字号 ${FONT_SIZE.toInt()}px"
+        for ((stage, strategy) in listOf(lookStage to "lookahead", dpStage to "paragraph-dp")) {
+            stage.style.setProperty("width", "${width}px")
+            TiqianWeb.destroy(stage)
+            while (stage.firstChild != null) stage.removeChild(stage.firstChild!!)
+            COMPARISON_PARAGRAPHS.forEach(stage::appendParagraph)
+            TiqianWeb.enhance(stage, demoOptions.copy(lineBreakStrategy = strategy))
+        }
+    }
+
+    compareSlider.addEventListener("input", { _: Event -> relayoutComparison() })
+    appendChild(heading)
+    appendChild(hint)
+    appendChild(compareSlider)
+    appendChild(row)
+    relayoutComparison()
+}
+
+/** 真实博客段落(blog3《画风清奇的开源许可证》、neo-blog《PWM》《字体更新》)。 */
+private val COMPARISON_PARAGRAPHS = listOf(
+    "无论你的源代码是否重要，开发者都应当为自己的源代码选择许可证。当然，如果你觉得自己的" +
+        "源代码真的很不重要，甚至想跟读你代码的人们开个玩笑，那么可以考虑一下这些画风有毒的" +
+        "开源许可证们 (ﾟ∀。)。",
+    "和任何一个小众开源许可证一样，WTFPL 并没有被广泛的应用，虽然它是一份 GPL 兼容的许可证，" +
+        "甚至还得到了 FSF 的认可（但没得到 OSI 的认可），但是并不被 FSF 与 OSI 推荐使用。" +
+        "原因包括：不够严肃、细节过于模糊且解有多种解读方式。",
+    "脉冲宽度调制（英语：Pulse-width modulation，缩写：PWM），简称脉宽调制，是用脉波来输出" +
+        "模拟信号的一种技术，一般转换后脉波的周期固定，但脉波的工作周期会依模拟信号的大小而改变。",
+    "只有一个原因：没有 Serif。如果你曾经看过我的 Blog，你会发现有一段时间我在使用思源宋体" +
+        "来作为正文字体，但是，思源宋体用其超级丑的使用体验劝退了我，于是我转身向 MiSans 走去。" +
+        "没有 Serif 指的是，没有一个可以在网页上分包，符合再分发协议的衬线字体（直接把方正全家" +
+        "都干死了），又是因为汉仪玄宋不适合作为正文字体，所以基本上汉仪全家也死了。你没有一个" +
+        "可以使用的规范的 Serif 衬线的宋体。",
+)
 
 private fun Double.roundedMillisecond(): String = (this * 10.0).roundToInt().div(10.0).toString()
 
