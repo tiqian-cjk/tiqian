@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   PREPARED_DOM_BRIDGE_NAME,
+  installPreparedDomRendererBridge,
   installPreparedRenderFontStyle,
   installPreparedValueStyles,
   releasePreparedParagraphStyles,
@@ -256,6 +257,57 @@ test("browser replay preserves controlled inline semantics supplied by a Worker 
   });
 
   assert.match(host.innerHTML, /<strong data-tq-source-semantic="true">中文<\/strong>/u);
+});
+
+test("live Worker replay lowers semantic placeholders without serializing host behavior", () => {
+  const sourceElement = {
+    tagName: "SPOILER",
+    cloneNode() {},
+  };
+  const rendered = renderPreparedParagraphArtifact(fixturePlan(), "zh-Hans", {
+    sourceText: "中文",
+    semanticReplay: "live-source",
+    semantics: [{
+      start: 0,
+      end: 2,
+      tagName: "spoiler",
+      sourceIndex: 0,
+    }],
+    liveSemanticElements: [sourceElement],
+  });
+
+  assert.equal(rendered.liveSemanticCount, 1);
+  assert.match(rendered.html, /data-tq-live-semantic-index="0"/u);
+  assert.doesNotMatch(rendered.html, /<spoiler|onclick=|padding:4px/u);
+});
+
+test("live Worker replay nests equal-range placeholders in source hierarchy order", () => {
+  const rendered = renderPreparedParagraphArtifact(fixturePlan(), "zh-Hans", {
+    sourceText: "中文",
+    semanticReplay: "live-source",
+    semantics: [{
+      start: 0,
+      end: 2,
+      tagName: "em",
+      sourceIndex: 0,
+      order: 1,
+    }, {
+      start: 0,
+      end: 2,
+      tagName: "spoiler",
+      sourceIndex: 1,
+      order: 0,
+    }],
+    liveSemanticElements: [{ tagName: "EM", cloneNode() {} }, {
+      tagName: "SPOILER",
+      cloneNode() {},
+    }],
+  });
+
+  assert.match(
+    rendered.html,
+    /data-tq-live-semantic-index="1"[^>]*><span data-tq-live-semantic-index="0"/u,
+  );
 });
 
 test("browser replay moves dynamic prepared values into one root-scoped stylesheet", () => {
@@ -558,7 +610,87 @@ test("global runtime bridge delegates to the canonical lowering and browser repl
 
   assert.equal(bridge.layoutRevision, "tiqian-layout-v2");
   assert.equal(bridge.renderRevision, "prebroken-dom-v15");
+  assert.equal(bridge.version, 1);
+  assert.equal(bridge.semanticReplayRevision, 1);
   assert.deepEqual(bridge.lower(JSON.stringify(plan), "zh-Hans"), expected);
   assert.equal(bridge.render(host, plan, { locale: "zh-Hans" }).html, expected.html);
   assert.equal(host.innerHTML, expected.html);
+});
+
+test("prepared DOM bridge upgrades a configurable legacy renderer", () => {
+  const target = {};
+  const legacy = Object.freeze({
+    schema: 1,
+    layoutRevision: "tiqian-layout-v2",
+    renderRevision: "prebroken-dom-v15",
+    lower: () => "legacy",
+    render: () => "legacy",
+    release: () => false,
+    releaseRoot: () => false,
+  });
+  Object.defineProperty(target, PREPARED_DOM_BRIDGE_NAME, {
+    configurable: true,
+    value: legacy,
+  });
+
+  const bridge = installPreparedDomRendererBridge(target);
+
+  assert.notEqual(bridge, legacy);
+  assert.equal(bridge.coordinatorVersion, 1);
+  assert.equal(bridge.version, 1);
+  assert.equal(bridge.semanticReplayRevision, 1);
+  assert.equal(
+    Object.getOwnPropertyDescriptor(target, PREPARED_DOM_BRIDGE_NAME).configurable,
+    false,
+  );
+  assert.equal(bridge.lower(fixturePlan(), "zh-Hans").markerCount, 1);
+});
+
+test("cached legacy renderer cannot downgrade the prepared DOM bridge", () => {
+  const target = {};
+  const bridge = installPreparedDomRendererBridge(target);
+
+  assert.throws(() => {
+    Object.defineProperty(target, PREPARED_DOM_BRIDGE_NAME, {
+      configurable: true,
+      value: Object.freeze({
+        schema: 1,
+        layoutRevision: "tiqian-layout-v2",
+        renderRevision: "prebroken-dom-v15",
+      }),
+      writable: false,
+    });
+  }, TypeError);
+  assert.equal(target[PREPARED_DOM_BRIDGE_NAME], bridge);
+  assert.equal(bridge.semanticReplayRevision, 1);
+});
+
+test("prepared DOM coordinator upgrades monotonically without unlocking the global slot", () => {
+  const target = {};
+  const bridge = installPreparedDomRendererBridge(target);
+  const future = Object.freeze({
+    version: 2,
+    semanticReplayRevision: 0,
+    schema: 1,
+    layoutRevision: "tiqian-layout-v2",
+    renderRevision: "prebroken-dom-v16",
+    lower: () => "future",
+    render: () => "future",
+    release: () => true,
+    releaseRoot: () => true,
+  });
+
+  assert.equal(bridge.install(future), bridge);
+  assert.equal(bridge.version, 2);
+  assert.equal(bridge.renderRevision, "prebroken-dom-v16");
+  assert.equal(bridge.lower(), "future");
+
+  installPreparedDomRendererBridge(target);
+  assert.equal(bridge.version, 2);
+  assert.equal(bridge.renderRevision, "prebroken-dom-v16");
+  assert.equal(bridge.lower(), "future");
+  assert.equal(
+    Object.getOwnPropertyDescriptor(target, PREPARED_DOM_BRIDGE_NAME).configurable,
+    false,
+  );
 });

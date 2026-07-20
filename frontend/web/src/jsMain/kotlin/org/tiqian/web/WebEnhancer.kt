@@ -340,9 +340,10 @@ object TiqianWeb {
      * WorkerLayoutInputContract keeps DOM ownership on the main thread while
      * serializing only the immutable layout model. The Worker runs the existing
      * Lookahead engine against the already-proven exact replay session; any
-     * unsupported semantic, decoration or inline object remains native when an
-     * exact session is active; exact layout must never fall back to synchronous
-     * Kotlin/JS on the navigation thread.
+     * snapshot-ineligible textual semantics replay shallow clones of their live
+     * source elements; unsupported structure, decoration or inline objects stay
+     * native. Exact layout must never fall back to synchronous Kotlin/JS merely
+     * because the snapshot serializer has a narrower semantic vocabulary.
      */
     private fun workerLayoutRequest(
         root: HTMLElement,
@@ -876,6 +877,7 @@ object TiqianWeb {
             workerPlan,
             paragraph.lowered.textStyle.locale,
             paragraph.lowered.text,
+            paragraph.lowered.sourceSpans.map { it.element }.toTypedArray(),
         )
         val preparedDomIssue = validatePreparedParagraphDom(paragraph.source, width.toDouble())
         if (preparedDomIssue != null) {
@@ -2344,7 +2346,11 @@ private fun workerLayoutRequestJson(
             append("\"end\":").append(span.range.end).append(',')
             append("\"tagName\":").appendWorkerJsonString(span.element.tagName.lowercase()).append(',')
             append("\"attributes\":").append(elementAttributesJson(span.element)).append(',')
-            append("\"order\":").append(index)
+            // WorkerSemanticHierarchyOrder: sourceSpans are collected after
+            // their children, so the list index identifies the live element
+            // but cannot also describe outer-to-inner replay order.
+            append("\"sourceIndex\":").append(index).append(',')
+            append("\"order\":").append(span.depth)
             append('}')
         }
         append("],\"renderInlineBoxes\":[")
@@ -2839,7 +2845,7 @@ private external fun preparedWorkerLayoutIssue(
     requestText: String,
 ): String?
 @JsFun(
-    """(host, recordJson, locale, sourceText) => {
+    """(host, recordJson, locale, sourceText, semanticElements) => {
       const record = JSON.parse(recordJson);
       return globalThis.__TiqianPreparedDomRenderer.render(
         host,
@@ -2847,8 +2853,10 @@ private external fun preparedWorkerLayoutIssue(
         locale,
         {
           sourceText,
+          semanticReplay: record.semanticReplay || "snapshot-safe",
           semantics: record.semantics || [],
-          inlineBoxes: record.inlineBoxes || []
+          inlineBoxes: record.inlineBoxes || [],
+          liveSemanticElements: semanticElements || []
         }
       );
     }""",
@@ -2858,6 +2866,7 @@ private external fun renderPreparedWorkerParagraphDom(
     recordJson: String,
     locale: String,
     sourceText: String,
+    semanticElements: Array<Element>,
 ): JsAny?
 @JsFun("(host) => !!(globalThis.__TiqianPreparedDomRenderer && globalThis.__TiqianPreparedDomRenderer.release && globalThis.__TiqianPreparedDomRenderer.release(host) === true)")
 private external fun releasePreparedParagraphDomStyles(host: HTMLElement): Boolean

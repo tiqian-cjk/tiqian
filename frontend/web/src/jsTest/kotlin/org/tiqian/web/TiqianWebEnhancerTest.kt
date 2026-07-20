@@ -196,6 +196,50 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
+    fun exactWorkerUnsupportedLiveSemanticReplaysWorkerPlanFromSourceElement() {
+        installExactFontSessionFixture(failShaping = false)
+        installPreparedWorkerLivePlan()
+        try {
+            val root = mount(
+                """
+                <div data-tiqian-root="true" style="width: 260px">
+                  <p style="font-family: 'Fixture CJK'; font-size: 18px; line-height: 30px">正文<spoiler style="box-decoration-break: slice; padding-left: 4px; padding-right: 4px"><em>秘密</em></spoiler>继续。</p>
+                </div>
+                """.trimIndent(),
+            )
+
+            val paragraph = root.querySelector("p") as HTMLElement
+            val enhanced = TiqianWeb.enhance(
+                root,
+                exactTestOptions().copy(
+                    paragraphSelector = "p:not([data-tq-snapshot-key])",
+                    requireExactLayoutWorker = true,
+                ),
+            )
+            assertEquals(
+                1,
+                enhanced,
+                "issue=${paragraph.getAttribute("data-tiqian-capability-issue")}; " +
+                    "detail=${paragraph.getAttribute("data-tiqian-capability-detail")}; " +
+                    "html=${paragraph.innerHTML}",
+            )
+
+            assertEquals("true", paragraph.getAttribute("data-tq-rendered"))
+            assertNull(paragraph.getAttribute("data-tiqian-capability-issue"))
+            assertNotNull(
+                paragraph.querySelector(
+                    "spoiler[data-tq-source-semantic] > em[data-tq-source-semantic]",
+                ),
+            )
+            assertEquals(0, exactFontShapeCount(), "live semantics must not relayout on the main thread")
+            assertEquals(1, exactPreparedRenderCount())
+            assertEquals("正文秘密继续。", copySelection(paragraph))
+        } finally {
+            clearExactFontSessionFixture()
+        }
+    }
+
+    @Test
     fun unkeyedRuntimeCompletionKeepsExactDashWhenAnotherRunNeedsBrowserFallback() {
         installExactFontSessionFixture(failShaping = false, failText = "坏")
         try {
@@ -3047,10 +3091,50 @@ private fun installExactFontSessionFixture(
         releaseMetrics: (handle) => metrics.delete(handle),
       };
       globalThis.__TiqianPreparedDomRenderer = {
-        render(host, planJson, locale) {
+        render(host, planJson, locale, options = {}) {
           if (failShaping) throw new Error("Exact renderer must not run after shaping failure");
           globalThis.__TiqianExactPreparedRenderCount += 1;
           globalThis.__TiqianExactPreparedPlan = planJson;
+          if (options.semanticReplay === "live-source") {
+            const sourceText = String(options.sourceText || "");
+            const semantics = Array.from(options.semantics || []);
+            const sourceElements = Array.from(options.liveSemanticElements || []);
+            host.replaceChildren();
+            const roots = [];
+            const stack = [];
+            for (const semantic of semantics) {
+              while (stack.length > 0 && semantic.start >= stack.at(-1).end) stack.pop();
+              const node = { ...semantic, children: [] };
+              const parent = stack.at(-1);
+              if (parent) {
+                if (semantic.end > parent.end) throw new Error("CrossingLiveSemanticRanges");
+                parent.children.push(node);
+              } else {
+                roots.push(node);
+              }
+              stack.push(node);
+            }
+            const appendRange = (container, start, end, children) => {
+              let offset = start;
+              for (const semantic of children) {
+                if (semantic.start > offset) {
+                  container.appendChild(document.createTextNode(sourceText.slice(offset, semantic.start)));
+                }
+                const source = sourceElements[semantic.sourceIndex];
+                if (!source) throw new Error(`MissingLiveSemanticSource:${'$'}{semantic.sourceIndex}`);
+                const clone = source.cloneNode(false);
+                clone.setAttribute("data-tq-source-semantic", "true");
+                appendRange(clone, semantic.start, semantic.end, semantic.children);
+                container.appendChild(clone);
+                offset = semantic.end;
+              }
+              if (offset < end) {
+                container.appendChild(document.createTextNode(sourceText.slice(offset, end)));
+              }
+            };
+            appendRange(host, 0, sourceText.length, roots);
+            return {};
+          }
           host.innerHTML = `<span data-tq-exact-rendered="${'$'}{locale}"></span>`;
           return {};
         },
@@ -3097,6 +3181,43 @@ private external fun exactPreparedRenderCount(): Int
 private external fun exactWorkerRequestMaxWidth(root: HTMLElement, paragraph: HTMLElement): Double
 @JsFun("(detail) => { globalThis.__TiqianLayoutWorker = { take: () => null, issue: () => detail }; }")
 private external fun installPreparedWorkerIssue(detail: String)
+@JsFun(
+    """() => {
+      globalThis.__TiqianLayoutWorker = {
+        take(_element, _sessionKey, requestText) {
+          const request = JSON.parse(requestText);
+          const semantics = Array.from(request.semantics || [], function (semantic, sourceIndex) {
+            return {
+              start: semantic.start,
+              end: semantic.end,
+              tagName: semantic.tagName,
+              sourceIndex: Number.isSafeInteger(semantic.sourceIndex)
+                ? semantic.sourceIndex
+                : sourceIndex,
+              order: Number.isSafeInteger(semantic.order) ? semantic.order : sourceIndex,
+            };
+          }).sort(function (left, right) {
+            return left.start - right.start || right.end - left.end || left.order - right.order;
+          }).map(function (semantic) {
+            return {
+              start: semantic.start,
+              end: semantic.end,
+              tagName: semantic.tagName,
+              sourceIndex: semantic.sourceIndex,
+            };
+          });
+          return JSON.stringify({
+            plan: { fixture: "worker-live-source" },
+            semanticReplay: "live-source",
+            semantics,
+            inlineBoxes: request.renderInlineBoxes || [],
+          });
+        },
+        issue: () => null,
+      };
+    }""",
+)
+private external fun installPreparedWorkerLivePlan()
 @JsFun("() => { delete globalThis.__TiqianFontBackend; delete globalThis.__TiqianPreparedDomRenderer; delete globalThis.__TiqianPreparedDomValidator; delete globalThis.__TiqianLayoutWorker; delete globalThis.__TiqianExactPreparedPlan; delete globalThis.__TiqianExactPreparedRenderCount; delete globalThis.__TiqianExactFontShapeCount; delete globalThis.__TiqianExactFontFallbackCount; }")
 private external fun clearExactFontSessionFixture()
 @JsFun("(root) => document.dispatchEvent(new CustomEvent('tiqian:enhance', { detail: { root } }))")

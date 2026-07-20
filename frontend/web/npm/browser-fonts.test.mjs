@@ -337,10 +337,15 @@ test("layout Worker plans survive duplicate module instances and reach the runti
     closest: () => state.root,
     getBoundingClientRect: () => ({ top: 0, bottom: 24 }),
   };
+  const invalidElement = {
+    closest: () => state.root,
+    getBoundingClientRect: () => ({ top: 0, bottom: 24 }),
+  };
+  let queriedElements = [element];
   const selectors = [];
   state.root.querySelectorAll = (selector) => {
     selectors.push(selector);
-    return [element];
+    return queriedElements;
   };
   let requestText = "first";
   const completionSelector = ":is(p, li):not([data-tq-snapshot-key])";
@@ -368,6 +373,13 @@ test("layout Worker plans survive duplicate module instances and reach the runti
   try {
     delete globalThis[coordinatorKey];
     delete globalThis.__TiqianLayoutWorker;
+    const legacyBridge = Object.freeze({
+      version: 1,
+      take: () => "legacy",
+      issue: () => "legacy",
+      release: () => false,
+    });
+    globalThis.__TiqianLayoutWorker = legacyBridge;
     globalThis.Worker = FixtureWorker;
     globalThis.innerHeight = 800;
     globalThis.TiqianWeb = {
@@ -380,6 +392,9 @@ test("layout Worker plans survive duplicate module instances and reach the runti
     };
 
     const firstModule = await import(`./worker-layout.js?fixture=first-${Date.now()}`);
+    assert.notEqual(globalThis.__TiqianLayoutWorker, legacyBridge);
+    assert.equal(globalThis.__TiqianLayoutWorker.version, 1);
+    assert.equal(globalThis.__TiqianLayoutWorker.semanticReplayRevision, 1);
     assert.equal(await firstModule.prepareWorkerLayouts(state.root, handle, {
       paragraphSelector: completionSelector,
     }), 1);
@@ -438,7 +453,156 @@ test("layout Worker plans survive duplicate module instances and reach the runti
       "fixture replay miss",
     );
 
+    globalThis.TiqianWeb.workerLayoutRequest = () => JSON.stringify({
+      text: "live semantic",
+      maxWidthPx: 320,
+      semantics: [{
+        start: 0,
+        end: 4,
+        tagName: "spoiler",
+        attributes: [],
+      }],
+      renderInlineBoxes: [],
+    });
+    assert.equal(await secondModule.prepareWorkerLayouts(state.root, handle, {
+      paragraphSelector: completionSelector,
+    }), 1);
+    const unsupportedSemanticRequest = globalThis.TiqianWeb.workerLayoutRequest();
+    const unsupportedSemanticRecord = JSON.parse(
+      globalThis.__TiqianLayoutWorker.take(element, handle.id, unsupportedSemanticRequest),
+    );
+    assert.equal(unsupportedSemanticRecord.plan.fixture, "live semantic");
+    assert.equal(unsupportedSemanticRecord.semanticReplay, "live-source");
+    assert.deepEqual(unsupportedSemanticRecord.semantics, [{
+      start: 0,
+      end: 4,
+      tagName: "spoiler",
+      sourceIndex: 0,
+    }]);
+    assert.equal(
+      globalThis.__TiqianLayoutWorker.issue(element, handle.id, unsupportedSemanticRequest),
+      null,
+    );
+
+    const nestedLiveSemanticRequest = JSON.stringify({
+      ...JSON.parse(unsupportedSemanticRequest),
+      semantics: [{
+        start: 0,
+        end: 4,
+        tagName: "em",
+        attributes: [],
+        sourceIndex: 0,
+        order: 1,
+      }, {
+        start: 0,
+        end: 4,
+        tagName: "spoiler",
+        attributes: [],
+        sourceIndex: 1,
+        order: 0,
+      }],
+    });
+    assert.deepEqual(
+      JSON.parse(
+        globalThis.__TiqianLayoutWorker.take(element, handle.id, nestedLiveSemanticRequest),
+      ).semantics,
+      [{ start: 0, end: 4, tagName: "spoiler", sourceIndex: 1 },
+        { start: 0, end: 4, tagName: "em", sourceIndex: 0 }],
+    );
+
+    const sameLayoutSafeSemanticRequest = JSON.stringify({
+      ...JSON.parse(unsupportedSemanticRequest),
+      semantics: [{
+        start: 0,
+        end: 4,
+        tagName: "span",
+        attributes: [],
+      }],
+    });
+    const sameLayoutSafeSemanticRecord = JSON.parse(
+      globalThis.__TiqianLayoutWorker.take(element, handle.id, sameLayoutSafeSemanticRequest),
+    );
+    assert.equal(sameLayoutSafeSemanticRecord.plan.fixture, "live semantic");
+    assert.equal(sameLayoutSafeSemanticRecord.semanticReplay, "snapshot-safe");
+
+    const sameLayoutStyledSemanticRequest = JSON.stringify({
+      ...JSON.parse(unsupportedSemanticRequest),
+      semantics: [{
+        start: 0,
+        end: 4,
+        tagName: "span",
+        attributes: [["style", "padding:4px"]],
+      }],
+    });
+    assert.equal(
+      JSON.parse(
+        globalThis.__TiqianLayoutWorker.take(
+          element,
+          handle.id,
+          sameLayoutStyledSemanticRequest,
+        ),
+      ).semanticReplay,
+      "live-source",
+    );
+
+    const sameLayoutLiveHrefRequest = JSON.stringify({
+      ...JSON.parse(unsupportedSemanticRequest),
+      semantics: [{
+        start: 0,
+        end: 4,
+        tagName: "a",
+        attributes: [["href", "javascript:hostOwnedAction()"]],
+      }],
+    });
+    assert.equal(
+      JSON.parse(
+        globalThis.__TiqianLayoutWorker.take(element, handle.id, sameLayoutLiveHrefRequest),
+      ).semanticReplay,
+      "live-source",
+    );
+
+    const invalidSemanticRequest = JSON.stringify({
+      ...JSON.parse(unsupportedSemanticRequest),
+      semantics: [{ start: 0, end: 99, tagName: "spoiler", attributes: [] }],
+    });
+    assert.equal(
+      globalThis.__TiqianLayoutWorker.take(element, handle.id, invalidSemanticRequest),
+      null,
+    );
+    assert.equal(
+      globalThis.__TiqianLayoutWorker.issue(element, handle.id, invalidSemanticRequest),
+      "InvalidSnapshotSemanticRange",
+    );
+
+    queriedElements = [invalidElement, element];
+    globalThis.TiqianWeb.workerLayoutRequest = (_root, candidate) => {
+      if (candidate === invalidElement) return "{";
+      return JSON.stringify({
+        text: "after invalid candidate",
+        maxWidthPx: 320,
+        semantics: [],
+        renderInlineBoxes: [],
+      });
+    };
+    assert.equal(await secondModule.prepareWorkerLayouts(state.root, handle, {
+      paragraphSelector: completionSelector,
+    }), 1);
+    const afterInvalidRequest = globalThis.TiqianWeb.workerLayoutRequest(state.root, element);
+    assert.equal(
+      JSON.parse(
+        globalThis.__TiqianLayoutWorker.take(element, handle.id, afterInvalidRequest),
+      ).plan.fixture,
+      "after invalid candidate",
+    );
+    queriedElements = [element];
+
     requestText = "default-runtime-set";
+    globalThis.TiqianWeb.workerLayoutRequest = () => JSON.stringify({
+      text: requestText,
+      maxWidthPx: 320,
+      semantics: [],
+      renderInlineBoxes: [],
+    });
     assert.equal(await secondModule.prepareWorkerLayouts(state.root, handle, {}), 1);
     const defaultRequest = globalThis.TiqianWeb.workerLayoutRequest();
     assert.equal(
@@ -451,6 +615,8 @@ test("layout Worker plans survive duplicate module instances and reach the runti
     assert.equal(globalThis.__TiqianLayoutWorker.take(element, handle.id, secondRequest), null);
     assert.equal(globalThis.__TiqianLayoutWorker.issue(element, handle.id, failedRequest), null);
     assert.deepEqual(selectors, [
+      completionSelector,
+      completionSelector,
       completionSelector,
       completionSelector,
       completionSelector,

@@ -1,9 +1,20 @@
 import { browserFontSessionWorkerContract } from "./browser-fonts.js";
-import { normalizeSnapshotSemantics } from "./snapshot-source.js";
+import {
+  normalizeLiveSemantics,
+  normalizeSnapshotSemantics,
+  SnapshotSemanticError,
+} from "./snapshot-source.js";
 
 const ROOT_SELECTOR = "tiqian-prose, [data-tiqian-root]";
 const DEFAULT_RUNTIME_PARAGRAPH_SELECTOR = "p, li";
 const MAIN_SLICE_BUDGET_MS = 8;
+const BRIDGE_VERSION = 1;
+const SEMANTIC_REPLAY_REVISION = 1;
+const LIVE_SOURCE_SEMANTIC_CODES = new Set([
+  "UnsupportedSnapshotSemanticAttribute",
+  "UnsupportedSnapshotSemanticTag",
+  "UnsafeSnapshotSemanticHref",
+]);
 const LAYOUT_REQUEST_FIELDS = Object.freeze([
   "text",
   "maxWidthPx",
@@ -101,17 +112,60 @@ function parsedLayoutRequest(requestText) {
   }
 }
 
+function errorDetail(error) {
+  return String(error instanceof Error ? error.message : error).slice(0, 1_000);
+}
+
+/**
+ * WorkerPlanReplayEligibility: layout identity deliberately excludes DOM
+ * semantics. Resolve replay eligibility from the current request every time,
+ * without storing a semantic miss in the shared layout-plan cache.
+ */
+function semanticReplay(request) {
+  try {
+    return {
+      mode: "snapshot-safe",
+      semantics: normalizeSnapshotSemantics(request.text, request.semantics),
+    };
+  } catch (error) {
+    if (!(error instanceof SnapshotSemanticError) ||
+        !LIVE_SOURCE_SEMANTIC_CODES.has(error.code)) {
+      return { issue: errorDetail(error) };
+    }
+    try {
+      return {
+        mode: "live-source",
+        semantics: normalizeLiveSemantics(request.text, request.semantics),
+      };
+    } catch (liveError) {
+      return { issue: errorDetail(liveError) };
+    }
+  }
+}
+
 function installBridge() {
-  if (globalThis.__TiqianLayoutWorker?.version === 1) return;
+  const installedVersion = Number(globalThis.__TiqianLayoutWorker?.version);
+  const installedSemanticReplayRevision = Number(
+    globalThis.__TiqianLayoutWorker?.semanticReplayRevision ?? 0,
+  );
+  // MonotonicBridgeFeatureUpgrade: legacy v1 chunks return early for any v1
+  // bridge. Keep that outer version so an old chunk cannot downgrade this
+  // implementation, and use a feature revision to replace an older v1 closure.
+  if (installedVersion > BRIDGE_VERSION ||
+      (installedVersion === BRIDGE_VERSION &&
+       installedSemanticReplayRevision >= SEMANTIC_REPLAY_REVISION)) return;
   Object.defineProperty(globalThis, "__TiqianLayoutWorker", {
     configurable: true,
     value: Object.freeze({
-      version: 1,
+      version: BRIDGE_VERSION,
+      semanticReplayRevision: SEMANTIC_REPLAY_REVISION,
       take(_element, sessionKey, requestText) {
         const request = parsedLayoutRequest(requestText);
         if (!request) return null;
         const record = plans.get(preparedPlanKey(sessionKey, request));
         if (!record || record.issue) return null;
+        const replay = semanticReplay(request);
+        if (replay.issue) return null;
         return JSON.stringify({
           plan: record.plan,
           // LayoutPlanSemanticLateBinding: the Worker plan depends only on the
@@ -119,14 +173,18 @@ function installBridge() {
           // renderer-owned inline-box metadata are read again at commit time;
           // including them in the cache key made harmless progressive DOM
           // changes look like a missing plan for every later paragraph.
-          semantics: normalizeSnapshotSemantics(request.text, request.semantics),
+          semanticReplay: replay.mode,
+          semantics: replay.semantics,
           inlineBoxes: request.renderInlineBoxes,
         });
       },
       issue(_element, sessionKey, requestText) {
         const request = parsedLayoutRequest(requestText);
         if (!request) return null;
-        return plans.get(preparedPlanKey(sessionKey, request))?.issue ?? null;
+        const record = plans.get(preparedPlanKey(sessionKey, request));
+        if (!record) return null;
+        if (record.issue) return record.issue;
+        return semanticReplay(request).issue ?? null;
       },
       release(sessionKey) {
         for (const key of plans.keys()) {
@@ -173,14 +231,14 @@ export async function prepareWorkerLayouts(
   let sliceStartedAt = performance.now();
   for (const { element } of candidates) {
     if (!isCurrent()) break;
-    let serialized;
     let request;
     try {
-      serialized = api.workerLayoutRequest(root, element, options);
+      const serialized = api.workerLayoutRequest(root, element, options);
       if (!serialized) continue;
       request = JSON.parse(serialized);
-      request.semantics = normalizeSnapshotSemantics(request.text, request.semantics);
     } catch {
+      // ParagraphAtomicNativeRollback: an invalid candidate remains native
+      // without preventing later independent paragraphs from being prepared.
       continue;
     }
     sliceStartedAt = await yieldMainIfNeeded(sliceStartedAt);

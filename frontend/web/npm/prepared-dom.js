@@ -3,7 +3,10 @@ import {
   RENDER_REVISION,
   SNAPSHOT_SCHEMA,
 } from "./snapshot-schema.js";
-import { normalizeSnapshotSemantics } from "./snapshot-source.js";
+import {
+  normalizeLiveSemantics,
+  normalizeSnapshotSemantics,
+} from "./snapshot-source.js";
 
 const SPACING_EPSILON = 0.01;
 const RENDER_FLOW_EPSILON_PX = 0.01;
@@ -12,12 +15,76 @@ const LINE_MARKER_SELECTOR = "[data-tq-line-flow-width]";
 const ROOT_SELECTOR = "tiqian-prose, [data-tiqian-root]";
 const VALUE_STYLE_SCOPE_ATTRIBUTE = "data-tq-value-style-scope";
 const VALUE_STYLE_ELEMENT_ATTRIBUTE = "data-tq-prepared-value-styles";
+const LIVE_SEMANTIC_INDEX_ATTRIBUTE = "data-tq-live-semantic-index";
+const PREPARED_DOM_COORDINATOR_VERSION = 1;
+const PREPARED_DOM_BRIDGE_VERSION = 1;
+const SEMANTIC_REPLAY_REVISION = 1;
 const SNAPSHOT_STYLE_OWNER = Object.freeze({});
 const preparedStyleStates = new WeakMap();
 const preparedStyleRootsByHost = new WeakMap();
 let nextPreparedStyleScope = 1;
 
 export const PREPARED_DOM_BRIDGE_NAME = "__TiqianPreparedDomRenderer";
+
+function preparedDomBridgeRevision(bridge) {
+  const version = Number(bridge?.version ?? 0);
+  const semanticReplayRevision = Number(bridge?.semanticReplayRevision ?? 0);
+  return {
+    version: Number.isSafeInteger(version) && version >= 0 ? version : 0,
+    semanticReplayRevision: Number.isSafeInteger(semanticReplayRevision) &&
+      semanticReplayRevision >= 0
+      ? semanticReplayRevision
+      : 0,
+  };
+}
+
+function isNewerPreparedDomBridge(candidate, installed) {
+  const candidateRevision = preparedDomBridgeRevision(candidate);
+  const installedRevision = preparedDomBridgeRevision(installed);
+  return candidateRevision.version > installedRevision.version ||
+    (candidateRevision.version === installedRevision.version &&
+      candidateRevision.semanticReplayRevision > installedRevision.semanticReplayRevision);
+}
+
+function createPreparedDomBridgeCoordinator(initialBridge) {
+  let activeBridge = initialBridge;
+  let coordinator;
+  coordinator = Object.freeze({
+    coordinatorVersion: PREPARED_DOM_COORDINATOR_VERSION,
+    install(candidate) {
+      if (isNewerPreparedDomBridge(candidate, activeBridge)) activeBridge = candidate;
+      return coordinator;
+    },
+    get version() {
+      return activeBridge.version;
+    },
+    get semanticReplayRevision() {
+      return activeBridge.semanticReplayRevision;
+    },
+    get schema() {
+      return activeBridge.schema;
+    },
+    get layoutRevision() {
+      return activeBridge.layoutRevision;
+    },
+    get renderRevision() {
+      return activeBridge.renderRevision;
+    },
+    lower(...args) {
+      return activeBridge.lower(...args);
+    },
+    render(...args) {
+      return activeBridge.render(...args);
+    },
+    release(...args) {
+      return activeBridge.release(...args);
+    },
+    releaseRoot(...args) {
+      return activeBridge.releaseRoot(...args);
+    },
+  });
+  return coordinator;
+}
 
 function preparedPlan(value) {
   return typeof value === "string" ? JSON.parse(value) : value;
@@ -378,7 +445,28 @@ export function renderPreparedParagraphArtifact(
     throw new Error("InvalidPreparedParagraphGeometry");
   }
   const sourceText = plan.lines.flatMap((line) => line.cells).map((cell) => cell.source).join("");
-  const semantics = normalizeSnapshotSemantics(options.sourceText ?? sourceText, options.semantics ?? []);
+  const semanticReplay = options.semanticReplay ?? "snapshot-safe";
+  if (semanticReplay !== "snapshot-safe" && semanticReplay !== "live-source") {
+    throw new Error(`UnsupportedPreparedSemanticReplay:${semanticReplay}`);
+  }
+  const liveSemanticElements = Array.from(options.liveSemanticElements ?? []);
+  const semantics = semanticReplay === "live-source"
+    ? normalizeLiveSemantics(options.sourceText ?? sourceText, options.semantics ?? [])
+    : normalizeSnapshotSemantics(options.sourceText ?? sourceText, options.semantics ?? []);
+  if (semanticReplay === "live-source") {
+    const seenSourceIndices = new Set();
+    for (const semantic of semantics) {
+      const sourceElement = liveSemanticElements[semantic.sourceIndex];
+      if (!sourceElement || typeof sourceElement.cloneNode !== "function" ||
+          String(sourceElement.tagName ?? "").toLowerCase() !== semantic.tagName) {
+        throw new Error(`LiveSemanticSourceMismatch:${semantic.sourceIndex}:${semantic.tagName}`);
+      }
+      if (seenSourceIndices.has(semantic.sourceIndex)) {
+        throw new Error(`DuplicateLiveSemanticSource:${semantic.sourceIndex}`);
+      }
+      seenSourceIndices.add(semantic.sourceIndex);
+    }
+  }
   const renderTextSpans = Array.from(options.renderTextSpans ?? [], (span) => {
     const start = Number(span?.start);
     const end = Number(span?.end);
@@ -424,10 +512,14 @@ export function renderPreparedParagraphArtifact(
     let container = activeContainers.at(-1)?.children ?? nodes;
     for (let index = common; index < semanticPath.length; index += 1) {
       const semantic = semanticPath[index];
-      const wrapper = renderedContainer(semantic.tagName, {
-        ...Object.fromEntries(semantic.attributes),
-        "data-tq-source-semantic": "true",
-      });
+      const wrapper = semanticReplay === "live-source"
+        ? renderedContainer("span", {
+          [LIVE_SEMANTIC_INDEX_ATTRIBUTE]: String(semantic.sourceIndex),
+        })
+        : renderedContainer(semantic.tagName, {
+          ...Object.fromEntries(semantic.attributes),
+          "data-tq-source-semantic": "true",
+        });
       container.push(wrapper);
       activeSemantics.push(semantic);
       activeContainers.push(wrapper);
@@ -586,12 +678,42 @@ export function renderPreparedParagraphArtifact(
   return Object.freeze({
     html: nodes.map((node) => node.html).join(""),
     artifact: nodes.map((node) => node.artifact),
+    liveSemanticCount: semanticReplay === "live-source" ? semantics.length : 0,
     markerCount: plan.lines.length,
   });
 }
 
 export function renderPreparedParagraph(planOrJson, typographyOrLocale = DEFAULT_LOCALE) {
   return renderPreparedParagraphArtifact(planOrJson, typographyOrLocale).html;
+}
+
+/**
+ * LiveSourceSemanticReplay: replace inert placeholder spans with shallow clones
+ * of the current source elements. Host attributes and CSS behavior never pass
+ * through snapshot HTML, while Worker-owned geometry stays intact.
+ */
+function restoreLiveSemanticElements(host, sourceElements, expectedCount) {
+  if (expectedCount === 0) return;
+  const placeholders = Array.from(host.querySelectorAll(`[${LIVE_SEMANTIC_INDEX_ATTRIBUTE}]`));
+  if (placeholders.length !== expectedCount) {
+    throw new Error(
+      `LiveSemanticMarkerCountMismatch:expected=${expectedCount};actual=${placeholders.length}`,
+    );
+  }
+  const seen = new Set();
+  for (const placeholder of placeholders) {
+    const sourceIndex = Number(placeholder.getAttribute(LIVE_SEMANTIC_INDEX_ATTRIBUTE));
+    const source = sourceElements[sourceIndex];
+    if (!Number.isSafeInteger(sourceIndex) || seen.has(sourceIndex) ||
+        !source || typeof source.cloneNode !== "function") {
+      throw new Error(`LiveSemanticSourceUnavailable:${sourceIndex}`);
+    }
+    seen.add(sourceIndex);
+    const clone = source.cloneNode(false);
+    clone.setAttribute("data-tq-source-semantic", "true");
+    while (placeholder.firstChild) clone.appendChild(placeholder.firstChild);
+    placeholder.replaceWith(clone);
+  }
 }
 
 /**
@@ -634,17 +756,29 @@ export function renderPreparedParagraphInto(
     syncPreparedValueStyles(state);
   }
   host.innerHTML = lowered.html;
+  if (lowered.liveSemanticCount > 0) {
+    restoreLiveSemanticElements(
+      host,
+      Array.from(options.liveSemanticElements ?? []),
+      lowered.liveSemanticCount,
+    );
+  }
   const markers = Array.from(host.querySelectorAll(LINE_MARKER_SELECTOR));
   if (markers.length !== lowered.markerCount) {
     throw new Error(
       `PreparedDomMarkerCountMismatch:expected=${lowered.markerCount};actual=${markers.length}`,
     );
   }
-  return Object.freeze({ html: lowered.html, markers });
+  return Object.freeze({
+    html: lowered.liveSemanticCount > 0 ? host.innerHTML : lowered.html,
+    markers,
+  });
 }
 
 export function installPreparedDomRendererBridge(target = globalThis) {
-  const bridge = Object.freeze({
+  const candidate = Object.freeze({
+    version: PREPARED_DOM_BRIDGE_VERSION,
+    semanticReplayRevision: SEMANTIC_REPLAY_REVISION,
     schema: SNAPSHOT_SCHEMA,
     layoutRevision: LAYOUT_REVISION,
     renderRevision: RENDER_REVISION,
@@ -653,13 +787,27 @@ export function installPreparedDomRendererBridge(target = globalThis) {
     release: releasePreparedParagraphStyles,
     releaseRoot: releasePreparedValueStyleRoot,
   });
+  const installed = target[PREPARED_DOM_BRIDGE_NAME];
+  if (Number(installed?.coordinatorVersion) >= PREPARED_DOM_COORDINATOR_VERSION &&
+      typeof installed?.install === "function") {
+    return installed.install(candidate);
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(target, PREPARED_DOM_BRIDGE_NAME);
+  if (descriptor && !descriptor.configurable) {
+    throw new Error("IncompatibleLockedPreparedDomRendererBridge");
+  }
+  // MonotonicPreparedDomBridgeCoordinator: the global slot is immutable so a
+  // cached legacy chunk cannot replace a live-source-capable renderer. Future
+  // coordinator-aware chunks still upgrade the delegated implementation by
+  // monotonically increasing the bridge or semantic-replay revision.
+  const coordinator = createPreparedDomBridgeCoordinator(candidate);
   Object.defineProperty(target, PREPARED_DOM_BRIDGE_NAME, {
-    configurable: true,
+    configurable: false,
     enumerable: false,
-    value: bridge,
+    value: coordinator,
     writable: false,
   });
-  return bridge;
+  return coordinator;
 }
 
 installPreparedDomRendererBridge();
