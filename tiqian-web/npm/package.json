@@ -1,6 +1,6 @@
 {
   "name": "@tiqian/prose",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "Progressively enhance Chinese prose with Tiqian's CJK paragraph layout engine.",
   "keywords": [
     "cjk",

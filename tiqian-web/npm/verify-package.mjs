@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const EXPECTED_NAME = "@tiqian/prose";
-const EXPECTED_VERSION = "0.1.0-alpha.1";
+const EXPECTED_VERSION = "0.1.0-alpha.2";
 const RUNTIMES = [
   {
     directory: "runtime/",
