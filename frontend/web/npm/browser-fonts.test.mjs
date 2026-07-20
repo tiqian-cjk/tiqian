@@ -67,7 +67,7 @@ function manifestWithFaces(
   return {
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v14",
+    renderRevision: "prebroken-dom-v15",
     fontSourcePolicy: "host-compatible-stylesheet-v1",
     renderFontFamilies: ["Fixture CJK"],
     paragraphSelector: "p[data-tq-snapshot-key]",

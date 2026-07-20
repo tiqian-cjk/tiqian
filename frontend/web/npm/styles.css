@@ -84,6 +84,12 @@ tiqian-prose [data-tq-rendered="true"] {
    semantic runtime DOM; otherwise a link or code span revives the host strut
    and adds fractional height to only those paragraphs. */
 [data-tq-rendered="true"] {
+  /* EngineOwnedPunctuationOpenTypeFeatures: Firefox can apply IBM Plex Sans
+     SC's proportional punctuation positioning when `font-kerning: normal`
+     meets the real face. LayoutResult already owns punctuation compression,
+     so browser shaping must keep palt, halt, and chws disabled and express the
+     measured spacing through Tiqian geometry only. */
+  font-feature-settings: "halt" 0, "chws" 0, "palt" 0 !important;
   line-height: 0 !important;
 }
 
@@ -196,7 +202,7 @@ tiqian-prose [data-tq-rendered="true"] {
    inferred again by the renderer. */
 [data-tq-rendered="true"] span[data-tq-shaping-boundary][data-tq-open-type-features="pwid,palt"] {
   font-variant-east-asian: proportional-width !important;
-  font-feature-settings: "palt" 1 !important;
+  font-feature-settings: "halt" 0, "chws" 0, "palt" 1 !important;
 }
 
 /* BrowserFallbackCurlyQuoteFeatures: runtime DOM runs receive the same
@@ -204,7 +210,7 @@ tiqian-prose [data-tq-rendered="true"] {
    shared geometry reset on specificity, and this later rule wins. */
 [data-tq-rendered="true"] span[data-tq-open-type-features="pwid,palt"] {
   font-variant-east-asian: proportional-width !important;
-  font-feature-settings: "palt" 1 !important;
+  font-feature-settings: "halt" 0, "chws" 0, "palt" 1 !important;
 }
 
 [data-tq-rendered="true"]::first-letter,

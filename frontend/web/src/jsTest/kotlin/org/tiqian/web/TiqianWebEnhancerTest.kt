@@ -60,6 +60,7 @@ class TiqianWebEnhancerTest {
             val root = mount(
                 """
                 <div data-tiqian-root="true" style="width: 220px">
+                  $enginePunctuationFeatureStyle
                   <p data-tq-snapshot-key="plain" style="font-family: 'Fixture CJK'; font-size: 18px; line-height: 30px">中文正文。</p>
                 </div>
                 """.trimIndent(),
@@ -74,6 +75,7 @@ class TiqianWebEnhancerTest {
             assertEquals("true", paragraph.getAttribute("data-tq-runtime-render-font"))
             assertEquals("zh-Hans", paragraph.getAttribute("lang"))
             assertNotNull(paragraph.querySelector("[data-tq-exact-rendered]"))
+            assertEnginePunctuationFeatureLock(paragraph)
             assertTrue(exactPreparedPlan().contains("\"layoutRevision\":\"tiqian-layout-v2\""))
             assertTrue(exactPreparedPlan().contains("\"height\":"))
         } finally {
@@ -288,7 +290,12 @@ class TiqianWebEnhancerTest {
     fun browserFontFallbackMeasuresAndReplaysLatinCurlyQuoteFeatures() {
         val source = "that’s；（如 ‘O’, ‘Q’）"
         val root = mount(
-            "<div data-tiqian-root='true' style='width: 500px'><p>$source</p></div>",
+            """
+            <div data-tiqian-root="true" style="width: 500px">
+              $enginePunctuationFeatureStyle
+              <p>$source</p>
+            </div>
+            """.trimIndent(),
         )
 
         assertEquals(1, TiqianWeb.enhance(root, testOptions()))
@@ -301,6 +308,7 @@ class TiqianWebEnhancerTest {
         var quotedCodePoints = 0
         for (index in 0 until featureRuns.length) {
             val run = featureRuns.item(index) as HTMLElement
+            assertEnginePunctuationFeatureLock(run, proportionalQuote = true)
             quotedCodePoints += run.textContent.orEmpty().count { it in '\u2018'..'\u201D' }
         }
         assertEquals(5, quotedCodePoints, paragraph.innerHTML)
@@ -1981,7 +1989,12 @@ class TiqianWebEnhancerTest {
         val root = mount(
             """
             <div data-tiqian-root="true" style="width: 700px">
-              <style>[data-tq-rendered="true"] [data-tq-geometry] { text-spacing-trim: space-all !important; }</style>
+              $enginePunctuationFeatureStyle
+              <style>
+                [data-tq-rendered="true"] [data-tq-geometry] {
+                  text-spacing-trim: space-all !important;
+                }
+              </style>
               <p style="font-size: 18px; line-height: 30px">$source</p>
             </div>
             """.trimIndent(),
@@ -1992,6 +2005,8 @@ class TiqianWebEnhancerTest {
         val paragraph = root.querySelector("p") as HTMLElement
         val closingCommaRun = assertNotNull(geometryLeafWithText(paragraph, "」、"))
         assertEquals("space-all", computedStyleValue(closingCommaRun, "text-spacing-trim"))
+        assertEnginePunctuationFeatureLock(paragraph)
+        assertEnginePunctuationFeatureLock(closingCommaRun)
         val characterWidths = textNodeCharacterWidths(closingCommaRun)
             .split(',')
             .mapNotNull(String::toDoubleOrNull)
@@ -2799,6 +2814,18 @@ class TiqianWebEnhancerTest {
             detail = "test",
         ),
     )
+
+    private val enginePunctuationFeatureStyle: String
+        get() = """
+            <style>
+              [data-tq-rendered="true"] {
+                font-feature-settings: "halt" 0, "chws" 0, "palt" 0 !important;
+              }
+              [data-tq-rendered="true"] span[data-tq-open-type-features="pwid,palt"] {
+                font-feature-settings: "halt" 0, "chws" 0, "palt" 1 !important;
+              }
+            </style>
+        """.trimIndent()
 }
 @JsFun(
     """() => {
@@ -3225,5 +3252,18 @@ private external fun elementFragmentWidths(element: HTMLElement): Array<Double>
 
 private fun Char.isCurlyQuoteForWebTest(): Boolean =
     this == '\u2018' || this == '\u2019' || this == '\u201C' || this == '\u201D'
+
+private fun assertEnginePunctuationFeatureLock(
+    element: HTMLElement,
+    proportionalQuote: Boolean = false,
+) {
+    val features = computedStyleValue(element, "font-feature-settings")
+    assertTrue(Regex("""["']halt["']\s+0""").containsMatchIn(features), features)
+    assertTrue(Regex("""["']chws["']\s+0""").containsMatchIn(features), features)
+    val palt = Regex("""["']palt["'](?:\s+(-?\d+))?""").find(features)
+    assertNotNull(palt, features)
+    val paltValue = palt.groupValues[1].ifEmpty { "1" }
+    assertEquals(if (proportionalQuote) "1" else "0", paltValue, features)
+}
 
 private fun cssPx(value: String): Float = value.removeSuffix("px").toFloatOrNull() ?: 0f

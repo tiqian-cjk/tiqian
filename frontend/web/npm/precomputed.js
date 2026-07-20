@@ -114,6 +114,9 @@ function yieldSnapshotValidationIfNeeded(sliceStartedAt, serverRenderedEntries) 
 }
 const RENDER_FLOW_EPSILON_PX = 0.01;
 const PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE = "pwid,palt";
+const ENGINE_PUNCTUATION_FEATURE_SETTINGS = '"halt" 0, "chws" 0, "palt" 0';
+const PROPORTIONAL_CURLY_QUOTE_FEATURE_SETTINGS =
+  '"halt" 0, "chws" 0, "palt" 1';
 export const EXACT_RENDER_FONT_ATTRIBUTE = "data-tiqian-exact-render-font";
 const EXACT_PREPARED_DOM_ATTRIBUTE = "data-tq-exact-prepared-dom";
 const SERVER_RENDERED_SNAPSHOT_ATTRIBUTE = "data-tq-ssr-snapshot";
@@ -648,7 +651,7 @@ function openTypeFeatureContract(features) {
   if (features == null || (Array.isArray(features) && features.length === 0)) {
     return Object.freeze({
       signature: "",
-      fontFeatureSettings: "normal",
+      fontFeatureSettings: ENGINE_PUNCTUATION_FEATURE_SETTINGS,
       fontVariantEastAsian: "normal",
       fontVariantNumeric: "normal",
     });
@@ -665,7 +668,9 @@ function openTypeFeatureContract(features) {
   }
   return Object.freeze({
     signature: features.join(","),
-    fontFeatureSettings: roleSignature ? '"palt" 1' : "normal",
+    fontFeatureSettings: roleSignature
+      ? PROPORTIONAL_CURLY_QUOTE_FEATURE_SETTINGS
+      : ENGINE_PUNCTUATION_FEATURE_SETTINGS,
     fontVariantEastAsian: roleSignature ? "proportional-width" : "normal",
     fontVariantNumeric,
   });
@@ -678,8 +683,22 @@ function boundaryOpenTypeFeatureContract(element) {
     : openTypeFeatureContract(signature.split(","));
 }
 
-function canonicalPaltFeatureSettings(value) {
-  return /^["']palt["'](?:\s+1)?$/u.test(String(value ?? "").trim());
+function parsedOpenTypeFeatureSettings(value) {
+  const serialized = String(value ?? "").trim();
+  if (!serialized || serialized === "normal") return new Map();
+  const result = new Map();
+  for (const item of serialized.split(",")) {
+    const match = /^\s*["']([A-Za-z0-9]{4})["'](?:\s+(-?\d+))?\s*$/u.exec(item);
+    if (!match || result.has(match[1])) return null;
+    result.set(match[1], Number(match[2] ?? 1));
+  }
+  return result;
+}
+
+function canonicalEnginePunctuationFeatureSettings(value, proportionalQuote = false) {
+  const settings = parsedOpenTypeFeatureSettings(value);
+  if (!settings || settings.get("halt") !== 0 || settings.get("chws") !== 0) return false;
+  return settings.size === 3 && settings.get("palt") === (proportionalQuote ? 1 : 0);
 }
 
 function boundaryOpenTypeFeatureIssue(element, style, contract) {
@@ -688,7 +707,7 @@ function boundaryOpenTypeFeatureIssue(element, style, contract) {
   if (style.fontVariantEastAsian !== contract.fontVariantEastAsian) {
     return "Boundary:fontVariantEastAsian";
   }
-  if (!canonicalPaltFeatureSettings(style.fontFeatureSettings)) {
+  if (!canonicalEnginePunctuationFeatureSettings(style.fontFeatureSettings, true)) {
     return "Boundary:fontFeatureSettings";
   }
   return null;
@@ -1050,7 +1069,13 @@ function computedTypographyIssue(
   if (!Number.isFinite(letterSpacing) || Math.abs(letterSpacing - contract.letterSpacingPx) > 0.01) {
     return "letterSpacing";
   }
-  if ((style.fontFeatureSettings || "normal") !== contract.fontFeatureSettings) return "fontFeatureSettings";
+  if (canonicalPreparedFlow) {
+    if (!canonicalEnginePunctuationFeatureSettings(style.fontFeatureSettings)) {
+      return "fontFeatureSettings";
+    }
+  } else if ((style.fontFeatureSettings || "normal") !== contract.fontFeatureSettings) {
+    return "fontFeatureSettings";
+  }
   if ((style.fontVariationSettings || "normal") !== contract.fontVariationSettings) return "fontVariationSettings";
   if (!new Set(["normal", "100%"]).has(style.fontStretch || "normal")) return "fontStretch";
   if (canonicalPreparedFlow

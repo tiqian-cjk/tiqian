@@ -267,7 +267,9 @@ function fixtureComputedStyle(element, _pseudo, overrides = {}) {
     fontStyle: "normal",
     letterSpacing: "normal",
     wordSpacing: "normal",
-    fontFeatureSettings: proportionalQuote ? '"palt" 1' : "normal",
+    fontFeatureSettings: proportionalQuote
+      ? '"halt" 0, "chws" 0, "palt" 1'
+      : canonicalPreparedFlow ? '"halt" 0, "chws" 0, "palt" 0' : "normal",
     fontVariationSettings: "normal",
     fontStretch: "100%",
     fontKerning: "normal",
@@ -456,7 +458,7 @@ function fixture({
   const manifest = {
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v14",
+    renderRevision: "prebroken-dom-v15",
     fontSourcePolicy: "host-compatible-stylesheet-v1",
     ...(entrySource === undefined ? {} : { entrySource }),
     renderFontFamilies: ["Fixture CJK"],
@@ -693,7 +695,7 @@ test("proportional quote evidence and prepared boundaries replay the same featur
     assert.ok(measuredProbeStyles.some((style) =>
       style.includes("font-variant-east-asian:proportional-width!important")));
     assert.ok(measuredProbeStyles.some((style) =>
-      style.includes('font-feature-settings:"palt" 1!important')));
+      style.includes('font-feature-settings:"halt" 0, "chws" 0, "palt" 1!important')));
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;
   }
@@ -1353,6 +1355,27 @@ test("prepared geometry still rejects shaping styles that differ from its semant
     assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), {
       adopted: false,
       reason: "SnapshotAdoptionFailed:RenderedSnapshotGeometryMismatch:Geometry:fontWeight",
+    });
+    assert.strictEqual(paragraph.firstChild, originalText);
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
+test("snapshot adoption requires the engine-owned punctuation feature lock", async () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = (element, pseudo) => fixtureComputedStyle(
+    element,
+    pseudo,
+    element.closest?.("[data-tq-canonical-source]")
+      ? { fontFeatureSettings: "normal" }
+      : {},
+  );
+  try {
+    const { root, paragraph, originalText } = fixture();
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), {
+      adopted: false,
+      reason: "SnapshotAdoptionFailed:RenderedSnapshotHostContractMismatch",
     });
     assert.strictEqual(paragraph.firstChild, originalText);
   } finally {

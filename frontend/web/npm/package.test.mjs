@@ -479,6 +479,10 @@ test("the custom element validates a snapshot before dynamically loading the bro
   assert.match(stylesSource, /text-spacing-trim: space-all !important/u);
   assert.match(
     stylesSource,
+    /\[data-tq-rendered="true"\] \{[\s\S]*?font-feature-settings: "halt" 0, "chws" 0, "palt" 0 !important/u,
+  );
+  assert.match(
+    stylesSource,
     /\[data-tq-rendered="true"\] \.tq-line\[data-tq-geometry="true"\]/u,
   );
   assert.match(
@@ -500,4 +504,8 @@ test("the custom element validates a snapshot before dynamically loading the bro
     /\[data-tq-open-type-features="pwid,palt"\]/u,
   );
   assert.match(stylesSource, /font-variant-east-asian: proportional-width !important/u);
+  assert.match(
+    stylesSource,
+    /font-feature-settings: "halt" 0, "chws" 0, "palt" 1 !important/u,
+  );
 });

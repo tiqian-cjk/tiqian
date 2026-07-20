@@ -40,7 +40,19 @@ test("semantic and canonical paragraphs share the engine-owned line box", () => 
   assert.match(stylesheet, /EngineOwnedLineBox/u);
   assert.match(
     stylesheet,
-    /\[data-tq-rendered="true"\]\s*\{\s*line-height:\s*0\s*!important/u,
+    /\[data-tq-rendered="true"\]\s*\{[\s\S]*?line-height:\s*0\s*!important/u,
+  );
+});
+
+test("rendered paragraphs keep browser punctuation shaping out of engine geometry", () => {
+  assert.match(stylesheet, /EngineOwnedPunctuationOpenTypeFeatures/u);
+  assert.match(
+    stylesheet,
+    /font-feature-settings:\s*"halt" 0, "chws" 0, "palt" 0\s*!important/u,
+  );
+  assert.match(
+    stylesheet,
+    /font-feature-settings:\s*"halt" 0, "chws" 0, "palt" 1\s*!important/u,
   );
 });
 
