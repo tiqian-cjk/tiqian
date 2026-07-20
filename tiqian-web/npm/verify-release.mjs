@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -86,6 +86,14 @@ assert.match(import.meta.resolve("@tiqian/prose/styles.css"), /styles\\.css$/u);
     throw new Error(`ReleaseConsumerImportFailed:\n${detail}`);
   }
   console.log("verified packed @tiqian/prose exports in an isolated consumer");
+  const artifactDirectory = String(process.env.TIQIAN_RELEASE_ARTIFACT_DIR ?? "").trim();
+  if (artifactDirectory) {
+    const outputDirectory = resolve(artifactDirectory);
+    await mkdir(outputDirectory, { recursive: true });
+    const outputPath = resolve(outputDirectory, filename);
+    await copyFile(tarballPath, outputPath);
+    console.log(`retained verified release tarball at ${outputPath}`);
+  }
 } finally {
   await rm(consumerRoot, { force: true, recursive: true });
 }

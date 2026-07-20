@@ -4,9 +4,11 @@ import test from "node:test";
 
 test("published package includes the generated runtime and no repository-only bin", async () => {
   const manifest = JSON.parse(await readFile(new URL("./package.json", import.meta.url), "utf8"));
+  const lock = JSON.parse(await readFile(new URL("./package-lock.json", import.meta.url), "utf8"));
 
   assert.equal(manifest.name, "@tiqian/prose");
-  assert.equal(manifest.version, "0.1.0-alpha.2");
+  assert.equal(lock.version, manifest.version);
+  assert.equal(lock.packages[""].version, manifest.version);
   assert.equal(manifest.license, "MPL-2.0");
   assert.equal(manifest.types, "./api.d.ts");
   assert.equal(manifest.engines.node, ">=22");
@@ -41,7 +43,38 @@ test("published package includes the generated runtime and no repository-only bi
     manifest.scripts["verify:release"],
     "npm run prepack && node ./verify-release.mjs",
   );
+  assert.equal(manifest.scripts["release:prepare"], "node ./prepare-release.mjs");
   assert.equal(manifest.files.includes("verify-release.mjs"), false);
+  assert.equal(manifest.files.includes("prepare-release.mjs"), false);
+});
+
+test("the release helper derives the repository tag and commit subject from one version", async () => {
+  const { normalizeReleaseVersion, releaseCommitSubject, releaseTag } = await import(
+    "./prepare-release.mjs"
+  );
+
+  assert.equal(normalizeReleaseVersion("0.1.0-alpha.3"), "0.1.0-alpha.3");
+  assert.equal(releaseTag("0.1.0-alpha.3"), "@tiqian/prose@0.1.0-alpha.3");
+  assert.equal(releaseCommitSubject("0.1.0-alpha.3"), "chore(web): prepare alpha.3 release");
+  assert.equal(releaseCommitSubject("0.1.0"), "chore(web): prepare 0.1.0 release");
+  assert.throws(() => normalizeReleaseVersion("v0.1.0-alpha.3"), /InvalidReleaseVersion/u);
+  assert.throws(() => normalizeReleaseVersion("0.1.0-alpha.03"), /InvalidReleaseVersion/u);
+  assert.throws(() => normalizeReleaseVersion("0.1.0+local"), /InvalidReleaseVersion/u);
+});
+
+test("the release workflow publishes one verified artifact and synchronizes both dist-tags", async () => {
+  const workflow = await readFile(
+    new URL("../../.github/workflows/publish-prose.yml", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(workflow, /tags:\s*\n\s*- "@tiqian\/prose@\*"/u);
+  assert.match(workflow, /id-token: write/u);
+  assert.match(workflow, /TIQIAN_RELEASE_ARTIFACT_DIR/u);
+  assert.match(workflow, /npm publish "\$\{tarball\}" --ignore-scripts --access public --tag alpha/u);
+  assert.match(workflow, /NODE_AUTH_TOKEN: \$\{\{ secrets\.NPM_DIST_TAG_TOKEN \}\}/u);
+  assert.match(workflow, /npm dist-tag add "@tiqian\/prose@\$\{RELEASE_VERSION\}" latest/u);
+  assert.match(workflow, /tags\.alpha !== version \|\| tags\.latest !== version/u);
 });
 
 test("the release verifier accepts both assembled Kotlin/JS runtimes", async () => {

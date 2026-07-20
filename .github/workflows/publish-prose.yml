@@ -1,0 +1,144 @@
+name: Publish prose package
+
+on:
+  push:
+    tags:
+      - "@tiqian/prose@*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-tiqian-prose
+  cancel-in-progress: false
+
+jobs:
+  publish-alpha:
+    name: Verify and publish alpha
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+    defaults:
+      run:
+        working-directory: tiqian-web/npm
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Use an OIDC-capable npm CLI
+        run: npm install --global npm@11.12.1
+
+      - name: Validate release tag
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          expected_tag="@tiqian/prose@${version}"
+          if [[ "${GITHUB_REF_NAME}" != "${expected_tag}" ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package version ${version}"
+            exit 1
+          fi
+          if [[ "$(git cat-file -t "${GITHUB_REF_NAME}")" != "tag" ]]; then
+            echo "::error::Release tag must be annotated"
+            exit 1
+          fi
+          tag_commit="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
+          if [[ "${tag_commit}" != "${GITHUB_SHA}" ]]; then
+            echo "::error::Tag target ${tag_commit} does not match workflow commit ${GITHUB_SHA}"
+            exit 1
+          fi
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "${tag_commit}" refs/remotes/origin/main; then
+            echo "::error::Release tag must point to a commit on origin/main"
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Install package dependencies
+        run: npm ci
+
+      - name: Build and verify the release tarball
+        env:
+          TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-prose-release
+        run: npm run verify:release
+
+      - name: Publish the verified tarball to alpha
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(find "${RUNNER_TEMP}/tiqian-prose-release" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          if [[ -z "${tarball}" ]]; then
+            echo "::error::Verified release tarball is missing"
+            exit 1
+          fi
+          npm publish "${tarball}" --ignore-scripts --access public --tag alpha
+
+  sync-latest:
+    name: Synchronize latest dist-tag
+    needs: publish-alpha
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Use the release npm CLI
+        run: npm install --global npm@11.12.1
+
+      - name: Point latest at the published alpha
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_DIST_TAG_TOKEN }}
+          RELEASE_VERSION: ${{ needs.publish-alpha.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${NODE_AUTH_TOKEN}" ]]; then
+            echo "::error::NPM_DIST_TAG_TOKEN is not configured"
+            exit 1
+          fi
+          npm dist-tag add "@tiqian/prose@${RELEASE_VERSION}" latest
+
+      - name: Verify alpha and latest
+        env:
+          RELEASE_VERSION: ${{ needs.publish-alpha.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..12}; do
+            tags="$(npm view @tiqian/prose dist-tags --json)"
+            if DIST_TAGS="${tags}" node --input-type=module -e '
+              const tags = JSON.parse(process.env.DIST_TAGS);
+              const version = process.env.RELEASE_VERSION;
+              if (tags.alpha !== version || tags.latest !== version) process.exit(1);
+            '; then
+              echo "alpha and latest both point to ${RELEASE_VERSION}"
+              exit 0
+            fi
+            if [[ "${attempt}" -lt 12 ]]; then sleep 5; fi
+          done
+          echo "::error::npm dist-tags did not converge on ${RELEASE_VERSION}"
+          exit 1

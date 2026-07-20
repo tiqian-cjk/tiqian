@@ -4,8 +4,9 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { normalizeReleaseVersion } from "./prepare-release.mjs";
+
 const EXPECTED_NAME = "@tiqian/prose";
-const EXPECTED_VERSION = "0.1.0-alpha.2";
 const RUNTIMES = [
   {
     directory: "runtime/",
@@ -27,8 +28,10 @@ function fail(message) {
 export async function verifyPackage(packageRoot = new URL("./", import.meta.url)) {
   const manifest = JSON.parse(await readFile(new URL("package.json", packageRoot), "utf8"));
   if (manifest.name !== EXPECTED_NAME) fail(`expected ${EXPECTED_NAME}, found ${manifest.name}`);
-  if (manifest.version !== EXPECTED_VERSION) {
-    fail(`expected ${EXPECTED_VERSION}, found ${manifest.version}`);
+  try {
+    normalizeReleaseVersion(manifest.version);
+  } catch {
+    fail(`invalid package version ${manifest.version}`);
   }
   if (manifest.license !== "MPL-2.0") fail("manifest must declare MPL-2.0");
 
