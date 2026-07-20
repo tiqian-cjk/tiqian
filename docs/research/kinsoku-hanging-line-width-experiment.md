@@ -6,8 +6,8 @@
 1. GB 法与严格处理在最短哪个行长下仍可接受？
 2. 行尾悬挂在哪些行长收益最明显？
 
-复现：`./gradlew :tiqian-layout:jvmTest --tests '*KinsokuHangingExperimentProbe*'`
-（[KinsokuHangingExperimentProbe.kt](../../tiqian-layout/src/jvmTest/kotlin/org/tiqian/layout/KinsokuHangingExperimentProbe.kt)）。
+复现：`./gradlew :layout:jvmTest --tests '*KinsokuHangingExperimentProbe*'`
+（[KinsokuHangingExperimentProbe.kt](../../layout/src/jvmTest/kotlin/org/tiqian/layout/KinsokuHangingExperimentProbe.kt)）。
 
 ## 方法
 

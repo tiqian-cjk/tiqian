@@ -129,7 +129,7 @@ during dogfooding.
 ## Verification
 
 ```shell
-./gradlew :tiqian-compose:jvmTest --tests 'org.tiqian.compose.CjkTextCompatibilityTest'
-./gradlew :tiqian-compose:jvmTest --tests 'org.tiqian.compose.CjkTextLinkClickTest'
-./gradlew :tiqian-compose:jvmTest --tests 'org.tiqian.compose.CjkTextRenderTest'
+./gradlew :frontend:compose:jvmTest --tests 'org.tiqian.compose.CjkTextCompatibilityTest'
+./gradlew :frontend:compose:jvmTest --tests 'org.tiqian.compose.CjkTextLinkClickTest'
+./gradlew :frontend:compose:jvmTest --tests 'org.tiqian.compose.CjkTextRenderTest'
 ```

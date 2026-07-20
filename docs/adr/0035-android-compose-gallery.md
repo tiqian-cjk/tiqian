@@ -5,12 +5,12 @@
 
 > [!NOTE]
 > 2026-07-11：Compose 示例界面已从库模块与独立 gallery 收拢到共享的
-> `tiqian-demo`。Desktop 由该模块直接启动，`tiqian-demo-android` 只保留 Android
+> `demo`。Desktop 由该模块直接启动，`demo/android` 只保留 Android
 > application 壳。下文的 `tiqian-gallery-android` 是本 ADR 落地时的历史名称。
 
 ## Context
 
-ADR 0017 deliberately shipped `tiqian-compose` as Desktop/JVM first: the renderer
+ADR 0017 deliberately shipped `frontend/compose` as Desktop/JVM first: the renderer
 used Skia `TextBlob`s and the module had no Android target. The next useful
 gallery surface is Android Compose, because Android is one of the real platform
 text stacks Tiqian already measures through `AndroidPaintTextShaper`, and the
@@ -67,7 +67,7 @@ width-specific platform choice.
 
 ## Consequences
 
-- `tiqian-compose` now produces an Android AAR and exposes the same public
+- `frontend/compose` now produces an Android AAR and exposes the same public
   Compose API on Android and Desktop.
 - Android gallery is a first-class Gradle module and can be launched as an app.
 - Android rendering uses the same `LayoutResult` contract as Desktop, but the
@@ -84,6 +84,6 @@ width-specific platform choice.
 ## Verification
 
 ```shell
-./gradlew :tiqian-compose:compileAndroidMain :tiqian-demo-android:assembleDebug
-./gradlew :tiqian-compose:compileKotlinJvm :tiqian-compose:jvmTest
+./gradlew :frontend:compose:compileAndroidMain :demo:android:assembleDebug
+./gradlew :frontend:compose:compileKotlinJvm :frontend:compose:jvmTest
 ```

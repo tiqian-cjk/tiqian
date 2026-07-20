@@ -12,7 +12,7 @@ Accepted.
 
 ## Context
 
-Slice 6 开始前，`tiqian-shaping-api` 只有极薄的 `TextShaper` 接口，layout 仍直接构造 `Cluster` 和 nominal advance。这会让 pipeline 看起来已经有 shaping 模块，但实际上排版核心没有经过 shaping boundary，也无法在 playground / tests 中解释 shaping 来源。
+Slice 6 开始前，`shaping/api` 只有极薄的 `TextShaper` 接口，layout 仍直接构造 `Cluster` 和 nominal advance。这会让 pipeline 看起来已经有 shaping 模块，但实际上排版核心没有经过 shaping boundary，也无法在 playground / tests 中解释 shaping 来源。
 
 同时，提椠必须避免另一个方向的错误：把 CLREQ 替换、字体 fallback、标点 glue、避头尾或两端对齐决策塞进平台 shaper。Android / Skia / HarfBuzz adapter 应是可替换的 glyph geometry provider，而不是排版规则拥有者。
 
@@ -41,6 +41,6 @@ Slice 6 开始前，`tiqian-shaping-api` 只有极薄的 `TextShaper` 接口，l
 
 ## Follow-up
 
-- 为 `tiqian-shaping-android` / `tiqian-shaping-skia` 单列模块和 adapter。
+- 为 `shaping/android-adapter` / `shaping/skia` 单列模块和 adapter。
 - 增加 golden fixture，固定 source/display/glyph advance/debug decision。
 - 将真实 glyph ink bounds 接入 `PunctuationAtomBuilder`，替代当前 policy-derived body width。

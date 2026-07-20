@@ -29,30 +29,30 @@
 ```shell
 ./gradlew build
 
-./gradlew :tiqian-layout:jvmTest
-./gradlew :tiqian-layout:jvmTest --tests 'org.tiqian.layout.LayoutDumpGoldenTest'
-./gradlew :tiqian-layout:generateLayoutReport
+./gradlew :layout:jvmTest
+./gradlew :layout:jvmTest --tests 'org.tiqian.layout.LayoutDumpGoldenTest'
+./gradlew :layout:generateLayoutReport
 
-./gradlew :tiqian-compose:jvmTest
-./gradlew :tiqian-compose:compileAndroidMain
-./gradlew :tiqian-demo-android:assembleDebug
+./gradlew :frontend:compose:jvmTest
+./gradlew :frontend:compose:compileAndroidMain
+./gradlew :demo:android:assembleDebug
 ./gradlew runComposeDemo
 
-./gradlew :tiqian-web:jsBrowserTest
-./gradlew :tiqian-web-precompute:jsNodeTest
-./gradlew :tiqian-web:assembleNpmPackage
-(cd tiqian-web/npm && npm test)
+./gradlew :frontend:web:jsBrowserTest
+./gradlew :frontend:web-precompute:jsNodeTest
+./gradlew :frontend:web:assembleNpmPackage
+(cd frontend/web/npm && npm test)
 ```
 
 Layout report 位于
-`tiqian-layout/build/reports/tiqian-layout-report/index.html`。
+`layout/build/reports/tiqian-layout-report/index.html`。
 
 任何会改变断行、字体选择、标点空间、行高或行内几何的改动都应：
 
 1. 同步 fixture 与结构化 decision。
 2. 运行相关模块测试和 `LayoutDumpGoldenTest`。
 3. 行为变化需要更新 golden 时，使用
-   `TIQIAN_UPDATE_GOLDEN=1 ./gradlew :tiqian-layout:jvmTest --tests 'org.tiqian.layout.LayoutDumpGoldenTest'`，
+   `TIQIAN_UPDATE_GOLDEN=1 ./gradlew :layout:jvmTest --tests 'org.tiqian.layout.LayoutDumpGoldenTest'`，
    然后逐项检查 golden diff。
 4. 生成 layout report，并按涉及平台做浏览器、桌面或 Android 真机检查。
 
@@ -61,13 +61,13 @@ Layout report 位于
 
 ## 模块边界
 
-- **排版核心**：`tiqian-core`、`tiqian-font`、`tiqian-linebreak`、`tiqian-clreq`、
-  `tiqian-layout` 定义数据、字体策略、断行、中文规则与最终 `LayoutResult`。
-- **平台 shaping**：`tiqian-shaping-api` 是契约；`tiqian-shaping-jvm`、
-  `tiqian-shaping-skia`、`tiqian-shaping-android`、`tiqian-shaping-web` 提供各平台实现。
-- **前端**：`tiqian-compose`、`tiqian-web`、`tiqian-android-view` 只消费布局结果并呈现。
-- **Demo 与工具**：`tiqian-demo` 共享 Desktop / Android 示例界面，
-  `tiqian-demo-android` 是薄 Android 启动壳；layout report 与 `tiqian-test` 提供诊断和共享语料。
+- **排版核心**：`core`、`font`、`linebreak`、`clreq`、
+  `layout` 定义数据、字体策略、断行、中文规则与最终 `LayoutResult`。
+- **平台 shaping**：`shaping/api` 是契约；`shaping/jvm`、
+  `shaping/skia`、`shaping/android-adapter`、`shaping/web-adapter` 提供各平台实现。
+- **前端**：`frontend/compose`、`frontend/web`、`frontend/android-view` 只消费布局结果并呈现。
+- **Demo 与工具**：`demo` 共享 Desktop / Android 示例界面，
+  `demo/android` 是薄 Android 启动壳；layout report 与 `test-support` 提供诊断和共享语料。
 
 平台层可以负责字体加载、shaping、glyph metrics、绘制和宿主样式读取，但不得自行决定
 字体 fallback、标点 glue、避头尾、行调整或两端对齐。需要平台证据的规则应把证据送回

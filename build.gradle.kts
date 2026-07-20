@@ -36,5 +36,5 @@ subprojects {
 tasks.register("runComposeDemo") {
     group = "application"
     description = "Opens the shared Tiqian Compose demo on Desktop."
-    dependsOn(":tiqian-demo:runComposeDemo")
+    dependsOn(":demo:runComposeDemo")
 }

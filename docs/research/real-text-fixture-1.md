@@ -62,11 +62,11 @@ spacing decisions (整段共 2 处):
 下面是改前的诊断笔记，留作上下文。
 
 
-整段 14 个 ASCII 空格（每个中西交界点都有一个）当前在 [`CjkFontRoleClassifier`](../../tiqian-font/src/commonMain/kotlin/org/tiqian/font/FontPolicy.kt) 里依次：
+整段 14 个 ASCII 空格（每个中西交界点都有一个）当前在 [`CjkFontRoleClassifier`](../../font/src/commonMain/kotlin/org/tiqian/font/FontPolicy.kt) 里依次：
 不是 CJK 码点；不是 `isAmbiguousAsciiPunctuation`（只有 `- / ~`）；不是 curly quote；不是 CJK 标点；不是 `isLatinCodePoint`（只覆盖字母数字）；不是 `isAsciiLatinPunctuation`（刚加的括号集）；不是 emoji；`isSymbolCodePoint` 不命中（SPACE_SEPARATOR 不在 math/currency/modifier/other_symbol）。最终 → `FontRole.Unknown` → `PreferCjkForAmbiguousPunctuationResolver` 给出 `symbol-fallback`。
 
 当时的 layout report 里之所以**看起来正常**，是因为
-[`renderGlyphBox`](../../tiqian-layout/src/jvmTest/kotlin/org/tiqian/layout/tooling/LayoutReportMain.kt)
+[`renderGlyphBox`](../../layout/src/jvmTest/kotlin/org/tiqian/layout/tooling/LayoutReportMain.kt)
 的 `else` 分支默认按 `cjk-text` 上色——纯粹是 viz bug 掩盖了 model bug。
 
 潜在后果：
@@ -89,7 +89,7 @@ real-paragraph-1 实测变化：
 
 下面是改前的诊断笔记，留作上下文。
 
-`line[6]` greedy：`adjusted=336, maxWidth=320`。原因：[`applyKinsokuRepairs`](../../tiqian-layout/src/commonMain/kotlin/org/tiqian/layout/LineBreaker.kt) 把 prev 行末尾 cluster carry 到 curr 行头时，只重算 prev/curr 两侧的 `naturalWidth/adjustedWidth`，不再检查 curr 是否超 `maxWidth`。
+`line[6]` greedy：`adjusted=336, maxWidth=320`。原因：[`applyKinsokuRepairs`](../../layout/src/commonMain/kotlin/org/tiqian/layout/LineBreaker.kt) 把 prev 行末尾 cluster carry 到 curr 行头时，只重算 prev/curr 两侧的 `naturalWidth/adjustedWidth`，不再检查 curr 是否超 `maxWidth`。
 
 `line[8]` 同问题：carry 完之后 `adjustedWidth=284`，但加上 justifier 的 `+36`，`visualWidth=320` 刚好打住——这次是 justifier 把溢出吞了，但**模型上仍然依赖 justifier 强行拉伸**，没有真正修复。
 
@@ -110,7 +110,7 @@ real-paragraph-1 实测变化：
 下面是改前的诊断笔记，留作上下文。
 
 
-`line[11]` 结尾 `。`：`adjusted=128`，`。` 仍占 16f 完整 advance。但 [ADR 0004](../adr/0004-punctuation-additive-glue-model.md) 的 follow-up 与 [research/kongque-notes.md](kongque-notes.md) 明确写过「行尾标点自然半宽」是核心目标，[`PunctuationAtomBuilder`](../../tiqian-layout/src/commonMain/kotlin/org/tiqian/layout/PunctuationModel.kt) 也给标点设了 `trailingGlue.natural = sideGlue`——但 `LineBreaker` 在 commit 行的时候从不消耗这条 glue。
+`line[11]` 结尾 `。`：`adjusted=128`，`。` 仍占 16f 完整 advance。但 [ADR 0004](../adr/0004-punctuation-additive-glue-model.md) 的 follow-up 与 [research/kongque-notes.md](kongque-notes.md) 明确写过「行尾标点自然半宽」是核心目标，[`PunctuationAtomBuilder`](../../layout/src/commonMain/kotlin/org/tiqian/layout/PunctuationModel.kt) 也给标点设了 `trailingGlue.natural = sideGlue`——但 `LineBreaker` 在 commit 行的时候从不消耗这条 glue。
 
 孔雀计划文章直接指出：判断是否悬挂之前**必须**先把「行尾半宽」做出来，否则悬挂只是把不齐换成更不齐。
 
@@ -159,7 +159,7 @@ real-paragraph-1 实测变化：
 
 #### 8. lookahead 在真实长文本上明显赚
 
-greedy 出 2 repair + 1 个 line overflow；lookahead 出 0 repair + 0 overflow + justification 分布更均匀。证明 [`LookaheadLineBreaker`](../../tiqian-layout/src/commonMain/kotlin/org/tiqian/layout/LineBreaker.kt) 默认 `window=1, futureLineHorizon=2` 这个组合在 ~200 字段落上撑得住。是积极发现，不是问题。
+greedy 出 2 repair + 1 个 line overflow；lookahead 出 0 repair + 0 overflow + justification 分布更均匀。证明 [`LookaheadLineBreaker`](../../layout/src/commonMain/kotlin/org/tiqian/layout/LineBreaker.kt) 默认 `window=1, futureLineHorizon=2` 这个组合在 ~200 字段落上撑得住。是积极发现，不是问题。
 
 #### 9. `」。` 压缩工作正常
 

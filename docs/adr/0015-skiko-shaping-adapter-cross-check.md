@@ -16,7 +16,7 @@ OpenType `halt` / `chws`（ADR 0014 follow-up）的自然载体。
 
 ## Decision
 
-新增 `tiqian-shaping-skia`，提供 `SkiaTextShaper`：
+新增 `shaping/skia`，提供 `SkiaTextShaper`：
 
 - 依赖 `org.jetbrains.skiko:skiko-awt:0.148.1`（测试与 playground 另挂本机
   `skiko-awt-runtime-macos-arm64`；其它宿主退回 `TIQIAN_PLAYGROUND_SHAPER=jvm-awt`）。
@@ -70,7 +70,7 @@ Skia 光栅化（或渲染层垂直校正）留作后续。
 - playground 支持 `TIQIAN_PLAYGROUND_SHAPER=skia` 渲染对照。
 - `halt` / `chws` 接入可以从 Skiko 路径开始（HarfBuzz 特性可用），AWT 路径
   保留为对照。
-- Android adapter（`tiqian-shaping-android`）仍未接：Skiko 不是 Android 上的
+- Android adapter（`shaping/android-adapter`）仍未接：Skiko 不是 Android 上的
   TextPaint，平台真值还需要单独 adapter；但 contract 与对照方法可直接复用。
 
 ## Alternatives considered

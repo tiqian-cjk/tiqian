@@ -39,8 +39,8 @@ ClreqProfile(..., autoSpace = AutoSpacePolicy.Default)
 
 具体语义：
 
-1. **U+0020 SPACE 归类为 `LatinText`**（[`CjkFontRoleClassifier.isAsciiLatinPunctuation`](../../tiqian-font/src/commonMain/kotlin/org/tiqian/font/FontPolicy.kt) 扩展）。它进入 Latin run，跟相邻 Latin 字符聚合成一个 cluster。
-2. **Cluster 阶段后，按 `policy.cjkLatin` 处理边界 typed space**（[`ParagraphLayoutEngine.applyAutoSpacePolicy`](../../tiqian-layout/src/commonMain/kotlin/org/tiqian/layout/ParagraphLayoutEngine.kt)，命名 heuristic `TextAutoSpaceReplace`）：
+1. **U+0020 SPACE 归类为 `LatinText`**（[`CjkFontRoleClassifier.isAsciiLatinPunctuation`](../../font/src/commonMain/kotlin/org/tiqian/font/FontPolicy.kt) 扩展）。它进入 Latin run，跟相邻 Latin 字符聚合成一个 cluster。
+2. **Cluster 阶段后，按 `policy.cjkLatin` 处理边界 typed space**（[`ParagraphLayoutEngine.applyAutoSpacePolicy`](../../layout/src/commonMain/kotlin/org/tiqian/layout/ParagraphLayoutEngine.kt)，命名 heuristic `TextAutoSpaceReplace`）：
    - 一个 Latin cluster 的**前导**空格数 × (1em - gapEm)，从该 cluster 的 advance 减掉，前提是它的左邻 cluster 是 `CjkText` 或 `CjkPunctuation`。
    - **后置**空格数同理，看右邻。
    - Latin 内部空格（如 `Hello world` 的词间）不动——它们不在 CJK 边界上。

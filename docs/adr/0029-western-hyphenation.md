@@ -20,7 +20,7 @@
 
 ## Decision
 
-**数据：内置 TeX 连字模式。** `tiqian-linebreak` 定 `Hyphenator` 接口
+**数据：内置 TeX 连字模式。** `linebreak` 定 `Hyphenator` 接口
 （`hyphenate(word): List<Int>` 给音节断点），`NoHyphenator` 为无数据默认；
 `LiangHyphenator` 实现 Frank Liang 算法（TeX/浏览器同款）。JVM/Android 内置标准
 `hyph-en-us`（Kuiken/hyph-utf8，宽松许可、文件头声明原样保留——**非公有领域**），

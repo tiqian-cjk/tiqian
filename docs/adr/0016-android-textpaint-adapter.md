@@ -17,7 +17,7 @@ Android 只能近似为「该 locale 下的平台文本栈测量」。
 
 ## Decision
 
-新增 `tiqian-shaping-android`（AGP 9.2.1，minSdk 31，AGP 内建 Kotlin）：
+新增 `shaping/android-adapter`（AGP 9.2.1，minSdk 31，AGP 内建 Kotlin）：
 
 - `AndroidPaintTextShaper`：advance 来自 `Paint.getRunAdvance`，per-glyph
   id/位置/Font 来自 `TextRunShaper.shapeTextRun`（API 31+），ink bounds 来自
@@ -78,7 +78,7 @@ id、origin、Font 绘制；只有缺少平台 Font key 时，才退回同一 re
 - Android 的测量与主文本绘制在 API 31+ 上同源：layout 消费的 glyph id /
   origin / Font 被 renderer 直接重放，避免 draw 阶段再次让平台重新理解文本。
 - Android 真机/模拟器是唯一需要外部环境的测试路径，不进默认 `build`；
-  按需跑 `:tiqian-shaping-android:connectedAndroidTest`。
+  按需跑 `:shaping:android-adapter:connectedAndroidTest`。
 - `local.properties`（sdk.dir）为本机配置，不入库。
 
 ## Alternatives considered

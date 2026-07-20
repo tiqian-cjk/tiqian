@@ -45,9 +45,9 @@ U+200C/U+200D 还参与字形连接。它们不能因同样“测得零宽”就
 
 ## Implementation
 
-引擎级（干净模块 `tiqian-linebreak` + `tiqian-layout`，不依赖 compose）：
+引擎级（干净模块 `linebreak` + `layout`，不依赖 compose）：
 
-1. `tiqian-linebreak`：识别强制断行类码点（含 `CRLF` 合一），产出 `BreakKind.Required` 断点；
+1. `linebreak`：识别强制断行类码点（含 `CRLF` 合一），产出 `BreakKind.Required` 断点；
    单独识别 U+200B，不与 `WJ` / shaping controls 混同。
 2. 引擎 cluster 构建：强制断行符成独立零宽 cluster，标记「其后强制断 + 不 shape」；U+200B
    成独立 `ZeroWidthSpaceSoftBreakNoShape` cluster。

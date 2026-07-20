@@ -18,7 +18,7 @@ glyph bounds。继续在这个假宽度上调 line break、autospace、glue 和 
 
 ## Decision
 
-新增 `tiqian-shaping-jvm`，提供 `AwtTextShaper`：
+新增 `shaping/jvm`，提供 `AwtTextShaper`：
 
 - 使用 JVM `Font.layoutGlyphVector` 和 `FontRenderContext` 测量 display text。
 - 输入仍然消费 layout/profile 已经决定好的 `displayText`，不改 source text。
@@ -39,5 +39,5 @@ glyph bounds。继续在这个假宽度上调 line break、autospace、glue 和 
 
 - 让 `PunctuationAtomBuilder` 接收 shaped glyph bounds，替代 policy-derived `bodyWidth`。
 - 在 playground metadata 中展示 glyph bounds / ink box，而不只是 run advance。
-- 增加 platform-specific adapter：`tiqian-shaping-android` 和 Skia/Skiko adapter。
+- 增加 platform-specific adapter：`shaping/android-adapter` 和 Skia/Skiko adapter。
 - 为真实 shaper 输出建立专门 golden，避免复用 stub golden。

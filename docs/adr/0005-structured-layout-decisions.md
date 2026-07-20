@@ -23,7 +23,7 @@ Slice 0–3 把 pipeline 形状打通了，但 `ExplainableStubParagraphLayoutEn
 
 ### 1. 结构化 LayoutDecision 类型
 
-在 `tiqian-core` 引入：
+在 `core` 引入：
 
 ```text
 FontDecision         (range, sourceText, displayText, role, fontKey, reason, substitutionReason)

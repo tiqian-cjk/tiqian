@@ -1,0 +1,103 @@
+{
+  "name": "@tiqian/prose",
+  "version": "0.1.0-alpha.2",
+  "description": "Progressively enhance Chinese prose with Tiqian's CJK paragraph layout engine.",
+  "keywords": [
+    "cjk",
+    "chinese",
+    "typography",
+    "prose",
+    "layout",
+    "web-component",
+    "kotlin-js"
+  ],
+  "homepage": "https://github.com/tiqian-cjk/tiqian#readme",
+  "bugs": {
+    "url": "https://github.com/tiqian-cjk/tiqian/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tiqian-cjk/tiqian.git",
+    "directory": "frontend/web/npm"
+  },
+  "license": "MPL-2.0",
+  "type": "module",
+  "types": "./api.d.ts",
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "scripts": {
+    "build:runtime": "node ./build-runtime.mjs",
+    "test": "node --test *.test.mjs",
+    "verify:package": "node ./verify-package.mjs",
+    "verify:release": "npm run prepack && node ./verify-release.mjs",
+    "release:prepare": "node ./prepare-release.mjs",
+    "prepack": "npm run build:runtime && npm test && npm run verify:package"
+  },
+  "files": [
+    "LICENSE",
+    "README.md",
+    "api.d.ts",
+    "api.js",
+    "browser-font-replay.js",
+    "browser-fonts.js",
+    "copy.js",
+    "digest.js",
+    "element.d.ts",
+    "element.js",
+    "font-face-boundaries.js",
+    "font-contract.js",
+    "lazy-capabilities.js",
+    "layout-worker.js",
+    "precompute.d.ts",
+    "precompute.js",
+    "precompute-fonts.js",
+    "precompute-node-fonts.js",
+    "precompute-runtime/",
+    "precomputed.js",
+    "prepared-dom.js",
+    "runtime.js",
+    "runtime/",
+    "snapshot-manifest.js",
+    "snapshot-source.js",
+    "snapshot-client.d.ts",
+    "snapshot-client.js",
+    "snapshot-schema.js",
+    "styles.css",
+    "styles.js",
+    "worker-layout.js"
+  ],
+  "exports": {
+    ".": {
+      "types": "./api.d.ts",
+      "default": "./api.js"
+    },
+    "./element": {
+      "types": "./element.d.ts",
+      "default": "./element.js"
+    },
+    "./precompute": {
+      "types": "./precompute.d.ts",
+      "default": "./precompute.js"
+    },
+    "./snapshot-client": {
+      "types": "./snapshot-client.d.ts",
+      "default": "./snapshot-client.js"
+    },
+    "./styles.css": "./styles.css"
+  },
+  "sideEffects": [
+    "./api.js",
+    "./element.js",
+    "./prepared-dom.js",
+    "./styles.css"
+  ],
+  "dependencies": {
+    "harfbuzzjs": "1.4.0",
+    "woff2-encoder": "2.0.0"
+  }
+}

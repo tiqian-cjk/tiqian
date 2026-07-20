@@ -13,24 +13,24 @@
 
 ## Decision
 
-固定一条单向 pipeline，所有排版决策都在 `tiqian-core` ~ `tiqian-layout` 之间完成：
+固定一条单向 pipeline，所有排版决策都在 `core` ~ `layout` 之间完成：
 
 ```text
 text + style + locale + profile
-  -> font selection (tiqian-font)
-  -> shaping        (tiqian-shaping-api, 平台 adapter 实现)
-  -> CJK metric normalization (tiqian-font)
-  -> punctuation atom / glue  (tiqian-layout)
-  -> break candidates         (tiqian-linebreak + tiqian-clreq)
-  -> line repair / optimization (tiqian-layout)
-  -> justification            (tiqian-layout)
-  -> LayoutResult             (tiqian-core)
-  -> renderer (tiqian-compose / tiqian-android-view)
+  -> font selection (font)
+  -> shaping        (shaping/api, 平台 adapter 实现)
+  -> CJK metric normalization (font)
+  -> punctuation atom / glue  (layout)
+  -> break candidates         (linebreak + clreq)
+  -> line repair / optimization (layout)
+  -> justification            (layout)
+  -> LayoutResult             (core)
+  -> renderer (frontend/compose / frontend/android-view)
 ```
 
-平台前端模块 (`tiqian-compose`, `tiqian-android-view`) 只允许做：接收 constraints、调用 core layout、绘制 glyph runs、提供 hit-test、暴露调试 overlay。它们**不可以**决定 fallback 顺序、标点空间、避头尾、对齐分配、段落优化。
+平台前端模块 (`frontend/compose`, `frontend/android-view`) 只允许做：接收 constraints、调用 core layout、绘制 glyph runs、提供 hit-test、暴露调试 overlay。它们**不可以**决定 fallback 顺序、标点空间、避头尾、对齐分配、段落优化。
 
-平台 shaping/font 能力通过 `tiqian-shaping-api` 的接口注入，差异落到 capability report，不进入 core 规则。
+平台 shaping/font 能力通过 `shaping/api` 的接口注入，差异落到 capability report，不进入 core 规则。
 
 ## Consequences
 
@@ -46,5 +46,5 @@ text + style + locale + profile
 
 ## Follow-up
 
-- `tiqian-shaping-android` / `tiqian-shaping-skia` 在 Slice 6 (M5) 才真正出现。
+- `shaping/android-adapter` / `shaping/skia` 在 Slice 6 (M5) 才真正出现。
 - 竖排接入时复用同一 pipeline，writing mode 进入 profile，不应另起一条 pipeline。

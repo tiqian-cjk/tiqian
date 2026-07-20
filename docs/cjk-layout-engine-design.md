@@ -364,36 +364,36 @@ tiqian-text-core
   Cluster / TextRun / GlyphRun / LineBox
   LayoutInput / LayoutResult
 
-tiqian-linebreak
+linebreak
   Unicode UAX #14 adapter
   ICU / platform BreakIterator adapter
   custom rule pipeline
 
-tiqian-clreq
+clreq
   CLREQ 横排规则
   strictness profile
   punctuation class table
   punctuation glue table
   line-start / line-end policies
 
-tiqian-font
+font
   FontResolver
   FallbackResolver
   FontMetricsPolicy
   PunctuationFontPolicy
 
-tiqian-shaping-api
+shaping/api
   TextShaper
   GlyphRun
   ClusterMetrics
 
-tiqian-shaping-android
+shaping/android-adapter
   Android TextPaint / MeasuredText / Canvas integration
 
-tiqian-shaping-skia
+shaping/skia
   Skiko / Skia integration
 
-tiqian-layout
+layout
   ParagraphLayoutEngine
   PunctuationAtomBuilder
   GluePlanner
@@ -401,7 +401,7 @@ tiqian-layout
   Justifier
   HitTester
 
-tiqian-compose
+frontend/compose
   CjkText
   rememberCjkTextLayout
   Compose Canvas renderer
@@ -410,7 +410,7 @@ tiqian-view
   CjkTextView
   Android View renderer
 
-tiqian-test
+test-support
   fixtures
   golden layout snapshots
   screenshot renderer

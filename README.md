@@ -28,7 +28,7 @@
 
 ## Compose
 
-`tiqian-compose` 支持 Compose Desktop 和 Android 31 及以上版本。普通文本可以直接把
+`frontend/compose` 支持 Compose Desktop 和 Android 31 及以上版本。普通文本可以直接把
 Compose 的 `Text` 换成 `CjkText`，已有的 `AnnotatedString` 和 `TextStyle` 也可以继续使用。
 
 ```kotlin
@@ -71,7 +71,7 @@ CjkText(
 ```
 
 安装、命令式 API、构建期预排与运行环境见
-[`@tiqian/prose` 使用文档](tiqian-web/npm/README.md)。
+[`@tiqian/prose` 使用文档](frontend/web/npm/README.md)。
 
 ## 体验与构建
 
@@ -84,7 +84,7 @@ CjkText(
 
 ## 文档
 
-- [`@tiqian/prose` 使用文档](tiqian-web/npm/README.md) 说明 Web 安装、接入方式与构建期预排。
+- [`@tiqian/prose` 使用文档](frontend/web/npm/README.md) 说明 Web 安装、接入方式与构建期预排。
 - [Roadmap](docs/roadmap.md) 记录当前进度、已经完成的切片与下一步工作。
 - [当前架构](docs/architecture.md) 说明 pipeline、模块边界与平台接入方式。
 - [ADR 索引](docs/adr/README.md) 记录已经确定的架构和排版取舍。
