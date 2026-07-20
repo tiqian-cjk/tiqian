@@ -262,6 +262,11 @@ test("the custom element validates a snapshot before dynamically loading the bro
   );
   assert.doesNotMatch(stylesSource, /tq-inline-size-probe/u);
   assert.match(elementSource, /#paragraphWidthSignature\(\)/u);
+  assert.match(elementSource, /function fragmentedBorderBoxInlineSize\(element\)/u);
+  assert.match(
+    elementSource,
+    /#responsiveGeometrySignature\(\)[\s\S]*?fragmentedBorderBoxInlineSize\(this\)/u,
+  );
   assert.doesNotMatch(elementSource, /RESPONSIVE_LAYOUT_SETTLE_MS|#resizeSettleTimer/u);
   assert.doesNotMatch(elementSource, /RESPONSIVE_LATEST_RETARGET_QUIET_MS/u);
   assert.match(

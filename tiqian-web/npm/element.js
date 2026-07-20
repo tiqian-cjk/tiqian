@@ -91,6 +91,18 @@ function nextFrame() {
   return new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
+// CssFragmentedBlockInlineMeasure: a block fragmented by CSS columns has one
+// layout inline-size even though getBoundingClientRect() returns the union of
+// every horizontally separated fragment. Custom-element invalidation and the
+// Kotlin runtime must compare the same per-fragment border-box measure.
+function fragmentedBorderBoxInlineSize(element) {
+  const fallback = Number(element?.getBoundingClientRect?.().width) || 0;
+  const rects = Array.from(element?.getClientRects?.() ?? [])
+    .filter((rect) => Number(rect.width) > 0);
+  if (rects.length <= 1) return fallback;
+  return Math.max(...rects.map((rect) => Number(rect.width) || 0));
+}
+
 function belongsToRootScope(element, root) {
   return element.closest(ROOT_SELECTOR) === root;
 }
@@ -848,7 +860,7 @@ class TiqianProseElement extends HTMLElementBase {
     if (!paragraph) return `${reference}\u0000missing`;
     const style = getComputedStyle(paragraph);
     const fontSize = Number.parseFloat(style.fontSize);
-    const width = paragraph.getBoundingClientRect().width;
+    const width = fragmentedBorderBoxInlineSize(paragraph);
     const measure = lineLengthGridMeasure(width, fontSize);
     return `${reference}\u0000${Math.fround(fontSize)}\u0000${measure ?? `invalid:${width.toFixed(3)}`}`;
   }
@@ -940,7 +952,7 @@ class TiqianProseElement extends HTMLElementBase {
     this.#responsiveCommitRequired = false;
     this.#responsiveRelayoutRequired = false;
     this.#lastTypography = currentTypography;
-    this.#lastWidth = this.getBoundingClientRect().width;
+    this.#lastWidth = fragmentedBorderBoxInlineSize(this);
     this.#lastParagraphMeasures = currentMeasures;
     this.#lastParagraphWidths = currentParagraphWidths;
     this.#observeWidth();
@@ -1206,15 +1218,12 @@ class TiqianProseElement extends HTMLElementBase {
         .filter((paragraph) => belongsToRootScope(paragraph, this)),
     ];
     for (const target of targets) {
-      widths.set(target, target.getBoundingClientRect().width);
+      widths.set(target, fragmentedBorderBoxInlineSize(target));
     }
     const observer = new ResizeObserver((entries) => {
       let changed = false;
       for (const entry of entries) {
-        const borderBox = Array.isArray(entry.borderBoxSize)
-          ? entry.borderBoxSize[0]
-          : entry.borderBoxSize;
-        const width = Number(borderBox?.inlineSize ?? entry.target.getBoundingClientRect().width);
+        const width = fragmentedBorderBoxInlineSize(entry.target);
         const previous = widths.get(entry.target);
         widths.set(entry.target, width);
         if (previous == null || Math.abs(width - previous) >= 0.5) changed = true;
@@ -1350,7 +1359,7 @@ class TiqianProseElement extends HTMLElementBase {
     const forceLatestWidth = this.#responsiveRelayoutRequired;
     this.#responsiveCommitRequired = false;
     this.#responsiveRelayoutRequired = false;
-    const width = this.getBoundingClientRect().width;
+    const width = fragmentedBorderBoxInlineSize(this);
     const paragraphWidths = this.#paragraphWidthSignature();
     const paragraphMeasures = this.#paragraphMeasureSignature();
     const widthsChanged = Math.abs(width - this.#lastWidth) >= 0.5 ||
@@ -1778,16 +1787,15 @@ class TiqianProseElement extends HTMLElementBase {
 
   #paragraphWidthSignature() {
     return Array.from(this.querySelectorAll(DEFAULT_PARAGRAPH_SELECTOR), (paragraph) => {
-      const rect = paragraph.getBoundingClientRect();
-      return rect.width.toFixed(3);
+      return fragmentedBorderBoxInlineSize(paragraph).toFixed(3);
     }).join("\u001f");
   }
 
   #responsiveGeometrySignature() {
     return [
-      this.getBoundingClientRect().width,
+      fragmentedBorderBoxInlineSize(this),
       ...Array.from(this.querySelectorAll(DEFAULT_PARAGRAPH_SELECTOR), (paragraph) =>
-        paragraph.getBoundingClientRect().width),
+        fragmentedBorderBoxInlineSize(paragraph)),
     ].join("\u001f");
   }
 
@@ -1797,7 +1805,7 @@ class TiqianProseElement extends HTMLElementBase {
       const style = getComputedStyle(paragraph);
       const fontSize = Number.parseFloat(style.fontSize);
       const layoutWidth = (element, elementStyle) => {
-        let value = element.getBoundingClientRect().width;
+        let value = fragmentedBorderBoxInlineSize(element);
         if (!exactFontLayout) return value;
         const number = (value) => Number.parseFloat(value) || 0;
         value -= number(elementStyle.paddingLeft) + number(elementStyle.paddingRight) +

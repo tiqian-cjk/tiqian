@@ -781,6 +781,29 @@ class TiqianWebEnhancerTest {
     }
 
     @Test
+    fun cssMultiColumnFragmentsUseOneFragmentainerAsTheLineMeasure() {
+        val source = "多栏正文的段落即使跨过多个栏片段，也始终只在单栏版心内完成断行。".repeat(10)
+        val root = mount(
+            """
+            <div data-tiqian-root="true" style="width: 400px; height: 120px; columns: 180px auto; column-gap: 40px; column-fill: auto; font-size: 18px; line-height: 30px">
+              <p style="margin: 0">$source</p>
+            </div>
+            """.trimIndent(),
+        )
+        val paragraph = root.querySelector("p") as HTMLElement
+        val fragmentWidths = elementFragmentWidths(paragraph)
+
+        assertTrue(fragmentWidths.size > 1, "fixture must fragment across CSS columns")
+        assertTrue(elementWidth(paragraph) > fragmentWidths.max())
+        assertEquals(1, TiqianWeb.enhance(root, testOptions()))
+
+        val firstLine = paragraph.querySelector(":scope > .tq-line") as HTMLElement
+        val lineMeasure = assertNotNull(firstLine.getAttribute("data-tq-line-width")).toDouble()
+        assertTrue(lineMeasure <= fragmentWidths.max() + 0.5)
+        assertEquals(source, copySelection(paragraph))
+    }
+
+    @Test
     fun listItemPaddingIsExcludedFromTheAvailableLineMeasure() {
         val root = mount(
             """
@@ -3197,6 +3220,8 @@ private external fun computedStyleValueElement(element: Element, property: Strin
 private external fun selectionCoversElement(container: HTMLElement, target: HTMLElement): Boolean
 @JsFun("(element) => element.getBoundingClientRect().width")
 private external fun elementWidth(element: HTMLElement): Double
+@JsFun("(element) => Array.from(element.getClientRects()).filter((rect) => rect.width > 0).map((rect) => rect.width)")
+private external fun elementFragmentWidths(element: HTMLElement): Array<Double>
 
 private fun Char.isCurlyQuoteForWebTest(): Boolean =
     this == '\u2018' || this == '\u2019' || this == '\u201C' || this == '\u201D'

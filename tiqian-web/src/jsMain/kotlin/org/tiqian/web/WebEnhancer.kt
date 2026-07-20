@@ -1652,7 +1652,7 @@ object TiqianWeb {
 
     private fun captureSourceInlineSize(paragraph: HTMLElement): SourceInlineSize =
         SourceInlineSize(
-            borderBoxWidth = paragraph.getBoundingClientRect().width,
+            borderBoxWidth = elementFragmentBorderBoxInlineSize(paragraph),
             contentBoxWidth = elementContentWidth(paragraph),
             borderBoxSizing =
                 computedStyle(paragraph, "box-sizing").trim().lowercase() == "border-box",
@@ -2952,7 +2952,32 @@ private external fun scheduleProgressiveCallback(callback: () -> Unit, idle: Boo
     }""",
 )
 private external fun cancelProgressiveCallback(token: JsAny)
-@JsFun("(element) => { const style = getComputedStyle(element); const number = (value) => Number.parseFloat(value) || 0; return element.getBoundingClientRect().width - number(style.paddingLeft) - number(style.paddingRight) - number(style.borderLeftWidth) - number(style.borderRightWidth); }")
+// CssFragmentedBlockInlineMeasure: getBoundingClientRect() unions every CSS
+// multi-column fragment and therefore grows horizontally with the number of
+// occupied columns. A paragraph is still laid out against one fragmentainer;
+// use the widest live fragment as its stable horizontal border-box measure.
+@JsFun(
+    """(element) => {
+      const fallback = element.getBoundingClientRect().width;
+      const rects = Array.from(element.getClientRects()).filter((rect) => rect.width > 0);
+      if (rects.length <= 1) return fallback;
+      return Math.max(...rects.map((rect) => rect.width));
+    }""",
+)
+private external fun elementFragmentBorderBoxInlineSize(element: HTMLElement): Double
+@JsFun(
+    """(element) => {
+      const style = getComputedStyle(element);
+      const number = (value) => Number.parseFloat(value) || 0;
+      const fallback = element.getBoundingClientRect().width;
+      const rects = Array.from(element.getClientRects()).filter((rect) => rect.width > 0);
+      const borderBoxWidth = rects.length <= 1
+        ? fallback
+        : Math.max(...rects.map((rect) => rect.width));
+      return borderBoxWidth - number(style.paddingLeft) - number(style.paddingRight) -
+        number(style.borderLeftWidth) - number(style.borderRightWidth);
+    }""",
+)
 private external fun elementContentWidth(element: HTMLElement): Double
 // NestedInlineBoxEdgeOwnership: compare an inline's flow edge with its direct
 // in-flow content boundary. A descendant semantic box owns its own padding,
