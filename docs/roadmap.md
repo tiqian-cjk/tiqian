@@ -15,8 +15,9 @@
 
 当前主线是 **Slice 36：构建期 Web 字体证据与最大版心快照**。站点用明确发布的字体文件在
 Node + HarfBuzz 中跑同一条 Tiqian layout pipeline；桌面最大版心的 source / typography / font
-证据全部命中时直接采用预断行 DOM；snapshot 与 exact browser Kotlin/JS runtime 通过
-`renderFontFamilies` 显式使用同一绘制字体，失配则回到现有 Kotlin/JS host-font 路径。完整取舍见
+证据全部命中时采用预断行 DOM；宽度失配或 runtime-only 段落在字体证据仍有效时，由 browser
+Kotlin/JS layout core 重放服务器生成的 shaping / metrics。回放证据缺失或能力域不匹配时才保留
+原生正文，或按具名能力回到 host-font 路径。完整取舍见
 [ADR 0040](adr/0040-build-time-web-font-snapshots.md)。
 
 已经命名但尚未开工的候选：

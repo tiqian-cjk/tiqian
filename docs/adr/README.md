@@ -70,4 +70,5 @@ ADR 记录已经做出的架构与排版决定。它们按编号保留当时的 
 - 0021 中的 `firstLineIndentEm` / `blockIndentEm` 命名由 0034 改为 `Ic` 类型的
   `firstLineIndent` / `blockIndent`；
 - 0017 的 Desktop-only 前端由 0035 扩展到 Android，并由 0039 增加 Web 前端。
-- 0039 的客户端实时度量路径由 0040 增加 exact-font 构建期最大版心快照快路径；失配仍回到 0039。
+- 0039 的客户端实时度量路径由 0040 增加构建期最大版心快照与服务器 shaping / metrics 回放；
+  快照失配但证据仍有效时继续走回放，证据不可用时才保留原生正文或回到 0039 的具名降级路径。

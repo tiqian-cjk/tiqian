@@ -86,6 +86,8 @@ await destroy(article);
 ```js
 import {
   createPrecomputer,
+  renderFontContractBundle,
+  renderSnapshotBundle,
   renderSnapshotTemplate,
 } from "@tiqian/prose/precompute";
 
@@ -135,13 +137,43 @@ precomputer.close();
 重新排版。完整契约见
 [ADR 0040](https://github.com/tiqian-cjk/tiqian/blob/main/docs/adr/0040-build-time-web-font-snapshots.md)。
 
-需要同时输出初始样式与客户端导航所需内容时，改用 `renderSnapshotBundle()`，把它的
-`initialStyle` 与 `inertTemplate` 写入 `<head>`。客户端导航照常传递原始正文 HTML；创建新的
-`<tiqian-prose>` 前，用 `@tiqian/prose/snapshot-client` 的 `registerSnapshotBundle()` 注册同一份
-快照即可复用，不必重复传输整篇预排 HTML。
+需要同时输出初始样式与客户端导航所需内容时，改用 `renderSnapshotBundle()`。`initialStyle` 是 CSS
+字符串，需要放进 `<style>`；`inertTemplate` 则作为 HTML 写入 `<head>`：
 
-正文包含暂时无法预排的富文本时，可以用 `renderFontContractBundle()` 只下发字体与度量证据：
-段落布局仍在浏览器完成，但能复用构建期的 shaping 结果。
+```js
+const bundle = renderSnapshotBundle([paragraph], { id: "tq-post-snapshot" });
+const headHtml =
+  `<style data-tq-initial-snapshot="${bundle.id}">${bundle.initialStyle}</style>` +
+  bundle.inertTemplate;
+```
+
+页面正文仍按前面的例子设置 `snapshot-ref` 与 paragraph key。客户端导航照常传递原始正文 HTML；
+创建新的 `<tiqian-prose>` 前，用 `@tiqian/prose/snapshot-client` 的 `registerSnapshotBundle()` 注册
+bundle 中的客户端数据即可复用快照，不必重复传输整篇预排 HTML。
+
+若正文必须保留原始语义 DOM，并由浏览器完成布局（例如包含链接的富文本），可以在关闭
+precomputer 前用 `prepareFontContract()` 只生成字体与度量证据，再交给
+`renderFontContractBundle()`：
+
+```js
+const evidence = await precomputer.prepareFontContract({
+  key: "intro-font-contract",
+  text: "需要在浏览器排版的正文。",
+  maxWidthPx: 720,
+});
+if (evidence.status !== "prepared") {
+  throw new Error(evidence.issue);
+}
+
+const fontBundle = renderFontContractBundle(
+  [evidence],
+  { id: "tq-post-font-contract" },
+);
+```
+
+`fontBundle` 的注入和客户端注册方式与上面的 `bundle` 相同，`<tiqian-prose>` 仍用
+`snapshot-ref` 引用它的 id；段落布局在浏览器完成，并复用构建期的 shaping 结果，正文段落
+不需要设置 `data-tq-snapshot-key`。
 
 ## 运行环境
 
