@@ -52,8 +52,8 @@ tiqian-prose {
 }
 ```
 
-Markdown 的加粗会保留为原生 `<strong>` 粗体，不会默认改成着重号。只有站点明确把
-`<strong>` 当作中文着重语义时才显式开启转换：
+Markdown 的加粗默认保留为原生 `<strong>` 粗体。如果站点把 `<strong>` 用作中文的着重语义，
+可以开启着重号转换：
 
 ```html
 <tiqian-prose strong-as-emphasis-marks>
@@ -71,22 +71,17 @@ import { destroy, enhance } from "@tiqian/prose";
 const article = document.querySelector("article");
 await enhance(article);
 
-// 仅在宿主明确采用这套语义时启用。
-// await enhance(article, { strongAsEmphasisMarks: true });
-
 // 替换或移除正文前还原原始 DOM。
 await destroy(article);
 ```
 
 ## 构建期预排（可选）
 
-默认情况下，`@tiqian/prose` 只等待正文实际使用的字体和字符子集，最多等待 3 秒；超时会继续显示
-原生 SSR 正文，字体完成加载或宿主字体样式变化后再按最新状态重试。如果网站使用固定的 web font，
-桌面正文也有固定的最大版心，可以在 Node 构建阶段提前排好纯文本段落，减少首屏从原生排版切换到
-提椠排版时的变化。普通接入不需要使用这项能力。
+使用固定 web font，且桌面正文有固定最大版心的网站，可以在 Node 构建阶段提前排好段落，减少
+首屏从原生排版切换到提椠排版时的变化。普通接入不需要使用这项能力。
 
-构建期预排直接读取网站已有的 `@font-face` 样式表和字体文件，不需要启动 Headless Chromium，
-也不会复制字体、生成别名或增加浏览器端字体请求：
+构建期预排在 Node 里直接读取网站已有的 `@font-face` 样式表和字体文件，不需要 Headless 浏览器，
+也不改变网站自己的字体交付方式：
 
 ```js
 import {
@@ -111,9 +106,17 @@ const paragraph = await precomputer.prepareParagraph({
   text: "需要预排的正文。",
   maxWidthPx: 720,
 });
+if (paragraph.status !== "prepared") {
+  precomputer.close();
+  throw new Error(paragraph.issue);
+}
+
 const snapshot = renderSnapshotTemplate([paragraph], { id: "tq-post-snapshot" });
 precomputer.close();
 ```
+
+`source` 是构建机上的样式表路径；`publicUrl` 是同一张样式表部署后的地址，用来解析其中的相对
+字体 URL。需要程序化生成字体配置时，可以改用 `faces` 数组（与 `fontStylesheets` 二选一）。
 
 把 `snapshot` 原样写入 SSR HTML 中的 inert template，并让页面正文使用相同的 id 和 paragraph key
 引用它。原始 `<p>` 始终保留，负责无 JavaScript 显示、站内搜索和快照失效后的回退：
@@ -127,37 +130,24 @@ precomputer.close();
 </tiqian-prose>
 ```
 
-`source` 是构建机读取的本地样式表；`publicUrl` 是同一张样式表在网站上的地址，用于解析其中的
-相对字体 URL，不是提椠代理。样式表里的 `local()` 会保留为宿主自己的字体选择，提椠不会重新暴露
-本地字体，也不会为中文字体的数百个分片创建第二套 URL。需要程序化生成字体配置时，仍可使用底层
-`faces` 数组，但不能和 `fontStylesheets` 同时传入。
-
-浏览器只在正文内容、版心宽度、排版参数和宿主实际选中的字体全部匹配时采用快照；任何一项不匹配
-都会保留页面原文并在浏览器中重新排版。提椠不要求宿主字体 URL 带内容 hash。
-完整契约见
+快照以 inert template 的形式进入页面，不改变浏览器的首次绘制。浏览器只在正文内容、版心宽度、
+排版参数和宿主实际选中的字体全部匹配时采用快照；任何一项不匹配都会保留页面原文并在浏览器中
+重新排版。完整契约见
 [ADR 0040](https://github.com/tiqian-cjk/tiqian/blob/main/docs/adr/0040-build-time-web-font-snapshots.md)。
 
-上面的 inert template 不会改变浏览器首次绘制。响应式 SSR 必须保留原始 `<p>`；服务端不知道
-客户端的实际版心宽度，也无法预先证明 `local()` 最终选中的字形，因此不应把 `entries[].html`
-直接替换成首屏可见内容。需要同时拿到初始样式和客户端导航契约时，可以使用
-`renderSnapshotBundle()`，把它的 `initialStyle` 与 `inertTemplate` 写入 `<head>`。
+需要同时输出初始样式与客户端导航所需内容时，改用 `renderSnapshotBundle()`，把它的
+`initialStyle` 与 `inertTemplate` 写入 `<head>`。客户端导航照常传递原始正文 HTML；创建新的
+`<tiqian-prose>` 前，用 `@tiqian/prose/snapshot-client` 的 `registerSnapshotBundle()` 注册同一份
+快照即可复用，不必重复传输整篇预排 HTML。
 
-客户端导航仍应传递原始正文 HTML。创建新的 `<tiqian-prose>` 前，可以用
-`@tiqian/prose/snapshot-client` 的 `registerSnapshotBundle()` 注册 `clientTemplate`，复用同一份
-快照而不重复传输整篇预排 HTML。字体的加载与 preload 策略始终由宿主样式表决定。
-
-当一个正文根包含暂时无法预排的富文本，但仍希望浏览器复用构建时生成的 shaping 与度量证据时，
-使用 `renderFontContractBundle()`。它只输出紧凑的宿主字体契约和 server replay 数据，不输出可采用
-的段落几何，也不会要求宿主把正文标记成已使用快照；浏览器仍从原始语义 DOM 完成全部段落布局。
+正文包含暂时无法预排的富文本时，可以用 `renderFontContractBundle()` 只下发字体与度量证据：
+段落布局仍在浏览器完成，但能复用构建期的 shaping 结果。
 
 ## 运行环境
 
 - 包是 ESM-only；CommonJS 宿主需要使用动态 `import()`。
 - `@tiqian/prose/precompute` 需要 Node.js 22 或更高版本。
-- 布局、断行、行调整与 DOM 增强发布为 Kotlin/JS；生成 runtime 不需要 WebAssembly GC、
-  Exception Handling 或 `application/wasm` MIME 配置。HarfBuzz / WOFF2 WebAssembly 只在 Node
-  构建期生成字体证据；浏览器端的快照 miss 使用纯 JavaScript 缩放并重放服务器证据，不加载或执行
-  WebAssembly。JavaScript、字体或回放证据不可用时，原始 SSR 正文仍然可读。
+- 浏览器端 runtime 是纯 JavaScript，不加载 WebAssembly，也不需要特殊的服务器配置。
 
 ## 了解提椠
 
