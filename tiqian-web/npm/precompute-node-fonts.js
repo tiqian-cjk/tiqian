@@ -5,6 +5,15 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { createFontSession } from "./precompute-fonts.js";
 
 const DUMMY_PUBLIC_ORIGIN = "https://tiqian.invalid";
+const URL_SCHEME_PREFIX = /^[a-z][a-z0-9+.-]*:/iu;
+const WINDOWS_DRIVE_ABSOLUTE_PATH = /^[a-z]:[\\/]/iu;
+
+// WindowsDrivePathBeforeUrlScheme: a drive letter is syntactically a valid URL
+// scheme, but Node callers pass path.resolve()/path.join() results here as
+// ordinary local sources. File paths must win before explicit URL handling.
+function isExplicitUrlString(source) {
+  return URL_SCHEME_PREFIX.test(source) && !WINDOWS_DRIVE_ABSOLUTE_PATH.test(source);
+}
 
 async function readSource(source) {
   if (source instanceof Uint8Array) return source;
@@ -14,7 +23,7 @@ async function readSource(source) {
     return new Uint8Array(await readFile(fileURLToPath(source)));
   }
   if (typeof source === "string") {
-    if (/^[a-z][a-z0-9+.-]*:/iu.test(source)) {
+    if (isExplicitUrlString(source)) {
       const url = new URL(source);
       if (url.protocol !== "file:") throw new Error(`RemoteFontSourceNotSupported:${source}`);
       return new Uint8Array(await readFile(fileURLToPath(url)));
@@ -30,7 +39,7 @@ function sourceFileUrl(source) {
     return source;
   }
   if (typeof source !== "string" || !source.trim()) throw new Error("UnsupportedFontStylesheetSource");
-  if (/^[a-z][a-z0-9+.-]*:/iu.test(source)) {
+  if (isExplicitUrlString(source)) {
     const url = new URL(source);
     if (url.protocol !== "file:") throw new Error(`RemoteFontStylesheetNotSupported:${source}`);
     return url;
