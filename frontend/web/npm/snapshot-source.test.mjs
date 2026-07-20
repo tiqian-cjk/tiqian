@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  normalizeLiveSemantics,
   normalizeSnapshotSemantics,
+  SnapshotSemanticError,
   snapshotSemanticMetricContractIssue,
   snapshotSourceArtifactString,
 } from "./snapshot-source.js";
@@ -45,6 +47,65 @@ test("snapshot semantics reject crossing ranges and active content attributes", 
   assert.throws(() => normalizeSnapshotSemantics("链接", [
     { start: 0, end: 2, tagName: "a", attributes: { onclick: "alert(1)" } },
   ]), /UnsupportedSnapshotSemanticAttribute/u);
+});
+
+test("live semantics validate structure without serializing host tags or attributes", () => {
+  let snapshotError;
+  try {
+    normalizeSnapshotSemantics("前秘密后", [{
+      start: 1,
+      end: 3,
+      tagName: "spoiler",
+      attributes: { style: "padding:4px", onclick: "reveal()" },
+    }]);
+  } catch (error) {
+    snapshotError = error;
+  }
+  assert.ok(snapshotError instanceof SnapshotSemanticError);
+  assert.equal(snapshotError.code, "UnsupportedSnapshotSemanticTag");
+  assert.equal(snapshotError.detail, "spoiler");
+
+  assert.deepEqual(normalizeLiveSemantics("前秘密后", [{
+    start: 1,
+    end: 3,
+    tagName: "spoiler",
+    attributes: { style: "padding:4px", onclick: "reveal()" },
+  }]), [{
+    start: 1,
+    end: 3,
+    tagName: "spoiler",
+    sourceIndex: 0,
+  }]);
+  assert.throws(() => normalizeLiveSemantics("中文正文", [
+    { start: 0, end: 3, tagName: "spoiler" },
+    { start: 2, end: 4, tagName: "span" },
+  ]), /CrossingSnapshotSemanticRanges/u);
+});
+
+test("live semantics keep hierarchy order separate from live source indices", () => {
+  assert.deepEqual(normalizeLiveSemantics("秘密", [{
+    start: 0,
+    end: 2,
+    tagName: "em",
+    sourceIndex: 0,
+    order: 1,
+  }, {
+    start: 0,
+    end: 2,
+    tagName: "spoiler",
+    sourceIndex: 1,
+    order: 0,
+  }]), [{
+    start: 0,
+    end: 2,
+    tagName: "spoiler",
+    sourceIndex: 1,
+  }, {
+    start: 0,
+    end: 2,
+    tagName: "em",
+    sourceIndex: 0,
+  }]);
 });
 
 test("inline code requires an explicit exact-font and box metric contract", () => {
