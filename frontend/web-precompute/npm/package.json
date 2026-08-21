@@ -36,6 +36,10 @@
       "types": "./lib/cache.d.ts",
       "default": "./lib/cache.js"
     },
+    "./persistence": {
+      "types": "./lib/persistence.d.ts",
+      "default": "./lib/persistence.js"
+    },
     "./precompute-html": {
       "types": "./lib/precompute-html.d.ts",
       "default": "./lib/precompute-html.js"

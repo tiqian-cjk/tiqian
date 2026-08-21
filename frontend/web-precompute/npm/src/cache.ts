@@ -7,6 +7,7 @@
 import { addon } from "./load.js";
 import {
   canonicalSubmission,
+  memberOf,
   type CanonicalKind,
   type CanonicalSubmissionInput,
 } from "./canonical.js";
@@ -49,7 +50,7 @@ export function submissionItem(
   kind: CanonicalKind,
 ): SubmissionItem {
   const { canonical, hash } = canonicalSubmission(input, kind);
-  const rawKey = input["key"];
+  const rawKey = memberOf(input, "key");
   const logicalKey = rawKey === undefined || rawKey === null ? "" : String(rawKey);
   return { hash, logicalKey, canonical };
 }
@@ -171,7 +172,8 @@ function packSubmissions(items: readonly SubmissionItem[]): Buffer {
   return writer.finish();
 }
 
-function packRecords(records: readonly CacheRecord[]): Buffer {
+/** Serializes records for a host store; each blob holds its own header. */
+export function packRecords(records: readonly CacheRecord[]): Buffer {
   const writer = new BridgeWriter();
   writer.header(RECORDS_MAGIC);
   writer.count(records.length);
@@ -185,7 +187,8 @@ function packRecords(records: readonly CacheRecord[]): Buffer {
   return writer.finish();
 }
 
-function unpackRecords(buffer: Uint8Array): CacheRecord[] {
+/** Reads records back from one packed blob. */
+export function unpackRecords(buffer: Uint8Array): CacheRecord[] {
   const reader = new BridgeReader(Buffer.from(buffer));
   const count = reader.header(RECORDS_MAGIC);
   const records: CacheRecord[] = [];

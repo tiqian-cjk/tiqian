@@ -42,9 +42,10 @@ const BOX_OUTER_SPACING = 0x04;
 /**
  * The wire input the encoder reads. The members match the paragraph and
  * contract input interfaces of `precompute.ts`; the encoder coerces loosely
- * at runtime, the same coercions the Rust encoder ports.
+ * at runtime, the same coercions the Rust encoder ports. The loose `object`
+ * keeps interface-typed inputs assignable; members are read dynamically.
  */
-export type CanonicalSubmissionInput = Readonly<Record<string, unknown>>;
+export type CanonicalSubmissionInput = Readonly<object>;
 
 /** Grows a buffer in chunks; every multi-byte integer is little-endian. */
 class CanonicalWriter {
@@ -98,7 +99,7 @@ function coalesce(value: unknown): unknown {
 
 /** `Number(member)` when the member survives, absent otherwise. */
 function numberMember(input: CanonicalSubmissionInput, name: string): number | undefined {
-  const resolved = coalesce(input[name]);
+  const resolved = memberOf(input, name);
   if (resolved === undefined) {
     return undefined;
   }
@@ -125,7 +126,7 @@ function listMember(
   name: string,
   issue: string,
 ): readonly unknown[] {
-  const resolved = coalesce(input[name]);
+  const resolved = memberOf(input, name);
   if (resolved === undefined) {
     return [];
   }
@@ -135,8 +136,9 @@ function listMember(
   return resolved;
 }
 
-function memberOf(span: unknown, name: string): unknown {
-  return coalesce((span as Readonly<Record<string, unknown>>)[name]);
+/** One dynamically read member: absent and null both read as absent. */
+export function memberOf(input: unknown, name: string): unknown {
+  return coalesce((input as Readonly<Record<string, unknown>>)[name]);
 }
 
 function encodeAttributes(writer: CanonicalWriter, value: unknown): void {
@@ -284,7 +286,7 @@ export function encodeCanonicalInput(
   kind: CanonicalKind,
 ): Buffer {
   const writer = new CanonicalWriter(kind);
-  const rawText = coalesce(input["text"]);
+  const rawText = memberOf(input, "text");
   writer.str(rawText === undefined ? "" : String(rawText));
   if (kind === KIND_SNAPSHOT) {
     numberField(writer, numberMember(input, "maxWidthPx"));
@@ -293,7 +295,7 @@ export function encodeCanonicalInput(
   encodeTextSpans(writer, listMember(input, "textSpans", "InvalidSnapshotTextSpans"));
   encodeInlineBoxes(writer, listMember(input, "inlineBoxes", "InvalidSnapshotInlineBoxes"));
   // A non-array reads as absent boundaries, the capture loop's own rule.
-  const rawBoundaries = coalesce(input["sourceBoundaries"]);
+  const rawBoundaries = memberOf(input, "sourceBoundaries");
   const boundaries = Array.isArray(rawBoundaries) ? rawBoundaries : [];
   writer.count(boundaries.length);
   for (const boundary of boundaries) {
