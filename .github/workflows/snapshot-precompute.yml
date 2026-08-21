@@ -2,8 +2,9 @@ name: Snapshot precompute packages
 
 # Manual-only snapshot lane for @tiqian/precompute. Each dispatch stamps its
 # own timestamped tag, builds the five packages from that commit, temporarily
-# swaps the manifests to @tiqian-cjk (GitHub Packages requires the npm scope
-# to equal the repository owner), publishes the timestamped versions with the
+# swaps the manifests to the running repository owner's scope (GitHub
+# Packages requires the npm scope to equal the owner; @tiqian-cjk on the
+# canonical repository), publishes the timestamped versions with the
 # `snapshot` dist-tag, and restores the manifests. Release publishing stays
 # in publish-precompute.yml and never runs the swap.
 on:
@@ -139,6 +140,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       SNAPSHOT_VERSION: ${{ needs.stamp.outputs.version }}
+      SNAPSHOT_SCOPE: "@${{ github.repository_owner }}"
     steps:
       - name: Check out the stamped commit
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -187,7 +189,7 @@ jobs:
       - name: Apply the snapshot manifest swap
         id: swap
         working-directory: frontend/web-precompute/npm
-        run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "@tiqian-cjk"
+        run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "${SNAPSHOT_SCOPE}"
 
       - name: Pack platform package
         working-directory: frontend/web-precompute/npm/platforms/${{ matrix.platform }}
@@ -253,7 +255,7 @@ jobs:
       - name: Apply the snapshot manifest swap
         id: swap
         working-directory: frontend/web-precompute/npm
-        run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "@tiqian-cjk"
+        run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "${SNAPSHOT_SCOPE}"
 
       - name: Pack
         working-directory: frontend/web-precompute/npm
@@ -290,13 +292,14 @@ jobs:
       packages: write
     env:
       SNAPSHOT_VERSION: ${{ needs.stamp.outputs.version }}
+      SNAPSHOT_SCOPE: "@${{ github.repository_owner }}"
     steps:
       - name: Set up Node.js 24 for GitHub Packages
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24"
           registry-url: https://npm.pkg.github.com
-          scope: tiqian-cjk
+          scope: ${{ github.repository_owner }}
           package-manager-cache: false
 
       - name: Download all package artifacts
@@ -344,7 +347,7 @@ jobs:
             echo "### Precompute snapshot published"
             echo ""
             echo '```sh'
-            echo "npm install @tiqian-cjk/precompute@${SNAPSHOT_VERSION} \\"
+            echo "npm install ${SNAPSHOT_SCOPE}/precompute@${SNAPSHOT_VERSION} \\"
             echo "  --registry=https://npm.pkg.github.com"
             echo '```'
             echo ""

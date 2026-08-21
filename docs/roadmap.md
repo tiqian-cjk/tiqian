@@ -74,8 +74,9 @@ Kotlin/JS layout core 重放服务器生成的 shaping / metrics。回放证据�
   清理的 prune；Deno 没有内建 sqlite 模块，该运行时的宿主自带存储适配器。文章表与
   文章哈希表属于 Article 索引层，随 schema-2 拆分一并推迟。手动触发的 snapshot 发布
   流水线已就绪（snapshot-precompute.yml）：每次 dispatch 自打时间戳 tag，五个包临时
-  换 @tiqian-cjk scope（GitHub Packages 要求 npm scope 等于仓库 owner）发到 GitHub
-  Packages 的 snapshot dist-tag，发布后还原 manifest；npmjs.org 的 release 流程不变。
+  换运行仓库 owner 的 scope（GitHub Packages 要求 npm scope 等于 owner，canonical
+  仓库为 @tiqian-cjk）发到 GitHub Packages 的 snapshot dist-tag，发布后还原 manifest；
+  npmjs.org 的 release 流程不变。
 
 当前并行推进 **Slice 37：Compose 静态正文 selection**：只读 `CjkText` 已接入源忠实拖选、
 双击选词、三击选段、触摸长按、Foundation 平台手柄、Android 文本放大镜、系统 `ActionMode`
