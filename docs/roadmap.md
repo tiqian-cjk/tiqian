@@ -55,6 +55,16 @@ Kotlin/JS layout core 重放服务器生成的 shaping / metrics。回放证据�
   ADR 0050 随重组出修订段。Gradle/KMP 只约束 Kotlin 模块与其产物路径，npm 目录
   布局与命名不受它强制。动工时机随 Slice 39 收尾确定，先于 Neon 编排接入可避免
   在旧布局上加建。
+- `LayeredCacheAndBatchRenderer`：precompute 缓存分层、批量渲染器与二进制过桥协议
+  （2026-08-21，ADR 0052，承接 0050 未实施的缓存设计）。三层缓存（FontContracts、
+  Paragraph、Article 索引）用内容哈希键，桶失效取全部现存文章哈希并集的反连接；
+  `CacheAdapterTrait` 嵌入常驻线程池批量渲染器，SSR 逐段配对、SSG 流式输出与同步框架
+  同步等待三种消费方式共用一条队列，Neon 过桥按类型分传、单 Buffer 返回，内容哈希由
+  宿主用运行时内建函数计算，已知哈希的请求不再传输正文；renderSnapshotBundle
+  拆站级表、篇级 manifest
+  与呈现字段，表经根属性按需加载；npm 侧提供 node / bun / Deno 内建 SQLite 参考实现。
+  blog3 缓存按附录测量预计从 115.2 MB 降到约 50 MB。实施分三批：协议与批量渲染器、
+  缓存分层与 bundle 拆分、表传输与 SQLite 封装。
 
 当前并行推进 **Slice 37：Compose 静态正文 selection**：只读 `CjkText` 已接入源忠实拖选、
 双击选词、三击选段、触摸长按、Foundation 平台手柄、Android 文本放大镜、系统 `ActionMode`

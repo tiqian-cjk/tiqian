@@ -69,6 +69,7 @@ ADR 记录已经做出的架构与排版决定。它们按编号保留当时的 
 - [0049 虚拟正文选区使用逻辑文档坐标](0049-logical-document-selection.md)
 - [0050 原生 precompute 引擎绑定与 Rust / npm 双生态分发](0050-native-precompute-rust-bindings.md)
 - [0051 API<31 自然簇串合并绘制](0051-natural-run-coalesced-draw.md)
+- [0052 precompute 缓存分层、批量渲染器与二进制过桥协议](0052-precompute-cache-and-batch-renderer.md)
 
 ## 早期状态说明
 
