@@ -12,9 +12,11 @@ use tiqian_precompute::font_record::{FontFaceSpec, FontWeightSpec};
 use tiqian_precompute::js_compat::trunc_sat_i32;
 use tiqian_precompute::js_compat::trunc_sat_usize;
 use tiqian_precompute::json::Json;
+#[cfg(tiqian_engine_link)]
+use tiqian_precompute::session::CaptureEvidence;
 use tiqian_precompute::session::{
-    create_font_session as create_session_impl, CaptureEvidence, MetricsInput, SessionFaceSpec,
-    SessionOptions, ShapeInput, BACKEND_REVISION, HARFBUZZ_VERSION,
+    create_font_session as create_session_impl, MetricsInput, SessionFaceSpec, SessionOptions,
+    ShapeInput, BACKEND_REVISION, HARFBUZZ_VERSION,
 };
 use tiqian_precompute::source_boundaries::{BoundaryStyle, BoundaryTextSpan};
 

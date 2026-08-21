@@ -105,7 +105,7 @@ pub fn precomputer_info(mut cx: FunctionContext) -> JsResult<JsString> {
 
 fn prepare_entry<'a>(
     cx: &mut FunctionContext<'a>,
-    call: impl Fn(&mut Precomputer, &PrepareInput) -> Result<Json, NamedError>,
+    call: impl Fn(&Precomputer, &PrepareInput) -> Result<Json, NamedError>,
 ) -> JsResult<'a, JsString> {
     let handle = cx.argument::<JsString>(0)?.value(cx);
     let input = json_argument(cx, 1, "input")?;

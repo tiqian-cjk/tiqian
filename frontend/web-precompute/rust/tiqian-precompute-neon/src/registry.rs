@@ -12,7 +12,7 @@ use tiqian_precompute::precomputer::Precomputer;
 use tiqian_precompute::session::FontSession;
 
 static SESSIONS: OnceLock<Mutex<HashMap<String, FontSession>>> = OnceLock::new();
-static PRECOMPUTERS: OnceLock<Mutex<HashMap<String, Arc<Mutex<Precomputer>>>>> = OnceLock::new();
+static PRECOMPUTERS: OnceLock<Mutex<HashMap<String, Arc<Precomputer>>>> = OnceLock::new();
 static HTML_PREPARERS: OnceLock<Mutex<HashMap<String, HtmlPreparer>>> = OnceLock::new();
 static NEXT_HANDLE: AtomicU64 = AtomicU64::new(0);
 
@@ -20,7 +20,7 @@ fn sessions() -> &'static Mutex<HashMap<String, FontSession>> {
     SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn precomputers() -> &'static Mutex<HashMap<String, Arc<Mutex<Precomputer>>>> {
+fn precomputers() -> &'static Mutex<HashMap<String, Arc<Precomputer>>> {
     PRECOMPUTERS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -59,15 +59,15 @@ pub fn with_session<T>(id: &str, call: impl FnOnce(&mut FontSession) -> T) -> Re
 
 /// Wraps a created precomputer in its shared handle, registers it and
 /// returns the handle together with the handle the preparers share.
-pub fn insert_precomputer(precomputer: Precomputer) -> (String, Arc<Mutex<Precomputer>>) {
-    let shared = Arc::new(Mutex::new(precomputer));
+pub fn insert_precomputer(precomputer: Precomputer) -> (String, Arc<Precomputer>) {
+    let shared = Arc::new(precomputer);
     let handle = next_handle("tq-precomputer");
     recover(precomputers().lock()).insert(handle.clone(), Arc::clone(&shared));
     (handle, shared)
 }
 
 /// The shared precomputer behind `handle`.
-pub fn shared_precomputer(handle: &str) -> Result<Arc<Mutex<Precomputer>>, String> {
+pub fn shared_precomputer(handle: &str) -> Result<Arc<Precomputer>, String> {
     recover(precomputers().lock())
         .get(handle)
         .cloned()
@@ -75,14 +75,15 @@ pub fn shared_precomputer(handle: &str) -> Result<Arc<Mutex<Precomputer>>, Strin
 }
 
 /// Runs `call` with the precomputer for `handle`. The registry lock is
-/// released before the precomputer lock is taken.
+/// released before the call; every precomputer method takes `&self`, so
+/// concurrent callers (including the batch renderer pool) share one
+/// precomputer without a lock held across a computation.
 pub fn with_precomputer<T>(
     handle: &str,
-    call: impl FnOnce(&mut Precomputer) -> T,
+    call: impl FnOnce(&Precomputer) -> T,
 ) -> Result<T, String> {
     let shared = shared_precomputer(handle)?;
-    let mut precomputer = recover(shared.lock());
-    Ok(call(&mut precomputer))
+    Ok(call(&shared))
 }
 
 /// Registers a created HTML preparer and returns its handle.

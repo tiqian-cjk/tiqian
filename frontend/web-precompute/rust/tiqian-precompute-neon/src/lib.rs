@@ -1,6 +1,7 @@
 //! Neon addon boundary for `tiqian-precompute` (ADR 0050). The font session
 //! API runs in Rust; this crate only wires the exported names to it.
 
+mod cache_calls;
 mod calls;
 mod pin;
 mod precompute_calls;
@@ -80,5 +81,12 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
         "parseBuildFontStylesheet",
         precompute_calls::parse_build_font_stylesheet,
     )?;
+    cx.export_function("cacheContext", cache_calls::cache_context)?;
+    cx.export_function("cacheSubmitHashes", cache_calls::cache_submit_hashes)?;
+    cx.export_function("cacheSubmitContents", cache_calls::cache_submit_contents)?;
+    cx.export_function("cachePrefillContents", cache_calls::cache_prefill_contents)?;
+    cx.export_function("cachePrefetch", cache_calls::cache_prefetch)?;
+    cx.export_function("cacheDrainWrites", cache_calls::cache_drain_writes)?;
+    cx.export_function("cacheEvictExcept", cache_calls::cache_evict_except)?;
     Ok(())
 }
