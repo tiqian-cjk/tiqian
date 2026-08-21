@@ -191,7 +191,7 @@ jobs:
       - name: Apply the snapshot manifest swap
         id: swap
         working-directory: frontend/web-precompute/npm
-        run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "${SNAPSHOT_SCOPE}"
+        run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "${SNAPSHOT_SCOPE}" "${GITHUB_REPOSITORY}"
 
       - name: Pack platform package
         working-directory: frontend/web-precompute/npm/platforms/${{ matrix.platform }}
@@ -258,7 +258,7 @@ jobs:
       - name: Apply the snapshot manifest swap
         id: swap
         working-directory: frontend/web-precompute/npm
-        run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "${SNAPSHOT_SCOPE}"
+        run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "${SNAPSHOT_SCOPE}" "${GITHUB_REPOSITORY}"
 
       - name: Pack
         working-directory: frontend/web-precompute/npm
