@@ -306,3 +306,15 @@ shape 行 100,281 条（存储 230,708 行）；strings 11,969 个（引用 260,
 分层重排的预计构成：条目去 coverageText 与 probe 后约 13 MB，fontReplay 的 shapes
 单份约 10.0 MB，字体证据出篇后忽略不计，呈现字段 22.4 MB，站级表约 0.8 MB，四项合计
 约 46 MB，连同 JSON 语法与标识字段约 50 MB。
+
+## 附录（2026-08-21）：实施顺序与推迟项
+
+批次一与批次二的首批内容已实现：分层缓存、常驻渲染池与 owner 归属的去重、
+canonical 形式及其 Rust 与 TS 双侧编码器（golden 向量固定同一组字节）、Neon 二进制
+过桥、TS 持久化 SDK（宿主只提供地址到字节的存储，记录字节不透明，命中经本地副本
+摘要校验后使用，正文不过桥）。验证由 crate 单元与集成测试、npm 测试及两侧 canonical
+golden 向量承担。
+
+`BundleLayering` 的 schema-2 拆分与 `TableTransport` 推迟：两者改变构建产物与 HTML
+输出字节，两个接入站点要先以现输出形态完成包来源切换并核对输出一致，再实施这两节，
+否则对照基准不可用。`SqliteReferenceStore` 不改产物字节，不受此约束，随后实施。

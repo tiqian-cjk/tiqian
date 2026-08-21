@@ -64,7 +64,12 @@ Kotlin/JS layout core 重放服务器生成的 shaping / metrics。回放证据�
   拆站级表、篇级 manifest
   与呈现字段，表经根属性按需加载；npm 侧提供 node / bun / Deno 内建 SQLite 参考实现。
   blog3 缓存按附录测量预计从 115.2 MB 降到约 50 MB。实施分三批：协议与批量渲染器、
-  缓存分层与 bundle 拆分、表传输与 SQLite 封装。
+  缓存分层与 bundle 拆分、表传输与 SQLite 封装。2026-08-21 状态：批次一（协议、
+  批量渲染器、过桥）与批次二的 TS 持久化 SDK 已实现，规范形式的 golden 向量在
+  Rust 与 TS 两侧固定同一组字节，持久化命中经本地副本校验后不再过桥正文；bundle
+  schema-2 拆分与 TableTransport 推迟，两者会改变构建产物与 HTML 输出字节，先于
+  两个接入站点完成包来源切换与输出一致验收之前实施会破坏对照基准，SQLite 参考
+  实现不受影响，随后实施。
 
 当前并行推进 **Slice 37：Compose 静态正文 selection**：只读 `CjkText` 已接入源忠实拖选、
 双击选词、三击选段、触摸长按、Foundation 平台手柄、Android 文本放大镜、系统 `ActionMode`
