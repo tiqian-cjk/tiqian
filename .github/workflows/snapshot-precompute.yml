@@ -1,0 +1,352 @@
+name: Snapshot precompute packages
+
+# Manual-only snapshot lane for @tiqian/precompute. Each dispatch stamps its
+# own timestamped tag, builds the five packages from that commit, temporarily
+# swaps the manifests to @tiqian-cjk (GitHub Packages requires the npm scope
+# to equal the repository owner), publishes the timestamped versions with the
+# `snapshot` dist-tag, and restores the manifests. Release publishing stays
+# in publish-precompute.yml and never runs the swap.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: snapshot-precompute
+  cancel-in-progress: false
+
+jobs:
+  stamp:
+    name: Stamp snapshot tag and version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.stamp.outputs.version }}
+      tag: ${{ steps.stamp.outputs.tag }}
+      commit: ${{ steps.stamp.outputs.commit }}
+    steps:
+      - name: Check out the dispatched commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Verify manifest set and push the timestamped tag
+        id: stamp
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$(node -p "require('./frontend/web-precompute/npm/package.json').version.split('-')[0]")"
+          for platform in darwin-arm64 linux-arm64-gnu linux-x64-gnu win32-x64-msvc; do
+            platform_base="$(node -p "require('./frontend/web-precompute/npm/platforms/${platform}/package.json').version.split('-')[0]")"
+            if [[ "${platform_base}" != "${base}" ]]; then
+              echo "::error::Platform ${platform} is at ${platform_base}, expected ${base}"
+              exit 1
+            fi
+          done
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          version="${base}-snapshot.${stamp}"
+          tag="precompute-snapshot-${stamp}"
+          git tag -a "${tag}" -m "precompute snapshot ${version}"
+          git push origin "${tag}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "commit=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+
+  engine-linux:
+    name: Build engine archives linux x64 arm64
+    runs-on: ubuntu-latest
+    needs: [stamp]
+    steps:
+      - name: Check out the stamped commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ needs.stamp.outputs.commit }}
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses > /dev/null
+      - name: Install Android platform pieces
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0" > /dev/null
+
+      - name: Cache Gradle
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'gradle/gradle-daemon-jvm.properties', '**/*.gradle.kts') }}
+          restore-keys: gradle-${{ runner.os }}-
+      - name: Cache Kotlin/Native toolchains
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-snapshot-precompute-${{ hashFiles('**/*.gradle.kts') }}
+          restore-keys: |
+            konan-${{ runner.os }}-snapshot-precompute-
+            konan-${{ runner.os }}-
+
+      - name: Link static libraries
+        run: >
+          ./gradlew
+          :ffi:native:linkReleaseStaticLinuxX64
+          :ffi:native:linkReleaseStaticLinuxArm64
+
+      - name: Upload linuxX64 engine archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: engine-linuxX64
+          path: ffi/native/build/bin/linuxX64/releaseStatic
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload linuxArm64 engine archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: engine-linuxArm64
+          path: ffi/native/build/bin/linuxArm64/releaseStatic
+          if-no-files-found: error
+          retention-days: 7
+
+  binaries:
+    name: Build addon (${{ matrix.platform }})
+    needs: [stamp, engine-linux]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x64-gnu
+            os: ubuntu-latest
+            engine-archive: engine-linuxX64
+          - platform: linux-arm64-gnu
+            os: ubuntu-24.04-arm
+            engine-archive: engine-linuxArm64
+          - platform: darwin-arm64
+            os: macos-latest
+            engine-archive: ""
+          - platform: win32-x64-msvc
+            os: windows-latest
+            engine-archive: ""
+    runs-on: ${{ matrix.os }}
+    env:
+      SNAPSHOT_VERSION: ${{ needs.stamp.outputs.version }}
+    steps:
+      - name: Check out the stamped commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ needs.stamp.outputs.commit }}
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Download the engine archive
+        if: matrix.engine-archive != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ matrix.engine-archive }}
+          path: engine
+
+      - name: Install npm dependencies
+        working-directory: frontend/web-precompute/npm
+        run: npm install --no-audit --no-fund
+
+      # An empty TIQIAN_NATIVE_LIB_DIR keeps the engine call compiled out for
+      # the platforms without a wired engine link; the font session and the
+      # registry entries still load and smoke test.
+      - name: Build addon and place platform binary
+        working-directory: frontend/web-precompute/npm
+        shell: bash
+        env:
+          NEON_BUILD_PLATFORM: ${{ matrix.platform }}
+          TIQIAN_NATIVE_LIB_DIR: ${{ matrix.engine-archive != '' && format('{0}/engine', github.workspace) || '' }}
+        run: |
+          cargo build --manifest-path ../rust/tiqian-precompute-neon/Cargo.toml \
+            --release --message-format=json-render-diagnostics > cargo.log
+          npx neon dist --name tiqian-precompute-neon < cargo.log
+          test -f "platforms/${NEON_BUILD_PLATFORM}/index.node"
+
+      - name: Smoke test through the npm loader
+        working-directory: frontend/web-precompute/npm
+        shell: bash
+        run: npm test
+
+      - name: Apply the snapshot manifest swap
+        id: swap
+        working-directory: frontend/web-precompute/npm
+        run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "@tiqian-cjk"
+
+      - name: Pack platform package
+        working-directory: frontend/web-precompute/npm/platforms/${{ matrix.platform }}
+        shell: bash
+        run: |
+          mkdir -p ../../pack-output
+          PACK_OUTPUT=$(npm pack --pack-destination ../../pack-output | grep '\.tgz$' | head -n 1)
+          if [[ -z "$PACK_OUTPUT" ]]; then
+            echo "::error::Failed to pack the platform package."
+            exit 1
+          fi
+          FILENAME=$(basename "$PACK_OUTPUT")
+          echo "filename=$FILENAME" >> "$GITHUB_OUTPUT"
+        id: pack
+
+      - name: Restore the manifests
+        if: ${{ always() && steps.swap.outcome == 'success' }}
+        working-directory: frontend/web-precompute/npm
+        run: node snapshot-swap.mjs restore
+
+      - name: Upload platform package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: binary-package-${{ matrix.platform }}
+          path: frontend/web-precompute/npm/pack-output/${{ steps.pack.outputs.filename }}
+          if-no-files-found: error
+          retention-days: 7
+
+  main-package:
+    name: Pack main package
+    needs: [stamp]
+    runs-on: ubuntu-latest
+    env:
+      SNAPSHOT_VERSION: ${{ needs.stamp.outputs.version }}
+    steps:
+      - name: Check out the stamped commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ needs.stamp.outputs.commit }}
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Install npm dependencies
+        working-directory: frontend/web-precompute/npm
+        run: npm install --no-audit --no-fund
+
+      - name: Lint, typecheck, and build the JS entry
+        working-directory: frontend/web-precompute/npm
+        run: |
+          npm run lint
+          npm run build
+          npm run typecheck
+      # The packed package vendors the browser-shared modules; a stale copy
+      # would fork the render contract between server and browser.
+      - name: Check vendored shared modules
+        working-directory: frontend/web-precompute/npm
+        run: npm run check:shared
+
+      - name: Apply the snapshot manifest swap
+        id: swap
+        working-directory: frontend/web-precompute/npm
+        run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "@tiqian-cjk"
+
+      - name: Pack
+        working-directory: frontend/web-precompute/npm
+        shell: bash
+        id: pack
+        run: |
+          mkdir -p pack-output
+          PACK_OUTPUT=$(npm pack --pack-destination pack-output | grep '\.tgz$' | head -n 1)
+          if [[ -z "$PACK_OUTPUT" ]]; then
+            echo "::error::Failed to pack the main package."
+            exit 1
+          fi
+          echo "filename=$(basename "$PACK_OUTPUT")" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the manifests
+        if: ${{ always() && steps.swap.outcome == 'success' }}
+        working-directory: frontend/web-precompute/npm
+        run: node snapshot-swap.mjs restore
+
+      - name: Upload main package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: main-package
+          path: frontend/web-precompute/npm/pack-output/${{ steps.pack.outputs.filename }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish snapshot tarballs to GitHub Packages
+    needs: [stamp, binaries, main-package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      SNAPSHOT_VERSION: ${{ needs.stamp.outputs.version }}
+    steps:
+      - name: Set up Node.js 24 for GitHub Packages
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          registry-url: https://npm.pkg.github.com
+          scope: tiqian-cjk
+          package-manager-cache: false
+
+      - name: Download all package artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: packages
+
+      - name: Verify a complete package set
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="binary-package-darwin-arm64 binary-package-linux-arm64-gnu binary-package-linux-x64-gnu binary-package-win32-x64-msvc main-package"
+          for name in $expected; do
+            if ! find "packages/$name" -name '*.tgz' | grep -q .; then
+              echo "::error::Artifact $name contains no package."
+              exit 1
+            fi
+          done
+          while IFS= read -r -d '' tarball; do
+            if [[ "$(basename "$tarball")" != *"-${SNAPSHOT_VERSION}.tgz" ]]; then
+              echo "::error::$(basename "$tarball") does not carry version ${SNAPSHOT_VERSION}."
+              exit 1
+            fi
+          done < <(find packages -name '*.tgz' -print0)
+
+      # Platform packages first: the main package lists them as optional
+      # dependencies at the same version.
+      - name: Publish each tarball
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in binary-package-darwin-arm64 binary-package-linux-arm64-gnu binary-package-linux-x64-gnu binary-package-win32-x64-msvc; do
+            tarball="$(find "packages/$name" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+            npm publish "${tarball}" --ignore-scripts --access public --tag snapshot
+          done
+          tarball="$(find packages/main-package -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          npm publish "${tarball}" --ignore-scripts --access public --tag snapshot
+
+      - name: Report the install line
+        shell: bash
+        run: |
+          {
+            echo "### Precompute snapshot published"
+            echo ""
+            echo '```sh'
+            echo "npm install @tiqian-cjk/precompute@${SNAPSHOT_VERSION} \\"
+            echo "  --registry=https://npm.pkg.github.com"
+            echo '```'
+            echo ""
+            echo "Tag: \`${{ needs.stamp.outputs.tag }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

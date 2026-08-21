@@ -101,3 +101,15 @@ npm test               # node --test over test/, against the built lib/
 against that output. The CI lane (`build-neon-precompute.yml`) builds every
 supported platform and uploads the platform packages as artifacts; publishing
 is a separate workflow.
+
+Releases go to npmjs.org from annotated `@tiqian/precompute@<version>` tags
+(`publish-precompute.yml`). Snapshot publication is manual-only
+(`snapshot-precompute.yml`): each dispatch stamps its own
+`precompute-snapshot-<UTC timestamp>` tag, temporarily swaps the five
+manifests to the `@tiqian-cjk` scope (GitHub Packages requires the npm scope
+to equal the repository owner), publishes `<base>-snapshot.<timestamp>`
+versions with the `snapshot` dist-tag to GitHub Packages, and restores the
+manifests. The addon loader resolves the platform packages under whatever
+scope its own manifest carries, so the swapped packages load without a source
+patch. Consumers install by exact version with
+`--registry=https://npm.pkg.github.com` and a token carrying `read:packages`.
