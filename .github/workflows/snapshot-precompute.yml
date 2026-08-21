@@ -192,10 +192,13 @@ jobs:
         id: swap
         working-directory: frontend/web-precompute/npm
         # Bash keeps ${VAR} expansion off PowerShell, which sees an empty
-        # string for the shell-variable syntax. npm scopes are lowercase, so
-        # the owner name is lowercased on the way in.
+        # string for the shell-variable syntax. npm scopes are lowercase, and
+        # macOS ships Bash 3.2 without the ,, expansion, so tr lowercases.
         shell: bash
-        run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "${SNAPSHOT_SCOPE,,}" "${GITHUB_REPOSITORY,,}"
+        run: |
+          scope="$(printf '%s' "${SNAPSHOT_SCOPE}" | tr '[:upper:]' '[:lower:]')"
+          repository="$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "${scope}" "${repository}"
 
       - name: Pack platform package
         working-directory: frontend/web-precompute/npm/platforms/${{ matrix.platform }}
@@ -263,10 +266,13 @@ jobs:
         id: swap
         working-directory: frontend/web-precompute/npm
         # Bash keeps ${VAR} expansion off PowerShell, which sees an empty
-        # string for the shell-variable syntax. npm scopes are lowercase, so
-        # the owner name is lowercased on the way in.
+        # string for the shell-variable syntax. npm scopes are lowercase, and
+        # macOS ships Bash 3.2 without the ,, expansion, so tr lowercases.
         shell: bash
-        run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "${SNAPSHOT_SCOPE,,}" "${GITHUB_REPOSITORY,,}"
+        run: |
+          scope="$(printf '%s' "${SNAPSHOT_SCOPE}" | tr '[:upper:]' '[:lower:]')"
+          repository="$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "${scope}" "${repository}"
 
       - name: Pack
         working-directory: frontend/web-precompute/npm
@@ -353,11 +359,12 @@ jobs:
       - name: Report the install line
         shell: bash
         run: |
+          scope="$(printf '%s' "${SNAPSHOT_SCOPE}" | tr '[:upper:]' '[:lower:]')"
           {
             echo "### Precompute snapshot published"
             echo ""
             echo '```sh'
-            echo "npm install ${SNAPSHOT_SCOPE,,}/precompute@${SNAPSHOT_VERSION} \\"
+            echo "npm install ${scope}/precompute@${SNAPSHOT_VERSION} \\"
             echo "  --registry=https://npm.pkg.github.com"
             echo '```'
             echo ""
