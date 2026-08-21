@@ -68,8 +68,11 @@ Kotlin/JS layout core 重放服务器生成的 shaping / metrics。回放证据�
   批量渲染器、过桥）与批次二的 TS 持久化 SDK 已实现，规范形式的 golden 向量在
   Rust 与 TS 两侧固定同一组字节，持久化命中经本地副本校验后不再过桥正文；bundle
   schema-2 拆分与 TableTransport 推迟，两者会改变构建产物与 HTML 输出字节，先于
-  两个接入站点完成包来源切换与输出一致验收之前实施会破坏对照基准，SQLite 参考
-  实现不受影响，随后实施。
+  两个接入站点完成包来源切换与输出一致验收之前实施会破坏对照基准。批次三的 SQLite
+  参考存储已实现：npm 包按 node:sqlite、bun:sqlite 的顺序探测宿主内建 SQLite，单表
+  按不透明地址存条目记录字节，WAL、预编译语句与单事务批量写出，附按 context 前缀
+  清理的 prune；Deno 没有内建 sqlite 模块，该运行时的宿主自带存储适配器。文章表与
+  文章哈希表属于 Article 索引层，随 schema-2 拆分一并推迟。
 
 当前并行推进 **Slice 37：Compose 静态正文 selection**：只读 `CjkText` 已接入源忠实拖选、
 双击选词、三击选段、触摸长按、Foundation 平台手柄、Android 文本放大镜、系统 `ActionMode`

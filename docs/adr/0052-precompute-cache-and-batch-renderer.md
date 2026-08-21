@@ -2,7 +2,7 @@
 
 - Status: Proposed
 - Date: 2026-08-21
-- Relates: [ADR 0050](0050-native-precompute-rust-bindings.md)（原生 precompute 引擎绑定；本 ADR 承接其原缓存契约设计并取代之）、
+- Relates: [ADR 0050](0050-native-precompute-rust-bindings.md)（原生 precompute 引擎绑定；本 ADR 承接其原缓存接口设计并取代之）、
   [ADR 0039](0039-web-rendering-path.md)（Web 渲染路径）、
   [ADR 0040](0040-build-time-web-font-snapshots.md)（构建期字体证据与快照）、
   [ADR 0042](0042-framework-web-integrations.md)（Web 框架集成包）
@@ -16,7 +16,7 @@ NoCache、Memory、Directory、SQLite 实现均未开工。两个接入站点（
 
 缓存条目的内容构成可以量化。blog3 一次完整构建的缓存共 306 个条目、115.2 MB，逐字段
 数据见附录。结构性事实有三条。第一，每篇产物的两个 template 各内嵌一份 manifest：
-clientTemplate 里是契约 manifest，inertTemplate 里是段落 manifest，两份又各自内嵌一份
+clientTemplate 里是 FontContract manifest，inertTemplate 里是段落 manifest，两份又各自内嵌一份
 相同的 fontReplay 与 fontEvidence，等于每篇把字体回放与字体证据存了两遍，合计
 24.3 MB。第二，全站不重复的内容很小：face 记录 95 条共 110.1 KB，metrics 行
 14,816 条，字符串 11,969 个；按篇存储后 face 部分占到 16.4 MB。第三，条目里的
@@ -25,7 +25,7 @@ coverageText 是正文的片段，与 renderedContent 重复。按本 ADR 的分
 约 50 MB。
 
 过桥协议是 JSON 文本。每次调用把整棵输入序列化成字符串，经 napi 拷贝，Rust 解析成
-Json DOM 后逐字段读取；结果沿同一路径返回。契约批量入口在 1 线程下比逐条入口慢 6.7%
+Json DOM 后逐字段读取；结果沿同一路径返回。FontContract 批量入口在 1 线程下比逐条入口慢 6.7%
 （0050 第二附录），差值是批量序列化与结果数组构造，发生在 JS 调用线程上，不随 Rust
 侧线程数分摊。段落批量的并行收益已经兑现，4 线程为 1 线程的 2.21 倍；线程数继续提高
 时，这段串行成本先成为固定下限。
@@ -40,7 +40,7 @@ Json DOM 后逐字段读取；结果沿同一路径返回。契约批量入口�
 
 缓存分三层：
 
-1. **FontContracts 层**。字体契约的捕获宽度由文本长度、区间与 inline boxes 推导，
+1. **FontContracts 层**。FontContract 的捕获宽度由文本长度、区间与 inline boxes 推导，
    入参携带的宽度不参与（0050 的既有行为）。条目只依赖文本、覆盖层、typography、
    face 集合与引擎 revision，没有文章维度输入，因此条目跨文章可用。
 2. **Paragraph 层**。键为提交规范形式的内容哈希，宽度与 typography 参与哈希。
@@ -215,8 +215,8 @@ Deno 的模块，加载时探测。三张表：条目（层、键、context、�
 
 ## Consequences
 
-- 0050 删除其缓存契约设计（原 `TwoLaneCacheContract` 一节与散布的缓存 API 表述），
-  由本 ADR 承接。缓存条目格式成为跨 ADR 的公共契约：内部格式随 revision 演化，外部
+- 0050 删除其缓存接口设计（原 `TwoLaneCacheContract` 一节与散布的缓存 API 表述），
+  由本 ADR 承接。缓存条目格式成为跨 ADR 的公共接口：内部格式随 revision 演化，外部
   存储按不透明字节处理，格式变化经 context 指纹失效。
 - 缓存从可选附件变为批量渲染器的组成部分：走批量渲染器即得缓存行为；`NoCache` 仍是
   可用配置。
@@ -283,7 +283,7 @@ fontEvidence 内容相同（抽验首 60 篇）。
 
 | 部分 | 字节 |
 | --- | --- |
-| 契约 manifest（clientTemplate 内） | 47.26 MB |
+| FontContract manifest（clientTemplate 内） | 47.26 MB |
 | 段落 manifest（inertTemplate 内） | 39.40 MB |
 | inert DOM | 13.95 MB |
 | initialStyle | 4.29 MB |
@@ -300,7 +300,7 @@ manifest 内部（两份合计）：entries 44.75 MB，其中条目 fontFaceEvid
 全站不重复内容：face 记录 95 条 110.1 KB（unicodeRange 70.7 KB）；typographies 2 条；
 shape 行 100,281 条（存储 230,708 行）；strings 11,969 个（引用 260,990 次）；metrics
 行 14,816 条（引用 220,030 次）；probe 对象 4,444 个 602.3 KB（引用 96,539 次）。
-条目本身几乎全不重复：契约条目 37,471 用次中不重复 37,389，段落条目 6,244 用次全部
+条目本身几乎全不重复：FontContract 条目 37,471 用次中不重复 37,389，段落条目 6,244 用次全部
 不重复。initialStyle 306 篇逐篇不同。
 
 分层重排的预计构成：条目去 coverageText 与 probe 后约 13 MB，fontReplay 的 shapes
@@ -317,4 +317,13 @@ golden 向量承担。
 
 `BundleLayering` 的 schema-2 拆分与 `TableTransport` 推迟：两者改变构建产物与 HTML
 输出字节，两个接入站点要先以现输出形态完成包来源切换并核对输出一致，再实施这两节，
-否则对照基准不可用。`SqliteReferenceStore` 不改产物字节，不受此约束，随后实施。
+否则对照基准不可用。
+
+同日批次三实施 `SqliteReferenceStore` 的条目部分：npm 包按 node:sqlite、bun:sqlite
+的顺序探测宿主内建模块，单表按不透明地址（context 指纹加内容哈希）存整条记录字节，
+WAL、预编译语句、单事务批量写出，另有按 context 前缀清理并保留 keep 列表的 prune。
+Deno 没有内建 sqlite 模块，探测在两种模块都缺席时按具名错误报告，该运行时的宿主
+自带 `PersistentCacheStore` 实现。库文件的结构版本记在 SQLite 的 user_version，
+开门时校验：更新版本拒绝读取，未知版本拒绝猜测；条目内容的版本不走这里，仍由
+context 指纹失效，结构不匹配时宿主可整文件重建。三张表设计中的文章表与文章哈希表
+属于 Article 索引层，随 schema-2 拆分一并推迟；站点缓存替换只需要条目一张表。
