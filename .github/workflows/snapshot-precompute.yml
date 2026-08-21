@@ -192,9 +192,10 @@ jobs:
         id: swap
         working-directory: frontend/web-precompute/npm
         # Bash keeps ${VAR} expansion off PowerShell, which sees an empty
-        # string for the shell-variable syntax.
+        # string for the shell-variable syntax. npm scopes are lowercase, so
+        # the owner name is lowercased on the way in.
         shell: bash
-        run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "${SNAPSHOT_SCOPE}" "${GITHUB_REPOSITORY}"
+        run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "${SNAPSHOT_SCOPE,,}" "${GITHUB_REPOSITORY,,}"
 
       - name: Pack platform package
         working-directory: frontend/web-precompute/npm/platforms/${{ matrix.platform }}
@@ -262,9 +263,10 @@ jobs:
         id: swap
         working-directory: frontend/web-precompute/npm
         # Bash keeps ${VAR} expansion off PowerShell, which sees an empty
-        # string for the shell-variable syntax.
+        # string for the shell-variable syntax. npm scopes are lowercase, so
+        # the owner name is lowercased on the way in.
         shell: bash
-        run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "${SNAPSHOT_SCOPE}" "${GITHUB_REPOSITORY}"
+        run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "${SNAPSHOT_SCOPE,,}" "${GITHUB_REPOSITORY,,}"
 
       - name: Pack
         working-directory: frontend/web-precompute/npm
@@ -308,7 +310,6 @@ jobs:
         with:
           node-version: "24"
           registry-url: https://npm.pkg.github.com
-          scope: ${{ github.repository_owner }}
           package-manager-cache: false
 
       - name: Download all package artifacts
@@ -356,7 +357,7 @@ jobs:
             echo "### Precompute snapshot published"
             echo ""
             echo '```sh'
-            echo "npm install ${SNAPSHOT_SCOPE}/precompute@${SNAPSHOT_VERSION} \\"
+            echo "npm install ${SNAPSHOT_SCOPE,,}/precompute@${SNAPSHOT_VERSION} \\"
             echo "  --registry=https://npm.pkg.github.com"
             echo '```'
             echo ""
