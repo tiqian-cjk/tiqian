@@ -191,6 +191,9 @@ jobs:
       - name: Apply the snapshot manifest swap
         id: swap
         working-directory: frontend/web-precompute/npm
+        # Bash keeps ${VAR} expansion off PowerShell, which sees an empty
+        # string for the shell-variable syntax.
+        shell: bash
         run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "${SNAPSHOT_SCOPE}" "${GITHUB_REPOSITORY}"
 
       - name: Pack platform package
@@ -258,6 +261,9 @@ jobs:
       - name: Apply the snapshot manifest swap
         id: swap
         working-directory: frontend/web-precompute/npm
+        # Bash keeps ${VAR} expansion off PowerShell, which sees an empty
+        # string for the shell-variable syntax.
+        shell: bash
         run: node snapshot-swap.mjs apply "${SNAPSHOT_VERSION}" "${SNAPSHOT_SCOPE}" "${GITHUB_REPOSITORY}"
 
       - name: Pack
