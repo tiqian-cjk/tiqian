@@ -8,6 +8,9 @@ pub use tiqian::NamedError;
 
 pub mod base_table;
 pub mod build_fonts;
+pub mod cache;
+pub mod canonical;
+pub mod context;
 pub mod emit;
 #[cfg(tiqian_engine_link)]
 pub mod engine_bridge;
@@ -29,6 +32,7 @@ pub mod policy;
 pub mod precompute_html;
 pub mod precomputer;
 pub mod prepared_dom;
+pub mod renderer;
 pub mod replay;
 pub mod schema;
 pub mod selection;
@@ -39,4 +43,5 @@ pub mod snapshot_bundle;
 pub mod snapshot_manifest;
 pub mod snapshot_source;
 pub mod source_boundaries;
+pub mod submission;
 pub mod unicode_tables;

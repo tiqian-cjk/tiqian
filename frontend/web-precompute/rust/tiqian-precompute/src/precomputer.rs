@@ -7,6 +7,7 @@
 
 use tiqian::NamedError;
 
+use crate::cache::{CacheAdapter, LayeredCacheStore, NoCache};
 use crate::emit::evidence_json;
 use crate::font_source::sha256_hex;
 use crate::js_compat::{js_int_to_number, trunc_sat_i32};
@@ -33,11 +34,14 @@ use crate::source_boundaries::{BoundaryStyle, BoundaryTextSpan};
 const BUILD_SESSION_PREFIX: &str = "tq-build-font";
 
 /// Options of [`create_precomputer`]. `faces` are the resolved build faces;
-/// reading files and parsing stylesheets belongs to the host lane.
+/// reading files and parsing stylesheets belongs to the host lane. A Rust
+/// host plugs its persistence through `cache_adapter`; without one the bridge
+/// drain queue serves as the write side.
 pub struct PrecomputerOptions<'a> {
     pub typography: TypographyInput,
     pub faces: Vec<SessionFaceSpec<'a>>,
     pub session_prefix: String,
+    pub cache_adapter: Option<Box<dyn CacheAdapter>>,
 }
 
 impl<'a> PrecomputerOptions<'a> {
@@ -46,6 +50,7 @@ impl<'a> PrecomputerOptions<'a> {
             typography,
             faces,
             session_prefix: BUILD_SESSION_PREFIX.to_string(),
+            cache_adapter: None,
         }
     }
 }
@@ -73,11 +78,22 @@ pub fn create_precomputer(options: PrecomputerOptions) -> Result<Precomputer, Na
         render_font_families: Vec::new(),
         session,
         closed: std::sync::atomic::AtomicBool::new(false),
+        cache: LayeredCacheStore::new([0; 32], Box::new(NoCache)),
+        cache_owner: crate::renderer::next_job_owner(),
     };
     precomputer.render_font_families = precomputer
         .session
         .render_families(&precomputer.typography.font_families)
         .map_err(NamedError)?;
+    // The context fingerprint covers the revisions, the shaping engine, the
+    // resolved face set and the normalized typography; every cache key of
+    // this precomputer derives from it (ADR 0052).
+    let context =
+        crate::context::context_fingerprint(&precomputer.typography, &precomputer.session.faces());
+    precomputer.cache = match options.cache_adapter {
+        Some(adapter) => LayeredCacheStore::new(context, adapter),
+        None => LayeredCacheStore::with_drain_queue(context).0,
+    };
     Ok(precomputer)
 }
 
@@ -86,6 +102,9 @@ pub struct Precomputer {
     render_font_families: Vec<String>,
     session: FontSession,
     closed: std::sync::atomic::AtomicBool,
+    pub(crate) cache: LayeredCacheStore,
+    /// Instance identity for renderer-pool dedup; see [`crate::renderer`].
+    pub(crate) cache_owner: u64,
 }
 
 /// One `prepare(input, snapshotCandidate)` call. Every field is the loose js

@@ -19,7 +19,7 @@ use crate::html_parse::{
 use crate::js_compat::{is_js_whitespace, js_int_to_number, js_trim, trunc_sat_usize};
 use crate::json::{member, Json};
 use crate::normalize::SnapshotTypography;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::precomputer::{create_precomputer, Precomputer, PrecomputerOptions, PrepareInput};
 use crate::snapshot_bundle::{
@@ -496,7 +496,7 @@ impl<'a> Default for HtmlPrepareOptions<'a> {
 /// with the preparer. `shared_runtime_style` is the package stylesheet the
 /// bundle inlines; the crate never reads files.
 pub struct HtmlPreparerOptions<'a> {
-    pub precomputer: Option<Arc<Mutex<Precomputer>>>,
+    pub precomputer: Option<Arc<Precomputer>>,
     pub create: PrecomputerOptions<'a>,
     pub paragraph_selector: Option<&'a str>,
     pub skipped_ancestor_selector: Option<&'a str>,
@@ -510,7 +510,7 @@ pub fn create_html_preparer(options: HtmlPreparerOptions) -> Result<HtmlPreparer
     let owns_precomputer = options.precomputer.is_none();
     let precomputer = match options.precomputer {
         Some(shared) => shared,
-        None => Arc::new(Mutex::new(create_precomputer(options.create)?)),
+        None => Arc::new(create_precomputer(options.create)?),
     };
     let paragraph_selector = options
         .paragraph_selector
@@ -535,7 +535,7 @@ pub struct HtmlPreparer {
     source_map_ignored: Vec<CompoundSelector>,
     tag_names: Vec<String>,
     skipped_ancestor_selector: Vec<CompoundSelector>,
-    precomputer: Arc<Mutex<Precomputer>>,
+    precomputer: Arc<Precomputer>,
     owns_precomputer: bool,
     shared_runtime_style: String,
     projector: Option<Box<dyn SnapshotParagraphProjector>>,
@@ -544,11 +544,7 @@ pub struct HtmlPreparer {
 
 impl HtmlPreparer {
     pub fn typography(&self) -> SnapshotTypography {
-        self.precomputer
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .typography()
-            .clone()
+        self.precomputer.typography().clone()
     }
 
     pub fn close(&mut self) {
@@ -557,10 +553,7 @@ impl HtmlPreparer {
         }
         self.closed = true;
         if self.owns_precomputer {
-            self.precomputer
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .close();
+            self.precomputer.close();
         }
     }
 
@@ -636,11 +629,7 @@ impl HtmlPreparer {
         // state and the source order check reports by index, so validation
         // and projection stay sequential. The plans own their projected
         // values, which frees the shaping calls for the worker spread.
-        let typography = precomputer
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .typography()
-            .clone();
+        let typography = precomputer.typography().clone();
         struct ElementPlan {
             index: usize,
             opening_tag_end: usize,
@@ -686,10 +675,7 @@ impl HtmlPreparer {
             contract: Option<Json>,
             issues: Vec<Json>,
         }
-        let shared = precomputer
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let precomputer_ref: &Precomputer = &*shared;
+        let precomputer_ref: &Precomputer = precomputer.as_ref();
         let workers = crate::parallel::worker_count();
         let outcomes = crate::parallel::indexed_collect(plans.len(), workers, |slot| {
             let plan = &plans[slot];
