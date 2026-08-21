@@ -70,7 +70,7 @@ test("submission bytes equal the JSON lane entry bytes", { skip: precompute === 
   const lane = JSON.stringify(await precomputer.prepareParagraph(snapshotInput));
   assert.equal(artifactText(outcomes[0].artifact), lane);
 
-  const contractInput = { key: "fc-0", text: "中文合同段落" };
+  const contractInput = { key: "fc-0", text: "字体样本段落" };
   const contractOutcomes = precomputer.cache.submitContents([
     cacheModule.submissionItem(contractInput, KIND_CONTRACT),
   ]);

@@ -88,12 +88,12 @@ test("render results equal the JSON batch lanes", { skip: precompute === null },
   assert.deepEqual(rendered, lane);
   assert.equal(rendered[2]?.status, "unsupported");
   const contracts = await cache.renderContracts([
-    { key: "fc-0", text: "中文合同段落" },
-    { key: "fc-1", text: "第二合同段落" },
+    { key: "fc-0", text: "字体样本段落" },
+    { key: "fc-1", text: "第二样本段落" },
   ]);
   const contractLane = await precomputer.prepareFontContracts([
-    { key: "fc-0", text: "中文合同段落" },
-    { key: "fc-1", text: "第二合同段落" },
+    { key: "fc-0", text: "字体样本段落" },
+    { key: "fc-1", text: "第二样本段落" },
   ]);
   assert.deepEqual(contracts, contractLane);
   precomputer.close();
