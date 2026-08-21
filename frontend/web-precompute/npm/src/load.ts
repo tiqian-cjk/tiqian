@@ -3,6 +3,7 @@
 // path serves local builds placed by `neon dist` (`bun run debug:native`);
 // when it is absent the proxy falls back to the installed platform package.
 
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { currentPlatform, proxy } from "@neon-rs/load";
 
@@ -201,12 +202,29 @@ export interface NativeAddon {
   cacheEvictExcept(handle: string, keys: Buffer): void;
 }
 
+// The platform packages resolve under the scope of this package's own name,
+// so a snapshot publication under a different scope loads without a source
+// patch (GitHub Packages requires the npm scope to equal the repository
+// owner; the snapshot workflow swaps the manifests temporarily).
+const manifestUrl = new URL("../package.json", import.meta.url);
+const manifest = JSON.parse(readFileSync(manifestUrl, "utf8")) as { name?: unknown };
+const ownName = typeof manifest.name === "string" ? manifest.name : "";
+const slash = ownName.indexOf("/");
+const ownScope = ownName.startsWith("@") && slash > 0 ? ownName.slice(0, slash) : null;
+
+const platformPackage = (platform: string): string => {
+  if (ownScope === null) {
+    throw new Error("PlatformPackageScopeMissing");
+  }
+  return `${ownScope}/precompute-${platform}`;
+};
+
 export const addon: NativeAddon = proxy({
   platforms: {
-    "win32-x64-msvc": () => require("@tiqian/precompute-win32-x64-msvc"),
-    "darwin-arm64": () => require("@tiqian/precompute-darwin-arm64"),
-    "linux-x64-gnu": () => require("@tiqian/precompute-linux-x64-gnu"),
-    "linux-arm64-gnu": () => require("@tiqian/precompute-linux-arm64-gnu"),
+    "win32-x64-msvc": () => require(platformPackage("win32-x64-msvc")),
+    "darwin-arm64": () => require(platformPackage("darwin-arm64")),
+    "linux-x64-gnu": () => require(platformPackage("linux-x64-gnu")),
+    "linux-arm64-gnu": () => require(platformPackage("linux-arm64-gnu")),
   },
   debug: () => require(`../platforms/${currentPlatform()}/index.node`),
 });

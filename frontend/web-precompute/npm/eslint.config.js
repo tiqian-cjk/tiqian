@@ -20,6 +20,14 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    // The manifest swap script is plain ESM; it only touches these Node
+    // globals.
+    files: ["*.mjs"],
+    languageOptions: {
+      globals: { console: "readonly", process: "readonly" },
+    },
+  },
+  {
     linterOptions: {
       reportUnusedDisableDirectives: "error",
     },
