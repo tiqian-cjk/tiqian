@@ -32,6 +32,10 @@
       "types": "./lib/precompute.d.ts",
       "default": "./lib/precompute.js"
     },
+    "./cache": {
+      "types": "./lib/cache.d.ts",
+      "default": "./lib/cache.js"
+    },
     "./precompute-html": {
       "types": "./lib/precompute-html.d.ts",
       "default": "./lib/precompute-html.js"

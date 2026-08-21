@@ -97,6 +97,27 @@ test("HTML projectors and foreign precomputers are rejected by name", { skip: pr
     prepareFontContract: async (input) => ({ status: "unsupported", key: input.key, issue: "fixture" }),
     prepareFontContracts: async (inputs) =>
       inputs.map((input) => ({ status: "unsupported", key: input.key, issue: "fixture" })),
+    cache: {
+      context: () => "",
+      submitHashes: () => {
+        throw new Error("fixture precomputer has no cache bridge");
+      },
+      submitContents: () => {
+        throw new Error("fixture precomputer has no cache bridge");
+      },
+      prefillContents: () => {
+        throw new Error("fixture precomputer has no cache bridge");
+      },
+      prefetch: () => {
+        throw new Error("fixture precomputer has no cache bridge");
+      },
+      drainWrites: () => {
+        throw new Error("fixture precomputer has no cache bridge");
+      },
+      evictExcept: () => {
+        throw new Error("fixture precomputer has no cache bridge");
+      },
+    },
     close() {},
   };
   await assert.rejects(

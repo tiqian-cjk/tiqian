@@ -188,6 +188,17 @@ export interface NativeAddon {
   snapshotServerAssets(bundleJson: string): string;
   renderSnapshotServerAssets(assetsJson: string): string;
   parseBuildFontStylesheet(css: string, sourceFileUrl: string, publicUrl: string | null): string;
+  /**
+   * The cache and submission bridge (ADR 0052). Binary buffers in and out;
+   * the packers and readers live in `cache.ts`, no JSON crosses.
+   */
+  cacheContext(handle: string): string;
+  cacheSubmitHashes(handle: string, hashes: Buffer): Buffer;
+  cacheSubmitContents(handle: string, submissions: Buffer): Buffer;
+  cachePrefillContents(handle: string, submissions: Buffer): number;
+  cachePrefetch(handle: string, records: Buffer): number;
+  cacheDrainWrites(handle: string): Buffer;
+  cacheEvictExcept(handle: string, keys: Buffer): void;
 }
 
 export const addon: NativeAddon = proxy({

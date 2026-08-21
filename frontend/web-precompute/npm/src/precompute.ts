@@ -10,6 +10,7 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { addon } from "./load.js";
+import { createCacheBridge, type CacheBridge } from "./cache.js";
 import { renderPreparedParagraph as sharedRenderPreparedParagraph } from "../shared/prepared-dom.js";
 
 const SHARED_RUNTIME_STYLE = readFileSync(
@@ -314,6 +315,12 @@ export interface Precomputer {
    * `prepareFontContract` calls.
    */
   prepareFontContracts(inputs: readonly FontContractInput[]): Promise<PreparedEntry[]>;
+  /**
+   * The cache and submission bridge of this precomputer (ADR 0052). The
+   * property is present only when the platform build carries the bridge;
+   * the batch renderer and the layered cache live behind it.
+   */
+  readonly cache: CacheBridge;
   close(): void;
 }
 
@@ -360,6 +367,7 @@ export async function createPrecomputer(options: CreatePrecomputerOptions): Prom
   const precomputer: Precomputer = {
     typography: Object.freeze(info.typography),
     renderFontFamilies: Object.freeze(info.renderFontFamilies),
+    cache: createCacheBridge(handle),
     async prepareParagraph(input: SnapshotParagraphInput): Promise<PreparedEntry> {
       return freezeEntry(
         parse<PreparedEntry>(addon.prepareParagraph(handle, JSON.stringify(input ?? {}))),
