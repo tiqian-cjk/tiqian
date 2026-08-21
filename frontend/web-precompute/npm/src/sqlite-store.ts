@@ -97,9 +97,16 @@ function migrate(db: SqliteDatabase): void {
 export async function createSqliteCacheStore(path: string): Promise<SqliteCacheStore> {
   mkdirSync(dirname(path), { recursive: true });
   const db = await openDatabase(path);
-  db.exec("PRAGMA journal_mode = WAL;");
-  migrate(db);
-  db.exec("CREATE TEMP TABLE IF NOT EXISTS keep_list (address TEXT PRIMARY KEY);");
+  // A failed open must release the handle: an open sqlite file blocks
+  // deleting the cache directory on Windows.
+  try {
+    db.exec("PRAGMA journal_mode = WAL;");
+    migrate(db);
+    db.exec("CREATE TEMP TABLE IF NOT EXISTS keep_list (address TEXT PRIMARY KEY);");
+  } catch (error) {
+    db.close();
+    throw error;
+  }
   const readStatement = db.prepare("SELECT bytes FROM tiqian_cache_entries WHERE address = ?;");
   const writeStatement = db.prepare(
     "INSERT OR REPLACE INTO tiqian_cache_entries (address, bytes) VALUES (?, ?);",
