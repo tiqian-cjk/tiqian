@@ -72,7 +72,7 @@ Rust 侧分两个 Cargo workspace，都在 `frontend` 下。`frontend/rust` 持�
   `snapshot-source.js` 与 `precompute-html.js` 的 Node 侧行为。只依赖 `tiqian`，不依赖
   napi，可独立 `cargo test`。
 - `tiqian-precompute-neon`：Neon cdylib。暴露现有 precompute 入口的全部导出（兼容性约束见
-  `NpmPrecomputePackage`），并新增 `createFontSession`、原始 `layoutParagraph` 入口与 JS 缓存车道的
+  `NpmPrecomputePackage`），并新增 `createFontSession`、原始 `layoutParagraph` 入口与 JS 缓存接口的
   `cacheKey` / `cacheContext` / `serializeCachedParagraph` / `deserializeCachedParagraph`。
   Neon 打包与 CI 配置沿用同维护者 blurest 仓库验证过的 `neon dist` 与 `neon show ci github`
   流程。
@@ -186,18 +186,18 @@ breaking change，发生在 alpha 阶段，不提供兼容 re-export。浏览器
 复用同一字体会话。其中一个站点为三种 typography 各建一个 precomputer，同一字体解码三遍；
 共享字体会话取代此用法。
 
-### `TwoLaneCacheContract`：缓存两车道与引擎指纹
+### `TwoLaneCacheContract`：缓存契约与引擎指纹
 
-缓存契约分两条车道。key 只在 Rust 一处实现；JS 车道经 Neon 调用同一实现。
+缓存契约分 Rust 与 JS 两侧。key 只在 Rust 一处实现；JS 侧经 Neon 调用同一实现。
 
-Rust 车道：`PreparedParagraphCache` trait，`lookup` / `store` 返回 boxed future，兼容 dyn
+Rust 侧：`PreparedParagraphCache` trait，`lookup` / `store` 返回 boxed future，兼容 dyn
 分发与异步实现。异步实现自行持有 runtime `Handle` 并在其上阻塞，该约束写入 trait 文档。内建
 `NoCache` 为默认。`MemoryCache` 含并发去重。`DirectoryCache` 每条目一文件，惰性失效，
 原子写，compact 序列化复用 manifest 的压缩格式。SQLite 后端为 cargo feature。
 
-JS 车道：`cacheKey(input, mode)`、`cacheContext()`、`serializeCachedParagraph` /
+JS 侧：`cacheKey(input, mode)`、`cacheContext()`、`serializeCachedParagraph` /
 `deserializeCachedParagraph`。条目为不透明字节，反序列化带 revision 与 context 校验，损坏条目按
-miss 处理。JS 车道统一 key 语义与条目格式；存储机制（原子写、并发去重、清理已失效条目）仍由站点
+miss 处理。JS 侧统一 key 语义与条目格式；存储机制（原子写、并发去重、清理已失效条目）仍由站点
 自选实现。站点的外层 bundle 组织（identity 索引、按需重建）不在契约范围内。
 
 context 由 `engine` 与 `user` 两部分组成。`engine` 由 Rust 计算：layout / render / backend
@@ -236,14 +236,21 @@ oracle 期间 Rust 侧逐字复用 `snapshot-schema.js` 的既有 revision 常�
 常量在 `@tiqian/prose` 与 Rust 侧各持一份声明，npm 测试断言两侧相等；`@tiqian/prose` 不依赖
 `@tiqian/precompute`，浏览器包不引入原生依赖。`snapshot-schema.js` 还定义 replay key 函数，
 Rust 会话产出相同的 replay key，该层一致性由差分 harness 与共享 golden 覆盖。
-字体会话层的 parity 由 `tiqian-precompute` 的 `js_session_parity` 集成测试承载。同一
+字体会话层的 parity 曾由 `tiqian-precompute` 的 `js_session_parity` 集成测试承载：同一
 case matrix 分别经 Rust 会话与 Node 下的 `precompute-fonts.js` 执行，两侧输出 JSON
-逐字节比对。2026-08-20 起矩阵输出一致：六个会话（含四个错误路径与 session 计数器语义）、
+逐字节比对。2026-08-20 矩阵输出一致：六个会话（含四个错误路径与 session 计数器语义）、
 22 次 shape、10 次 metrics、renderFamilies、beginCapture 与 evidence 捕获，豁免字段
-仅 `harfbuzzVersion`。
+仅 `harfbuzzVersion`。js 目标删除后该测试一并移除：oracle 实现与其 npm 依赖不再存在，
+会话层的持续回归由 crate 单元测试与引擎链接测试承担。
 
 迁移完成后 prepared DOM lowering 有 Rust 与浏览器 JS 两份实现。共享 golden 语料常驻双向
 断言：`cargo test` 与 npm 测试对同一语料断言字节一致，取代 ADR 0040 的单文件共享不变量。
+js 目标删除时，`build_fonts_parity` 与 `precompute_html_parity` 无法再运行 js oracle，
+改为与固定不变的 golden dump 比对（`tests/build-fonts-golden.txt` 与
+`tests/precompute-html-golden.txt`）。golden 录自两侧输出逐字节一致的时点；重新生成用
+`TIQIAN_UPDATE_GOLDEN=1`，行为变化以 golden diff 为准。`precompute_html_parity` 的 golden
+在 `prepareHtml` 文档循环改为并行执行的当天重新生成；生成前先从 git 历史恢复 js oracle
+的输出，核对与 Rust 输出一致后再写入。
 
 ## Consequences
 
@@ -326,7 +333,7 @@ f64 加宽值（`20.34000015258789`、整数无小数点），JVM 与 Kotlin/Nat
 （`20.34`、整数带 `.0`）。数值本身一致，分歧只在表示。修订后 plan 数字在 commonMain 单点
 规范化为 ECMAScript `Number::toString` 形式：位数取自 `Double.toString`，布局按 ECMA 阈值
 重排，末位从 Float 的精确十进制展开按 half-even 取整。选择 ECMAScript 形式使两个 JS 消费
-lane（npm 生产路径与浏览器 worker）字节不变，只影响 JVM 与 Native 输出；dtoa 库在精确
+方（npm 生产路径与浏览器 worker）字节不变，只影响 JVM 与 Native 输出；dtoa 库在精确
 十进制半值处的舍入差异由精确展开消除。JVM golden dump 不含 plan JSON，无 fixture
 变化。
 
@@ -341,9 +348,9 @@ lane（npm 生产路径与浏览器 worker）字节不变，只影响 JVM 与 Na
   ellipsis 回退、纯换行）字节一致；`plan_parity` 在无 oracle dump 时按理由跳过，
   CI 以 `TIQIAN_REQUIRE_PARITY_ORACLE=1` 强制比对。
 - `tiqian` sys crate 在 `TIQIAN_NATIVE_LIB_DIR` 指向 Gradle `linkReleaseStatic*` 产物时
-  链接真实引擎，`cargo test` 在 linux CI lane（`rust-engine-parity` job）跑通 plan parity。
+  链接真实引擎，`cargo test` 在 linux CI 的 `rust-engine-parity` job 跑通 plan parity。
   build script 对归档文件声明 `rerun-if-changed`，引擎归档重建后 cargo 侧强制重链接。
-- `EngineFfiModules` 落地：js 门面位于 `ffi/js`（bundle 名 `Tiqian-tiqian-ffi-js`），
+- `EngineFfiModules` 已实现：js 门面位于 `ffi/js`（bundle 名 `Tiqian-tiqian-ffi-js`），
   `jsNodeTest`、npm runtime 组装任务与 parity oracle 的 bundle 路径同步；`ffi/native` 的
   四个 `linkReleaseStatic*` 目标成为唯一 native 产物；`frontend/web-precompute` 只剩
   Rust workspace、npm 包与 parity 脚本，不含 Kotlin。
@@ -389,9 +396,9 @@ Native 为 `@tiqian/precompute`（Neon addon + harfrust 0.13.0 + 静态链接的
 Kotlin/Native 引擎，release 构建；blog3 四组实测时 linux-x64 addon 为
 8,439,088 字节，neo-blog 实测时为 8,366,448 字节）。每轮清除快照缓存冷启动，
 各跑三轮；RSS 用 `/proc` 对进程组内全部进程按 50ms 采样；端到端耗时为整条
-构建命令的墙钟时间。调用计数与耗时按调用逐条追加落盘：vite 在多个 worker
-线程各自实例化宿主模块，单个统计文件只保留最后写入线程的视图，逐条追加是
-完整口径。全部 12 轮构建退出码为 0。线程数由 `TIQIAN_PRECOMPUTE_THREADS`
+构建命令的端到端耗时。调用计数与耗时按调用逐条追加落盘：vite 在多个 worker
+线程各自实例化宿主模块，单个统计文件只保留最后写入线程的视图，逐条追加覆盖
+全部调用。十二次构建的退出码均为 0。线程数由 `TIQIAN_PRECOMPUTE_THREADS`
 固定；未设置时取 available_parallelism（本机为 16）。批处理入口按线程分摊，
 单一段落入口不读该变量。
 
@@ -484,3 +491,79 @@ Kotlin `Float` 精度与 HarfBuzz 版本两个来源；断行与行结构在两�
   CI 比对。
 - `unsafeBreakCount` 与 glyph extents 纳入 HarfBuzz 版本差分的比对维度。
 - `renderSnapshotBundle` 原生路径单次多 3.6 ms，可单独复查。
+
+## 附录（2026-08-21 第二轮）：契约批量入口与 prepareHtml 文档循环的并行执行
+
+本轮改动三处：新增 `prepareFontContracts` 批量入口（Rust 方法、Neon 导出、
+TypeScript API）；`prepareHtml` 的文档循环先按文档顺序遍历，再把各元素并行处理，
+最后按文档顺序重组输出，各元素的快照尝试与契约回退发生在并行阶段；blog3 宿主
+改为按 article 批量提交契约请求。测试平台与采样方法同第一轮；本轮 linux-x64
+addon 为 8,465,208 字节。blog3 每轮仍为 946 次契约请求，批调用按
+article × precomputer 合并。
+
+### 性能结果
+
+blog3 端到端（每个线程数三轮，每轮从空缓存开始；第一轮数字来自上一附录）：
+
+| 线程数 | 第一轮 ms | 第二轮 ms | 第二轮内存峰值 KiB |
+|---|---|---|---|
+| 1 | 80,687 / 80,669 / 81,822 | 82,815 / 83,519 / 83,520 | 1,874,628 / 1,860,768 / 1,887,944 |
+| 2 | 64,387 / 64,049 / 64,456 | 65,544 / 67,555 / 66,150 | 1,939,708 / 1,970,060 / 1,958,276 |
+| 4 | 57,040 / 56,601 / 56,584 | 57,248 / 57,823 / 57,102 | 1,986,160 / 2,002,688 / 2,017,944 |
+
+九次构建的退出码均为 0。耗时差全部出现在 vite build 阶段：1/2/4 线程该阶段的
+三轮中位数从 76 / 59 / 51 s 变为 78 / 61 / 52 s。契约请求的离线重放（946 条站点
+正文文本，预热一轮后取 7 轮，单进程）：
+
+| 调用方式 | 线程数 | 最佳 ms | 中位 ms |
+|---|---|---|---|
+| 逐条 `prepareFontContract` | 1 | 7,636.9 | 7,712.0 |
+| 逐条 `prepareFontContract` | 4 | 7,663.8 | 7,704.9 |
+| 批量 `prepareFontContracts` | 1 | 7,688.2 | 8,225.1 |
+| 批量 `prepareFontContracts` | 2 | 4,507.8 | 4,684.6 |
+| 批量 `prepareFontContracts` | 4 | 3,036.5 | 3,073.1 |
+| 批量 `prepareFontContracts` | 8 | 2,374.4 | 2,454.8 |
+
+按中位数，批量入口在 2/4/8 线程下的耗时分别为逐条调用的 0.61 / 0.40 / 0.32；
+1 线程比逐条调用慢 6.7%（批入参的 JSON 序列化与结果数组分配）。端到端没有出现
+同量级的缩短，原因是：946 次契约请求分布在 6 个 vite worker 上，每个 worker 的
+串行契约耗时约 1.3 s（7.7 s 除以 6）；进程内并行最多为每个 worker 节省约 1 s，
+在约 33 s 的构建基线里不可分辨。宿主端的合并已到上限：单个 article 内全部快照
+未命中的回退请求都通过同一次调用提交。跨 article 合并要求宿主先收集各页请求再
+统一执行，可节省的上限相同，本轮不做。1 线程的端到端差值约 +2.8 s，其中约
++0.5 s 与离线
+重放的差值一致；其余约 2.3 s 本轮未查明原因。
+
+`prepareHtml` 的并行执行没有端到端测量：blog3 宿主自行遍历 DOM，调用
+`prepareParagraphs` 与 `prepareFontContracts`；neo-blog 宿主逐条调用
+`prepareParagraph` 与 `prepareFontContract`。两个站点都不经过 `prepareHtml`，
+该入口的行为等价由重新生成的 `precompute-html-golden.txt` 与 npm 测试承担。
+
+neo-blog 第二轮（每个线程数三轮，每轮从空缓存开始；第一轮单线程 Native 为
+8,494 / 8,269 / 8,247 ms、内存峰值 2,042,900 / 2,076,572 / 2,054,008 KiB）：
+
+| 线程数 | 端到端 ms（三轮） | 内存峰值 KiB（三轮） |
+|---|---|---|
+| 1 | 8,201 / 8,199 / 8,144 | 2,126,288 / 2,144,424 / 2,183,952 |
+| 2 | 8,357 / 8,179 / 8,094 | 2,187,552 / 2,171,708 / 2,143,788 |
+| 4 | 8,093 / 8,081 / 8,089 | 2,178,408 / 2,178,912 / 2,157,480 |
+
+九次构建的退出码均为 0。该站宿主只逐条调用 `prepareParagraph` 与
+`prepareFontContract`，这两个入口不读取线程数环境变量；1/2/4 线程三轮的中位数
+8,199 / 8,179 / 8,089 ms 之间的差值小于同一线程数内三轮之间的波动（2 线程组内
+为 263 ms），与第一轮的 8,269 ms 处于同一量级。内存峰值比第一轮高约 4–5%，
+本轮未查明原因。复测前做了一项环境处理，记录如下：neo-blog 没有直接的
+`cookie` 依赖，astro 7.2.3 的 ESM import 沿目录向上解析到
+`/home/losses/Development/node_modules/cookie`（0.7.2 CJS，只有 parse/serialize），
+报 `parseCookie` 具名导出错误；测量期间在该站 `node_modules/cookie` 放了指向
+store 内 cookie@2.0.1 的符号链接，测量结束后移除。
+
+### 等效性审计
+
+第二轮 1/2/4 线程三轮构建写出的 306 条缓存两两字节一致（0 差异），并与第一轮
+4 线程构建的缓存在把 `generation` 字段替换为占位符后 306/306 逐字节一致；该字段把宿主
+源文件计入哈希，本轮宿主有源码改动，其余字段全部相同。批量与逐条调用对同一
+输入产出相同的缓存条目。neo-blog 第二轮 1/2/4 线程的 `prepared-paragraphs.json`
+两两字节一致，dist 的 742 个文件把版本标识替换后 742/742 一致；两者并分别与
+第一轮 native 构建的缓存（327 条、plan 零差异、共享字段全部相同）与 dist
+（742/742）一致。

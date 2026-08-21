@@ -28,8 +28,8 @@ Kotlin/JS layout core 重放服务器生成的 shaping / metrics。回放证据�
 并行推进 **全段动态规划断行**（2026-07-17，[ADR 0041](adr/0041-paragraph-dp-line-breaking.md)）：
 `ParagraphDpLineBreaker` 以 ADR 0038 的同一代价做全段精确 DP，推入以压缩边进解
 （`CompressionAsDpEdge`）。2026-07-18 真实语料目检否决转默认：全局最优暴露出
-代价模型四缺陷——邻行差项在自然密排处的过零行为造成松散传染、总 gap 平均掩盖
-中西间距集中拉伸、末行免检、压缩被平坦罚分定成最后手段（与 CLREQ 先挤压后拉伸
+代价模型四缺陷——邻行差项在自然密排处的过零行为造成松散传染、总 gap 平均之后
+中西间距的集中拉伸不可见、末行免检、压缩被平坦罚分定成最后手段（与 CLREQ 先挤压后拉伸
 相反）。二次目检再证伪邻行差项本身：v3 换 `StretchRunSparsity`（可见拉伸行
 游程递增罚）。三轮目检后**收档冻结**：v3 下 DP 与 lookahead 在真实语料基本
 收敛，残余收益不足以转默认——lookahead + ADR 0031/0038 已接近修正后感知
@@ -80,9 +80,12 @@ WASM 运行时迁往 Kotlin/Native 静态库与 Rust 编排：`ffi/native` 以 l
 macosArm64、mingwX64 四个目标暴露引擎级 packed C ABI，js 门面迁入 `ffi/js` 服务浏览器回退与
 parity oracle；Rust 侧分两个 workspace，`frontend/rust` 持有 `tiqian` sys 绑定，
 `frontend/web-precompute/rust` 持有 `tiqian-precompute` 与 `tiqian-precompute-neon`；npm 侧
-precompute 迁入独立的 `@tiqian/precompute` 包，现有导出同名同签名保留。现行 JS 实现先作差分 parity oracle，最终支持平台全集 byte-identical 后移除。
-实现按四个切片推进：A 目标与 workspace 骨架，B 字体会话，C 编排与 Neon，D 平台包发布与
-legacy 移除。
+precompute 迁入独立的 `@tiqian/precompute` 包，现有导出同名同签名保留。实现按四个切片推进：
+A 目标与 workspace 骨架，B 字体会话，C 编排与 Neon，D 平台包发布与 legacy 移除。A、B、C
+已完成：批处理入口（`prepareParagraphs`、`prepareFontContracts`、`prepareHtml` 文档循环）
+按 `TIQIAN_PRECOMPUTE_THREADS` 在 worker 线程间分摊，输出与线程数无关；legacy JS 实现已
+于 2026-08-20 删除，parity 由固定不变的 golden（plan、build-fonts、precompute-html、
+plain-text-issue）与 crate 单元测试、引擎链接测试承担。D 只剩平台包发布，等 crates.io key。
 
 最近完成的是 **Slice 35：Web 真实站点宿主接入**（2026-07-11）。`@tiqian/prose` 以
 ESM 包和 light-DOM `<tiqian-prose>` 接入真实博客；SSR、无 JavaScript、Pagefind、宿主 CSS、
