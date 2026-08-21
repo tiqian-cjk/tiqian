@@ -40,6 +40,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           base="$(node -p "require('./frontend/web-precompute/npm/package.json').version.split('-')[0]")"
           for platform in darwin-arm64 linux-arm64-gnu linux-x64-gnu win32-x64-msvc; do
             platform_base="$(node -p "require('./frontend/web-precompute/npm/platforms/${platform}/package.json').version.split('-')[0]")"
