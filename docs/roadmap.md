@@ -60,19 +60,21 @@ Kotlin/JS layout core 重放服务器生成的 shaping / metrics。回放证据�
   Paragraph、Article 索引）用内容哈希键，桶失效取全部现存文章哈希并集的反连接；
   `CacheAdapterTrait` 嵌入常驻线程池批量渲染器，SSR 逐段配对、SSG 流式输出与同步框架
   同步等待三种消费方式共用一条队列，Neon 过桥按类型分传、单 Buffer 返回，内容哈希由
-  宿主用运行时内建函数计算，已知哈希的请求不再传输正文；renderSnapshotBundle
-  拆站级表、篇级 manifest
-  与呈现字段，表经根属性按需加载；npm 侧提供 node / bun / Deno 内建 SQLite 参考实现。
+  宿主用运行时内建函数计算，已知哈希的请求不再传输正文；bundle 渲染拆站级表、
+  篇级 manifest 与呈现字段，表经根属性按需加载；npm 侧提供 node / bun / Deno
+  内建 SQLite 参考实现。
   blog3 缓存按附录测量预计从 115.2 MB 降到约 50 MB。实施分三批：协议与批量渲染器、
   缓存分层与 bundle 拆分、表传输与 SQLite 封装。2026-08-21 状态：批次一（协议、
   批量渲染器、过桥）与批次二的 TS 持久化 SDK 已实现，规范形式的 golden 向量在
-  Rust 与 TS 两侧固定同一组字节，持久化命中经本地副本校验后不再过桥正文；bundle
-  schema-2 拆分与 TableTransport 推迟，两者会改变构建产物与 HTML 输出字节，先于
-  两个接入站点完成包来源切换与输出一致验收之前实施会破坏对照基准。批次三的 SQLite
-  参考存储已实现：npm 包按 node:sqlite、bun:sqlite 的顺序探测宿主内建 SQLite，单表
-  按不透明地址存条目记录字节，WAL、预编译语句与单事务批量写出，附按 context 前缀
-  清理的 prune；Deno 没有内建 sqlite 模块，该运行时的宿主自带存储适配器。文章表与
-  文章哈希表属于 Article 索引层，随 schema-2 拆分一并推迟。手动触发的 snapshot 发布
+  Rust 与 TS 两侧固定同一组字节，持久化命中经本地副本校验后不再过桥正文。批次三的
+  SQLite 参考存储已实现：npm 包按 node:sqlite、bun:sqlite 的顺序探测宿主内建
+  SQLite，单表按不透明地址存条目记录字节，WAL、预编译语句与单事务批量写出，附按
+  context 前缀清理的 prune；Deno 没有内建 sqlite 模块，该运行时的宿主自带存储
+  适配器。2026-08-22 状态：批次三的 bundle 拆分与 TableTransport 已实施，测量与
+  接入形态见 ADR 0052 附录；表文件以 TIQTBL03 二进制形式发布，schema 1 的读取路径
+  与产出路径先后删除，一次性整函数 renderSnapshotBundle、renderFontContractBundle、
+  renderSnapshotTemplate 删除。文章表与
+  文章哈希表属于 Article 索引层，未实施。手动触发的 snapshot 发布
   流水线已就绪（snapshot-precompute.yml）：每次 dispatch 自打时间戳 tag，五个包临时
   换运行仓库 owner 的 scope（GitHub Packages 要求 npm scope 等于 owner，canonical
   仓库为 @tiqian-cjk）发到 GitHub Packages 的 snapshot dist-tag，发布后还原 manifest；

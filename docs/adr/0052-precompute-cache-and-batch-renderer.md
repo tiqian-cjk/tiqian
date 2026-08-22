@@ -176,10 +176,9 @@ Bun 与 Deno 均兼容，Bun 另有 CryptoHasher），算法 SHA-256，与协议
 经 napi 已经零拷贝，不引入 SharedArrayBuffer：共享内存的价值在两端并发读写同一区域，
 而批量渲染器的队列在 Rust 内部，JS 侧没有生产者。
 
-### `BundleLayering`：renderSnapshotBundle 返回数据不拼装
+### `BundleLayering`：bundle 渲染拆数据与拼装两段
 
-renderSnapshotBundle 的职责收缩为产出数据，字符串拼装移出为独立小函数，放置位置由
-宿主选。产出三层：
+数据阶段产出条目渲染结果，拼装阶段在表冻结后产出模板与样式，两段各自独立。产出三层：
 
 1. **站级表**：faces、typographies、valueStyles、fontPreloads、strings 行、probe 行、
    metrics 行、revision 常量。一组表由一次构建持有，构建内多个 precomputer 的行并入
@@ -193,9 +192,12 @@ renderSnapshotBundle 的职责收缩为产出数据，字符串拼装移出为�
 3. **呈现字段**：renderedContent、inert DOM、initialStyle、root 属性，逐根各自所有，
    不进共享表（initialStyle 在 306 篇中逐篇不同，没有可共享内容）。
 
-schema 自 1 升 2：读侧保留一个版本对 schema 1 的支持，写侧只产 schema 2。
-renderSnapshotBundle 与 renderFontContractBundle 两个整函数保留，产出的 manifest 自包含
-全部数据，宿主在无表环境使用（见 `TableTransport` 的回退阶梯）。
+schema 自 1 升 2：读写两侧都只认识 schema 2，schema 1 的读取路径与产出路径先后删除。
+渲染只保留拆分形式：`renderSnapshotBundleData` 与 `renderFontContractBundleData`
+产出数据，`assembleSnapshotBundle` 与 `assembleFontContractBundle` 在表冻结后拼装；
+一次性整函数 `renderSnapshotBundle`、`renderFontContractBundle`、
+`renderSnapshotTemplate` 删除。HTML 预备 lane 在单次调用内部走同一条拆分路径，
+返回结果对象与表文件字节。
 
 按附录的字节构成重排，blog3 形态的缓存体积预计约 50 MB，为当前 115.2 MB 的 43%
 左右；HTML 产物里内嵌的 manifest 同步变小。
@@ -209,13 +211,72 @@ promise，全页一份表实例。runtime 加载后预扫描文档中的表属�
 
 完整性校验：manifest 携带期望表的 sha，加载后比对，不匹配按 miss 处理并走回退。
 
-回退阶梯三级：URL；页内元素 id 引用（同一映射，键为 id；serverless 只读文件系统的
-部署形态）；自包含 manifest（schema 1 形态）。
+回退阶梯实施为一级：引用按 URL 加载，sha 比对通过后进入全局映射；无引用、加载失败
+或比对不匹配按 miss 处理，根回退到运行时活排版。计划中的页内元素 id 引用与自包含
+manifest（schema 1 形态）两级随 schema 1 的删除取消。
 
 不设时序与枚举要求：没有 head 放置规则，没有引用顺序约束；动态内容产生新表即新
 URL，映射按需增长。表响应带 immutable 缓存头，同一访客同一表只取一次。流式 SSR 的
 到达顺序因此无关紧要，任何根到达时按属性等待即可。React、Astro、SvelteKit 的封装
 是后续切片，不阻塞本 ADR。
+
+### `TableFileBinary`：站级表的二进制文件编码
+
+`TableTransport` 的表文件是固定布局字节：魔数 `TIQTBL03`，全文件小端。56 字节头部
+（8 字节魔数接 12 个 u32 计数）之后按固定顺序排列字节区，完整布局见
+`snapshot_table_binary.rs` 的模块文档：
+
+```text
+magic "TIQTBL03"                              8 bytes
+replayStringCount stringCount                 u32 each, 56-byte header
+metricCount metricValuePoolCount
+probeCount probeAdvancePoolCount probeStylePoolCount probeFeaturesPoolCount
+faceCount typographyCount valueStyleCount fontPreloadCount
+stringDeltas          stringCount x u32       offsets into stringBytes
+stringBytes           UTF-8, concatenated
+metricFamiliesRefs    metricCount x u32       columns of the key-sorted rows
+metricWeights         metricCount x f64
+metricItalics         metricCount x u8
+metricRoleRefs        metricCount x u32
+metricFaceSelRefs     metricCount x u32
+metricPoolRefs        metricCount x u32
+metricValuePool       poolCount x 40 B        5 x f64, NaN bits = absent
+probeTextRefs         probeCount x u32
+probeAdvanceRefs      probeCount x u16
+probeStyleRefs        probeCount x u16
+probeFeatureRefs      probeCount x u16
+probeAdvancePool      poolCount x f64
+probeStylePool        poolCount x 25 B
+probeFeatureDeltas    poolCount x u32         offsets into probeFeaturesRows
+probeFeaturesRows     row = u16 count + count x u32
+faceDeltas            faceCount x u32         canonical JSON text per row
+typographyDeltas      typographyCount x u32
+valueStyleDeltas      valueStyleCount x u32
+fontPreloadDeltas     fontPreloadCount x u32
+revisionText          canonical JSON of the revisions object (tail region)
+```
+
+编码规则：
+
+- 行数据按列存放：同一定宽字段连续成区，重复的小整数与重复的 f64 位型集中，
+  传输压缩可以合并它们。
+- 偏移区记 u32 增量，从隐式零累加；读取时每区对照文件长度，越界先于任何行读出，
+  以 `SnapshotTableBinaryInvalid` 失败。
+- metric 行按 `(familiesRef, weight, italic, roleRef, faceSelectionRef)` 排序：
+  吸收顺序不同的构建冻结出相同字节，恢复冻结文件再冻结复现原文件。
+- metric 值为 f64 而非 f32，取整值可能翻转断行；值五元组进共享池，40 B 一行，
+  NaN 位型表示缺省。
+- probe 的 advance、样式与 feature 列表分别进池，池引用 u16；样式行 25 B
+  （fontSizePx 与 fontWeight 两个 f64、italic 一个 u8、script 与 language 两个
+  string 引用），feature 行为 u16 计数加 string 引用数组。
+- faces、typographies 每行是规范 JSON 文本，valueStyles 与 fontPreloads 同为文本
+  行；四类行对二进制层不透明，行内容由上层 schema 定义。
+- revision 尾无长度声明，读取时解析，截断文件先于行读出失败；尾区保留
+  backendRevision 与 harfbuzzVersion，fontReplay 相关 revision 常量随 manifest。
+- 浏览器读取按需：采纳一个根只读 manifest 引用到的行，行解码结果按视图记忆，
+  重复展开不重扫全表。
+
+文件按内容哈希命名，`TableTransport` 的 URL 寻址不变；体积与解码测量见第四批附录。
 
 ### `SqliteReferenceStore`：SQLite 参考实现
 
@@ -232,6 +293,8 @@ Deno 的模块，加载时探测。三张表：条目（层、键、context、�
 - 缓存从可选附件变为批量渲染器的组成部分：走批量渲染器即得缓存行为；`NoCache` 仍是
   可用配置。
 - bundle schema 升到 2，读侧兼容一个版本；站级表文件是新的构建产物。
+- 表文件编码定为 `TIQTBL03` 字节布局，文本表的产出与读取路径删除；文件按内容哈希
+  寻址，`TableTransport` 的 URL 形态不变。
 - Rust 宿主获得与 JS 宿主对等的接入面，不强制经过 JS 层。
 - Neon 入口的输入侧不再出现 JSON 文本；引擎 plan 输出与缓存条目序列化仍是 JSON。
 - 实施分三批，每批独立回退：协议与批量渲染器先行（性能），缓存分层与 bundle 拆分
@@ -279,6 +342,8 @@ Deno 的模块，加载时探测。三张表：条目（层、键、context、�
 - 预填模式：SSG 构建从空缓存开始，预填开启与关闭两组端到端耗时对比；跨 worker 重复
   内容在内存层的合并计数。
 - bundle 拆分：golden 重新生成并逐项核对，流程同 0050。
+- 表文件二进制：恢复冻结文件再冻结复现相同字节；损坏或截断的文件在任何行读出前
+  以具名错误失败；同一内容跨吸收顺序冻结出相同字节。
 - 基准：从空缓存开始的构建、全命中构建、单桶清除后的构建，三组端到端耗时与缓存
   体积；当次构建内重复段落的命中计数。
 - 内存：写缓冲预算取保守值时，构建内存峰值不高于现状。
@@ -412,3 +477,43 @@ clientTemplate 语料（306 条目合计）：
 属性，表请求 200，页面段落全部携带 data-tiqian-rendered。
 
 表文件的二进制编码是下一批次，继续压低表传输字节。
+
+## 附录（2026-08-22 第四批）：表文件二进制化测量
+
+同一构建内容（7,480 metric 行、3,866 probe 行、153 valueStyle 行、11,924 个
+string、95 face、2 typography、95 fontPreload）在两种文件形态下的字节：
+
+| 形态 | 字节 | gzip |
+| --- | --- | --- |
+| 文本 JSON（第三批的表） | 1,065,655 | 140,192 |
+| TIQTBL03 二进制 | 494,066 | 122,000 |
+
+原始字节 −53.6%，gzip −13.0%。二进制形态的 metric 行按排序键存放，文本形态按吸收
+顺序存放，行集合相同。revisions 在文本形态 4 键，二进制形态 2 键
+（backendRevision、harfbuzzVersion），fontReplay 相关 revision 常量随 manifest。
+
+二进制文件的字节区构成（494,066 B）：
+
+| 字节区 | 字节 |
+| --- | --- |
+| 头部（魔数与计数） | 56 |
+| strings（增量区与字节区） | 135,600 |
+| metric 六列 | 187,000 |
+| metric 值池 | 40 |
+| probe 四列 | 38,660 |
+| probe 三池 | 5,100 |
+| face 文本 | 110,514 |
+| typography 文本 | 894 |
+| valueStyle 文本 | 12,224 |
+| fontPreload 文本 | 3,895 |
+| revision 尾 | 83 |
+
+解码时间（Node 22，20 次中位数）：二进制布局解码 0.12 ms，全部行物化 3.0 ms，
+文本形态 JSON.parse 3.1 ms。采纳路径按需读行，不做全量物化。
+
+构建与传输（blog3，306 条目）：全部条目重算的构建产出表 494,066 B；随后的全命中
+构建不写新表，条目与表字节不变，表 sha 两次一致。条目合计 63,418,450 B（第三批
+文本形态 63,426,406 B），计入表 63,912,516 B（第三批 64,492,061 B），条目 gzip
+合计 7,083,274 B。preview 实测一页：表请求 200，响应字节与表文件一致，传输
+133,189 B；该 Chrome 实例的字体契约不匹配（SnapshotExactFontContractMismatch），
+根按设计回退活排版。
