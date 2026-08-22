@@ -59,22 +59,31 @@ export function textTableAccessors(parsed) {
   validateSnapshotTables(parsed);
   const stringAt = (ref) =>
     tableRow(parsed.strings, ref, "SnapshotFontReplayStringReferenceInvalid");
+  // Manifest expansion reads the metric rows once per expansion; the rows are
+  // a pure function of the parsed table, so the mapped form is memoized per
+  // view and repeated expansions stop rescanning the whole table.
+  let metricRowsCache = null;
   return {
     binary: false,
     stringAt,
-    metricRows: () => parsed.metrics.map((row) => {
-      if (!Array.isArray(row) || row.length !== 10 || (row[2] !== 0 && row[2] !== 1)) {
-        throw new Error("SnapshotFontReplayMetricsTransportInvalid");
+    metricRows: () => {
+      if (metricRowsCache === null) {
+        metricRowsCache = parsed.metrics.map((row) => {
+          if (!Array.isArray(row) || row.length !== 10 || (row[2] !== 0 && row[2] !== 1)) {
+            throw new Error("SnapshotFontReplayMetricsTransportInvalid");
+          }
+          return {
+            serializedFamilies: stringAt(row[0]),
+            fontWeight: row[1],
+            italic: row[2] === 1,
+            role: stringAt(row[3]),
+            faceSelectionText: stringAt(row[4]),
+            valuesEm: row.slice(5),
+          };
+        });
       }
-      return {
-        serializedFamilies: stringAt(row[0]),
-        fontWeight: row[1],
-        italic: row[2] === 1,
-        role: stringAt(row[3]),
-        faceSelectionText: stringAt(row[4]),
-        valuesEm: row.slice(5),
-      };
-    }),
+      return metricRowsCache;
+    },
     probeAt: (ref) => tableRow(parsed.probes, ref, "SnapshotProbeReferenceInvalid"),
     typographyAt: (ref) => tableRow(parsed.typographies, ref, "SnapshotTypographyReferenceInvalid"),
     faceAt: (ref) => tableRow(parsed.faces, ref, "SnapshotFontFaceReferenceInvalid"),

@@ -351,6 +351,27 @@ function expandManifestEntries(
  * metrics come from the table, and value styles splice in so the
  * style-installation site reads one shape for both schemas.
  */
+/** View to its replay-metric rows; one build's expansions share the mapping. */
+const replayMetricsByView = new WeakMap();
+
+function replayMetricsOf(view) {
+  let metrics = replayMetricsByView.get(view);
+  if (metrics === undefined) {
+    metrics = view.metricRows().map((row) => ({
+      key: metricReplayKey(
+        row.serializedFamilies,
+        row.fontWeight,
+        row.italic,
+        row.role,
+        row.faceSelectionText,
+      ),
+      valuesEm: row.valuesEm,
+    }));
+    replayMetricsByView.set(view, metrics);
+  }
+  return metrics;
+}
+
 function expandSnapshotManifestWithTables(manifest, tables) {
   if (tables == null) throw new Error("SnapshotTablesMissing");
   const view = typeof tables.stringAt === "function" ? tables : textTableAccessors(tables);
@@ -369,16 +390,7 @@ function expandSnapshotManifestWithTables(manifest, tables) {
     : {
       revision: replay.revision,
       shapes: expandReplayShapes(replay.shapes, view.stringAt),
-      metrics: view.metricRows().map((row) => ({
-        key: metricReplayKey(
-          row.serializedFamilies,
-          row.fontWeight,
-          row.italic,
-          row.role,
-          row.faceSelectionText,
-        ),
-        valuesEm: row.valuesEm,
-      })),
+      metrics: replayMetricsOf(view),
     };
   const evidenceVersions = {
     backendRevision: view.revisions().backendRevision,

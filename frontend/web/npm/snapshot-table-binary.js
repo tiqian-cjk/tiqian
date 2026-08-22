@@ -198,7 +198,12 @@ function readRevisionsOf(bytes, layout) {
     return value;
   };
 
+  // Manifest expansion reads the metric rows once per expansion; the rows are
+  // a pure function of the bytes, so the decoded form is memoized per view
+  // and repeated expansions stop rescanning the whole table.
+  let metricRowsCache = null;
   const metricRows = () => {
+    if (metricRowsCache !== null) return metricRowsCache;
     const rows = new Array(layout.metricCount);
     for (let index = 0; index < layout.metricCount; index += 1) {
       const at = layout.metricRowsStart + index * METRIC_ROW_BYTES;
@@ -218,10 +223,11 @@ function readRevisionsOf(bytes, layout) {
         ],
       };
     }
+    metricRowsCache = rows;
     return rows;
   };
 
-  const probeAt = (ref) => {
+  const decodeProbe = (ref) => {
     if (!Number.isSafeInteger(ref) || ref < 0 || ref >= layout.probeCount) {
       throw new Error("SnapshotProbeReferenceInvalid");
     }
@@ -251,6 +257,14 @@ function readRevisionsOf(bytes, layout) {
       language: stringAt(readU32(bytes, styleAt + 21)),
       features,
     };
+  };
+
+  const probeCache = new Map();
+  const probeAt = (ref) => {
+    if (!probeCache.has(ref)) {
+      probeCache.set(ref, decodeProbe(ref));
+    }
+    return probeCache.get(ref);
   };
 
   const typographyCache = new Map();
