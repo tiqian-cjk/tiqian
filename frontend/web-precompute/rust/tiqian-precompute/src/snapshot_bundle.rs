@@ -3,19 +3,25 @@
 //! shared `tqv-` value-style classes, compacts the manifest tables, and emits
 //! the inert server template plus the client font-contract template.
 //!
+//! ADR 0052 `BundleLayering` splits the render in two: the data phase
+//! re-renders bodies and may mint value-style rows into mutable snapshot
+//! tables; the assembly phase compacts the manifest against the frozen table,
+//! so every article of one build pins the same content hash. The one-shot
+//! entry points keep the schema-1 behavior with byte-identical templates.
+//!
 //! The js module keeps the three public entry points for Node callers; this
-//! port serves the native precompute package with byte-identical templates.
-//! The shared runtime style stays a caller parameter so the crate ships
-//! without reading package files. Damage js reports with a raw `TypeError`
-//! (a non-array paragraph list) surfaces with `MissingPreparedParagraphs`;
-//! re-render damage keeps the named issues of the prepared DOM lowering.
+//! port serves the native precompute package. The shared runtime style stays
+//! a caller parameter so the crate ships without reading package files.
+//! Damage js reports with a raw `TypeError` (a non-array paragraph list)
+//! surfaces with `MissingPreparedParagraphs`; re-render damage keeps the
+//! named issues of the prepared DOM lowering.
 
 use std::collections::HashMap;
 
 use tiqian::NamedError;
 
 use crate::font_source::sha256_hex;
-use crate::js_compat::{js_int_to_number, js_number_string, js_trim};
+use crate::js_compat::{js_int_to_number, js_number_string, js_trim, trunc_sat_usize};
 use crate::json::Json;
 use crate::prepared_dom::{render_prepared_paragraph_artifact, PreparedRenderOptions};
 use crate::schema::{
@@ -38,7 +44,9 @@ const DEFAULT_LOCALE: &str = "zh-Hans";
 
 /// Options of the bundle entry points. `None` matches the `??` defaults of
 /// the js signatures; the shared runtime style is a required parameter
-/// because the crate never reads the package stylesheet itself.
+/// because the crate never reads the package stylesheet itself. Snapshot
+/// tables select the schema-2 split render; the one-shot entries reject
+/// them because a build must render every article before it freezes.
 pub struct SnapshotBundleOptions<'a> {
     pub id: Option<&'a str>,
     pub paragraph_selector: Option<&'a str>,
@@ -74,20 +82,138 @@ pub struct SnapshotBundle {
     pub entries: Json,
 }
 
+/// The data phase output of one bundle: re-rendered bodies plus everything
+/// assembly needs. Value styles mint in render order; the schema-1 path
+/// keeps the local list, the table path records the table indexes the
+/// classes used so assembly resolves declarations from frozen rows.
+pub struct SnapshotBundleData {
+    pub id: String,
+    pub paragraph_selector: String,
+    pub render_font_families: Vec<Json>,
+    pub rendered_entries: Vec<Json>,
+    pub font_contract_entries: Vec<Json>,
+    /// Schema-1 local declarations in first-mint order.
+    pub value_styles: Vec<String>,
+    /// Table indexes this bundle's classes used, in first-mint order.
+    pub used_value_style_indexes: Vec<usize>,
+}
+
+impl SnapshotBundleData {
+    /// The wire form the neon boundary passes between the data and assembly
+    /// calls; the host holds it for the span of one build.
+    pub fn to_json(&self) -> Json {
+        let mut used_indexes: Vec<Json> = Vec::with_capacity(self.used_value_style_indexes.len());
+        for index in &self.used_value_style_indexes {
+            used_indexes.push(match i64::try_from(*index) {
+                Ok(value) => Json::Num(js_int_to_number(value)),
+                // Table row counts stay far below the i64 limit.
+                Err(_) => Json::Num(js_int_to_number(0)),
+            });
+        }
+        Json::Obj(vec![
+            ("id".to_string(), Json::str(self.id.clone())),
+            (
+                "paragraphSelector".to_string(),
+                Json::str(self.paragraph_selector.clone()),
+            ),
+            (
+                "renderFontFamilies".to_string(),
+                Json::Arr(self.render_font_families.clone()),
+            ),
+            (
+                "renderedEntries".to_string(),
+                Json::Arr(self.rendered_entries.clone()),
+            ),
+            (
+                "fontContractEntries".to_string(),
+                Json::Arr(self.font_contract_entries.clone()),
+            ),
+            (
+                "valueStyles".to_string(),
+                Json::Arr(
+                    self.value_styles
+                        .iter()
+                        .map(|item| Json::str(item.clone()))
+                        .collect(),
+                ),
+            ),
+            ("usedValueStyleIndexes".to_string(), Json::Arr(used_indexes)),
+        ])
+    }
+
+    /// Restores the data phase output from its wire form.
+    pub fn from_json(value: &Json) -> Result<Self, NamedError> {
+        let invalid = || NamedError("SnapshotBundleDataInvalid".to_string());
+        let id = match field(value, "id") {
+            Some(Json::Str(text)) => text.clone(),
+            _ => return Err(invalid()),
+        };
+        let paragraph_selector = match field(value, "paragraphSelector") {
+            Some(Json::Str(text)) => text.clone(),
+            _ => return Err(invalid()),
+        };
+        let render_font_families = match field(value, "renderFontFamilies") {
+            Some(Json::Arr(items)) => items.clone(),
+            _ => return Err(invalid()),
+        };
+        let rendered_entries = match field(value, "renderedEntries") {
+            Some(Json::Arr(items)) => items.clone(),
+            _ => return Err(invalid()),
+        };
+        let font_contract_entries = match field(value, "fontContractEntries") {
+            Some(Json::Arr(items)) => items.clone(),
+            _ => return Err(invalid()),
+        };
+        let mut value_styles: Vec<String> = Vec::new();
+        if let Some(Json::Arr(rows)) = field(value, "valueStyles") {
+            for row in rows {
+                let Json::Str(text) = row else {
+                    return Err(invalid());
+                };
+                value_styles.push(text.clone());
+            }
+        }
+        let mut used_value_style_indexes: Vec<usize> = Vec::new();
+        if let Some(Json::Arr(rows)) = field(value, "usedValueStyleIndexes") {
+            for row in rows {
+                let Json::Num(number) = row else {
+                    return Err(invalid());
+                };
+                if number.fract() != 0.0 || *number < 0.0 {
+                    return Err(invalid());
+                }
+                used_value_style_indexes.push(trunc_sat_usize(*number));
+            }
+        }
+        Ok(SnapshotBundleData {
+            id,
+            paragraph_selector,
+            render_font_families,
+            rendered_entries,
+            font_contract_entries,
+            value_styles,
+            used_value_style_indexes,
+        })
+    }
+}
+
 /// `renderSnapshotBundle`: the inert prepared-DOM template plus the compact
 /// manifests used by server and client-navigation adapters.
 pub fn render_snapshot_bundle(
     prepared_paragraphs: Option<&Json>,
     options: &SnapshotBundleOptions,
 ) -> Result<SnapshotBundle, NamedError> {
-    let entries = array_input(prepared_paragraphs)?;
-    let font_contract_entries = array_input(options.font_contract_paragraphs)?;
-    build_snapshot_bundle(
-        &entries,
-        &font_contract_entries,
+    if options.snapshot_tables.is_some() {
+        return Err(named("SnapshotTablesRequireSplitRender"));
+    }
+    let data = render_snapshot_bundle_data_inner(
+        &array_input(prepared_paragraphs)?,
+        &array_input(options.font_contract_paragraphs)?,
         options,
+        None,
         PLAIN_PARAGRAPH_SELECTOR,
-    )
+    )?;
+    assemble_snapshot_bundle(&data, options)
 }
 
 /// `renderFontContractBundle`: the compact exact-font contract for roots that
@@ -96,20 +222,17 @@ pub fn render_font_contract_bundle(
     prepared_paragraphs: Option<&Json>,
     options: &SnapshotBundleOptions,
 ) -> Result<SnapshotBundle, NamedError> {
-    let entries = array_input(prepared_paragraphs)?;
-    let font_contract_entries = array_input(options.font_contract_paragraphs)?;
-    let mut bundle = build_snapshot_bundle(
-        &entries,
-        &font_contract_entries,
+    if options.snapshot_tables.is_some() {
+        return Err(named("SnapshotTablesRequireSplitRender"));
+    }
+    let data = render_snapshot_bundle_data_inner(
+        &array_input(prepared_paragraphs)?,
+        &array_input(options.font_contract_paragraphs)?,
         options,
+        None,
         RUNTIME_PARAGRAPH_SELECTOR,
     )?;
-    bundle.template = bundle.client_template.clone();
-    bundle.inert_template = bundle.client_template.clone();
-    bundle.initial_style = exact_render_font_style(&bundle.id);
-    bundle.root_attributes = Json::Obj(Vec::new());
-    bundle.entries = Json::Arr(Vec::new());
-    Ok(bundle)
+    assemble_font_contract_bundle(&data, options)
 }
 
 /// `renderSnapshotTemplate`: the inert template alone.
@@ -117,15 +240,49 @@ pub fn render_snapshot_template(
     prepared_paragraphs: Option<&Json>,
     options: &SnapshotBundleOptions,
 ) -> Result<String, NamedError> {
-    let entries = array_input(prepared_paragraphs)?;
-    let font_contract_entries = array_input(options.font_contract_paragraphs)?;
-    build_snapshot_bundle(
-        &entries,
-        &font_contract_entries,
+    if options.snapshot_tables.is_some() {
+        return Err(named("SnapshotTablesRequireSplitRender"));
+    }
+    render_snapshot_bundle_data_inner(
+        &array_input(prepared_paragraphs)?,
+        &array_input(options.font_contract_paragraphs)?,
         options,
+        None,
         PLAIN_PARAGRAPH_SELECTOR,
     )
+    .and_then(|data| assemble_snapshot_bundle(&data, options))
     .map(|bundle| bundle.inert_template)
+}
+
+/// The data phase for plain snapshot bundles: mutable tables mint the
+/// value-style rows this bundle's classes reference.
+pub fn render_snapshot_bundle_data(
+    prepared_paragraphs: Option<&Json>,
+    options: &SnapshotBundleOptions,
+    tables: Option<&mut SnapshotTables>,
+) -> Result<SnapshotBundleData, NamedError> {
+    render_snapshot_bundle_data_inner(
+        &array_input(prepared_paragraphs)?,
+        &array_input(options.font_contract_paragraphs)?,
+        options,
+        tables,
+        PLAIN_PARAGRAPH_SELECTOR,
+    )
+}
+
+/// The data phase for font-contract bundles.
+pub fn render_font_contract_bundle_data(
+    prepared_paragraphs: Option<&Json>,
+    options: &SnapshotBundleOptions,
+    tables: Option<&mut SnapshotTables>,
+) -> Result<SnapshotBundleData, NamedError> {
+    render_snapshot_bundle_data_inner(
+        &array_input(prepared_paragraphs)?,
+        &array_input(options.font_contract_paragraphs)?,
+        options,
+        tables,
+        RUNTIME_PARAGRAPH_SELECTOR,
+    )
 }
 
 fn named(message: &str) -> NamedError {
@@ -159,13 +316,16 @@ fn array_input(value: Option<&Json>) -> Result<Vec<Json>, NamedError> {
     }
 }
 
-/// `buildSnapshotBundle`: the shared core of the three entry points.
-fn build_snapshot_bundle(
+/// The data phase of `buildSnapshotBundle`: validation gates plus the
+/// re-render that mints value-style classes. `tables` selects where the
+/// classes index: table rows (schema 2) or the local list (schema 1).
+fn render_snapshot_bundle_data_inner(
     entries: &[Json],
     font_contract_entries: &[Json],
     options: &SnapshotBundleOptions,
+    mut tables: Option<&mut SnapshotTables>,
     supported_paragraph_selector: &str,
-) -> Result<SnapshotBundle, NamedError> {
+) -> Result<SnapshotBundleData, NamedError> {
     let mut corpus: Vec<&Json> = Vec::with_capacity(entries.len() + font_contract_entries.len());
     corpus.extend(entries.iter());
     corpus.extend(font_contract_entries.iter());
@@ -229,17 +389,28 @@ fn build_snapshot_bundle(
 
     let mut value_styles: Vec<String> = Vec::new();
     let mut value_style_indexes: HashMap<String, usize> = HashMap::new();
-    let mut style_class_for = |declaration: &str| -> String {
-        if let Some(&index) = value_style_indexes.get(declaration) {
-            return format!("tqv-{}", to_string_36(index));
-        }
-        let index = value_styles.len();
-        value_styles.push(declaration.to_string());
-        value_style_indexes.insert(declaration.to_string(), index);
-        format!("tqv-{}", to_string_36(index))
+    let mut used_value_style_indexes: Vec<usize> = Vec::new();
+    let mut class_for: Box<dyn FnMut(&str) -> String + '_> = match tables.as_deref_mut() {
+        Some(table) => Box::new(|declaration: &str| {
+            // Table rows define the class indexes; the data phase records
+            // which rows this bundle used so assembly writes the rules.
+            let index = table.intern_value_style(declaration);
+            if !used_value_style_indexes.contains(&index) {
+                used_value_style_indexes.push(index);
+            }
+            format!("tqv-{}", to_string_36(index))
+        }),
+        None => Box::new(|declaration: &str| {
+            if let Some(&index) = value_style_indexes.get(declaration) {
+                return format!("tqv-{}", to_string_36(index));
+            }
+            let index = value_styles.len();
+            value_styles.push(declaration.to_string());
+            value_style_indexes.insert(declaration.to_string(), index);
+            format!("tqv-{}", to_string_36(index))
+        }),
     };
     let mut rendered_entries: Vec<Json> = Vec::with_capacity(entries.len());
-    let mut rendered_pairs: Vec<(String, String)> = Vec::with_capacity(entries.len());
     for entry in entries {
         let plan_json = match field(entry, "plan") {
             Some(Json::Str(text)) => text.clone(),
@@ -248,7 +419,7 @@ fn build_snapshot_bundle(
         };
         let locale = prepared_locale(field(entry, "typography"));
         let mut render_options = PreparedRenderOptions::new();
-        render_options.style_class_for = Some(&mut style_class_for);
+        render_options.style_class_for = Some(&mut class_for);
         render_options.semantics = field(entry, "semantics");
         render_options.inline_boxes = field(entry, "inlineBoxes");
         render_options.render_text_spans = field(entry, "renderTextSpans");
@@ -279,70 +450,105 @@ fn build_snapshot_bundle(
         if !has_artifact_sha {
             fields.push(("renderArtifactSha256".to_string(), Json::str(&artifact_sha)));
         }
-        let key = js_string_value(field(entry, "key").unwrap_or(&Json::Null));
-        rendered_pairs.push((key, rendered.html.clone()));
         rendered_entries.push(Json::Obj(fields));
     }
+    drop(class_for);
+    Ok(SnapshotBundleData {
+        id,
+        paragraph_selector: paragraph_selector.to_string(),
+        render_font_families: families.to_vec(),
+        rendered_entries,
+        font_contract_entries: font_contract_entries.to_vec(),
+        value_styles,
+        used_value_style_indexes,
+    })
+}
 
-    let value_styles_json = Json::Arr(value_styles.iter().map(|item| Json::str(item)).collect());
-    let metadata = Json::Obj(vec![
-        (
-            "schema".to_string(),
-            Json::Num(js_int_to_number(SNAPSHOT_SCHEMA)),
-        ),
-        ("layoutRevision".to_string(), Json::str(LAYOUT_REVISION)),
-        ("renderRevision".to_string(), Json::str(RENDER_REVISION)),
-        (
-            "fontSourcePolicy".to_string(),
-            Json::str(FONT_SOURCE_POLICY),
-        ),
-        (
-            "paragraphSelector".to_string(),
-            Json::str(paragraph_selector),
-        ),
-        ("valueStyles".to_string(), value_styles_json.clone()),
-        (
-            "valueStylesSha256".to_string(),
-            Json::str(sha256_hex(stable_stringify(&value_styles_json).as_bytes())),
-        ),
-        (
-            "renderFontFamilies".to_string(),
-            Json::Arr(families.to_vec()),
-        ),
-    ]);
-    let mut corpus_entries = rendered_entries.clone();
-    corpus_entries.extend(font_contract_entries.iter().cloned());
-    let (manifest, client_manifest) = match options.snapshot_tables {
+/// The assembly phase: manifest compaction against the frozen table (or the
+/// self-contained schema-1 compaction), templates, and the first-paint
+/// style. Runs after every bundle of one build rendered and the table froze.
+pub fn assemble_snapshot_bundle(
+    data: &SnapshotBundleData,
+    options: &SnapshotBundleOptions,
+) -> Result<SnapshotBundle, NamedError> {
+    let rendered_pairs: Vec<(String, String)> = data
+        .rendered_entries
+        .iter()
+        .map(|entry| {
+            (
+                js_string_value(field(entry, "key").unwrap_or(&Json::Null)),
+                match field(entry, "html") {
+                    Some(Json::Str(text)) => text.clone(),
+                    _ => String::new(),
+                },
+            )
+        })
+        .collect();
+    let families = &data.render_font_families;
+    let mut corpus_entries = data.rendered_entries.clone();
+    corpus_entries.extend(data.font_contract_entries.iter().cloned());
+    let (manifest, client_manifest, manifest_has_local_styles) = match options.snapshot_tables {
         Some(tables) => {
             let compact = compact_snapshot_manifest_with_tables(
                 &Json::Arr(corpus_entries),
-                &metadata,
+                &tables_metadata(data),
                 tables,
             )?;
-            let manifest = if font_contract_entries.is_empty() {
+            let manifest = if data.font_contract_entries.is_empty() {
                 compact
             } else {
-                split_contract_entries(compact, rendered_entries.len())
+                split_contract_entries(compact, data.rendered_entries.len())
             };
             // The schema-2 walk reads the prepared corpus: coverage text and
             // probes left the compact entries but stay on the source faces.
             let client = client_font_contract_manifest_with_tables(
-                entries,
-                font_contract_entries,
+                &data.rendered_entries,
+                &data.font_contract_entries,
                 tables,
                 &manifest,
             )?;
-            (manifest, client)
+            (manifest, client, false)
         }
         None => {
+            let value_styles_json = Json::Arr(
+                data.value_styles
+                    .iter()
+                    .map(|item| Json::str(item.clone()))
+                    .collect(),
+            );
+            let metadata = Json::Obj(vec![
+                (
+                    "schema".to_string(),
+                    Json::Num(js_int_to_number(SNAPSHOT_SCHEMA)),
+                ),
+                ("layoutRevision".to_string(), Json::str(LAYOUT_REVISION)),
+                ("renderRevision".to_string(), Json::str(RENDER_REVISION)),
+                (
+                    "fontSourcePolicy".to_string(),
+                    Json::str(FONT_SOURCE_POLICY),
+                ),
+                (
+                    "paragraphSelector".to_string(),
+                    Json::str(data.paragraph_selector.clone()),
+                ),
+                ("valueStyles".to_string(), value_styles_json.clone()),
+                (
+                    "valueStylesSha256".to_string(),
+                    Json::str(sha256_hex(stable_stringify(&value_styles_json).as_bytes())),
+                ),
+                (
+                    "renderFontFamilies".to_string(),
+                    Json::Arr(families.to_vec()),
+                ),
+            ]);
             let compact = compact_snapshot_manifest(&Json::Arr(corpus_entries), &metadata)?;
-            let manifest = if font_contract_entries.is_empty() {
+            let manifest = if data.font_contract_entries.is_empty() {
                 compact
             } else {
-                split_contract_entries(compact, rendered_entries.len())
+                split_contract_entries(compact, data.rendered_entries.len())
             };
             let client = client_font_contract_manifest(&manifest)?;
-            (manifest, client)
+            (manifest, client, true)
         }
     };
     let manifest_json = manifest.render().replace('<', "\\u003c");
@@ -361,7 +567,7 @@ fn build_snapshot_bundle(
         "<template id=\"{}\" data-tq-snapshot-schema=\"{}\" data-tq-layout-revision=\"{}\" \
 data-tq-render-revision=\"{}\" data-pagefind-ignore><script type=\"application/json\" \
 data-tq-snapshot-manifest>{}</script>{}</template>",
-        escape_attribute(&id),
+        escape_attribute(&data.id),
         SNAPSHOT_SCHEMA,
         LAYOUT_REVISION,
         RENDER_REVISION,
@@ -376,7 +582,7 @@ data-tq-snapshot-manifest>{}</script>{}</template>",
         "<template id=\"{}\" data-tq-snapshot-schema=\"{}\" data-tq-layout-revision=\"{}\" \
 data-tq-render-revision=\"{}\" data-pagefind-ignore><script type=\"application/json\" \
 data-tq-snapshot-manifest>{}</script></template>",
-        escape_attribute(&id),
+        escape_attribute(&data.id),
         SNAPSHOT_SCHEMA,
         LAYOUT_REVISION,
         RENDER_REVISION,
@@ -385,17 +591,31 @@ data-tq-snapshot-manifest>{}</script></template>",
     // The line strut, geometry reset, and nowrap contract of the prepared DOM
     // belong in the server-injected first-paint style as well.
     let mut initial_style = String::from(options.shared_runtime_style);
-    initial_style.push_str(&exact_render_font_style(&id));
-    for (index, declaration) in value_styles.iter().enumerate() {
-        initial_style.push_str(&format!(
-            "tiqian-prose[snapshot-ref=\"{}\"] [data-tq-rendered=\"true\"] .tqv-{}{{{}}}",
-            escape_attribute(&id),
-            to_string_36(index),
-            declaration,
-        ));
+    initial_style.push_str(&exact_render_font_style(&data.id));
+    if manifest_has_local_styles {
+        for (index, declaration) in data.value_styles.iter().enumerate() {
+            initial_style.push_str(&format!(
+                "tiqian-prose[snapshot-ref=\"{}\"] [data-tq-rendered=\"true\"] .tqv-{}{{{}}}",
+                escape_attribute(&data.id),
+                to_string_36(index),
+                declaration,
+            ));
+        }
+    } else if let Some(tables) = options.snapshot_tables {
+        for &index in &data.used_value_style_indexes {
+            let Some(declaration) = tables.value_style_at(index) else {
+                return Err(named("SnapshotTableValueStyleMissing"));
+            };
+            initial_style.push_str(&format!(
+                "tiqian-prose[snapshot-ref=\"{}\"] [data-tq-rendered=\"true\"] .tqv-{}{{{}}}",
+                escape_attribute(&data.id),
+                to_string_36(index),
+                declaration,
+            ));
+        }
     }
     Ok(SnapshotBundle {
-        id,
+        id: data.id.clone(),
         template,
         client_template,
         inert_template,
@@ -418,6 +638,46 @@ data-tq-snapshot-manifest>{}</script></template>",
                 .collect(),
         ),
     })
+}
+
+/// Assembly of a font-contract bundle: the shared assembly plus the
+/// client-only post-processing of `renderFontContractBundle`.
+pub fn assemble_font_contract_bundle(
+    data: &SnapshotBundleData,
+    options: &SnapshotBundleOptions,
+) -> Result<SnapshotBundle, NamedError> {
+    let mut bundle = assemble_snapshot_bundle(data, options)?;
+    bundle.template = bundle.client_template.clone();
+    bundle.inert_template = bundle.client_template.clone();
+    bundle.initial_style = exact_render_font_style(&bundle.id);
+    bundle.root_attributes = Json::Obj(Vec::new());
+    bundle.entries = Json::Arr(Vec::new());
+    Ok(bundle)
+}
+
+/// The metadata spread of the schema-2 compaction: value styles live in the
+/// table and drop out, everything else passes through as in schema 1.
+fn tables_metadata(data: &SnapshotBundleData) -> Json {
+    Json::Obj(vec![
+        (
+            "schema".to_string(),
+            Json::Num(js_int_to_number(SNAPSHOT_SCHEMA)),
+        ),
+        ("layoutRevision".to_string(), Json::str(LAYOUT_REVISION)),
+        ("renderRevision".to_string(), Json::str(RENDER_REVISION)),
+        (
+            "fontSourcePolicy".to_string(),
+            Json::str(FONT_SOURCE_POLICY),
+        ),
+        (
+            "paragraphSelector".to_string(),
+            Json::str(data.paragraph_selector.clone()),
+        ),
+        (
+            "renderFontFamilies".to_string(),
+            Json::Arr(data.render_font_families.clone()),
+        ),
+    ])
 }
 
 /// Splits the compacted corpus back into `entries` and `fontContractEntries`,
@@ -795,6 +1055,7 @@ fn exact_render_font_style(id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::json::parse_json;
     use crate::schema::FONT_REPLAY_REVISION;
 
     #[test]
@@ -816,6 +1077,78 @@ mod tests {
         assert!(!valid_template_id("ab cd"));
         assert!(!valid_template_id("-abc"));
         assert!(!valid_template_id(""));
+    }
+
+    #[test]
+    fn one_shot_entries_reject_snapshot_tables() {
+        let tables = SnapshotTables::new();
+        let options = SnapshotBundleOptions {
+            snapshot_tables: Some(&tables),
+            ..SnapshotBundleOptions::new("")
+        };
+        let reject = |error: NamedError| {
+            assert_eq!(error.0, "SnapshotTablesRequireSplitRender");
+        };
+        match render_snapshot_bundle(None, &options) {
+            Ok(_) => panic!("bundle rejects tables"),
+            Err(error) => reject(error),
+        }
+        match render_font_contract_bundle(None, &options) {
+            Ok(_) => panic!("contract rejects tables"),
+            Err(error) => reject(error),
+        }
+        match render_snapshot_template(None, &options) {
+            Ok(_) => panic!("template rejects tables"),
+            Err(error) => reject(error),
+        }
+    }
+
+    #[test]
+    fn bundle_data_round_trips_through_its_wire_form() {
+        let data = SnapshotBundleData {
+            id: "tq-page".to_string(),
+            paragraph_selector: PLAIN_PARAGRAPH_SELECTOR.to_string(),
+            render_font_families: vec![Json::str("Tiqian Serif")],
+            rendered_entries: vec![Json::Obj(vec![
+                ("key".to_string(), Json::str("p1")),
+                ("html".to_string(), Json::str("<span>p</span>")),
+            ])],
+            font_contract_entries: Vec::new(),
+            value_styles: vec!["font-weight:600".to_string()],
+            used_value_style_indexes: vec![0, 2],
+        };
+        let wire = data.to_json().render();
+        let restored = SnapshotBundleData::from_json(&parse_json(&wire).expect("wire form parses"))
+            .expect("wire form restores");
+        assert_eq!(restored.id, "tq-page");
+        assert_eq!(restored.paragraph_selector, PLAIN_PARAGRAPH_SELECTOR);
+        assert_eq!(restored.value_styles, vec!["font-weight:600".to_string()]);
+        assert_eq!(restored.used_value_style_indexes, vec![0, 2]);
+        assert_eq!(restored.rendered_entries.len(), 1);
+    }
+
+    #[test]
+    fn bundle_data_wire_form_rejects_fractional_indexes() {
+        let wire = Json::Obj(vec![
+            ("id".to_string(), Json::str("tq-page")),
+            (
+                "paragraphSelector".to_string(),
+                Json::str(PLAIN_PARAGRAPH_SELECTOR),
+            ),
+            ("renderFontFamilies".to_string(), Json::Arr(Vec::new())),
+            ("renderedEntries".to_string(), Json::Arr(Vec::new())),
+            ("fontContractEntries".to_string(), Json::Arr(Vec::new())),
+            ("valueStyles".to_string(), Json::Arr(Vec::new())),
+            (
+                "usedValueStyleIndexes".to_string(),
+                Json::Arr(vec![Json::Num(0.5)]),
+            ),
+        ]);
+        let error = match SnapshotBundleData::from_json(&wire) {
+            Ok(_) => panic!("fractional index rejects"),
+            Err(error) => error,
+        };
+        assert_eq!(error.0, "SnapshotBundleDataInvalid");
     }
 
     fn contract_entry(key: &str, coverage: &str, probe_text: &str) -> Json {

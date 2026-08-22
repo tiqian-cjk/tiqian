@@ -188,6 +188,34 @@ export interface NativeAddon {
     optionsJson: string,
     sharedRuntimeStyle: string,
   ): string;
+  /** The split render of ADR 0052 schema 2: data phase, then assembly. */
+  renderSnapshotBundleData(
+    preparedParagraphsJson: string,
+    optionsJson: string,
+    sharedRuntimeStyle: string,
+  ): string;
+  renderFontContractBundleData(
+    preparedParagraphsJson: string,
+    optionsJson: string,
+    sharedRuntimeStyle: string,
+  ): string;
+  assembleSnapshotBundle(
+    dataJson: string,
+    optionsJson: string,
+    sharedRuntimeStyle: string,
+  ): string;
+  assembleFontContractBundle(
+    dataJson: string,
+    optionsJson: string,
+    sharedRuntimeStyle: string,
+  ): string;
+  /** The snapshot-tables lane of one build (ADR 0052 `BundleLayering`). */
+  createSnapshotTables(): string;
+  seedSnapshotTables(text: string): string;
+  absorbSnapshotTables(handle: string, preparedJson: string): number;
+  absorbSnapshotTablesMetadata(handle: string, metadataJson: string): void;
+  finalizeSnapshotTables(handle: string): string;
+  closeSnapshotTables(handle: string): void;
   snapshotPlainTextIssue(text: string): string;
   findHtmlOpeningTags(html: string, tagNamesJson: string): string;
   injectHtmlAttributes(html: string, insertionsJson: string): string;

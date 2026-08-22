@@ -58,8 +58,45 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
         precompute_calls::render_snapshot_template,
     )?;
     cx.export_function(
+        "renderSnapshotBundleData",
+        precompute_calls::render_snapshot_bundle_data,
+    )?;
+    cx.export_function(
+        "renderFontContractBundleData",
+        precompute_calls::render_font_contract_bundle_data,
+    )?;
+    cx.export_function(
+        "assembleSnapshotBundle",
+        precompute_calls::assemble_snapshot_bundle,
+    )?;
+    cx.export_function(
+        "assembleFontContractBundle",
+        precompute_calls::assemble_font_contract_bundle,
+    )?;
+    cx.export_function(
         "snapshotPlainTextIssue",
         precompute_calls::snapshot_plain_text_issue,
+    )?;
+    cx.export_function(
+        "createSnapshotTables",
+        precompute_calls::create_snapshot_tables,
+    )?;
+    cx.export_function("seedSnapshotTables", precompute_calls::seed_snapshot_tables)?;
+    cx.export_function(
+        "absorbSnapshotTables",
+        precompute_calls::absorb_snapshot_tables,
+    )?;
+    cx.export_function(
+        "absorbSnapshotTablesMetadata",
+        precompute_calls::absorb_snapshot_tables_metadata,
+    )?;
+    cx.export_function(
+        "finalizeSnapshotTables",
+        precompute_calls::finalize_snapshot_tables,
+    )?;
+    cx.export_function(
+        "closeSnapshotTables",
+        precompute_calls::close_snapshot_tables,
     )?;
     cx.export_function(
         "findHtmlOpeningTags",

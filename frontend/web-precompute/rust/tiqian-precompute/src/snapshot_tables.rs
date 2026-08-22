@@ -47,7 +47,8 @@ pub struct SnapshotTables {
     strings: ReplayStrings,
     metrics: Vec<Json>,
     metric_keys: HashMap<String, usize>,
-    value_styles: Option<Json>,
+    value_styles: Vec<String>,
+    value_style_indexes: HashMap<String, usize>,
     backend_revision: Option<Json>,
     harfbuzz_version: Option<Json>,
 }
@@ -71,7 +72,8 @@ impl SnapshotTables {
             strings: ReplayStrings::new(),
             metrics: Vec::new(),
             metric_keys: HashMap::new(),
-            value_styles: None,
+            value_styles: Vec::new(),
+            value_style_indexes: HashMap::new(),
             backend_revision: None,
             harfbuzz_version: None,
         }
@@ -195,24 +197,42 @@ impl SnapshotTables {
         Ok(())
     }
 
-    /// Absorbs the render metadata one build shares across articles. The value
-    /// styles are table-scoped: a second absorb with different content is a
-    /// named conflict, not a silent overwrite.
+    /// Absorbs the render metadata one build shares across articles. Value
+    /// styles are content rows: declarations append in first-seen order and
+    /// re-absorbing an existing row keeps its index.
     pub fn absorb_metadata(&mut self, metadata: &Json) -> Result<(), NamedError> {
         if self.frozen() {
             return Err(named("SnapshotTablesFrozen"));
         }
-        if let Some(value_styles) = field(metadata, "valueStyles").cloned() {
-            match &self.value_styles {
-                None | Some(Json::Null) => self.value_styles = Some(value_styles),
-                Some(existing) => {
-                    if stable_stringify(existing) != stable_stringify(&value_styles) {
-                        return Err(named("SnapshotTableValueStylesConflict"));
-                    }
-                }
+        if let Some(Json::Arr(rows)) = field(metadata, "valueStyles") {
+            for row in rows {
+                let Json::Str(declaration) = row else {
+                    return Err(named("SnapshotTableValueStylesInvalid"));
+                };
+                self.intern_value_style(declaration);
             }
         }
         Ok(())
+    }
+
+    /// Interns one value-style declaration, returning its table index. The
+    /// render phase mints `tqv-` classes from these indexes, so a frozen table
+    /// keeps every index this returns stable.
+    pub fn intern_value_style(&mut self, declaration: &str) -> usize {
+        if let Some(&index) = self.value_style_indexes.get(declaration) {
+            return index;
+        }
+        let index = self.value_styles.len();
+        self.value_styles.push(declaration.to_string());
+        self.value_style_indexes
+            .insert(declaration.to_string(), index);
+        index
+    }
+
+    /// One value-style declaration by table index; the assembly phase emits
+    /// the initial-style rules from these lookups.
+    pub fn value_style_at(&self, index: usize) -> Option<&str> {
+        self.value_styles.get(index).map(String::as_str)
     }
 
     /// Freezes the table and returns its canonical bytes plus content hash.
@@ -258,7 +278,12 @@ impl SnapshotTables {
             ("faces".to_string(), Json::Arr(self.faces.clone())),
             (
                 "valueStyles".to_string(),
-                self.value_styles.clone().unwrap_or(Json::Null),
+                Json::Arr(
+                    self.value_styles
+                        .iter()
+                        .map(|item| Json::str(item.clone()))
+                        .collect(),
+                ),
             ),
             ("fontPreloads".to_string(), self.derived_font_preloads()),
             ("revisions".to_string(), Json::Obj(revisions)),
@@ -321,7 +346,21 @@ impl SnapshotTables {
             };
             tables.strings.intern(row)?;
         }
-        tables.value_styles = field(&parsed, "valueStyles").cloned();
+        tables.value_styles = match field(&parsed, "valueStyles") {
+            Some(Json::Arr(rows)) => rows
+                .iter()
+                .map(|row| match row {
+                    Json::Str(text) => Ok(text.clone()),
+                    _ => Err(named("SnapshotTableSeedInvalid")),
+                })
+                .collect::<Result<Vec<String>, NamedError>>()?,
+            _ => Vec::new(),
+        };
+        for (index, declaration) in tables.value_styles.iter().enumerate() {
+            tables
+                .value_style_indexes
+                .insert(declaration.clone(), index);
+        }
         if let Some(revisions) = field(&parsed, "revisions") {
             tables.backend_revision = field(revisions, "backendRevision").cloned();
             tables.harfbuzz_version = field(revisions, "harfbuzzVersion").cloned();
@@ -622,7 +661,7 @@ mod tests {
     }
 
     #[test]
-    fn conflicting_value_styles_surface_a_named_error() {
+    fn value_styles_union_in_first_seen_order() {
         let mut tables = SnapshotTables::new();
         tables
             .absorb_metadata(&Json::Obj(vec![(
@@ -630,20 +669,28 @@ mod tests {
                 Json::Arr(vec![Json::str("font-feature-settings:'ss01'")]),
             )]))
             .expect("absorbs");
-        let error = match tables.absorb_metadata(&Json::Obj(vec![(
-            "valueStyles".to_string(),
-            Json::Arr(vec![Json::str("font-weight:600")]),
-        )])) {
-            Ok(_) => panic!("conflicting styles rejected"),
-            Err(error) => error,
-        };
-        assert_eq!(error.0, "SnapshotTableValueStylesConflict");
+        // A second absorb with new declarations extends the union; a repeated
+        // declaration keeps its index.
         tables
             .absorb_metadata(&Json::Obj(vec![(
                 "valueStyles".to_string(),
-                Json::Arr(vec![Json::str("font-feature-settings:'ss01'")]),
+                Json::Arr(vec![
+                    Json::str("font-weight:600"),
+                    Json::str("font-feature-settings:'ss01'"),
+                ]),
             )]))
-            .expect("identical styles pass");
+            .expect("unions");
+        assert_eq!(tables.intern_value_style("font-feature-settings:'ss01'"), 0);
+        assert_eq!(tables.intern_value_style("font-weight:600"), 1);
+        assert_eq!(tables.value_style_at(1), Some("font-weight:600"));
+        let error = match tables.absorb_metadata(&Json::Obj(vec![(
+            "valueStyles".to_string(),
+            Json::Arr(vec![Json::Num(7.0)]),
+        )])) {
+            Ok(_) => panic!("non-string row rejected"),
+            Err(error) => error,
+        };
+        assert_eq!(error.0, "SnapshotTableValueStylesInvalid");
     }
 
     fn object_field_mut<'a>(value: &'a mut Json, name: &str) -> &'a mut Json {

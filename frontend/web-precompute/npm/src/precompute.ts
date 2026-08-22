@@ -481,11 +481,12 @@ interface BundleOptionsJson {
   id?: string;
   paragraphSelector?: string | null;
   fontContractParagraphs?: PreparedEntry[] | null;
+  snapshotTables?: string | null;
 }
 
 function bundleWireValues(
   preparedParagraphs: readonly PreparedEntry[],
-  options: { id: string; paragraphSelector?: string; fontContractParagraphs?: readonly PreparedEntry[] },
+  options: { id: string; paragraphSelector?: string; fontContractParagraphs?: readonly PreparedEntry[]; snapshotTables?: SnapshotTables },
 ): [string, string] {
   return [
     JSON.stringify(Array.from(preparedParagraphs ?? [])),
@@ -495,6 +496,7 @@ function bundleWireValues(
       fontContractParagraphs: options.fontContractParagraphs
         ? Array.from(options.fontContractParagraphs)
         : null,
+      snapshotTables: options.snapshotTables ? options.snapshotTables.handle : null,
     } satisfies BundleOptionsJson),
   ];
 }
@@ -559,4 +561,145 @@ export function renderSnapshotTemplate(
 ): string {
   const [preparedJson, optionsJson] = bundleWireValues(preparedParagraphs, options);
   return addon.renderSnapshotTemplate(preparedJson, optionsJson, SHARED_RUNTIME_STYLE);
+}
+
+/**
+ * One build's snapshot tables (ADR 0052 `BundleLayering`): the station rows
+ * every article of the build shares. Absorb first, render every article,
+ * then finalize; the finalized json is content-addressed by its sha256.
+ */
+export interface SnapshotTables {
+  readonly kind: "snapshot-tables";
+  readonly handle: string;
+}
+
+/** The finalized table file a host serves verbatim under its sha address. */
+export interface FinalizedSnapshotTables {
+  readonly json: string;
+  readonly sha256: string;
+}
+
+/**
+ * The data phase of one bundle (ADR 0052 schema 2): rendered bodies plus the
+ * table indexes the classes used. Hold this until every article of the build
+ * rendered and the table froze, then assemble.
+ */
+export interface SnapshotBundleData {
+  readonly kind: "snapshot-bundle-data";
+  readonly json: string;
+}
+
+/** Creates the empty, unfrozen table set of one build. */
+export function createSnapshotTables(): SnapshotTables {
+  return { kind: "snapshot-tables", handle: addon.createSnapshotTables() };
+}
+
+/** Restores a previous build's frozen table so a rebuild extends the union. */
+export function seedSnapshotTables(json: string): SnapshotTables {
+  return { kind: "snapshot-tables", handle: addon.seedSnapshotTables(json) };
+}
+
+/**
+ * Absorbs one batch of prepared entries into the table; returns the absorbed
+ * entry count. Absorb every article before the first data phase call.
+ */
+export function absorbSnapshotTables(
+  tables: SnapshotTables,
+  prepared: readonly PreparedEntry[],
+): number {
+  return addon.absorbSnapshotTables(tables.handle, JSON.stringify(Array.from(prepared ?? [])));
+}
+
+/** Absorbs table-scoped render metadata; value styles append in first-seen
+ * order, re-absorbing an existing declaration keeps its index. */
+export function absorbSnapshotTablesMetadata(
+  tables: SnapshotTables,
+  metadata: { readonly valueStyles: readonly string[] },
+): void {
+  addon.absorbSnapshotTablesMetadata(tables.handle, JSON.stringify(metadata));
+}
+
+/**
+ * Freezes the rows and returns `{json, sha256}`; hosts serve the json
+ * verbatim under the sha address. The handle stays usable for assembly.
+ */
+export function finalizeSnapshotTables(tables: SnapshotTables): FinalizedSnapshotTables {
+  const file = parse<FinalizedSnapshotTables>(addon.finalizeSnapshotTables(tables.handle));
+  return Object.freeze(file);
+}
+
+/** Drops the table set once every bundle assembled. */
+export function closeSnapshotTables(tables: SnapshotTables): void {
+  addon.closeSnapshotTables(tables.handle);
+}
+
+/**
+ * The data phase for plain snapshot bundles: re-renders the bodies and mints
+ * value-style rows into the build's mutable tables.
+ */
+export function renderSnapshotBundleData(
+  preparedParagraphs: readonly PreparedEntry[],
+  options: {
+    id: string;
+    paragraphSelector?: ":is(p, li)[data-tq-snapshot-key]";
+    fontContractParagraphs?: readonly PreparedEntry[];
+    snapshotTables: SnapshotTables;
+  },
+): SnapshotBundleData {
+  const [preparedJson, optionsJson] = bundleWireValues(preparedParagraphs, options);
+  return {
+    kind: "snapshot-bundle-data",
+    json: addon.renderSnapshotBundleData(preparedJson, optionsJson, SHARED_RUNTIME_STYLE),
+  };
+}
+
+/** The data phase for font-contract bundles. */
+export function renderFontContractBundleData(
+  preparedParagraphs: readonly PreparedEntry[],
+  options: {
+    id: string;
+    paragraphSelector?: ":is(p, li):not([data-tiqian-skip])";
+    fontContractParagraphs?: readonly PreparedEntry[];
+    snapshotTables: SnapshotTables;
+  },
+): SnapshotBundleData {
+  const [preparedJson, optionsJson] = bundleWireValues(preparedParagraphs, options);
+  return {
+    kind: "snapshot-bundle-data",
+    json: addon.renderFontContractBundleData(preparedJson, optionsJson, SHARED_RUNTIME_STYLE),
+  };
+}
+
+function assembleWireValues(data: SnapshotBundleData, tables: SnapshotTables): [string, string] {
+  return [
+    data.json,
+    JSON.stringify({ snapshotTables: tables.handle } satisfies BundleOptionsJson),
+  ];
+}
+
+/**
+ * The assembly phase: compacts the manifest against the frozen table, builds
+ * the templates and the first-paint style. Requires finalizeSnapshotTables.
+ */
+export function assembleSnapshotBundle(
+  data: SnapshotBundleData,
+  tables: SnapshotTables,
+): SnapshotBundle {
+  const [dataJson, optionsJson] = assembleWireValues(data, tables);
+  return freezeBundle(
+    parse<SnapshotBundle>(addon.assembleSnapshotBundle(dataJson, optionsJson, SHARED_RUNTIME_STYLE)),
+  );
+}
+
+/** The assembly phase for font-contract bundles. */
+export function assembleFontContractBundle(
+  data: SnapshotBundleData,
+  tables: SnapshotTables,
+): SnapshotBundle {
+  const [dataJson, optionsJson] = assembleWireValues(data, tables);
+  return freezeBundle(
+    parse<SnapshotBundle>(
+      addon.assembleFontContractBundle(dataJson, optionsJson, SHARED_RUNTIME_STYLE),
+    ),
+  );
 }

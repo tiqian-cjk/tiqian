@@ -296,6 +296,91 @@ test("snapshot renderers reject invalid corpora and template ids by name", { ski
   );
 });
 
+test("split render assembles per-article bundles against one frozen table", { skip: precompute === null }, () => {
+  assert.ok(precompute);
+  const first = fixturePrepared({ key: "p-1", text: "正文" });
+  const second = fixturePrepared({ key: "p-2", text: "后文" });
+  const tables = precompute.createSnapshotTables();
+  precompute.absorbSnapshotTables(tables, [first, second]);
+
+  const dataFirst = precompute.renderSnapshotBundleData([first], {
+    id: "tq-page-a",
+    snapshotTables: tables,
+  });
+  const dataSecond = precompute.renderSnapshotBundleData([second], {
+    id: "tq-page-b",
+    snapshotTables: tables,
+  });
+  // Assembly needs the frozen rows; the data phase left the table mutable.
+  assert.throws(
+    () => precompute.assembleSnapshotBundle(dataFirst, tables),
+    /SnapshotTablesNotFinalized/u,
+  );
+
+  const file = precompute.finalizeSnapshotTables(tables);
+  assert.equal(file.sha256, sha256(file.json));
+  const parsedTable = JSON.parse(file.json);
+  assert.equal(parsedTable.schema, 2);
+  // Both articles share one face row; each distinct probe keeps its own row.
+  assert.equal(parsedTable.faces.length, 1);
+  assert.equal(parsedTable.probes.length, 2);
+
+  const bundleFirst = precompute.assembleSnapshotBundle(dataFirst, tables);
+  const bundleSecond = precompute.assembleSnapshotBundle(dataSecond, tables);
+  for (const bundle of [bundleFirst, bundleSecond]) {
+    assert.equal(bundle.entries.length, 1);
+    assert.match(bundle.entries[0].html, /class="tq-line tqv-0"/u);
+    assert.match(bundle.initialStyle, /\.tqv-0\{/u);
+    // Value styles stay table-scoped: the manifest carries the table
+    // reference instead of a per-article valueStyles array.
+    assert.doesNotMatch(bundle.template, /valueStyles/u);
+    assert.match(bundle.template, new RegExp(file.sha256, "u"));
+    assert.match(bundle.clientTemplate, /font-contract-v1/u);
+    assert.match(bundle.clientTemplate, /probeRef/u);
+  }
+  assert.equal(bundleFirst.entries[0].key, "p-1");
+  assert.equal(bundleSecond.entries[0].key, "p-2");
+  // The classes index the shared table rows, and the per-article snapshot
+  // refs scope the first-paint rules to their own root.
+  assert.match(bundleFirst.initialStyle, /snapshot-ref="tq-page-a"/u);
+  assert.match(bundleSecond.initialStyle, /snapshot-ref="tq-page-b"/u);
+
+  // A seeded table extends the union under one address across builds.
+  const seeded = precompute.seedSnapshotTables(file.json);
+  precompute.absorbSnapshotTablesMetadata(seeded, { valueStyles: ["font-weight:700"] });
+  const dataThird = precompute.renderSnapshotBundleData([first], {
+    id: "tq-page-c",
+    snapshotTables: seeded,
+  });
+  const refile = precompute.finalizeSnapshotTables(seeded);
+  assert.notEqual(refile.sha256, file.sha256);
+  const bundleThird = precompute.assembleSnapshotBundle(dataThird, seeded);
+  assert.match(bundleThird.initialStyle, /\.tqv-0\{/u);
+  assert.match(bundleThird.template, new RegExp(refile.sha256, "u"));
+  precompute.closeSnapshotTables(tables);
+  precompute.closeSnapshotTables(seeded);
+});
+
+test("split font-contract data assembles into a client-only bundle", { skip: precompute === null }, () => {
+  assert.ok(precompute);
+  const prepared = fixturePrepared({ key: "p-1", text: "正文" });
+  const tables = precompute.createSnapshotTables();
+  precompute.absorbSnapshotTables(tables, [prepared]);
+  const data = precompute.renderFontContractBundleData([prepared], {
+    id: "tq-contract-a",
+    snapshotTables: tables,
+  });
+  precompute.finalizeSnapshotTables(tables);
+  const bundle = precompute.assembleFontContractBundle(data, tables);
+  assert.deepEqual(bundle.entries, []);
+  assert.deepEqual(bundle.rootAttributes, {});
+  assert.equal(bundle.template, bundle.clientTemplate);
+  assert.match(bundle.clientTemplate, /font-contract-v1/u);
+  assert.match(bundle.clientTemplate, /:is\(p, li\):not\(\[data-tiqian-skip\]\)/u);
+  assert.doesNotMatch(bundle.initialStyle, /\.tqv-/u);
+  precompute.closeSnapshotTables(tables);
+});
+
 test("v1 snapshot typography stays aligned with the browser fallback contract", { skip: precompute === null }, async () => {
   assert.ok(precompute);
   const base: CreatePrecomputerOptions = { faces: [], typography: baseTypography };

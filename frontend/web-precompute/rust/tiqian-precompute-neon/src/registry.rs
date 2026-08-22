@@ -10,10 +10,12 @@ use std::sync::{Arc, Mutex, OnceLock};
 use tiqian_precompute::precompute_html::HtmlPreparer;
 use tiqian_precompute::precomputer::Precomputer;
 use tiqian_precompute::session::FontSession;
+use tiqian_precompute::snapshot_tables::SnapshotTables;
 
 static SESSIONS: OnceLock<Mutex<HashMap<String, FontSession>>> = OnceLock::new();
 static PRECOMPUTERS: OnceLock<Mutex<HashMap<String, Arc<Precomputer>>>> = OnceLock::new();
 static HTML_PREPARERS: OnceLock<Mutex<HashMap<String, HtmlPreparer>>> = OnceLock::new();
+static SNAPSHOT_TABLES: OnceLock<Mutex<HashMap<String, SnapshotTables>>> = OnceLock::new();
 static NEXT_HANDLE: AtomicU64 = AtomicU64::new(0);
 
 fn sessions() -> &'static Mutex<HashMap<String, FontSession>> {
@@ -26,6 +28,10 @@ fn precomputers() -> &'static Mutex<HashMap<String, Arc<Precomputer>>> {
 
 fn html_preparers() -> &'static Mutex<HashMap<String, HtmlPreparer>> {
     HTML_PREPARERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn snapshot_tables() -> &'static Mutex<HashMap<String, SnapshotTables>> {
+    SNAPSHOT_TABLES.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 fn next_handle(prefix: &str) -> String {
@@ -103,4 +109,30 @@ pub fn with_preparer<T>(
         Some(preparer) => Ok(call(preparer)),
         None => Err(format!("UnknownHtmlPreparer:{handle}")),
     }
+}
+
+/// Registers a created snapshot-table set and returns its handle. A build
+/// absorbs article by article, freezes once, then renders against the frozen
+/// rows, so every call goes through the registry with the lock held.
+pub fn insert_snapshot_tables(tables: SnapshotTables) -> String {
+    let handle = next_handle("tq-snapshot-tables");
+    recover(snapshot_tables().lock()).insert(handle.clone(), tables);
+    handle
+}
+
+/// Runs `call` with the snapshot tables for `handle`.
+pub fn with_snapshot_tables<T>(
+    handle: &str,
+    call: impl FnOnce(&mut SnapshotTables) -> T,
+) -> Result<T, String> {
+    let mut map = recover(snapshot_tables().lock());
+    match map.get_mut(handle) {
+        Some(tables) => Ok(call(tables)),
+        None => Err(format!("UnknownSnapshotTables:{handle}")),
+    }
+}
+
+/// Drops the snapshot tables for `handle`; a miss reports false.
+pub fn remove_snapshot_tables(handle: &str) -> bool {
+    recover(snapshot_tables().lock()).remove(handle).is_some()
 }
