@@ -1,15 +1,13 @@
-// The station-table binary reader of ADR 0052: decodes the `TIQTBL02` byte
+// The station-table binary reader of ADR 0052: decodes the `TIQTBL03` byte
 // file the Rust encoder produces into lazy accessors. Adopting a root reads
 // only the rows the manifest references. The byte contract lives in the
 // encoder; this file mirrors the region order and validates every offset
 // against the byte length, so a damaged file fails with
 // `SnapshotTablesInvalid` before any row is read.
 
-const MAGIC = "TIQTBL02";
+const MAGIC = "TIQTBL03";
 const HEADER_U32_COUNT = 12;
-const METRIC_ROW_BYTES = 25;
 const METRIC_POOL_ROW_BYTES = 40;
-const PROBE_ROW_BYTES = 16;
 const PROBE_STYLE_ROW_BYTES = 25;
 /** `f64::NAN.to_bits()`; the encoder writes exactly these bits for absent. */
 const ABSENT_METRIC_BITS = 0x7ff8000000000000n;
@@ -47,14 +45,18 @@ function readF64(view, at) {
 }
 
 /**
- * One offsets region: `count + 1` u32 values, non-decreasing, the last one
- * naming the byte length of the region that follows.
+ * One delta-coded offsets region: `count` u32 deltas summed from an implicit
+ * zero. Any delta sequence decodes monotone; the running sum must stay
+ * addressable within the file.
  */
-function readOffsetsRegion(bytes, start, count) {
+function readDeltasRegion(bytes, start, count) {
   const offsets = new Array(count + 1);
-  for (let index = 0; index <= count; index += 1) {
-    offsets[index] = readU32(bytes, start + index * 4);
-    if (index > 0 && offsets[index] < offsets[index - 1]) throw invalid();
+  offsets[0] = 0;
+  let at = 0;
+  for (let index = 0; index < count; index += 1) {
+    at += readU32(bytes, start + index * 4);
+    if (at > bytes.length) throw invalid();
+    offsets[index + 1] = at;
   }
   return offsets;
 }
@@ -81,25 +83,32 @@ function decodeLayout(bytes) {
     if (at > bytes.length) throw invalid();
     return start;
   };
-  const takeOffsets = (count) => {
-    const start = take((count + 1) * 4);
-    const offsets = readOffsetsRegion(bytes, start, count);
+  const takeDeltas = (count) => {
+    const start = take(count * 4);
+    const offsets = readDeltasRegion(bytes, start, count);
     return { offsets, bytesStart: take(offsets[count]) };
   };
-  const stringOffsetsStart = take((stringCount + 1) * 4);
-  const stringOffsets = readOffsetsRegion(bytes, stringOffsetsStart, stringCount);
+  const stringDeltasStart = take(stringCount * 4);
+  const stringOffsets = readDeltasRegion(bytes, stringDeltasStart, stringCount);
   const stringBytesStart = take(stringOffsets[stringCount]);
-  const sortedRefsStart = take(stringCount * 4);
-  const metricRowsStart = take(metricCount * METRIC_ROW_BYTES);
+  const metricFamiliesStart = take(metricCount * 4);
+  const metricWeightsStart = take(metricCount * 8);
+  const metricItalicsStart = take(metricCount);
+  const metricRoleRefsStart = take(metricCount * 4);
+  const metricFaceSelRefsStart = take(metricCount * 4);
+  const metricPoolRefsStart = take(metricCount * 4);
   const metricValuePoolStart = take(metricValuePoolCount * METRIC_POOL_ROW_BYTES);
-  const probeRowsStart = take(probeCount * PROBE_ROW_BYTES);
+  const probeTextRefsStart = take(probeCount * 4);
+  const probeAdvanceRefsStart = take(probeCount * 2);
+  const probeStyleRefsStart = take(probeCount * 2);
+  const probeFeatureRefsStart = take(probeCount * 2);
   const probeAdvancePoolStart = take(probeAdvancePoolCount * 8);
   const probeStylePoolStart = take(probeStylePoolCount * PROBE_STYLE_ROW_BYTES);
-  const probeFeatures = takeOffsets(probeFeaturesPoolCount);
-  const faceText = takeOffsets(faceCount);
-  const typographyText = takeOffsets(typographyCount);
-  const valueStyleText = takeOffsets(valueStyleCount);
-  const fontPreloadText = takeOffsets(fontPreloadCount);
+  const probeFeatures = takeDeltas(probeFeaturesPoolCount);
+  const faceText = takeDeltas(faceCount);
+  const typographyText = takeDeltas(typographyCount);
+  const valueStyleText = takeDeltas(valueStyleCount);
+  const fontPreloadText = takeDeltas(fontPreloadCount);
   const revisionTextStart = at;
   if (revisionTextStart > bytes.length) throw invalid();
   return {
@@ -110,10 +119,17 @@ function decodeLayout(bytes) {
     probeCount,
     stringOffsets,
     stringBytesStart,
-    sortedRefsStart,
-    metricRowsStart,
+    metricFamiliesStart,
+    metricWeightsStart,
+    metricItalicsStart,
+    metricRoleRefsStart,
+    metricFaceSelRefsStart,
+    metricPoolRefsStart,
     metricValuePoolStart,
-    probeRowsStart,
+    probeTextRefsStart,
+    probeAdvanceRefsStart,
+    probeStyleRefsStart,
+    probeFeatureRefsStart,
     probeAdvancePoolStart,
     probeStylePoolStart,
     probeFeatures,
@@ -206,14 +222,13 @@ function readRevisionsOf(bytes, layout) {
     if (metricRowsCache !== null) return metricRowsCache;
     const rows = new Array(layout.metricCount);
     for (let index = 0; index < layout.metricCount; index += 1) {
-      const at = layout.metricRowsStart + index * METRIC_ROW_BYTES;
-      const poolRef = readU32(bytes, at + 21);
+      const poolRef = readU32(bytes, layout.metricPoolRefsStart + index * 4);
       rows[index] = {
-        serializedFamilies: stringAt(readU32(bytes, at)),
-        fontWeight: readF64(view, at + 4),
-        italic: bytes[at + 12] === 1,
-        role: stringAt(readU32(bytes, at + 13)),
-        faceSelectionText: stringAt(readU32(bytes, at + 17)),
+        serializedFamilies: stringAt(readU32(bytes, layout.metricFamiliesStart + index * 4)),
+        fontWeight: readF64(view, layout.metricWeightsStart + index * 8),
+        italic: bytes[layout.metricItalicsStart + index] === 1,
+        role: stringAt(readU32(bytes, layout.metricRoleRefsStart + index * 4)),
+        faceSelectionText: stringAt(readU32(bytes, layout.metricFaceSelRefsStart + index * 4)),
         valuesEm: [
           metricValueAt(poolRef, 0),
           metricValueAt(poolRef, 1),
@@ -231,10 +246,10 @@ function readRevisionsOf(bytes, layout) {
     if (!Number.isSafeInteger(ref) || ref < 0 || ref >= layout.probeCount) {
       throw new Error("SnapshotProbeReferenceInvalid");
     }
-    const at = layout.probeRowsStart + ref * PROBE_ROW_BYTES;
-    const advancePoolRef = readU32(bytes, at + 4);
-    const stylePoolRef = readU32(bytes, at + 8);
-    const featuresPoolRef = readU32(bytes, at + 12);
+    const textRef = readU32(bytes, layout.probeTextRefsStart + ref * 4);
+    const advancePoolRef = readU16(bytes, layout.probeAdvanceRefsStart + ref * 2);
+    const stylePoolRef = readU16(bytes, layout.probeStyleRefsStart + ref * 2);
+    const featuresPoolRef = readU16(bytes, layout.probeFeatureRefsStart + ref * 2);
     if (featuresPoolRef >= layout.probeFeatures.offsets.length - 1) throw invalid();
     const advanceAt = layout.probeAdvancePoolStart + advancePoolRef * 8;
     const styleAt = layout.probeStylePoolStart + stylePoolRef * PROBE_STYLE_ROW_BYTES;
@@ -248,7 +263,7 @@ function readRevisionsOf(bytes, layout) {
       features[index] = stringAt(readU32(bytes, featuresAt + 2 + index * 4));
     }
     return {
-      text: stringAt(readU32(bytes, at)),
+      text: stringAt(textRef),
       advancePx: readF64(view, advanceAt),
       fontSizePx: readF64(view, styleAt),
       fontWeight: readF64(view, styleAt + 8),

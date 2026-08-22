@@ -3,7 +3,7 @@
 // URL of a content-addressed table file or `#id` of an in-page element
 // holding the same bytes. One global map deduplicates loads per reference,
 // so every root of a page shares one table instance. A file is either the
-// `TIQTBL02` binary or schema-2 JSON text; both load into the same accessor
+// `TIQTBL03` binary or schema-2 JSON text; both load into the same accessor
 // surface, and the raw bytes travel on so the layout worker rebuilds the
 // table in its own context.
 
@@ -97,7 +97,7 @@ export function textTableAccessors(parsed) {
 
 /**
  * Builds the accessor surface of one table file: the binary reader for the
- * `TIQTBL02` magic, the parsed-text accessors for JSON bytes.
+ * `TIQTBL03` magic, the parsed-text accessors for JSON bytes.
  */
 export function snapshotTablesFromBytes(bytes) {
   if (!(bytes instanceof Uint8Array)) throw new Error("SnapshotTablesInvalid");

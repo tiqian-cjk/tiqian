@@ -1,4 +1,4 @@
-// A test-only encoder of the `TIQTBL02` station-table bytes. It mirrors the
+// A test-only encoder of the `TIQTBL03` station-table bytes. It mirrors the
 // Rust encoder (region order, metric sort, pool assignment, string intern
 // order); re-encoding a decoded file reproduces the input bytes exactly. The
 // tests use it to pin the byte contract from the consumer side.
@@ -6,39 +6,43 @@
 const encoder = new TextEncoder();
 
 function writeU32(parts, value) {
+  if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) {
+    throw new Error("TableWriterU32OutOfRange");
+  }
   parts.push(value, value >>> 8, value >>> 16, value >>> 24);
 }
 
 function writeU16(parts, value) {
+  if (!Number.isInteger(value) || value < 0 || value > 0xffff) {
+    throw new Error("TableWriterU16OutOfRange");
+  }
   parts.push(value, value >>> 8);
 }
 
+const f64View = new DataView(new ArrayBuffer(8));
+
 function writeF64(parts, value) {
-  const view = new DataView(new ArrayBuffer(8));
-  view.setFloat64(0, value, true);
-  for (const byte of new Uint8Array(view.buffer)) parts.push(byte);
+  f64View.setFloat64(0, value, true);
+  for (const byte of new Uint8Array(f64View.buffer)) parts.push(byte);
 }
 
 const ABSENT_BITS = 0x7ff8000000000000n;
 
 function writeAbsentF64(parts) {
-  const view = new DataView(new ArrayBuffer(8));
-  view.setBigUint64(0, ABSENT_BITS, true);
-  for (const byte of new Uint8Array(view.buffer)) parts.push(byte);
+  f64View.setBigUint64(0, ABSENT_BITS, true);
+  for (const byte of new Uint8Array(f64View.buffer)) parts.push(byte);
 }
 
-/** Offsets region followed by the concatenated bytes of every row. */
-function writeOffsetsAndBytes(parts, texts) {
-  let at = 0;
-  writeU32(parts, 0);
-  for (const text of texts) {
-    at += encoder.encode(text).length;
-    writeU32(parts, at);
-  }
-  for (const text of texts) {
-    parts.push(...encoder.encode(text));
-  }
+/**
+ * One deltas region followed by the concatenated bytes of every row. Each
+ * delta equals its row's byte length; the offsets start at an implicit zero.
+ */
+function writeDeltasAndBytes(parts, byteRows) {
+  for (const row of byteRows) writeU32(parts, row.length);
+  for (const row of byteRows) parts.push(...row);
 }
+
+const textRows = (texts) => texts.map((text) => encoder.encode(text));
 
 export function writeBinaryTable(table) {
   const {
@@ -135,7 +139,7 @@ export function writeBinaryTable(table) {
   const revisionText = JSON.stringify(revisions);
 
   const parts = [];
-  parts.push(...encoder.encode("TIQTBL02"));
+  parts.push(...encoder.encode("TIQTBL03"));
   writeU32(parts, replayStrings.length);
   writeU32(parts, strings.length);
   writeU32(parts, metricRows.length);
@@ -149,19 +153,14 @@ export function writeBinaryTable(table) {
   writeU32(parts, valueStyles.length);
   writeU32(parts, fontPreloads.length);
 
-  writeOffsetsAndBytes(parts, strings);
-  const sortedRefs = strings.map((_, index) => index)
-    .sort((left, right) => (strings[left] < strings[right] ? -1 : strings[left] > strings[right] ? 1 : 0));
-  for (const ref of sortedRefs) writeU32(parts, ref);
+  writeDeltasAndBytes(parts, textRows(strings));
 
-  for (const row of metricRows) {
-    writeU32(parts, row.familiesRef);
-    writeF64(parts, row.weight);
-    parts.push(row.italic);
-    writeU32(parts, row.roleRef);
-    writeU32(parts, row.faceSelectionRef);
-    writeU32(parts, row.valuePoolRef);
-  }
+  for (const row of metricRows) writeU32(parts, row.familiesRef);
+  for (const row of metricRows) writeF64(parts, row.weight);
+  for (const row of metricRows) parts.push(row.italic);
+  for (const row of metricRows) writeU32(parts, row.roleRef);
+  for (const row of metricRows) writeU32(parts, row.faceSelectionRef);
+  for (const row of metricRows) writeU32(parts, row.valuePoolRef);
   for (const pool of valuePool) {
     for (const value of pool.values) {
       if (value == null) writeAbsentF64(parts);
@@ -169,12 +168,10 @@ export function writeBinaryTable(table) {
     }
   }
 
-  for (const row of probeRows) {
-    writeU32(parts, row.textRef);
-    writeU32(parts, row.advanceRef);
-    writeU32(parts, row.styleRef);
-    writeU32(parts, row.featuresRef);
-  }
+  for (const row of probeRows) writeU32(parts, row.textRef);
+  for (const row of probeRows) writeU16(parts, row.advanceRef);
+  for (const row of probeRows) writeU16(parts, row.styleRef);
+  for (const row of probeRows) writeU16(parts, row.featuresRef);
   for (const advance of advancePool) writeF64(parts, advance);
   for (const style of stylePool) {
     writeF64(parts, style.fontSizePx);
@@ -183,16 +180,16 @@ export function writeBinaryTable(table) {
     writeU32(parts, style.scriptRef);
     writeU32(parts, style.languageRef);
   }
-  writeOffsetsAndBytes(parts, featuresPool.map((pool) => {
+  writeDeltasAndBytes(parts, featuresPool.map((pool) => {
     const row = [];
     writeU16(row, pool.refs.length);
     for (const ref of pool.refs) writeU32(row, ref);
-    return String.fromCharCode(...row);
+    return row;
   }));
-  writeOffsetsAndBytes(parts, faceTexts);
-  writeOffsetsAndBytes(parts, typographyTexts);
-  writeOffsetsAndBytes(parts, valueStyles);
-  writeOffsetsAndBytes(parts, fontPreloads);
+  writeDeltasAndBytes(parts, textRows(faceTexts));
+  writeDeltasAndBytes(parts, textRows(typographyTexts));
+  writeDeltasAndBytes(parts, textRows(valueStyles));
+  writeDeltasAndBytes(parts, textRows(fontPreloads));
   parts.push(...encoder.encode(revisionText));
   return new Uint8Array(parts);
 }

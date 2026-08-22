@@ -163,7 +163,7 @@ test("the binary lane loads through the transport", async () => {
     const table = await snapshotTablesForRoot(root, null);
     assert.equal(table.view.binary, true);
     assert.deepEqual([...table.bytes], [...bytes]);
-    assert.equal(new TextDecoder().decode(table.bytes.subarray(0, 8)), "TIQTBL02");
+    assert.equal(new TextDecoder().decode(table.bytes.subarray(0, 8)), "TIQTBL03");
   } finally {
     globalThis.fetch = previousFetch;
   }

@@ -1,36 +1,46 @@
 //! The station-table binary encoding (ADR 0052 `BundleLayering`): the frozen
-//! table of one build as a fixed-layout byte file instead of canonical JSON
-//! text. Little-endian throughout, byte-packed rows read with unaligned
-//! little-endian loads:
+//! table of one build as a fixed-layout byte file. Little-endian throughout.
+//! Offset regions carry u32 deltas summed from an implicit zero start; row
+//! data lives in per-column regions of homogeneous width, so the repeated
+//! small integers and the few distinct f64 payloads stay visible to the
+//! transport compression:
 //!
 //! ```text
-//! magic "TIQTBL02"                              8 bytes
+//! magic "TIQTBL03"                              8 bytes
 //! replayStringCount stringCount                 u32 each, 56-byte header
 //! metricCount metricValuePoolCount
 //! probeCount probeAdvancePoolCount probeStylePoolCount probeFeaturesPoolCount
 //! faceCount typographyCount valueStyleCount fontPreloadCount
-//! stringOffsets        (stringCount+1) x u32    offsets into stringBytes
-//! stringSortedRefs     stringCount x u32        refs sorted by content
-//! metricRows           metricCount x 25 B       rows sorted by key tuple
-//! metricValuePool      poolCount x 40 B         5 x f64, NaN bits = absent
-//! probeRows            probeCount x 16 B
-//! probeAdvancePool     poolCount x f64
-//! probeStylePool       poolCount x 25 B
-//! probeFeaturesOffsets (poolCount+1) x u32
-//! probeFeaturesRows    row = u16 count + count x u32
-//! faceTextOffsets      (faceCount+1) x u32     canonical JSON text per row
-//! typographyTextOffsets (typographyCount+1) x u32
-//! valueStyleOffsets    (valueStyleCount+1) x u32
-//! fontPreloadOffsets   (fontPreloadCount+1) x u32
-//! revisionText         canonical JSON of the revisions object (tail region)
+//! stringDeltas          stringCount x u32       offsets into stringBytes
+//! stringBytes           UTF-8, concatenated
+//! metricFamiliesRefs    metricCount x u32       columns of the key-sorted rows
+//! metricWeights         metricCount x f64
+//! metricItalics         metricCount x u8
+//! metricRoleRefs        metricCount x u32
+//! metricFaceSelRefs     metricCount x u32
+//! metricPoolRefs        metricCount x u32
+//! metricValuePool       poolCount x 40 B        5 x f64, NaN bits = absent
+//! probeTextRefs         probeCount x u32
+//! probeAdvanceRefs      probeCount x u16
+//! probeStyleRefs        probeCount x u16
+//! probeFeatureRefs      probeCount x u16
+//! probeAdvancePool      poolCount x f64
+//! probeStylePool        poolCount x 25 B
+//! probeFeatureDeltas    poolCount x u32         offsets into probeFeaturesRows
+//! probeFeaturesRows     row = u16 count + count x u32
+//! faceDeltas            faceCount x u32         canonical JSON text per row
+//! typographyDeltas      typographyCount x u32
+//! valueStyleDeltas      valueStyleCount x u32
+//! fontPreloadDeltas     fontPreloadCount x u32
+//! revisionText          canonical JSON of the revisions object (tail region)
 //! ```
 //!
 //! Metric rows sort by `(familiesRef, weight, italic, roleRef,
-//! faceSelectionRef)` and string refs sort by content, so the runtime resolves
-//! a metric with two binary searches and no key strings. Metric values are
-//! f64, not f32: rounded values could flip line breaks against the server
-//! render. The encoding is deterministic: the same table content produces the
-//! same bytes, so restoring a frozen file and freezing again reproduces it.
+//! faceSelectionRef)`, so two builds that absorb the same content in
+//! different orders freeze to the same bytes. Metric values are f64, not
+//! f32: rounded values could flip line breaks against the server render.
+//! The encoding is deterministic: the same table content produces the same
+//! bytes, so restoring a frozen file and freezing again reproduces it.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -43,11 +53,9 @@ use crate::schema::stable_stringify;
 use crate::snapshot_manifest::{arr_of, field};
 use crate::snapshot_tables::SnapshotTables;
 
-const MAGIC: [u8; 8] = *b"TIQTBL02";
+const MAGIC: [u8; 8] = *b"TIQTBL03";
 const HEADER_U32_COUNT: usize = 12;
-const METRIC_ROW_BYTES: usize = 25;
 const METRIC_POOL_ROW_BYTES: usize = 40;
-const PROBE_ROW_BYTES: usize = 16;
 const PROBE_STYLE_ROW_BYTES: usize = 25;
 
 fn invalid() -> NamedError {
@@ -70,6 +78,10 @@ fn try_usize(value: u32) -> Result<usize, NamedError> {
 
 fn try_u32(value: usize) -> Result<u32, NamedError> {
     u32::try_from(value).map_err(|_| invalid())
+}
+
+fn try_u16(value: u32) -> Result<u16, NamedError> {
+    u16::try_from(value).map_err(|_| invalid())
 }
 
 /// One metric row split into its binary columns; the value quintuple lives in
@@ -105,12 +117,13 @@ impl MetricKey {
     }
 }
 
-/// One probe row split into pooled columns.
+/// One probe row split into pooled columns. The pool refs stay u16: the pools
+/// hold distinct values, which stay far below the u32 row indexes.
 struct ProbeRow {
     text_ref: u32,
-    advance_pool_ref: u32,
-    style_pool_ref: u32,
-    features_pool_ref: u32,
+    advance_pool_ref: u16,
+    style_pool_ref: u16,
+    features_pool_ref: u16,
 }
 
 struct ProbeStyle {
@@ -313,9 +326,9 @@ pub(crate) fn encode(tables: &SnapshotTables) -> Result<Vec<u8>, NamedError> {
         };
         probes.push(ProbeRow {
             text_ref,
-            advance_pool_ref,
-            style_pool_ref,
-            features_pool_ref,
+            advance_pool_ref: try_u16(advance_pool_ref)?,
+            style_pool_ref: try_u16(style_pool_ref)?,
+            features_pool_ref: try_u16(features_pool_ref)?,
         });
     }
 
@@ -355,22 +368,30 @@ pub(crate) fn encode(tables: &SnapshotTables) -> Result<Vec<u8>, NamedError> {
     writer.u32(try_u32(tables.value_styles.len())?);
     writer.u32(try_u32(font_preloads.len())?);
 
-    write_offsets(
+    write_deltas(
         &mut writer,
         &strings.texts.iter().map(String::as_str).collect::<Vec<_>>(),
     )?;
-    let mut sorted_refs: Vec<usize> = (0..strings.texts.len()).collect();
-    sorted_refs.sort_by(|a, b| strings.texts[*a].as_str().cmp(strings.texts[*b].as_str()));
-    for reference in &sorted_refs {
-        writer.u32(try_u32(*reference)?);
+    for text in &strings.texts {
+        writer.bytes(text.as_bytes());
     }
 
     for row in &metrics {
         writer.u32(row.families_ref);
+    }
+    for row in &metrics {
         writer.f64(row.weight);
+    }
+    for row in &metrics {
         writer.u8(row.italic);
+    }
+    for row in &metrics {
         writer.u32(row.role_ref);
+    }
+    for row in &metrics {
         writer.u32(row.face_selection_ref);
+    }
+    for row in &metrics {
         writer.u32(row.value_pool_ref);
     }
     for bits in &value_pool {
@@ -381,9 +402,15 @@ pub(crate) fn encode(tables: &SnapshotTables) -> Result<Vec<u8>, NamedError> {
 
     for row in &probes {
         writer.u32(row.text_ref);
-        writer.u32(row.advance_pool_ref);
-        writer.u32(row.style_pool_ref);
-        writer.u32(row.features_pool_ref);
+    }
+    for row in &probes {
+        writer.u16(row.advance_pool_ref);
+    }
+    for row in &probes {
+        writer.u16(row.style_pool_ref);
+    }
+    for row in &probes {
+        writer.u16(row.features_pool_ref);
     }
     for bits in &advance_pool {
         writer.f64(f64::from_bits(*bits));
@@ -396,7 +423,7 @@ pub(crate) fn encode(tables: &SnapshotTables) -> Result<Vec<u8>, NamedError> {
         writer.u32(style.language_ref);
     }
     let features_rows: Vec<&[u32]> = features_pool.iter().map(|refs| refs.as_slice()).collect();
-    write_feature_offsets(&mut writer, &features_rows)?;
+    write_feature_deltas(&mut writer, &features_rows)?;
     for refs in &features_pool {
         writer.u16(u16::try_from(refs.len()).map_err(|_| invalid())?);
         for reference in refs {
@@ -404,10 +431,22 @@ pub(crate) fn encode(tables: &SnapshotTables) -> Result<Vec<u8>, NamedError> {
         }
     }
 
-    write_offsets(&mut writer, &face_texts)?;
-    write_offsets(&mut writer, &typography_texts)?;
-    write_offsets(&mut writer, &tables.value_styles)?;
-    write_offsets(&mut writer, &font_preloads)?;
+    write_deltas(&mut writer, &face_texts)?;
+    for text in &face_texts {
+        writer.bytes(text.as_bytes());
+    }
+    write_deltas(&mut writer, &typography_texts)?;
+    for text in &typography_texts {
+        writer.bytes(text.as_bytes());
+    }
+    write_deltas(&mut writer, &tables.value_styles)?;
+    for declaration in &tables.value_styles {
+        writer.bytes(declaration.as_bytes());
+    }
+    write_deltas(&mut writer, &font_preloads)?;
+    for url in &font_preloads {
+        writer.bytes(url.as_bytes());
+    }
     writer.bytes(revision_text.as_bytes());
     Ok(writer.bytes)
 }
@@ -429,27 +468,25 @@ fn metric_order(a: &MetricRow, b: &MetricRow) -> Ordering {
     })
 }
 
-fn write_offsets<S: AsRef<str>>(writer: &mut Writer, texts: &[S]) -> Result<(), NamedError> {
+/// One offsets region as u32 deltas above an implicit zero start; the rows
+/// themselves are written by the caller after this region.
+fn write_deltas<S: AsRef<str>>(writer: &mut Writer, texts: &[S]) -> Result<(), NamedError> {
     let mut offset: u32 = 0;
     for text in texts {
-        writer.u32(offset);
-        offset = offset
+        let next = offset
             .checked_add(u32::try_from(text.as_ref().len()).map_err(|_| invalid())?)
             .ok_or_else(invalid)?;
-    }
-    writer.u32(offset);
-    for text in texts {
-        writer.bytes(text.as_ref().as_bytes());
+        writer.u32(next - offset);
+        offset = next;
     }
     Ok(())
 }
 
-fn write_feature_offsets(writer: &mut Writer, rows: &[&[u32]]) -> Result<(), NamedError> {
+fn write_feature_deltas(writer: &mut Writer, rows: &[&[u32]]) -> Result<(), NamedError> {
     let mut offset: u32 = 0;
     for refs in rows {
-        writer.u32(offset);
         let count = u16::try_from(refs.len()).map_err(|_| invalid())?;
-        offset = offset
+        let next = offset
             .checked_add(
                 u32::from(count)
                     .checked_mul(4)
@@ -457,8 +494,9 @@ fn write_feature_offsets(writer: &mut Writer, rows: &[&[u32]]) -> Result<(), Nam
                     .ok_or_else(invalid)?,
             )
             .ok_or_else(invalid)?;
+        writer.u32(next - offset);
+        offset = next;
     }
-    writer.u32(offset);
     Ok(())
 }
 
@@ -538,20 +576,37 @@ fn read_u8_at(bytes: &[u8], at: usize) -> Result<u8, NamedError> {
     Ok(*bytes.get(at).ok_or_else(invalid)?)
 }
 
+/// The six metric columns; every column holds `metric_count` entries.
+struct MetricColumns {
+    families_refs: usize,
+    weights: usize,
+    italics: usize,
+    role_refs: usize,
+    face_selection_refs: usize,
+    pool_refs: usize,
+}
+
+/// The four probe columns; the three pool columns hold u16 refs.
+struct ProbeColumns {
+    text_refs: usize,
+    advance_refs: usize,
+    style_refs: usize,
+    features_refs: usize,
+}
+
 /// The validated region layout of one binary table: every region's absolute
 /// start plus its offsets vector. All invariants the runtime relies on
-/// (strict metric order, content-sorted string refs, refs in range) hold when
-/// this parses.
+/// (strict metric order, refs in range) hold when this parses.
 struct Layout {
     replay_string_count: usize,
     string_count: usize,
     string_offsets: Vec<u32>,
     string_bytes_start: usize,
-    metric_rows_start: usize,
     metric_count: usize,
+    metrics: MetricColumns,
     metric_value_pool_start: usize,
-    probe_rows_start: usize,
     probe_count: usize,
+    probes: ProbeColumns,
     probe_advance_pool_start: usize,
     probe_style_pool_start: usize,
     probe_features_offsets: Vec<u32>,
@@ -596,64 +651,86 @@ fn decode_layout(bytes: &[u8]) -> Result<Layout, NamedError> {
         return Err(invalid());
     }
 
-    let string_offsets = read_offsets(&mut reader, string_count)?;
+    let string_offsets = read_deltas(&mut reader, string_count)?;
     let string_bytes_start = reader.position;
     let string_bytes_len = try_usize(*string_offsets.last().ok_or_else(invalid)?)?;
     reader.take(string_bytes_len)?;
-    let sorted_refs_start = reader.position;
-    reader.take(checked_mul(string_count, 4)?)?;
 
-    let metric_rows_start = reader.position;
-    reader.take(checked_mul(metric_count, METRIC_ROW_BYTES)?)?;
+    let metric_families_start = reader.position;
+    reader.take(checked_mul(metric_count, 4)?)?;
+    let metric_weights_start = reader.position;
+    reader.take(checked_mul(metric_count, 8)?)?;
+    let metric_italics_start = reader.position;
+    reader.take(metric_count)?;
+    let metric_role_start = reader.position;
+    reader.take(checked_mul(metric_count, 4)?)?;
+    let metric_face_selection_start = reader.position;
+    reader.take(checked_mul(metric_count, 4)?)?;
+    let metric_pool_start = reader.position;
+    reader.take(checked_mul(metric_count, 4)?)?;
     let metric_value_pool_start = reader.position;
     reader.take(checked_mul(metric_value_pool_count, METRIC_POOL_ROW_BYTES)?)?;
-    let probe_rows_start = reader.position;
-    reader.take(checked_mul(probe_count, PROBE_ROW_BYTES)?)?;
+
+    let probe_text_start = reader.position;
+    reader.take(checked_mul(probe_count, 4)?)?;
+    let probe_advance_refs_start = reader.position;
+    reader.take(checked_mul(probe_count, 2)?)?;
+    let probe_style_refs_start = reader.position;
+    reader.take(checked_mul(probe_count, 2)?)?;
+    let probe_features_refs_start = reader.position;
+    reader.take(checked_mul(probe_count, 2)?)?;
     let probe_advance_pool_start = reader.position;
     reader.take(checked_mul(probe_advance_pool_count, 8)?)?;
     let probe_style_pool_start = reader.position;
     reader.take(checked_mul(probe_style_pool_count, PROBE_STYLE_ROW_BYTES)?)?;
-    let probe_features_offsets = read_offsets(&mut reader, probe_features_pool_count)?;
+    let probe_features_offsets = read_deltas(&mut reader, probe_features_pool_count)?;
     let probe_features_rows_start = reader.position;
     let features_bytes_len = try_usize(*probe_features_offsets.last().ok_or_else(invalid)?)?;
     reader.take(features_bytes_len)?;
 
-    let face_text_offsets = read_offsets(&mut reader, face_count)?;
+    let face_text_offsets = read_deltas(&mut reader, face_count)?;
     let face_text_start = reader.position;
     reader.take(try_usize(*face_text_offsets.last().ok_or_else(invalid)?)?)?;
-    let typography_text_offsets = read_offsets(&mut reader, typography_count)?;
+    let typography_text_offsets = read_deltas(&mut reader, typography_count)?;
     let typography_text_start = reader.position;
     reader.take(try_usize(
         *typography_text_offsets.last().ok_or_else(invalid)?,
     )?)?;
-    let value_style_offsets = read_offsets(&mut reader, value_style_count)?;
+    let value_style_offsets = read_deltas(&mut reader, value_style_count)?;
     let value_style_start = reader.position;
     reader.take(try_usize(*value_style_offsets.last().ok_or_else(invalid)?)?)?;
-    let font_preload_offsets = read_offsets(&mut reader, font_preload_count)?;
+    let font_preload_offsets = read_deltas(&mut reader, font_preload_count)?;
     let font_preload_text_start = reader.position;
     reader.take(try_usize(
         *font_preload_offsets.last().ok_or_else(invalid)?,
     )?)?;
     let revision_text_start = reader.position;
 
+    let metrics = MetricColumns {
+        families_refs: metric_families_start,
+        weights: metric_weights_start,
+        italics: metric_italics_start,
+        role_refs: metric_role_start,
+        face_selection_refs: metric_face_selection_start,
+        pool_refs: metric_pool_start,
+    };
+    let probes = ProbeColumns {
+        text_refs: probe_text_start,
+        advance_refs: probe_advance_refs_start,
+        style_refs: probe_style_refs_start,
+        features_refs: probe_features_refs_start,
+    };
     validate_strings(&string_offsets, string_count, string_bytes_start, bytes)?;
-    validate_sorted_refs(
-        &string_offsets,
-        string_bytes_start,
-        sorted_refs_start,
-        string_count,
-        bytes,
-    )?;
-    validate_metric_rows(
-        metric_rows_start,
+    validate_metric_columns(
+        &metrics,
         metric_count,
         string_count,
         metric_value_pool_count,
         bytes,
     )?;
     validate_metric_value_pool(metric_value_pool_start, metric_value_pool_count, bytes)?;
-    validate_probe_rows(
-        probe_rows_start,
+    validate_probe_columns(
+        &probes,
         probe_count,
         string_count,
         probe_advance_pool_count,
@@ -684,11 +761,11 @@ fn decode_layout(bytes: &[u8]) -> Result<Layout, NamedError> {
         string_count,
         string_offsets,
         string_bytes_start,
-        metric_rows_start,
         metric_count,
+        metrics,
         metric_value_pool_start,
-        probe_rows_start,
         probe_count,
+        probes,
         probe_advance_pool_start,
         probe_style_pool_start,
         probe_features_offsets,
@@ -703,17 +780,20 @@ fn decode_layout(bytes: &[u8]) -> Result<Layout, NamedError> {
     })
 }
 
-fn read_offsets(reader: &mut Reader, count: usize) -> Result<Vec<u32>, NamedError> {
+/// One delta-coded offsets region: `count` u32 deltas summed from an implicit
+/// zero. Any delta sequence decodes monotone; the checked additions keep a
+/// hostile file from wrapping past the u32 range.
+fn read_deltas(reader: &mut Reader, count: usize) -> Result<Vec<u32>, NamedError> {
     let mut offsets = Vec::with_capacity(checked_add(count, 1)?);
-    for _ in 0..=count {
+    offsets.push(0);
+    let mut offset: u32 = 0;
+    for _ in 0..count {
         let mut raw = [0u8; 4];
         raw.copy_from_slice(reader.take(4)?);
-        offsets.push(u32::from_le_bytes(raw));
-    }
-    for pair in offsets.windows(2) {
-        if pair[0] > pair[1] {
-            return Err(invalid());
-        }
+        offset = offset
+            .checked_add(u32::from_le_bytes(raw))
+            .ok_or_else(invalid)?;
+        offsets.push(offset);
     }
     Ok(offsets)
 }
@@ -745,52 +825,40 @@ fn validate_strings(
     Ok(())
 }
 
-/// The sorted-ref region must order refs strictly by content: the runtime's
-/// string-to-ref binary search relies on the ordering.
-fn validate_sorted_refs(
-    offsets: &[u32],
-    string_bytes_start: usize,
-    sorted_refs_start: usize,
-    count: usize,
+fn metric_key_at(
     bytes: &[u8],
-) -> Result<(), NamedError> {
-    let mut previous: Option<&[u8]> = None;
-    for index in 0..count {
-        let at = checked_add(sorted_refs_start, checked_mul(index, 4)?)?;
-        let reference = read_u32_at(bytes, at)?;
-        let content = string_slice_at(offsets, string_bytes_start, bytes, try_usize(reference)?)?;
-        if let Some(previous) = previous {
-            if previous >= content {
-                return Err(invalid());
-            }
-        }
-        previous = Some(content);
-    }
-    Ok(())
-}
-
-fn metric_key_at(bytes: &[u8], start: usize, index: usize) -> Result<MetricKey, NamedError> {
-    let at = checked_add(start, checked_mul(index, METRIC_ROW_BYTES)?)?;
+    columns: &MetricColumns,
+    index: usize,
+) -> Result<MetricKey, NamedError> {
     Ok(MetricKey {
-        families_ref: read_u32_at(bytes, at)?,
-        weight: read_f64_at(bytes, checked_add(at, 4)?)?,
-        italic: read_u8_at(bytes, checked_add(at, 12)?)?,
-        role_ref: read_u32_at(bytes, checked_add(at, 13)?)?,
-        face_selection_ref: read_u32_at(bytes, checked_add(at, 17)?)?,
+        families_ref: read_u32_at(
+            bytes,
+            checked_add(columns.families_refs, checked_mul(index, 4)?)?,
+        )?,
+        weight: read_f64_at(bytes, checked_add(columns.weights, checked_mul(index, 8)?)?)?,
+        italic: read_u8_at(bytes, checked_add(columns.italics, index)?)?,
+        role_ref: read_u32_at(
+            bytes,
+            checked_add(columns.role_refs, checked_mul(index, 4)?)?,
+        )?,
+        face_selection_ref: read_u32_at(
+            bytes,
+            checked_add(columns.face_selection_refs, checked_mul(index, 4)?)?,
+        )?,
     })
 }
 
-fn validate_metric_rows(
-    start: usize,
+fn validate_metric_columns(
+    columns: &MetricColumns,
     count: usize,
     string_count: usize,
     value_pool_count: usize,
     bytes: &[u8],
 ) -> Result<(), NamedError> {
     for index in 0..count {
-        let key = metric_key_at(bytes, start, index)?;
+        let key = metric_key_at(bytes, columns, index)?;
         if index > 0 {
-            let previous = metric_key_at(bytes, start, index - 1)?;
+            let previous = metric_key_at(bytes, columns, index - 1)?;
             if previous.order(&key) != Ordering::Less {
                 return Err(invalid());
             }
@@ -806,10 +874,7 @@ fn validate_metric_rows(
         }
         let pool_ref = read_u32_at(
             bytes,
-            checked_add(
-                checked_add(start, checked_mul(index, METRIC_ROW_BYTES)?)?,
-                21,
-            )?,
+            checked_add(columns.pool_refs, checked_mul(index, 4)?)?,
         )?;
         if try_usize(pool_ref)? >= value_pool_count {
             return Err(invalid());
@@ -837,8 +902,8 @@ fn validate_metric_value_pool(start: usize, count: usize, bytes: &[u8]) -> Resul
     Ok(())
 }
 
-fn validate_probe_rows(
-    start: usize,
+fn validate_probe_columns(
+    columns: &ProbeColumns,
     count: usize,
     string_count: usize,
     advance_count: usize,
@@ -847,17 +912,33 @@ fn validate_probe_rows(
     bytes: &[u8],
 ) -> Result<(), NamedError> {
     for index in 0..count {
-        let at = checked_add(start, checked_mul(index, PROBE_ROW_BYTES)?)?;
-        let limits = [
-            (read_u32_at(bytes, at)?, string_count),
-            (read_u32_at(bytes, checked_add(at, 4)?)?, advance_count),
-            (read_u32_at(bytes, checked_add(at, 8)?)?, style_count),
-            (read_u32_at(bytes, checked_add(at, 12)?)?, features_count),
-        ];
-        for (reference, limit) in limits {
-            if try_usize(reference)? >= limit {
-                return Err(invalid());
-            }
+        let text_ref = read_u32_at(
+            bytes,
+            checked_add(columns.text_refs, checked_mul(index, 4)?)?,
+        )?;
+        if try_usize(text_ref)? >= string_count {
+            return Err(invalid());
+        }
+        let advance_ref = read_u16_at(
+            bytes,
+            checked_add(columns.advance_refs, checked_mul(index, 2)?)?,
+        )?;
+        if usize::from(advance_ref) >= advance_count {
+            return Err(invalid());
+        }
+        let style_ref = read_u16_at(
+            bytes,
+            checked_add(columns.style_refs, checked_mul(index, 2)?)?,
+        )?;
+        if usize::from(style_ref) >= style_count {
+            return Err(invalid());
+        }
+        let features_ref = read_u16_at(
+            bytes,
+            checked_add(columns.features_refs, checked_mul(index, 2)?)?,
+        )?;
+        if usize::from(features_ref) >= features_count {
+            return Err(invalid());
         }
     }
     Ok(())
@@ -989,32 +1070,37 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedTable, NamedError> {
 
     let mut metrics: Vec<Json> = Vec::with_capacity(layout.metric_count);
     for index in 0..layout.metric_count {
-        let at = checked_add(
-            layout.metric_rows_start,
-            checked_mul(index, METRIC_ROW_BYTES)?,
+        let families_ref = read_u32_at(
+            bytes,
+            checked_add(layout.metrics.families_refs, checked_mul(index, 4)?)?,
+        )?;
+        let weight = read_f64_at(
+            bytes,
+            checked_add(layout.metrics.weights, checked_mul(index, 8)?)?,
+        )?;
+        let italic = read_u8_at(bytes, checked_add(layout.metrics.italics, index)?)?;
+        let role_ref = read_u32_at(
+            bytes,
+            checked_add(layout.metrics.role_refs, checked_mul(index, 4)?)?,
+        )?;
+        let face_selection_ref = read_u32_at(
+            bytes,
+            checked_add(layout.metrics.face_selection_refs, checked_mul(index, 4)?)?,
+        )?;
+        let pool_ref = read_u32_at(
+            bytes,
+            checked_add(layout.metrics.pool_refs, checked_mul(index, 4)?)?,
         )?;
         let pool_at = checked_add(
             layout.metric_value_pool_start,
-            checked_mul(
-                try_usize(read_u32_at(bytes, checked_add(at, 21)?)?)?,
-                METRIC_POOL_ROW_BYTES,
-            )?,
+            checked_mul(try_usize(pool_ref)?, METRIC_POOL_ROW_BYTES)?,
         )?;
         let mut values: Vec<Json> = Vec::with_capacity(10);
-        values.push(Json::Num(f64::from(read_u32_at(bytes, at)?)));
-        values.push(Json::Num(read_f64_at(bytes, checked_add(at, 4)?)?));
-        values.push(Json::Num(f64::from(read_u8_at(
-            bytes,
-            checked_add(at, 12)?,
-        )?)));
-        values.push(Json::Num(f64::from(read_u32_at(
-            bytes,
-            checked_add(at, 13)?,
-        )?)));
-        values.push(Json::Num(f64::from(read_u32_at(
-            bytes,
-            checked_add(at, 17)?,
-        )?)));
+        values.push(Json::Num(f64::from(families_ref)));
+        values.push(Json::Num(weight));
+        values.push(Json::Num(f64::from(italic)));
+        values.push(Json::Num(f64::from(role_ref)));
+        values.push(Json::Num(f64::from(face_selection_ref)));
         for slot in 0..5 {
             let bits = read_f64_at(bytes, checked_add(pool_at, checked_mul(slot, 8)?)?)?.to_bits();
             if bits == f64::NAN.to_bits() {
@@ -1028,37 +1114,44 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedTable, NamedError> {
 
     let mut probes: Vec<Json> = Vec::with_capacity(layout.probe_count);
     for index in 0..layout.probe_count {
-        let at = checked_add(
-            layout.probe_rows_start,
-            checked_mul(index, PROBE_ROW_BYTES)?,
+        let text_ref = read_u32_at(
+            bytes,
+            checked_add(layout.probes.text_refs, checked_mul(index, 4)?)?,
         )?;
-        let text_ref = read_u32_at(bytes, at)?;
+        let advance_ref = read_u16_at(
+            bytes,
+            checked_add(layout.probes.advance_refs, checked_mul(index, 2)?)?,
+        )?;
+        let style_ref = read_u16_at(
+            bytes,
+            checked_add(layout.probes.style_refs, checked_mul(index, 2)?)?,
+        )?;
+        let features_pool_ref = read_u16_at(
+            bytes,
+            checked_add(layout.probes.features_refs, checked_mul(index, 2)?)?,
+        )?;
         let advance = read_f64_at(
             bytes,
             checked_add(
                 layout.probe_advance_pool_start,
-                checked_mul(try_usize(read_u32_at(bytes, checked_add(at, 4)?)?)?, 8)?,
+                checked_mul(usize::from(advance_ref), 8)?,
             )?,
         )?;
         let style_at = checked_add(
             layout.probe_style_pool_start,
-            checked_mul(
-                try_usize(read_u32_at(bytes, checked_add(at, 8)?)?)?,
-                PROBE_STYLE_ROW_BYTES,
-            )?,
+            checked_mul(usize::from(style_ref), PROBE_STYLE_ROW_BYTES)?,
         )?;
-        let features_pool_ref = read_u32_at(bytes, checked_add(at, 12)?)?;
         let features_row = {
             let from = try_usize(
                 *layout
                     .probe_features_offsets
-                    .get(try_usize(features_pool_ref)?)
+                    .get(usize::from(features_pool_ref))
                     .ok_or_else(invalid)?,
             )?;
             let to = try_usize(
                 *layout
                     .probe_features_offsets
-                    .get(checked_add(try_usize(features_pool_ref)?, 1)?)
+                    .get(checked_add(usize::from(features_pool_ref), 1)?)
                     .ok_or_else(invalid)?,
             )?;
             bytes
@@ -1344,7 +1437,7 @@ mod tests {
     }
 
     #[test]
-    fn swapped_sorted_refs_fail_validation() {
+    fn inflated_string_delta_fails_validation() {
         let mut tables = SnapshotTables::new();
         tables
             .absorb_prepared(&Json::Arr(vec![absorbing_entry()]))
@@ -1352,22 +1445,26 @@ mod tests {
         let bytes = encode(&tables).expect("encodes");
         let layout = decode_layout(&bytes).expect("layout");
         assert!(layout.string_count >= 2, "fixture interned strings");
-        // sortedRefs begin right after the string bytes.
-        let sorted_start = checked_add(
-            layout.string_bytes_start,
-            try_usize(*layout.string_offsets.last().expect("offsets")).expect("len"),
-        )
-        .expect("offset");
-        let mut swapped = bytes.clone();
-        let a = read_u32_at(&swapped, sorted_start).expect("ref");
-        let b = read_u32_at(&swapped, checked_add(sorted_start, 4).expect("offset")).expect("ref");
-        swapped[sorted_start..sorted_start + 4].copy_from_slice(&b.to_le_bytes());
-        swapped[sorted_start + 4..sorted_start + 8].copy_from_slice(&a.to_le_bytes());
-        let error = match decode_layout(&swapped) {
-            Ok(_) => panic!("unordered refs rejected"),
+        // The string deltas begin right after the header; inflating one delta
+        // pushes the prefix sum past the bytes the file holds.
+        let deltas_start = 8 + checked_mul(HEADER_U32_COUNT, 4).expect("header");
+        let mut inflated = bytes.clone();
+        let at = checked_add(deltas_start, 4).expect("offset");
+        inflated[at] = 0xff;
+        inflated[checked_add(at, 1).expect("offset")] = 0xff;
+        inflated[checked_add(at, 2).expect("offset")] = 0xff;
+        inflated[checked_add(at, 3).expect("offset")] = 0xff;
+        let error = match decode_layout(&inflated) {
+            Ok(_) => panic!("inflated delta rejected"),
             Err(error) => error,
         };
         assert_eq!(error.0, "SnapshotTableBinaryInvalid");
+    }
+
+    fn swap_span(bytes: &mut [u8], first: usize, second: usize, len: usize) {
+        for byte in 0..len {
+            bytes.swap(first + byte, second + byte);
+        }
     }
 
     #[test]
@@ -1381,13 +1478,45 @@ mod tests {
         if layout.metric_count < 2 {
             return;
         }
-        // Swap the two metric rows; the strict-order validation must trip.
-        for byte in 0..METRIC_ROW_BYTES {
-            let first = checked_add(layout.metric_rows_start, byte).expect("offset");
-            let second =
-                checked_add(layout.metric_rows_start, METRIC_ROW_BYTES + byte).expect("offset");
-            bytes.swap(first, second);
-        }
+        // Swap the two metric rows across every column; the strict-order
+        // validation must trip.
+        let columns = &layout.metrics;
+        swap_span(
+            &mut bytes,
+            columns.families_refs,
+            checked_add(columns.families_refs, 4).expect("offset"),
+            4,
+        );
+        swap_span(
+            &mut bytes,
+            columns.weights,
+            checked_add(columns.weights, 8).expect("offset"),
+            8,
+        );
+        swap_span(
+            &mut bytes,
+            columns.italics,
+            checked_add(columns.italics, 1).expect("offset"),
+            1,
+        );
+        swap_span(
+            &mut bytes,
+            columns.role_refs,
+            checked_add(columns.role_refs, 4).expect("offset"),
+            4,
+        );
+        swap_span(
+            &mut bytes,
+            columns.face_selection_refs,
+            checked_add(columns.face_selection_refs, 4).expect("offset"),
+            4,
+        );
+        swap_span(
+            &mut bytes,
+            columns.pool_refs,
+            checked_add(columns.pool_refs, 4).expect("offset"),
+            4,
+        );
         let error = match decode_layout(&bytes) {
             Ok(_) => panic!("unsorted metrics rejected"),
             Err(error) => error,
