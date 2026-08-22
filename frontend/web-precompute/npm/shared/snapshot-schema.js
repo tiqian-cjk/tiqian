@@ -1,10 +1,16 @@
 export const SNAPSHOT_SCHEMA = 1;
+export const SNAPSHOT_TABLES_SCHEMA = 2;
 export const LAYOUT_REVISION = "tiqian-layout-v2";
 export const RENDER_REVISION = "prebroken-dom-v15";
 export const FONT_SOURCE_POLICY = "host-compatible-stylesheet-v1";
 export const FONT_BACKEND_REVISION = "tiqian-shared-harfbuzz-v5";
 export const FONT_REPLAY_REVISION = "tiqian-server-shaping-replay-v1";
 export const FONT_REPLAY_TRANSPORT = "shared-strings-v1";
+
+/** The manifest schema this runtime build reads: station tables. */
+export function readableSnapshotSchema(schema) {
+  return schema === SNAPSHOT_TABLES_SCHEMA;
+}
 
 export function shapeReplayKey(
   displayText,
