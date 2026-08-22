@@ -148,6 +148,28 @@ test("a tampered store copy demotes to the content path", { skip: precompute ===
   precomputer.close();
 });
 
+test("prefill lanes queue work the render lanes then resolve", { skip: precompute === null }, async () => {
+  assert.ok(precompute);
+  assert.ok(persistence);
+  const options = cjkPrecomputerOptions();
+  if (options === null) return;
+  const precomputer = await precompute.createPrecomputer(options);
+  const cache = persistence.createPersistentCache(precomputer, memoryStore());
+  // The background egress queues without waiting; the render lane over the
+  // same content then resolves through the pool and matches the JSON lane.
+  assert.equal(cache.prefillSnapshots(SNAPSHOTS), SNAPSHOTS.length);
+  const rendered = await cache.renderSnapshots(SNAPSHOTS);
+  assert.deepEqual(rendered, await precomputer.prepareParagraphs([...SNAPSHOTS]));
+  assert.equal(cache.prefillContracts([{ key: "fc-0", text: "字体样本段落" }]), 1);
+  assert.deepEqual(
+    await cache.renderContracts([{ key: "fc-0", text: "字体样本段落" }]),
+    await precomputer.prepareFontContracts([{ key: "fc-0", text: "字体样本段落" }]),
+  );
+  const written = await cache.flush();
+  assert.equal(written, SNAPSHOTS.length + 1);
+  precomputer.close();
+});
+
 test("addresses stay apart across typography contexts", { skip: precompute === null }, async () => {
   assert.ok(precompute);
   assert.ok(persistence);

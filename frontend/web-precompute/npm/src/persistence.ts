@@ -49,6 +49,15 @@ export interface PersistentCache {
   renderSnapshots(inputs: readonly SnapshotParagraphInput[]): Promise<PreparedEntry[]>;
   /** The contract form of {@link PersistentCache.renderSnapshots}. */
   renderContracts(inputs: readonly FontContractInput[]): Promise<PreparedEntry[]>;
+  /**
+   * The background egress of {@link PersistentCache.renderSnapshots}: queues
+   * every item at the back of the render pool and returns once queued, so a
+   * host can warm content ahead of the waiting lanes. Failures surface when
+   * the same content arrives through a waiting lane.
+   */
+  prefillSnapshots(inputs: readonly SnapshotParagraphInput[]): number;
+  /** The contract form of {@link PersistentCache.prefillSnapshots}. */
+  prefillContracts(inputs: readonly FontContractInput[]): number;
   /** Persists the buffered writes; returns the record count written. */
   flush(): Promise<number>;
 }
@@ -202,6 +211,12 @@ export function createPersistentCache(
     },
     async renderContracts(inputs: readonly FontContractInput[]): Promise<PreparedEntry[]> {
       return renderLane(inputs, KIND_CONTRACT);
+    },
+    prefillSnapshots(inputs: readonly SnapshotParagraphInput[]): number {
+      return bridge.prefillContents(inputs.map((input) => submissionItem(input, KIND_SNAPSHOT)));
+    },
+    prefillContracts(inputs: readonly FontContractInput[]): number {
+      return bridge.prefillContents(inputs.map((input) => submissionItem(input, KIND_CONTRACT)));
     },
     async flush(): Promise<number> {
       const records = bridge.drainWrites();
