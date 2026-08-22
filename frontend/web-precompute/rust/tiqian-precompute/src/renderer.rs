@@ -141,11 +141,11 @@ fn pool_worker_loop() {
             let mut state = crate::parallel::recover(job.state.lock());
             *state = outcome;
         }
-        job.signal.notify_all();
-        // The in-flight entry leaves the map at completion, so submitters
-        // during execution attach to this job instead of queueing duplicate
-        // work; a dedup attach after completion reads the outcome and moves
-        // on without parking.
+        // The in-flight entry leaves the map before the completion signal, so
+        // a woken waiter that resubmits the same key queues fresh work instead
+        // of attaching to this finished job. Submitters during execution still
+        // attach; a dedup attach racing the removal reads the outcome and
+        // moves on without parking.
         if let Some(key) = key {
             let mut state = crate::parallel::recover(global_pool().state.lock());
             if state
@@ -156,6 +156,7 @@ fn pool_worker_loop() {
                 state.keyed.remove(&key);
             }
         }
+        job.signal.notify_all();
         global_pool().completed.fetch_add(1, Ordering::Relaxed);
     }
 }
