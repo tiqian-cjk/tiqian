@@ -23,12 +23,14 @@ use std::sync::Arc;
 
 use crate::precomputer::{create_precomputer, Precomputer, PrecomputerOptions, PrepareInput};
 use crate::snapshot_bundle::{
-    render_font_contract_bundle, render_snapshot_bundle, SnapshotBundle, SnapshotBundleOptions,
+    assemble_font_contract_bundle, assemble_snapshot_bundle, render_font_contract_bundle_data,
+    render_snapshot_bundle_data, SnapshotBundle, SnapshotBundleData, SnapshotBundleOptions,
 };
 use crate::snapshot_source::{
     js_number_value, js_string_value, semantics_json, snapshot_source_artifact_from_dom, DomNode,
     SourceArtifact,
 };
+use crate::snapshot_tables::SnapshotTableFile;
 
 pub const DEFAULT_PARAGRAPH_SELECTOR: &str = "p, li";
 pub const DEFAULT_SKIPPED_ANCESTOR_SELECTOR: &str =
@@ -559,12 +561,15 @@ impl HtmlPreparer {
 
     /// `prepare`: parse the wrapped markup, reconcile the DOM selection
     /// with the source tag scan, then snapshot or contract every remaining
-    /// paragraph. Returns the frozen result object in the js field order.
+    /// paragraph. Returns the frozen result object in the js field order
+    /// plus the station-table file the emitted manifest pins; hosts serve
+    /// the bytes under the sha address and point the root's `tq-tables`
+    /// attribute at that URL.
     pub fn prepare(
         &mut self,
         html: &str,
         options: &HtmlPrepareOptions,
-    ) -> Result<Json, NamedError> {
+    ) -> Result<(Json, Option<SnapshotTableFile>), NamedError> {
         if self.closed {
             return Err(named("HtmlPreparerClosed"));
         }
@@ -775,31 +780,39 @@ impl HtmlPreparer {
             issues.extend(outcome.issues);
         }
 
+        let mut tables_file: Option<SnapshotTableFile> = None;
         let bundle = if !prepared_paragraphs.is_empty() {
-            let contract_array = Json::Arr(font_contracts);
+            let contract_array = Json::Arr(font_contracts.clone());
             let options = SnapshotBundleOptions {
                 id: Some(&id),
                 paragraph_selector: None,
                 font_contract_paragraphs: Some(&contract_array),
                 shared_runtime_style: shared_runtime_style.as_str(),
-                snapshot_tables: None,
             };
-            Some(render_snapshot_bundle(
-                Some(&Json::Arr(prepared_paragraphs)),
+            // The table carries the contract faces too, so the absorb corpus
+            // spans both lanes even though the render input stays the plain
+            // paragraphs.
+            let mut absorb_corpus = prepared_paragraphs.clone();
+            absorb_corpus.extend(font_contracts);
+            let (bundle, file) = split_render(
+                &Json::Arr(absorb_corpus),
+                &Json::Arr(prepared_paragraphs),
                 &options,
-            )?)
+                false,
+            )?;
+            tables_file = Some(file);
+            Some(bundle)
         } else if !font_contracts.is_empty() {
             let options = SnapshotBundleOptions {
                 id: Some(&id),
                 paragraph_selector: None,
                 font_contract_paragraphs: None,
                 shared_runtime_style: shared_runtime_style.as_str(),
-                snapshot_tables: None,
             };
-            Some(render_font_contract_bundle(
-                Some(&Json::Arr(font_contracts)),
-                &options,
-            )?)
+            let contracts = Json::Arr(font_contracts);
+            let (bundle, file) = split_render(&contracts, &contracts, &options, true)?;
+            tables_file = Some(file);
+            Some(bundle)
         } else {
             None
         };
@@ -855,8 +868,34 @@ impl HtmlPreparer {
             ),
             ("issues".to_string(), Json::Arr(issues)),
         ];
-        Ok(Json::Obj(result))
+        Ok((Json::Obj(result), tables_file))
     }
+}
+
+/// The split render behind one `prepare` call: this lane owns the whole
+/// build, so it absorbs its corpus, renders the data phase, freezes the
+/// table, and assembles against the frozen rows. `contract_lane` selects
+/// the font-contract data phase and assembly.
+fn split_render(
+    absorb: &Json,
+    corpus: &Json,
+    options: &SnapshotBundleOptions,
+    contract_lane: bool,
+) -> Result<(SnapshotBundle, SnapshotTableFile), NamedError> {
+    let mut tables = crate::snapshot_tables::SnapshotTables::new();
+    tables.absorb_prepared(absorb)?;
+    let data: SnapshotBundleData = if contract_lane {
+        render_font_contract_bundle_data(Some(corpus), options, &mut tables)?
+    } else {
+        render_snapshot_bundle_data(Some(corpus), options, &mut tables)?
+    };
+    let file = tables.finalize()?;
+    let bundle = if contract_lane {
+        assemble_font_contract_bundle(&data, options, &tables)?
+    } else {
+        assemble_snapshot_bundle(&data, options, &tables)?
+    };
+    Ok((bundle, file))
 }
 
 /// One `{ index, key, stage, issue }` issues row.

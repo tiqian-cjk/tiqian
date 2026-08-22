@@ -88,8 +88,8 @@ impl SnapshotTables {
         self.frozen_file.as_ref().map(|file| file.sha256.as_str())
     }
 
-    /// Absorbs the font evidence of one batch of prepared entries. The walk is
-    /// the schema-1 compaction walk: same gates, same row encodings, so a
+    /// Absorbs the font evidence of one batch of prepared entries. The walk
+    /// shares its gates and row encodings with the manifest compaction, so a
     /// later render against the frozen table resolves every reference.
     pub fn absorb_prepared(&mut self, prepared: &Json) -> Result<usize, NamedError> {
         if self.frozen() {
@@ -178,7 +178,7 @@ impl SnapshotTables {
     }
 
     /// Absorbs one canonical metric row: keyed dedup with the same conflict
-    /// gate as the per-manifest compaction, the row compacted through the
+    /// gate as the manifest compaction, the row compacted through the
     /// snapshot string table so its indexes match the render-side rows.
     fn absorb_metric(&mut self, metric: &Json) -> Result<(), NamedError> {
         let key = match field(metric, "key") {

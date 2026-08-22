@@ -13,6 +13,7 @@ import type {
   NormalizedTypography,
   PreparedEntry,
   PreparedParagraph,
+  SnapshotBundle,
   SnapshotTypography,
 } from "../src/precompute.js";
 
@@ -118,13 +119,25 @@ function fixturePlan(text: string) {
   };
 }
 
+/** A probe row the binary table can encode: every column is required. */
+interface FixtureProbe {
+  text: string;
+  advancePx: number;
+  fontSizePx: number;
+  fontWeight: number;
+  italic: boolean;
+  script: string;
+  language: string;
+  features: never[];
+}
+
 interface FixtureFace {
   faceId: string;
   sourceOrder: number;
   family: string;
   publicUrl: string;
   coverageText: string;
-  probe: { text: string };
+  probe: FixtureProbe;
 }
 
 interface FixtureEvidence {
@@ -194,6 +207,38 @@ function assertPrepared(entry: PreparedEntry): PreparedBranch {
   return entry;
 }
 
+/**
+ * One split render over its own table set: absorb the corpus plus any
+ * contract paragraphs, run the data phase, freeze, assemble. The corpus of
+ * every bundle must pass through the same absorb (ADR 0052 schema 2).
+ */
+function assembledBundle(
+  corpus: readonly PreparedEntry[],
+  options: { id: string; fontContract?: boolean; fontContractParagraphs?: readonly PreparedEntry[] },
+): SnapshotBundle {
+  assert.ok(precompute);
+  const tables = precompute.createSnapshotTables();
+  const contracts = options.fontContractParagraphs ?? [];
+  precompute.absorbSnapshotTables(tables, [...corpus, ...contracts]);
+  const data = options.fontContract
+    ? precompute.renderFontContractBundleData(corpus, {
+      id: options.id,
+      ...(contracts.length > 0 ? { fontContractParagraphs: contracts } : {}),
+      snapshotTables: tables,
+    })
+    : precompute.renderSnapshotBundleData(corpus, {
+      id: options.id,
+      ...(contracts.length > 0 ? { fontContractParagraphs: contracts } : {}),
+      snapshotTables: tables,
+    });
+  precompute.finalizeSnapshotTables(tables);
+  const bundle = options.fontContract
+    ? precompute.assembleFontContractBundle(data, tables)
+    : precompute.assembleSnapshotBundle(data, tables);
+  precompute.closeSnapshotTables(tables);
+  return bundle;
+}
+
 test("v1 plain-text snapshots reject scripts whose browser shaping cannot be replayed exactly", { skip: precompute === null }, () => {
   assert.ok(precompute);
   assert.equal(precompute.snapshotPlainTextIssue("中文 Latin 123，。"), null);
@@ -208,9 +253,10 @@ test("v1 plain-text snapshots reject scripts whose browser shaping cannot be rep
 
 test("snapshot template keeps the prepared DOM inert and Pagefind-ignored", { skip: precompute === null }, () => {
   assert.ok(precompute);
-  const template = precompute.renderSnapshotTemplate([fixturePrepared({ key: "p-1", text: "正文" })], {
+  const bundle = assembledBundle([fixturePrepared({ key: "p-1", text: "正文" })], {
     id: "tq-page",
   });
+  const template = bundle.template;
   assert.match(template, /^<template /);
   assert.match(template, /data-pagefind-ignore/);
   assert.match(template, /data-tq-snapshot-manifest/);
@@ -222,7 +268,7 @@ test("snapshot template keeps the prepared DOM inert and Pagefind-ignored", { sk
 test("snapshot bundle exposes compact SSR artifacts without inline geometry", { skip: precompute === null }, () => {
   assert.ok(precompute);
   const prepared = fixturePrepared({ key: "p-1", text: "正文" });
-  const bundle = precompute.renderSnapshotBundle([prepared], { id: "tq-page" });
+  const bundle = assembledBundle([prepared], { id: "tq-page" });
 
   assert.equal(bundle.id, "tq-page");
   assert.equal(bundle.entries.length, 1);
@@ -260,26 +306,40 @@ test("snapshot bundle exposes compact SSR artifacts without inline geometry", { 
         ...fixtureEvidence("正文", "/fonts/fixture-deadbeef.woff2").faces[0],
         publicUrl: "/fonts/below-fold-deadbeef.woff2",
         coverageText: "后文",
-        probe: { text: "后" },
+        // The binary table encodes every probe column, so the replacement
+        // probe carries the full row.
+        probe: {
+          text: "后",
+          advancePx: 16,
+          fontSizePx: 16,
+          fontWeight: 400,
+          italic: false,
+          script: "hani",
+          language: "ZH",
+          features: [],
+        },
       }],
     },
   };
-  const boundedPreloads = precompute.renderSnapshotBundle([prepared, laterFace], {
-    id: "tq-page-two",
-  });
+  const boundedPreloads = assembledBundle([prepared, laterFace], { id: "tq-page-two" });
   assert.deepEqual(boundedPreloads.fontPreloads, []);
 
-  const semanticContract = precompute.renderSnapshotBundle([prepared], {
+  const semanticContract = assembledBundle([prepared], {
     id: "tq-page-semantic",
     fontContractParagraphs: [laterFace],
   });
   assert.equal(semanticContract.entries.length, 1);
   assert.equal(semanticContract.entries[0].key, "p-1");
   assert.match(semanticContract.template, /fontContractEntries/u);
-  assert.match(semanticContract.template, /below-fold-deadbeef/u);
-  assert.match(semanticContract.clientTemplate, /below-fold-deadbeef/u);
+  // Schema 2: face identity lives in the station table, so the below-fold
+  // face surfaces as its own table row instead of a URL in the manifest.
+  assert.match(semanticContract.template, /fontContractEntries":\[\{"key":"p-2"/u);
+  assert.match(semanticContract.template, /\{"faceRef":1,"probeRef":1\}/u);
+  assert.match(semanticContract.template, /"tables":\{"snapshot":"/u);
+  assert.match(semanticContract.clientTemplate, /"faceRef":1,"coverageText":"后文"/u);
+  assert.match(semanticContract.clientTemplate, /"tables":\{"snapshot":"/u);
 
-  const fontContract = precompute.renderFontContractBundle([prepared], { id: "tq-font-contract" });
+  const fontContract = assembledBundle([prepared], { id: "tq-font-contract", fontContract: true });
   assert.deepEqual(fontContract.entries, []);
   assert.deepEqual(fontContract.rootAttributes, {});
   assert.equal(fontContract.template, fontContract.clientTemplate);
@@ -293,35 +353,28 @@ test("snapshot bundle exposes compact SSR artifacts without inline geometry", { 
 test("snapshot renderers reject invalid corpora and template ids by name", { skip: precompute === null }, () => {
   assert.ok(precompute);
   const prepared = fixturePrepared({ key: "p-1", text: "正文" });
-  assert.throws(
-    () => precompute.renderSnapshotBundle([], { id: "tq-page" }),
-    /MissingPreparedParagraphs/u,
-  );
-  assert.throws(
-    () => precompute.renderSnapshotBundle([prepared], { id: "" }),
-    /MissingSnapshotTemplateId/u,
-  );
-  assert.throws(
-    () => precompute.renderSnapshotBundle([prepared], { id: "1x" }),
-    /InvalidSnapshotTemplateId/u,
-  );
-  assert.throws(
-    () => precompute.renderSnapshotBundle([prepared, prepared], { id: "tq-page" }),
-    /DuplicateSnapshotKey/u,
-  );
+  // The corpus and id gates run in the data phase, before any table freeze.
+  const tables = precompute.createSnapshotTables();
+  const data = (corpus: readonly PreparedEntry[], id: string, selector?: string) =>
+    precompute.renderSnapshotBundleData(corpus, {
+      id,
+      ...(selector !== undefined ? { paragraphSelector: selector as ":is(p, li)[data-tq-snapshot-key]" } : {}),
+      snapshotTables: tables,
+    });
+  assert.throws(() => data([], "tq-page"), /MissingPreparedParagraphs/u);
+  assert.throws(() => data([prepared], ""), /MissingSnapshotTemplateId/u);
+  assert.throws(() => data([prepared], "1x"), /InvalidSnapshotTemplateId/u);
+  assert.throws(() => data([prepared, prepared], "tq-page"), /DuplicateSnapshotKey/u);
   const stale: PreparedBranch = { ...prepared, renderRevision: "prebroken-dom-v0" };
   assert.throws(
-    () => precompute.renderSnapshotTemplate([stale], { id: "tq-stale" }),
+    () => data([stale], "tq-stale"),
     /SnapshotTemplateContainsStalePreparedParagraph/u,
   );
-  const selector = ".paragraph[data-tq-snapshot-key]";
   assert.throws(
-    () => precompute.renderSnapshotTemplate([prepared], {
-      id: "tq-custom-selector",
-      paragraphSelector: selector as ":is(p, li)[data-tq-snapshot-key]",
-    }),
+    () => data([prepared], "tq-custom-selector", ".paragraph[data-tq-snapshot-key]"),
     /UnsupportedSnapshotParagraphSelector/u,
   );
+  precompute.closeSnapshotTables(tables);
 });
 
 test("split render assembles per-article bundles against one frozen table", { skip: precompute === null }, () => {

@@ -6,9 +6,10 @@
 //! `ERROR:<message>` for throws), recorded when the lane still ran the js
 //! oracle and matched byte for byte. Regenerate with
 //! `TIQIAN_UPDATE_GOLDEN=1 cargo test --test precompute_html_parity` after
-//! reviewing the diff. The one exempt engine-identity field,
-//! `fontEvidence.harfbuzzVersion`, is rewritten to a placeholder before the
-//! byte comparison, so the dump stays valid across engine upgrades.
+//! reviewing the diff. Two engine-identity values are rewritten to
+//! placeholders before the byte comparison: `fontEvidence.harfbuzzVersion`,
+//! and the station-table sha each manifest pins, because the table bytes
+//! embed the HarfBuzz version. The dump stays valid across engine upgrades.
 //! The engine archive must be linked.
 //!
 //! The matrix sticks to inputs where linkedom and html5ever built the same
@@ -183,9 +184,15 @@ fn plan_json(font_path: &str) -> Json {
     ])
 }
 
-fn dump_line(name: &str, result: Result<Json, String>) -> String {
+fn dump_line(name: &str, result: Result<(Json, Option<String>), String>) -> String {
     match result {
-        Ok(entry) => format!("{name}\t{}", stable_stringify(&entry)),
+        Ok((entry, table_sha)) => {
+            let mut line = format!("{name}\t{}", stable_stringify(&entry));
+            if let Some(sha) = table_sha {
+                line = line.replace(&sha, "<tables-sha>");
+            }
+            line
+        }
         Err(message) => format!("{name}\t{message}"),
     }
 }
@@ -298,7 +305,8 @@ fn run_rust_side(font_bytes: &[u8], plan: &Json) -> Vec<String> {
         };
         let result = main
             .prepare(&html, &options)
-            .map_err(|error| format!("ERROR:{}", error.0));
+            .map_err(|error| format!("ERROR:{}", error.0))
+            .map(|(value, tables)| (value, tables.map(|file| file.sha256)));
         lines.push(dump_line(&name, result));
     }
 
@@ -346,7 +354,8 @@ fn run_rust_side(font_bytes: &[u8], plan: &Json) -> Vec<String> {
         };
         let result = projecting
             .prepare(&html, &options)
-            .map_err(|error| format!("ERROR:{}", error.0));
+            .map_err(|error| format!("ERROR:{}", error.0))
+            .map(|(value, tables)| (value, tables.map(|file| file.sha256)));
         lines.push(dump_line(&name, result));
     }
     projecting.close();

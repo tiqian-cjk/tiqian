@@ -46,18 +46,6 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("closeHtmlPreparer", precompute_calls::close_html_preparer)?;
     cx.export_function("htmlPreparerInfo", precompute_calls::html_preparer_info)?;
     cx.export_function(
-        "renderSnapshotBundle",
-        precompute_calls::render_snapshot_bundle,
-    )?;
-    cx.export_function(
-        "renderFontContractBundle",
-        precompute_calls::render_font_contract_bundle,
-    )?;
-    cx.export_function(
-        "renderSnapshotTemplate",
-        precompute_calls::render_snapshot_template,
-    )?;
-    cx.export_function(
         "renderSnapshotBundleData",
         precompute_calls::render_snapshot_bundle_data,
     )?;

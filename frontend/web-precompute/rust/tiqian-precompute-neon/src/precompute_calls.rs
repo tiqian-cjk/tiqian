@@ -256,8 +256,10 @@ pub fn create_html_preparer(mut cx: FunctionContext) -> JsResult<JsString> {
 }
 
 /// `prepareHtml(handle, html, optionsJson)`: the whole document in one call;
-/// the paragraph loop stays inside Rust.
-pub fn prepare_html(mut cx: FunctionContext) -> JsResult<JsString> {
+/// the paragraph loop stays inside Rust. Returns `{result, tablesBytes,
+/// tablesSha256}`: the result object as json plus the station-table file the
+/// emitted manifest pins, when the document produced one.
+pub fn prepare_html(mut cx: FunctionContext) -> JsResult<JsObject> {
     let handle = cx.argument::<JsString>(0)?.value(&mut cx);
     let html = cx.argument::<JsString>(1)?.value(&mut cx);
     let options_json = json_argument(&mut cx, 2, "options")?;
@@ -267,11 +269,29 @@ pub fn prepare_html(mut cx: FunctionContext) -> JsResult<JsString> {
             .and_then(|snapshot| member(snapshot, "maxWidthPx")),
     };
     let result = registry::with_preparer(&handle, |preparer| preparer.prepare(&html, &options));
-    match result {
-        Ok(Ok(value)) => Ok(cx.string(value.render())),
-        Ok(Err(error)) => cx.throw_error(error.0),
-        Err(error) => cx.throw_error(error),
+    let (value, tables) = match result {
+        Ok(Ok(prepared)) => prepared,
+        Ok(Err(error)) => return cx.throw_error(error.0),
+        Err(error) => return cx.throw_error(error),
+    };
+    let object = JsObject::new(&mut cx);
+    let result = cx.string(value.render());
+    object.set(&mut cx, "result", result)?;
+    match tables {
+        Some(file) => {
+            let bytes = JsBuffer::from_slice(&mut cx, &file.bytes)?;
+            let sha = cx.string(file.sha256);
+            object.set(&mut cx, "tablesBytes", bytes)?;
+            object.set(&mut cx, "tablesSha256", sha)?;
+        }
+        None => {
+            let empty_bytes = cx.null();
+            object.set(&mut cx, "tablesBytes", empty_bytes)?;
+            let empty_sha = cx.undefined();
+            object.set(&mut cx, "tablesSha256", empty_sha)?;
+        }
     }
+    Ok(object)
 }
 
 /// `closeHtmlPreparer(handle)`: closes the owned precomputer with it; a
@@ -300,82 +320,13 @@ pub fn html_preparer_info(mut cx: FunctionContext) -> JsResult<JsString> {
     }
 }
 
-fn bundle_options<'a>(
-    options: &'a Json,
-    style: &'a str,
-    tables: Option<&'a SnapshotTables>,
-) -> SnapshotBundleOptions<'a> {
+fn bundle_options<'a>(options: &'a Json, style: &'a str) -> SnapshotBundleOptions<'a> {
     SnapshotBundleOptions {
         id: member_str(options, "id"),
         paragraph_selector: member_str(options, "paragraphSelector"),
         font_contract_paragraphs: member(options, "fontContractParagraphs")
             .filter(|value| !matches!(value, Json::Null)),
         shared_runtime_style: style,
-        snapshot_tables: tables,
-    }
-}
-
-/// Resolves the `snapshotTables` option: absent keeps the self-contained
-/// schema-1 manifest, a handle renders against the frozen table rows.
-fn run_bundle_call<T>(
-    options_json: &Json,
-    style: &str,
-    render: impl FnOnce(&SnapshotBundleOptions) -> Result<T, NamedError>,
-) -> Result<Result<T, NamedError>, String> {
-    match member_str(options_json, "snapshotTables") {
-        Some(handle) => registry::with_snapshot_tables(handle, |tables| {
-            render(&bundle_options(options_json, style, Some(tables)))
-        }),
-        None => Ok(render(&bundle_options(options_json, style, None))),
-    }
-}
-
-/// `renderSnapshotBundle(preparedParagraphsJson, optionsJson,
-/// sharedRuntimeStyle)`.
-pub fn render_snapshot_bundle(mut cx: FunctionContext) -> JsResult<JsString> {
-    let prepared = json_argument(&mut cx, 0, "preparedParagraphs")?;
-    let options_json = json_argument(&mut cx, 1, "options")?;
-    let style = cx.argument::<JsString>(2)?.value(&mut cx);
-    match run_bundle_call(&options_json, &style, |options| {
-        tiqian_precompute::snapshot_bundle::render_snapshot_bundle(Some(&prepared), options)
-    }) {
-        Ok(Ok(bundle)) => {
-            Ok(cx.string(tiqian_precompute::precompute_html::bundle_json(&bundle).render()))
-        }
-        Ok(Err(error)) => cx.throw_error(error.0),
-        Err(error) => cx.throw_error(error),
-    }
-}
-
-/// `renderFontContractBundle(preparedParagraphsJson, optionsJson,
-/// sharedRuntimeStyle)`.
-pub fn render_font_contract_bundle(mut cx: FunctionContext) -> JsResult<JsString> {
-    let prepared = json_argument(&mut cx, 0, "preparedParagraphs")?;
-    let options_json = json_argument(&mut cx, 1, "options")?;
-    let style = cx.argument::<JsString>(2)?.value(&mut cx);
-    match run_bundle_call(&options_json, &style, |options| {
-        tiqian_precompute::snapshot_bundle::render_font_contract_bundle(Some(&prepared), options)
-    }) {
-        Ok(Ok(bundle)) => {
-            Ok(cx.string(tiqian_precompute::precompute_html::bundle_json(&bundle).render()))
-        }
-        Ok(Err(error)) => cx.throw_error(error.0),
-        Err(error) => cx.throw_error(error),
-    }
-}
-
-/// `renderSnapshotTemplate(preparedParagraphsJson, optionsJson,
-/// sharedRuntimeStyle)`: the inert template alone.
-pub fn render_snapshot_template(mut cx: FunctionContext) -> JsResult<JsString> {
-    let prepared = json_argument(&mut cx, 0, "preparedParagraphs")?;
-    let options_json = json_argument(&mut cx, 1, "options")?;
-    let style = cx.argument::<JsString>(2)?.value(&mut cx);
-    match run_bundle_call(&options_json, &style, |options| {
-        tiqian_precompute::snapshot_bundle::render_snapshot_template(Some(&prepared), options)
-    }) {
-        Ok(Ok(template)) => Ok(cx.string(template)),
-        Ok(Err(error)) => cx.throw_error(error.0),
-        Err(error) => cx.throw_error(error),
     }
 }
 
@@ -386,14 +337,14 @@ fn run_data_call(
     style: &str,
     render: impl FnOnce(
         &SnapshotBundleOptions,
-        Option<&mut SnapshotTables>,
+        &mut SnapshotTables,
     ) -> Result<SnapshotBundleData, NamedError>,
 ) -> Result<Result<SnapshotBundleData, NamedError>, String> {
     match member_str(options_json, "snapshotTables") {
         Some(handle) => registry::with_snapshot_tables(handle, |tables| {
-            render(&bundle_options(options_json, style, None), Some(tables))
+            render(&bundle_options(options_json, style), tables)
         }),
-        None => Ok(render(&bundle_options(options_json, style, None), None)),
+        None => Err("SnapshotTablesMissing".to_string()),
     }
 }
 
@@ -402,13 +353,13 @@ fn run_data_call(
 fn run_assemble_call<T>(
     options_json: &Json,
     style: &str,
-    assemble: impl FnOnce(&SnapshotBundleOptions) -> Result<T, NamedError>,
+    assemble: impl FnOnce(&SnapshotBundleOptions, &SnapshotTables) -> Result<T, NamedError>,
 ) -> Result<Result<T, NamedError>, String> {
     match member_str(options_json, "snapshotTables") {
         Some(handle) => registry::with_snapshot_tables(handle, |tables| {
-            assemble(&bundle_options(options_json, style, Some(tables)))
+            assemble(&bundle_options(options_json, style), tables)
         }),
-        None => Ok(assemble(&bundle_options(options_json, style, None))),
+        None => Err("SnapshotTablesMissing".to_string()),
     }
 }
 
@@ -465,8 +416,8 @@ pub fn assemble_snapshot_bundle(mut cx: FunctionContext) -> JsResult<JsString> {
     let data = bundle_argument(&mut cx, 0)?;
     let options_json = json_argument(&mut cx, 1, "options")?;
     let style = cx.argument::<JsString>(2)?.value(&mut cx);
-    match run_assemble_call(&options_json, &style, |options| {
-        tiqian_precompute::snapshot_bundle::assemble_snapshot_bundle(&data, options)
+    match run_assemble_call(&options_json, &style, |options, tables| {
+        tiqian_precompute::snapshot_bundle::assemble_snapshot_bundle(&data, options, tables)
     }) {
         Ok(Ok(bundle)) => {
             Ok(cx.string(tiqian_precompute::precompute_html::bundle_json(&bundle).render()))
@@ -481,8 +432,8 @@ pub fn assemble_font_contract_bundle(mut cx: FunctionContext) -> JsResult<JsStri
     let data = bundle_argument(&mut cx, 0)?;
     let options_json = json_argument(&mut cx, 1, "options")?;
     let style = cx.argument::<JsString>(2)?.value(&mut cx);
-    match run_assemble_call(&options_json, &style, |options| {
-        tiqian_precompute::snapshot_bundle::assemble_font_contract_bundle(&data, options)
+    match run_assemble_call(&options_json, &style, |options, tables| {
+        tiqian_precompute::snapshot_bundle::assemble_font_contract_bundle(&data, options, tables)
     }) {
         Ok(Ok(bundle)) => {
             Ok(cx.string(tiqian_precompute::precompute_html::bundle_json(&bundle).render()))

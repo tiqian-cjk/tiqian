@@ -1,20 +1,19 @@
 //! Snapshot bundle assembly of `buildSnapshotBundle` in `precompute.js`
 //! (ADR 0050). The bundle layer re-renders every prepared paragraph with the
-//! shared `tqv-` value-style classes, compacts the manifest tables, and emits
-//! the inert server template plus the client font-contract template.
+//! shared `tqv-` value-style classes, compacts the manifest against the
+//! station tables, and emits the inert server template plus the client
+//! font-contract template.
 //!
 //! ADR 0052 `BundleLayering` splits the render in two: the data phase
-//! re-renders bodies and may mint value-style rows into mutable snapshot
-//! tables; the assembly phase compacts the manifest against the frozen table,
-//! so every article of one build pins the same content hash. The one-shot
-//! entry points keep the schema-1 behavior with byte-identical templates.
+//! re-renders bodies and mints value-style rows into mutable snapshot
+//! tables; the assembly phase compacts the manifest against the frozen
+//! table, so every article of one build pins the same content hash. The
+//! split is the only render path; manifests are schema 2.
 //!
-//! The js module keeps the three public entry points for Node callers; this
-//! port serves the native precompute package. The shared runtime style stays
-//! a caller parameter so the crate ships without reading package files.
-//! Damage js reports with a raw `TypeError` (a non-array paragraph list)
-//! surfaces with `MissingPreparedParagraphs`; re-render damage keeps the
-//! named issues of the prepared DOM lowering.
+//! The shared runtime style stays a caller parameter so the crate ships
+//! without reading package files. Damage js reports with a raw `TypeError`
+//! (a non-array paragraph list) surfaces with `MissingPreparedParagraphs`;
+//! re-render damage keeps the named issues of the prepared DOM lowering.
 
 use std::collections::HashMap;
 
@@ -28,8 +27,7 @@ use crate::schema::{
     stable_stringify, FONT_SOURCE_POLICY, LAYOUT_REVISION, RENDER_REVISION, SNAPSHOT_SCHEMA,
 };
 use crate::snapshot_manifest::{
-    annotate_missing, compact_snapshot_manifest, compact_snapshot_manifest_with_tables,
-    index_number, key_string_of,
+    annotate_missing, compact_snapshot_manifest_with_tables, index_number, key_string_of,
 };
 use crate::snapshot_source::js_string_value;
 use crate::snapshot_tables::SnapshotTables;
@@ -44,17 +42,14 @@ const DEFAULT_LOCALE: &str = "zh-Hans";
 
 /// Options of the bundle entry points. `None` matches the `??` defaults of
 /// the js signatures; the shared runtime style is a required parameter
-/// because the crate never reads the package stylesheet itself. Snapshot
-/// tables select the schema-2 split render; the one-shot entries reject
-/// them because a build must render every article before it freezes.
+/// because the crate never reads the package stylesheet itself. The tables
+/// travel as call parameters: the data phase owns them mutably, assembly
+/// reads the frozen rows.
 pub struct SnapshotBundleOptions<'a> {
     pub id: Option<&'a str>,
     pub paragraph_selector: Option<&'a str>,
     pub font_contract_paragraphs: Option<&'a Json>,
     pub shared_runtime_style: &'a str,
-    /// Finalized snapshot tables (ADR 0052 schema 2). `None` keeps the
-    /// self-contained schema-1 manifest every current golden pins.
-    pub snapshot_tables: Option<&'a SnapshotTables>,
 }
 
 impl<'a> SnapshotBundleOptions<'a> {
@@ -64,7 +59,6 @@ impl<'a> SnapshotBundleOptions<'a> {
             paragraph_selector: None,
             font_contract_paragraphs: None,
             shared_runtime_style,
-            snapshot_tables: None,
         }
     }
 }
@@ -83,17 +77,15 @@ pub struct SnapshotBundle {
 }
 
 /// The data phase output of one bundle: re-rendered bodies plus everything
-/// assembly needs. Value styles mint in render order; the schema-1 path
-/// keeps the local list, the table path records the table indexes the
-/// classes used so assembly resolves declarations from frozen rows.
+/// assembly needs. Value styles mint into the tables in render order; the
+/// data records the table indexes the classes used so assembly resolves
+/// declarations from frozen rows.
 pub struct SnapshotBundleData {
     pub id: String,
     pub paragraph_selector: String,
     pub render_font_families: Vec<Json>,
     pub rendered_entries: Vec<Json>,
     pub font_contract_entries: Vec<Json>,
-    /// Schema-1 local declarations in first-mint order.
-    pub value_styles: Vec<String>,
     /// Table indexes this bundle's classes used, in first-mint order.
     pub used_value_style_indexes: Vec<usize>,
 }
@@ -128,15 +120,6 @@ impl SnapshotBundleData {
                 "fontContractEntries".to_string(),
                 Json::Arr(self.font_contract_entries.clone()),
             ),
-            (
-                "valueStyles".to_string(),
-                Json::Arr(
-                    self.value_styles
-                        .iter()
-                        .map(|item| Json::str(item.clone()))
-                        .collect(),
-                ),
-            ),
             ("usedValueStyleIndexes".to_string(), Json::Arr(used_indexes)),
         ])
     }
@@ -164,26 +147,20 @@ impl SnapshotBundleData {
             Some(Json::Arr(items)) => items.clone(),
             _ => return Err(invalid()),
         };
-        let mut value_styles: Vec<String> = Vec::new();
-        if let Some(Json::Arr(rows)) = field(value, "valueStyles") {
-            for row in rows {
-                let Json::Str(text) = row else {
-                    return Err(invalid());
-                };
-                value_styles.push(text.clone());
-            }
-        }
         let mut used_value_style_indexes: Vec<usize> = Vec::new();
-        if let Some(Json::Arr(rows)) = field(value, "usedValueStyleIndexes") {
-            for row in rows {
-                let Json::Num(number) = row else {
-                    return Err(invalid());
-                };
-                if number.fract() != 0.0 || *number < 0.0 {
-                    return Err(invalid());
+        match field(value, "usedValueStyleIndexes") {
+            Some(Json::Arr(rows)) => {
+                for row in rows {
+                    let Json::Num(number) = row else {
+                        return Err(invalid());
+                    };
+                    if number.fract() != 0.0 || *number < 0.0 {
+                        return Err(invalid());
+                    }
+                    used_value_style_indexes.push(trunc_sat_usize(*number));
                 }
-                used_value_style_indexes.push(trunc_sat_usize(*number));
             }
+            _ => return Err(invalid()),
         }
         Ok(SnapshotBundleData {
             id,
@@ -191,67 +168,9 @@ impl SnapshotBundleData {
             render_font_families,
             rendered_entries,
             font_contract_entries,
-            value_styles,
             used_value_style_indexes,
         })
     }
-}
-
-/// `renderSnapshotBundle`: the inert prepared-DOM template plus the compact
-/// manifests used by server and client-navigation adapters.
-pub fn render_snapshot_bundle(
-    prepared_paragraphs: Option<&Json>,
-    options: &SnapshotBundleOptions,
-) -> Result<SnapshotBundle, NamedError> {
-    if options.snapshot_tables.is_some() {
-        return Err(named("SnapshotTablesRequireSplitRender"));
-    }
-    let data = render_snapshot_bundle_data_inner(
-        &array_input(prepared_paragraphs)?,
-        &array_input(options.font_contract_paragraphs)?,
-        options,
-        None,
-        PLAIN_PARAGRAPH_SELECTOR,
-    )?;
-    assemble_snapshot_bundle(&data, options)
-}
-
-/// `renderFontContractBundle`: the compact exact-font contract for roots that
-/// keep their semantic source DOM and lay out in the browser.
-pub fn render_font_contract_bundle(
-    prepared_paragraphs: Option<&Json>,
-    options: &SnapshotBundleOptions,
-) -> Result<SnapshotBundle, NamedError> {
-    if options.snapshot_tables.is_some() {
-        return Err(named("SnapshotTablesRequireSplitRender"));
-    }
-    let data = render_snapshot_bundle_data_inner(
-        &array_input(prepared_paragraphs)?,
-        &array_input(options.font_contract_paragraphs)?,
-        options,
-        None,
-        RUNTIME_PARAGRAPH_SELECTOR,
-    )?;
-    assemble_font_contract_bundle(&data, options)
-}
-
-/// `renderSnapshotTemplate`: the inert template alone.
-pub fn render_snapshot_template(
-    prepared_paragraphs: Option<&Json>,
-    options: &SnapshotBundleOptions,
-) -> Result<String, NamedError> {
-    if options.snapshot_tables.is_some() {
-        return Err(named("SnapshotTablesRequireSplitRender"));
-    }
-    render_snapshot_bundle_data_inner(
-        &array_input(prepared_paragraphs)?,
-        &array_input(options.font_contract_paragraphs)?,
-        options,
-        None,
-        PLAIN_PARAGRAPH_SELECTOR,
-    )
-    .and_then(|data| assemble_snapshot_bundle(&data, options))
-    .map(|bundle| bundle.inert_template)
 }
 
 /// The data phase for plain snapshot bundles: mutable tables mint the
@@ -259,7 +178,7 @@ pub fn render_snapshot_template(
 pub fn render_snapshot_bundle_data(
     prepared_paragraphs: Option<&Json>,
     options: &SnapshotBundleOptions,
-    tables: Option<&mut SnapshotTables>,
+    tables: &mut SnapshotTables,
 ) -> Result<SnapshotBundleData, NamedError> {
     render_snapshot_bundle_data_inner(
         &array_input(prepared_paragraphs)?,
@@ -274,7 +193,7 @@ pub fn render_snapshot_bundle_data(
 pub fn render_font_contract_bundle_data(
     prepared_paragraphs: Option<&Json>,
     options: &SnapshotBundleOptions,
-    tables: Option<&mut SnapshotTables>,
+    tables: &mut SnapshotTables,
 ) -> Result<SnapshotBundleData, NamedError> {
     render_snapshot_bundle_data_inner(
         &array_input(prepared_paragraphs)?,
@@ -317,13 +236,12 @@ fn array_input(value: Option<&Json>) -> Result<Vec<Json>, NamedError> {
 }
 
 /// The data phase of `buildSnapshotBundle`: validation gates plus the
-/// re-render that mints value-style classes. `tables` selects where the
-/// classes index: table rows (schema 2) or the local list (schema 1).
+/// re-render that mints value-style classes into the mutable table rows.
 fn render_snapshot_bundle_data_inner(
     entries: &[Json],
     font_contract_entries: &[Json],
     options: &SnapshotBundleOptions,
-    mut tables: Option<&mut SnapshotTables>,
+    tables: &mut SnapshotTables,
     supported_paragraph_selector: &str,
 ) -> Result<SnapshotBundleData, NamedError> {
     let mut corpus: Vec<&Json> = Vec::with_capacity(entries.len() + font_contract_entries.len());
@@ -387,29 +305,16 @@ fn render_snapshot_bundle_data_inner(
         return Err(named("UnsupportedSnapshotParagraphSelector"));
     }
 
-    let mut value_styles: Vec<String> = Vec::new();
-    let mut value_style_indexes: HashMap<String, usize> = HashMap::new();
     let mut used_value_style_indexes: Vec<usize> = Vec::new();
-    let mut class_for: Box<dyn FnMut(&str) -> String + '_> = match tables.as_deref_mut() {
-        Some(table) => Box::new(|declaration: &str| {
-            // Table rows define the class indexes; the data phase records
-            // which rows this bundle used so assembly writes the rules.
-            let index = table.intern_value_style(declaration);
-            if !used_value_style_indexes.contains(&index) {
-                used_value_style_indexes.push(index);
-            }
-            format!("tqv-{}", to_string_36(index))
-        }),
-        None => Box::new(|declaration: &str| {
-            if let Some(&index) = value_style_indexes.get(declaration) {
-                return format!("tqv-{}", to_string_36(index));
-            }
-            let index = value_styles.len();
-            value_styles.push(declaration.to_string());
-            value_style_indexes.insert(declaration.to_string(), index);
-            format!("tqv-{}", to_string_36(index))
-        }),
-    };
+    let mut class_for: Box<dyn FnMut(&str) -> String + '_> = Box::new(|declaration: &str| {
+        // Table rows define the class indexes; the data phase records
+        // which rows this bundle used so assembly writes the rules.
+        let index = tables.intern_value_style(declaration);
+        if !used_value_style_indexes.contains(&index) {
+            used_value_style_indexes.push(index);
+        }
+        format!("tqv-{}", to_string_36(index))
+    });
     let mut rendered_entries: Vec<Json> = Vec::with_capacity(entries.len());
     for entry in entries {
         let plan_json = match field(entry, "plan") {
@@ -459,17 +364,17 @@ fn render_snapshot_bundle_data_inner(
         render_font_families: families.to_vec(),
         rendered_entries,
         font_contract_entries: font_contract_entries.to_vec(),
-        value_styles,
         used_value_style_indexes,
     })
 }
 
-/// The assembly phase: manifest compaction against the frozen table (or the
-/// self-contained schema-1 compaction), templates, and the first-paint
-/// style. Runs after every bundle of one build rendered and the table froze.
+/// The assembly phase: manifest compaction against the frozen table,
+/// templates, and the first-paint style. Runs after every bundle of one
+/// build rendered and the table froze.
 pub fn assemble_snapshot_bundle(
     data: &SnapshotBundleData,
     options: &SnapshotBundleOptions,
+    tables: &SnapshotTables,
 ) -> Result<SnapshotBundle, NamedError> {
     let rendered_pairs: Vec<(String, String)> = data
         .rendered_entries
@@ -487,70 +392,24 @@ pub fn assemble_snapshot_bundle(
     let families = &data.render_font_families;
     let mut corpus_entries = data.rendered_entries.clone();
     corpus_entries.extend(data.font_contract_entries.iter().cloned());
-    let (manifest, client_manifest, manifest_has_local_styles) = match options.snapshot_tables {
-        Some(tables) => {
-            let compact = compact_snapshot_manifest_with_tables(
-                &Json::Arr(corpus_entries),
-                &tables_metadata(data),
-                tables,
-            )?;
-            let manifest = if data.font_contract_entries.is_empty() {
-                compact
-            } else {
-                split_contract_entries(compact, data.rendered_entries.len())
-            };
-            // The schema-2 walk reads the prepared corpus: coverage text and
-            // probes left the compact entries but stay on the source faces.
-            let client = client_font_contract_manifest_with_tables(
-                &data.rendered_entries,
-                &data.font_contract_entries,
-                tables,
-                &manifest,
-            )?;
-            (manifest, client, false)
-        }
-        None => {
-            let value_styles_json = Json::Arr(
-                data.value_styles
-                    .iter()
-                    .map(|item| Json::str(item.clone()))
-                    .collect(),
-            );
-            let metadata = Json::Obj(vec![
-                (
-                    "schema".to_string(),
-                    Json::Num(js_int_to_number(SNAPSHOT_SCHEMA)),
-                ),
-                ("layoutRevision".to_string(), Json::str(LAYOUT_REVISION)),
-                ("renderRevision".to_string(), Json::str(RENDER_REVISION)),
-                (
-                    "fontSourcePolicy".to_string(),
-                    Json::str(FONT_SOURCE_POLICY),
-                ),
-                (
-                    "paragraphSelector".to_string(),
-                    Json::str(data.paragraph_selector.clone()),
-                ),
-                ("valueStyles".to_string(), value_styles_json.clone()),
-                (
-                    "valueStylesSha256".to_string(),
-                    Json::str(sha256_hex(stable_stringify(&value_styles_json).as_bytes())),
-                ),
-                (
-                    "renderFontFamilies".to_string(),
-                    Json::Arr(families.to_vec()),
-                ),
-            ]);
-            let compact = compact_snapshot_manifest(&Json::Arr(corpus_entries), &metadata)?;
-            let manifest = if data.font_contract_entries.is_empty() {
-                compact
-            } else {
-                split_contract_entries(compact, data.rendered_entries.len())
-            };
-            let client = client_font_contract_manifest(&manifest)?;
-            (manifest, client, true)
-        }
+    let compact = compact_snapshot_manifest_with_tables(
+        &Json::Arr(corpus_entries),
+        &tables_metadata(data),
+        tables,
+    )?;
+    let manifest = if data.font_contract_entries.is_empty() {
+        compact
+    } else {
+        split_contract_entries(compact, data.rendered_entries.len())
     };
+    // The schema-2 walk reads the prepared corpus: coverage text and probes
+    // left the compact entries but stay on the source faces.
+    let client_manifest = client_font_contract_manifest_with_tables(
+        &data.rendered_entries,
+        &data.font_contract_entries,
+        tables,
+        &manifest,
+    )?;
     let manifest_json = manifest.render().replace('<', "\\u003c");
 
     let body = rendered_pairs
@@ -592,27 +451,16 @@ data-tq-snapshot-manifest>{}</script></template>",
     // belong in the server-injected first-paint style as well.
     let mut initial_style = String::from(options.shared_runtime_style);
     initial_style.push_str(&exact_render_font_style(&data.id));
-    if manifest_has_local_styles {
-        for (index, declaration) in data.value_styles.iter().enumerate() {
-            initial_style.push_str(&format!(
-                "tiqian-prose[snapshot-ref=\"{}\"] [data-tq-rendered=\"true\"] .tqv-{}{{{}}}",
-                escape_attribute(&data.id),
-                to_string_36(index),
-                declaration,
-            ));
-        }
-    } else if let Some(tables) = options.snapshot_tables {
-        for &index in &data.used_value_style_indexes {
-            let Some(declaration) = tables.value_style_at(index) else {
-                return Err(named("SnapshotTableValueStyleMissing"));
-            };
-            initial_style.push_str(&format!(
-                "tiqian-prose[snapshot-ref=\"{}\"] [data-tq-rendered=\"true\"] .tqv-{}{{{}}}",
-                escape_attribute(&data.id),
-                to_string_36(index),
-                declaration,
-            ));
-        }
+    for &index in &data.used_value_style_indexes {
+        let Some(declaration) = tables.value_style_at(index) else {
+            return Err(named("SnapshotTableValueStyleMissing"));
+        };
+        initial_style.push_str(&format!(
+            "tiqian-prose[snapshot-ref=\"{}\"] [data-tq-rendered=\"true\"] .tqv-{}{{{}}}",
+            escape_attribute(&data.id),
+            to_string_36(index),
+            declaration,
+        ));
     }
     Ok(SnapshotBundle {
         id: data.id.clone(),
@@ -641,12 +489,13 @@ data-tq-snapshot-manifest>{}</script></template>",
 }
 
 /// Assembly of a font-contract bundle: the shared assembly plus the
-/// client-only post-processing of `renderFontContractBundle`.
+/// client-only post-processing of the font-contract lane.
 pub fn assemble_font_contract_bundle(
     data: &SnapshotBundleData,
     options: &SnapshotBundleOptions,
+    tables: &SnapshotTables,
 ) -> Result<SnapshotBundle, NamedError> {
-    let mut bundle = assemble_snapshot_bundle(data, options)?;
+    let mut bundle = assemble_snapshot_bundle(data, options, tables)?;
     bundle.template = bundle.client_template.clone();
     bundle.inert_template = bundle.client_template.clone();
     bundle.initial_style = exact_render_font_style(&bundle.id);
@@ -655,14 +504,11 @@ pub fn assemble_font_contract_bundle(
     Ok(bundle)
 }
 
-/// The metadata spread of the schema-2 compaction: value styles live in the
-/// table and drop out, everything else passes through as in schema 1.
+/// The metadata spread of the compaction: value styles live in the table
+/// and drop out, the compaction owns the schema member, everything else
+/// passes through.
 fn tables_metadata(data: &SnapshotBundleData) -> Json {
     Json::Obj(vec![
-        (
-            "schema".to_string(),
-            Json::Num(js_int_to_number(SNAPSHOT_SCHEMA)),
-        ),
         ("layoutRevision".to_string(), Json::str(LAYOUT_REVISION)),
         ("renderRevision".to_string(), Json::str(RENDER_REVISION)),
         (
@@ -710,152 +556,12 @@ fn split_contract_entries(compact: Json, rendered_count: usize) -> Json {
     Json::Obj(fields)
 }
 
-/// `clientFontContractManifest`: per-face coverage unions and deduped probes
-/// as one compact contract the client can verify its local faces against.
-fn client_font_contract_manifest(manifest: &Json) -> Result<Json, NamedError> {
-    struct Group {
-        face_ref: Json,
-        coverage: Vec<char>,
-        probes: Vec<(Option<String>, Option<Json>)>,
-    }
-    let mut groups: Vec<Group> = Vec::new();
-    let mut group_indexes: HashMap<String, usize> = HashMap::new();
-    let mut sources: Vec<&Json> = Vec::new();
-    if let Some(entries) = arr_of(field(manifest, "entries")) {
-        sources.extend(entries.iter());
-    }
-    if let Some(contract) = arr_of(field(manifest, "fontContractEntries")) {
-        sources.extend(contract.iter());
-    }
-    for entry in sources {
-        for evidence in arr_of(field(entry, "fontFaceEvidence")).unwrap_or(&[]) {
-            let face_ref = field(evidence, "faceRef").cloned().unwrap_or(Json::Null);
-            let group_key = face_ref.render();
-            let index = match group_indexes.get(&group_key) {
-                Some(&index) => index,
-                None => {
-                    groups.push(Group {
-                        coverage: Vec::new(),
-                        face_ref: face_ref.clone(),
-                        probes: Vec::new(),
-                    });
-                    group_indexes.insert(group_key, groups.len() - 1);
-                    groups.len() - 1
-                }
-            };
-            let group = &mut groups[index];
-            let coverage_text = match field(evidence, "coverageText") {
-                Some(Json::Str(text)) if !text.is_empty() => Some(text.clone()),
-                _ => field(evidence, "probe")
-                    .and_then(|probe| field(probe, "text"))
-                    .and_then(|text| match text {
-                        Json::Str(text) if !text.is_empty() => Some(text.clone()),
-                        _ => None,
-                    }),
-            };
-            if let Some(text) = coverage_text {
-                for point in text.chars() {
-                    if !group.coverage.contains(&point) {
-                        group.coverage.push(point);
-                    }
-                }
-            }
-            let probe = field(evidence, "probe").cloned();
-            let signature = probe.as_ref().map(stable_stringify);
-            if !group
-                .probes
-                .iter()
-                .any(|(existing, _)| *existing == signature)
-            {
-                group.probes.push((signature, probe));
-            }
-        }
-    }
-    let mut contract_entries: Vec<Json> = Vec::new();
-    for group in &groups {
-        for (_, probe) in &group.probes {
-            let mut evidence_row = vec![("faceRef".to_string(), group.face_ref.clone())];
-            evidence_row.push((
-                "coverageText".to_string(),
-                Json::str(group.coverage.iter().collect::<String>()),
-            ));
-            if let Some(probe) = probe {
-                evidence_row.push(("probe".to_string(), probe.clone()));
-            }
-            contract_entries.push(Json::Obj(vec![
-                (
-                    "key".to_string(),
-                    Json::str(format!("font-contract-{}", contract_entries.len())),
-                ),
-                ("sourceSha256".to_string(), Json::str("0".repeat(64))),
-                ("typographyRef".to_string(), Json::Num(0.0)),
-                ("maxWidthPx".to_string(), Json::Num(1.0)),
-                (
-                    "fontFaceEvidence".to_string(),
-                    Json::Arr(vec![Json::Obj(evidence_row)]),
-                ),
-                (
-                    "renderArtifactSha256".to_string(),
-                    Json::str("0".repeat(64)),
-                ),
-            ]));
-        }
-    }
-    if contract_entries.is_empty() {
-        return Err(named("SnapshotClientFontContractEmpty"));
-    }
-    // The client manifest drops fontContractEntries, empties the value
-    // styles, replaces the entries, and appends the entry source marker.
-    let empty_styles = Json::Arr(Vec::new());
-    let mut fields: Vec<(String, Json)> = match manifest {
-        Json::Obj(fields) => fields
-            .iter()
-            .filter(|(name, _)| name != "fontContractEntries")
-            .cloned()
-            .collect(),
-        _ => Vec::new(),
-    };
-    let mut present = [false; 3];
-    for (name, value) in fields.iter_mut() {
-        match name.as_str() {
-            "valueStyles" => {
-                *value = empty_styles.clone();
-                present[0] = true;
-            }
-            "valueStylesSha256" => {
-                *value = Json::str(sha256_hex(stable_stringify(&empty_styles).as_bytes()));
-                present[1] = true;
-            }
-            "entries" => {
-                *value = Json::Arr(contract_entries.clone());
-                present[2] = true;
-            }
-            _ => {}
-        }
-    }
-    fields.push(("entrySource".to_string(), Json::str("font-contract-v1")));
-    if !present[0] {
-        fields.push(("valueStyles".to_string(), empty_styles.clone()));
-    }
-    if !present[1] {
-        fields.push((
-            "valueStylesSha256".to_string(),
-            Json::str(sha256_hex(stable_stringify(&empty_styles).as_bytes())),
-        ));
-    }
-    if !present[2] {
-        fields.push(("entries".to_string(), Json::Arr(contract_entries)));
-    }
-    Ok(Json::Obj(fields))
-}
-
-/// `clientFontContractManifest` against finalized snapshot tables (ADR 0052
-/// schema 2): same per-face coverage unions and deduped probes, with faces and
-/// probes resolved through the frozen table. The walk reads the prepared
-/// corpus because coverage text and probes live on the source faces, not on
-/// the compact entries; the entry marker stays the literal the runtime gates
-/// on. A face or probe the absorb pass missed surfaces as a named error that
-/// carries the entry key.
+/// `clientFontContractManifest` against finalized snapshot tables: per-face
+/// coverage unions and deduped probes, with faces and probes resolved through
+/// the frozen table. The walk reads the prepared corpus because coverage text
+/// and probes live on the source faces, not on the compact entries; the entry
+/// marker stays the literal the runtime gates on. A face or probe the absorb
+/// pass missed surfaces as a named error that carries the entry key.
 fn client_font_contract_manifest_with_tables(
     entries: &[Json],
     font_contract_entries: &[Json],
@@ -908,8 +614,7 @@ fn client_font_contract_manifest_with_tables(
                     }
                 }
             }
-            // A probeless face keeps one row without a probe reference,
-            // mirroring the schema-1 contract.
+            // A probeless face keeps one row without a probe reference.
             let probe_index = match field(face, "probe") {
                 Some(probe) => match tables.probe_ref(probe) {
                     Ok(index) => Some(index),
@@ -1080,30 +785,6 @@ mod tests {
     }
 
     #[test]
-    fn one_shot_entries_reject_snapshot_tables() {
-        let tables = SnapshotTables::new();
-        let options = SnapshotBundleOptions {
-            snapshot_tables: Some(&tables),
-            ..SnapshotBundleOptions::new("")
-        };
-        let reject = |error: NamedError| {
-            assert_eq!(error.0, "SnapshotTablesRequireSplitRender");
-        };
-        match render_snapshot_bundle(None, &options) {
-            Ok(_) => panic!("bundle rejects tables"),
-            Err(error) => reject(error),
-        }
-        match render_font_contract_bundle(None, &options) {
-            Ok(_) => panic!("contract rejects tables"),
-            Err(error) => reject(error),
-        }
-        match render_snapshot_template(None, &options) {
-            Ok(_) => panic!("template rejects tables"),
-            Err(error) => reject(error),
-        }
-    }
-
-    #[test]
     fn bundle_data_round_trips_through_its_wire_form() {
         let data = SnapshotBundleData {
             id: "tq-page".to_string(),
@@ -1114,7 +795,6 @@ mod tests {
                 ("html".to_string(), Json::str("<span>p</span>")),
             ])],
             font_contract_entries: Vec::new(),
-            value_styles: vec!["font-weight:600".to_string()],
             used_value_style_indexes: vec![0, 2],
         };
         let wire = data.to_json().render();
@@ -1122,9 +802,11 @@ mod tests {
             .expect("wire form restores");
         assert_eq!(restored.id, "tq-page");
         assert_eq!(restored.paragraph_selector, PLAIN_PARAGRAPH_SELECTOR);
-        assert_eq!(restored.value_styles, vec!["font-weight:600".to_string()]);
         assert_eq!(restored.used_value_style_indexes, vec![0, 2]);
         assert_eq!(restored.rendered_entries.len(), 1);
+        // Value-style declarations live in the table rows; the wire form
+        // carries the used indexes only.
+        assert!(!wire.contains("valueStyles"));
     }
 
     #[test]
@@ -1138,7 +820,6 @@ mod tests {
             ("renderFontFamilies".to_string(), Json::Arr(Vec::new())),
             ("renderedEntries".to_string(), Json::Arr(Vec::new())),
             ("fontContractEntries".to_string(), Json::Arr(Vec::new())),
-            ("valueStyles".to_string(), Json::Arr(Vec::new())),
             (
                 "usedValueStyleIndexes".to_string(),
                 Json::Arr(vec![Json::Num(0.5)]),
@@ -1214,7 +895,7 @@ mod tests {
             client_font_contract_manifest_with_tables(&[first, second], &[], &tables, &manifest)
                 .expect("client contract succeeds");
         // Both entries share one face row; each distinct probe keeps its own
-        // contract entry, as in the schema-1 contract.
+        // contract entry.
         let entries = arr_of(field(&client, "entries")).unwrap_or(&[]);
         assert_eq!(entries.len(), 2);
         let mut probe_refs: Vec<f64> = Vec::new();

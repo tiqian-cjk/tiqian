@@ -53,12 +53,20 @@ export interface PreparedHtmlIssue {
   readonly issue: string;
 }
 
+/** The station-table file one `prepare` call emitted (ADR 0052 schema 2). */
+export interface PreparedHtmlTables {
+  readonly bytes: Buffer;
+  readonly sha256: string;
+}
+
 export interface PreparedHtml {
   readonly html: string;
   readonly rootAttributes: Readonly<Record<string, string>>;
   readonly bundle: SnapshotBundle | null;
   readonly clientBundle: ClientSnapshotBundle | null;
   readonly serverAssets: SnapshotServerAssets | null;
+  /** Hosts serve `bytes` under the sha address; the manifest pins the sha. */
+  readonly tables: PreparedHtmlTables | null;
   readonly issues: readonly PreparedHtmlIssue[];
 }
 
@@ -186,9 +194,18 @@ export async function createHtmlPreparer(options: HtmlPreparerOptions): Promise<
   return Object.freeze({
     typography: Object.freeze(info.typography),
     async prepare(html: string, prepareOptions: HtmlPrepareOptions = {}): Promise<PreparedHtml> {
-      return parse<PreparedHtml>(
-        addon.prepareHtml(handle, String(html), JSON.stringify(prepareOptions ?? {})),
+      const call = addon.prepareHtml(
+        handle,
+        String(html),
+        JSON.stringify(prepareOptions ?? {}),
       );
+      const prepared = parse<PreparedHtml>(call.result);
+      return Object.freeze({
+        ...prepared,
+        tables: call.tablesBytes && call.tablesSha256
+          ? Object.freeze({ bytes: call.tablesBytes, sha256: call.tablesSha256 })
+          : null,
+      });
     },
     close(): void {
       addon.closeHtmlPreparer(handle);

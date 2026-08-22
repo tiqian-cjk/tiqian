@@ -4,6 +4,7 @@
 // both build flavors: a build without the engine archive reports
 // PrecomputeEngineNotLinked from prepare.
 
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -209,6 +210,15 @@ test("whole-document preparation runs in one native call", { skip: precomputeHtm
     "data-tiqian-exact-render-font": "true",
   });
   assert.ok(snapshot.bundle);
+  // Schema 2: the manifest pins a station table the host serves by sha.
+  const tables = snapshot.tables;
+  assert.ok(tables);
+  assert.equal(tables.bytes.subarray(0, 8).toString("latin1"), "TIQTBL03");
+  assert.equal(
+    tables.sha256,
+    createHash("sha256").update(tables.bytes).digest("hex"),
+  );
+  assert.match(snapshot.bundle.template, new RegExp(tables.sha256, "u"));
   const serverAssets = snapshot.serverAssets;
   assert.ok(serverAssets);
   assert.match(serverAssets.inertTemplate, /data-tq-entry="p-0"/u);
@@ -229,6 +239,8 @@ test("whole-document preparation runs in one native call", { skip: precomputeHtm
   assert.ok(contractBundle);
   assert.deepEqual(contractBundle.entries, []);
   assert.match(contractBundle.clientTemplate, /font-contract-v1/u);
+  assert.ok(contractOnly.tables);
+  assert.match(contractBundle.clientTemplate, new RegExp(contractOnly.tables.sha256, "u"));
   preparer.close();
   precomputer.close();
 });

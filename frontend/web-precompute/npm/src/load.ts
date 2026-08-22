@@ -170,24 +170,17 @@ export interface NativeAddon {
     skippedAncestorSelector: string | null,
     sharedRuntimeStyle: string,
   ): string;
-  /** The whole document in one call; the paragraph loop stays inside Rust. */
-  prepareHtml(handle: string, html: string, optionsJson: string): string;
+  /**
+   * The whole document in one call; the paragraph loop stays inside Rust.
+   * Returns the result json plus the station-table file the emitted manifest
+   * pins (`tablesBytes`/`tablesSha256`, or null/undefined without one).
+   */
+  prepareHtml(
+    handle: string,
+    html: string,
+    optionsJson: string,
+  ): { result: string; tablesBytes: Buffer | null; tablesSha256: string | undefined };
   closeHtmlPreparer(handle: string): void;
-  renderSnapshotBundle(
-    preparedParagraphsJson: string,
-    optionsJson: string,
-    sharedRuntimeStyle: string,
-  ): string;
-  renderFontContractBundle(
-    preparedParagraphsJson: string,
-    optionsJson: string,
-    sharedRuntimeStyle: string,
-  ): string;
-  renderSnapshotTemplate(
-    preparedParagraphsJson: string,
-    optionsJson: string,
-    sharedRuntimeStyle: string,
-  ): string;
   /** The split render of ADR 0052 schema 2: data phase, then assembly. */
   renderSnapshotBundleData(
     preparedParagraphsJson: string,

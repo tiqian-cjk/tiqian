@@ -481,12 +481,17 @@ interface BundleOptionsJson {
   id?: string;
   paragraphSelector?: string | null;
   fontContractParagraphs?: PreparedEntry[] | null;
-  snapshotTables?: string | null;
+  snapshotTables: string;
 }
 
 function bundleWireValues(
   preparedParagraphs: readonly PreparedEntry[],
-  options: { id: string; paragraphSelector?: string; fontContractParagraphs?: readonly PreparedEntry[]; snapshotTables?: SnapshotTables },
+  options: {
+    id: string;
+    paragraphSelector?: string;
+    fontContractParagraphs?: readonly PreparedEntry[];
+    snapshotTables: SnapshotTables;
+  },
 ): [string, string] {
   return [
     JSON.stringify(Array.from(preparedParagraphs ?? [])),
@@ -496,7 +501,7 @@ function bundleWireValues(
       fontContractParagraphs: options.fontContractParagraphs
         ? Array.from(options.fontContractParagraphs)
         : null,
-      snapshotTables: options.snapshotTables ? options.snapshotTables.handle : null,
+      snapshotTables: options.snapshotTables.handle,
     } satisfies BundleOptionsJson),
   ];
 }
@@ -509,58 +514,6 @@ function freezeBundle(bundle: SnapshotBundle): SnapshotBundle {
     rootAttributes: Object.freeze({ ...bundle.rootAttributes }),
     entries: Object.freeze(bundle.entries.map((entry) => Object.freeze({ ...entry }))),
   });
-}
-
-/**
- * Produces an inert prepared-DOM template plus the compact manifests used by
- * server and client-navigation adapters. Responsive SSR should inject
- * `inertTemplate` without replacing the keyed source paragraphs; the custom
- * element adopts it only after validating live geometry and font evidence.
- */
-export function renderSnapshotBundle(
-  preparedParagraphs: readonly PreparedEntry[],
-  options: {
-    id: string;
-    paragraphSelector?: ":is(p, li)[data-tq-snapshot-key]";
-    fontContractParagraphs?: readonly PreparedEntry[];
-  },
-): SnapshotBundle {
-  const [preparedJson, optionsJson] = bundleWireValues(preparedParagraphs, options);
-  return freezeBundle(
-    parse<SnapshotBundle>(addon.renderSnapshotBundle(preparedJson, optionsJson, SHARED_RUNTIME_STYLE)),
-  );
-}
-
-/**
- * Build a compact exact-font contract for roots that keep semantic source DOM
- * and perform all paragraph layout in the browser.
- */
-export function renderFontContractBundle(
-  preparedParagraphs: readonly PreparedEntry[],
-  options: {
-    id: string;
-    paragraphSelector?: ":is(p, li):not([data-tiqian-skip])";
-    fontContractParagraphs?: readonly PreparedEntry[];
-  },
-): SnapshotBundle {
-  const [preparedJson, optionsJson] = bundleWireValues(preparedParagraphs, options);
-  return freezeBundle(
-    parse<SnapshotBundle>(
-      addon.renderFontContractBundle(preparedJson, optionsJson, SHARED_RUNTIME_STYLE),
-    ),
-  );
-}
-
-export function renderSnapshotTemplate(
-  preparedParagraphs: readonly PreparedEntry[],
-  options: {
-    id: string;
-    paragraphSelector?: ":is(p, li)[data-tq-snapshot-key]";
-    fontContractParagraphs?: readonly PreparedEntry[];
-  },
-): string {
-  const [preparedJson, optionsJson] = bundleWireValues(preparedParagraphs, options);
-  return addon.renderSnapshotTemplate(preparedJson, optionsJson, SHARED_RUNTIME_STYLE);
 }
 
 /**
