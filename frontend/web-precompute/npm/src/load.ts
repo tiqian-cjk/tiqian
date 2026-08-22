@@ -211,10 +211,10 @@ export interface NativeAddon {
   ): string;
   /** The snapshot-tables lane of one build (ADR 0052 `BundleLayering`). */
   createSnapshotTables(): string;
-  seedSnapshotTables(text: string): string;
+  restoreSnapshotTables(bytes: Buffer): string;
   absorbSnapshotTables(handle: string, preparedJson: string): number;
   absorbSnapshotTablesMetadata(handle: string, metadataJson: string): void;
-  finalizeSnapshotTables(handle: string): string;
+  finalizeSnapshotTables(handle: string): { bytes: Buffer; sha256: string };
   closeSnapshotTables(handle: string): void;
   snapshotPlainTextIssue(text: string): string;
   findHtmlOpeningTags(html: string, tagNamesJson: string): string;

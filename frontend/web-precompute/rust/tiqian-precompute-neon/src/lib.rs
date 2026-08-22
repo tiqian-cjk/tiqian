@@ -81,7 +81,10 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
         "createSnapshotTables",
         precompute_calls::create_snapshot_tables,
     )?;
-    cx.export_function("seedSnapshotTables", precompute_calls::seed_snapshot_tables)?;
+    cx.export_function(
+        "restoreSnapshotTables",
+        precompute_calls::restore_snapshot_tables,
+    )?;
     cx.export_function(
         "absorbSnapshotTables",
         precompute_calls::absorb_snapshot_tables,

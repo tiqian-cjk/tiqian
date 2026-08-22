@@ -5,6 +5,7 @@
 //! paragraph loops stay inside Rust.
 
 use neon::prelude::*;
+use neon::types::buffer::TypedArray;
 
 use tiqian_precompute::build_fonts::StylesheetFace;
 use tiqian_precompute::cache::WriteBudgetTier;
@@ -498,11 +499,11 @@ pub fn create_snapshot_tables(mut cx: FunctionContext) -> JsResult<JsString> {
     Ok(cx.string(handle))
 }
 
-/// `seedSnapshotTables(text)`: restores a previous build's frozen table so an
-/// incremental rebuild appends to the union under one URL.
-pub fn seed_snapshot_tables(mut cx: FunctionContext) -> JsResult<JsString> {
-    let text = cx.argument::<JsString>(0)?.value(&mut cx);
-    match SnapshotTables::from_json(&text) {
+/// `restoreSnapshotTables(bytes)`: restores a previous build's frozen binary
+/// table so an incremental rebuild appends to the union under one URL.
+pub fn restore_snapshot_tables(mut cx: FunctionContext) -> JsResult<JsString> {
+    let bytes = cx.argument::<JsBuffer>(0)?.as_slice(&cx).to_vec();
+    match SnapshotTables::from_binary(&bytes) {
         Ok(tables) => Ok(cx.string(registry::insert_snapshot_tables(tables))),
         Err(error) => cx.throw_error(error.0),
     }
@@ -538,17 +539,19 @@ pub fn absorb_snapshot_tables_metadata(mut cx: FunctionContext) -> JsResult<JsUn
 }
 
 /// `finalizeSnapshotTables(handle)`: freezes the rows and returns
-/// `{json, sha256}`; hosts serve the json verbatim under the sha address.
-pub fn finalize_snapshot_tables(mut cx: FunctionContext) -> JsResult<JsString> {
+/// `{bytes, sha256}`; hosts serve the binary bytes verbatim under the sha
+/// address.
+pub fn finalize_snapshot_tables(mut cx: FunctionContext) -> JsResult<JsObject> {
     let handle = cx.argument::<JsString>(0)?.value(&mut cx);
     match registry::with_snapshot_tables(&handle, |tables| tables.finalize()) {
-        Ok(Ok(file)) => Ok(cx.string(
-            Json::Obj(vec![
-                ("json".to_string(), Json::str(file.json)),
-                ("sha256".to_string(), Json::str(file.sha256)),
-            ])
-            .render(),
-        )),
+        Ok(Ok(file)) => {
+            let buffer = JsBuffer::from_slice(&mut cx, &file.bytes)?;
+            let sha = cx.string(file.sha256);
+            let result = JsObject::new(&mut cx);
+            result.set(&mut cx, "bytes", buffer)?;
+            result.set(&mut cx, "sha256", sha)?;
+            Ok(result)
+        }
         Ok(Err(error)) => cx.throw_error(error.0),
         Err(error) => cx.throw_error(error),
     }

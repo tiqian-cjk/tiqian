@@ -202,7 +202,7 @@ impl ReplayStrings {
         self.strings.len()
     }
 
-    /// One row by index, for seed reconstruction over serialized rows.
+    /// One row by index, for reconstruction over serialized rows.
     pub(crate) fn row_at(&self, index: usize) -> Option<&Json> {
         self.strings.get(index)
     }

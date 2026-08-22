@@ -71,6 +71,17 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function sha256Bytes(value: Buffer): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+// The binary table header: 8 magic bytes then twelve little-endian u32 counts
+// (replay strings, strings, metrics, metric values, probes, probe advances,
+// probe styles, probe features, faces, typographies, value styles, preloads).
+function tableHeaderCounts(bytes: Buffer): number[] {
+  return Array.from({ length: 12 }, (_, index) => bytes.readUInt32LE(8 + index * 4));
+}
+
 function fixturePlan(text: string) {
   return {
     schema: 1,
@@ -125,7 +136,16 @@ function fixtureEvidence(text: string, publicUrl: string): FixtureEvidence {
       family: "Fixture CJK",
       publicUrl,
       coverageText: text,
-      probe: { text: text[0] },
+      probe: {
+        text: text[0],
+        advancePx: 16,
+        fontSizePx: 16,
+        fontWeight: 400,
+        italic: false,
+        script: "hani",
+        language: "ZH",
+        features: [],
+      },
     }],
     replay: {
       revision: "tiqian-server-shaping-replay-v1",
@@ -318,12 +338,12 @@ test("split render assembles per-article bundles against one frozen table", { sk
   );
 
   const file = precompute.finalizeSnapshotTables(tables);
-  assert.equal(file.sha256, sha256(file.json));
-  const parsedTable = JSON.parse(file.json);
-  assert.equal(parsedTable.schema, 2);
+  assert.equal(file.bytes.subarray(0, 8).toString("latin1"), "TIQTBL02");
+  assert.equal(file.sha256, sha256Bytes(file.bytes));
+  const counts = tableHeaderCounts(file.bytes);
   // Both articles share one face row; each distinct probe keeps its own row.
-  assert.equal(parsedTable.faces.length, 1);
-  assert.equal(parsedTable.probes.length, 2);
+  assert.equal(counts[8], 1);
+  assert.equal(counts[4], 2);
 
   const bundleFirst = precompute.assembleSnapshotBundle(dataFirst, tables);
   const bundleSecond = precompute.assembleSnapshotBundle(dataSecond, tables);
@@ -345,20 +365,20 @@ test("split render assembles per-article bundles against one frozen table", { sk
   assert.match(bundleFirst.initialStyle, /snapshot-ref="tq-page-a"/u);
   assert.match(bundleSecond.initialStyle, /snapshot-ref="tq-page-b"/u);
 
-  // A seeded table extends the union under one address across builds.
-  const seeded = precompute.seedSnapshotTables(file.json);
-  precompute.absorbSnapshotTablesMetadata(seeded, { valueStyles: ["font-weight:700"] });
+  // A restored table extends the union under one address across builds.
+  const restored = precompute.restoreSnapshotTables(file.bytes);
+  precompute.absorbSnapshotTablesMetadata(restored, { valueStyles: ["font-weight:700"] });
   const dataThird = precompute.renderSnapshotBundleData([first], {
     id: "tq-page-c",
-    snapshotTables: seeded,
+    snapshotTables: restored,
   });
-  const refile = precompute.finalizeSnapshotTables(seeded);
+  const refile = precompute.finalizeSnapshotTables(restored);
   assert.notEqual(refile.sha256, file.sha256);
-  const bundleThird = precompute.assembleSnapshotBundle(dataThird, seeded);
+  const bundleThird = precompute.assembleSnapshotBundle(dataThird, restored);
   assert.match(bundleThird.initialStyle, /\.tqv-0\{/u);
   assert.match(bundleThird.template, new RegExp(refile.sha256, "u"));
   precompute.closeSnapshotTables(tables);
-  precompute.closeSnapshotTables(seeded);
+  precompute.closeSnapshotTables(restored);
 });
 
 test("split font-contract data assembles into a client-only bundle", { skip: precompute === null }, () => {

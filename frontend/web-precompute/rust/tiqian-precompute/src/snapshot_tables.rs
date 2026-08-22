@@ -12,44 +12,45 @@ use tiqian::NamedError;
 
 use crate::canonical::digest;
 use crate::js_compat::trunc_sat_usize;
-use crate::json::{parse_json, Json};
+use crate::json::Json;
 use crate::replay::metric_replay_key;
-use crate::schema::{stable_stringify, FONT_REPLAY_REVISION, FONT_REPLAY_TRANSPORT};
+use crate::schema::{stable_stringify, FONT_REPLAY_REVISION};
 use crate::snapshot_manifest::{
     arr_of, compact_metric_row, compact_shape_row, face_descriptor, field, key_string_of,
     table_index, truthy, ReplayStrings, StringSink,
 };
+use crate::snapshot_table_binary;
 
 fn named(message: impl Into<String>) -> NamedError {
     NamedError(message.into())
 }
 
-/// The frozen bytes of one snapshot table plus their content hash. `json` is
-/// the canonical rendering hosts serve verbatim; `sha256` is the hex digest of
-/// those bytes, the value article manifests pin.
+/// The frozen bytes of one snapshot table plus their content hash. `bytes` is
+/// the binary rendering (see `snapshot_table_binary`) hosts serve verbatim;
+/// `sha256` is the hex digest of those bytes, the value article manifests pin.
 pub struct SnapshotTableFile {
-    pub json: String,
+    pub bytes: Vec<u8>,
     pub sha256: String,
 }
 
-/// One table set's shared rows. Indexes are append-stable: seeding restores the
-/// previous build's rows so an incremental rebuild keeps serving the union
+/// One table set's shared rows. Indexes are append-stable: a restore rebuilds
+/// the previous build's rows so an incremental rebuild keeps serving the union
 /// table under one URL.
 pub struct SnapshotTables {
     frozen_file: Option<SnapshotTableFile>,
-    typographies: Vec<Json>,
+    pub(crate) typographies: Vec<Json>,
     typography_indexes: HashMap<String, usize>,
-    faces: Vec<Json>,
+    pub(crate) faces: Vec<Json>,
     face_indexes: HashMap<String, usize>,
-    probes: Vec<Json>,
+    pub(crate) probes: Vec<Json>,
     probe_indexes: HashMap<String, usize>,
-    strings: ReplayStrings,
-    metrics: Vec<Json>,
+    pub(crate) strings: ReplayStrings,
+    pub(crate) metrics: Vec<Json>,
     metric_keys: HashMap<String, usize>,
-    value_styles: Vec<String>,
+    pub(crate) value_styles: Vec<String>,
     value_style_indexes: HashMap<String, usize>,
-    backend_revision: Option<Json>,
-    harfbuzz_version: Option<Json>,
+    pub(crate) backend_revision: Option<Json>,
+    pub(crate) harfbuzz_version: Option<Json>,
 }
 
 impl Default for SnapshotTables {
@@ -234,98 +235,54 @@ impl SnapshotTables {
         self.value_styles.get(index).map(String::as_str)
     }
 
-    /// Freezes the table and returns its canonical bytes plus content hash.
+    /// Freezes the table and returns its binary bytes plus content hash.
     /// Freezing again returns the same file; absorbs after the freeze fail.
     pub fn finalize(&mut self) -> Result<SnapshotTableFile, NamedError> {
         if let Some(file) = &self.frozen_file {
             return Ok(SnapshotTableFile {
-                json: file.json.clone(),
+                bytes: file.bytes.clone(),
                 sha256: file.sha256.clone(),
             });
         }
-        let json = stable_stringify(&self.table_json());
-        let sha256 = hex_digest(&digest(json.as_bytes()));
-        let file = SnapshotTableFile { json, sha256 };
+        let bytes = snapshot_table_binary::encode(self)?;
+        let sha256 = hex_digest(&digest(&bytes));
+        let file = SnapshotTableFile { bytes, sha256 };
         self.frozen_file = Some(SnapshotTableFile {
-            json: file.json.clone(),
+            bytes: file.bytes.clone(),
             sha256: file.sha256.clone(),
         });
         Ok(file)
     }
 
-    /// The table content in its fixed field order. The order is part of the
-    /// content hash: adding a field means every snapshot-table URL changes.
-    fn table_json(&self) -> Json {
-        let mut revisions: Vec<(String, Json)> = Vec::new();
-        if let Some(value) = &self.backend_revision {
-            revisions.push(("backendRevision".to_string(), value.clone()));
-        }
-        if let Some(value) = &self.harfbuzz_version {
-            revisions.push(("harfbuzzVersion".to_string(), value.clone()));
-        }
-        revisions.push(("fontReplay".to_string(), Json::str(FONT_REPLAY_REVISION)));
-        revisions.push((
-            "fontReplayTransport".to_string(),
-            Json::str(FONT_REPLAY_TRANSPORT),
-        ));
-        Json::Obj(vec![
-            ("schema".to_string(), Json::Num(2.0)),
-            (
-                "typographies".to_string(),
-                Json::Arr(self.typographies.clone()),
-            ),
-            ("faces".to_string(), Json::Arr(self.faces.clone())),
-            (
-                "valueStyles".to_string(),
-                Json::Arr(
-                    self.value_styles
-                        .iter()
-                        .map(|item| Json::str(item.clone()))
-                        .collect(),
-                ),
-            ),
-            ("fontPreloads".to_string(), self.derived_font_preloads()),
-            ("revisions".to_string(), Json::Obj(revisions)),
-            ("strings".to_string(), Json::Arr(self.strings.rows())),
-            ("probes".to_string(), Json::Arr(self.probes.clone())),
-            ("metrics".to_string(), Json::Arr(self.metrics.clone())),
-        ])
-    }
-
     /// Preload URLs of the table faces, first-seen order. Hosts own their
     /// preload markup; this list is the table-scoped source for the runtime
-    /// wrappers.
-    fn derived_font_preloads(&self) -> Json {
-        let mut urls: Vec<Json> = Vec::new();
+    /// wrappers and the binary table's preload region.
+    pub(crate) fn derived_font_preload_urls(&self) -> Vec<String> {
+        let mut urls: Vec<String> = Vec::new();
         let mut seen: HashMap<String, usize> = HashMap::new();
         for face in &self.faces {
             if let Some(Json::Str(url)) = field(face, "publicUrl") {
                 if !seen.contains_key(url) {
                     seen.insert(url.clone(), urls.len());
-                    urls.push(Json::str(url.clone()));
+                    urls.push(url.clone());
                 }
             }
         }
-        Json::Arr(urls)
+        urls
     }
 
-    /// Rebuilds a table from a previous build's frozen bytes so an incremental
-    /// rebuild appends to the union instead of forking a new table lineage.
-    /// The seeded table is unfrozen and its indexes match the serialized row
-    /// order. `text` is the canonical rendering [`Self::finalize`] produced.
-    pub fn from_json(text: &str) -> Result<Self, NamedError> {
-        let parsed = parse_json(text).map_err(|_| named("SnapshotTableSeedInvalid"))?;
+    /// Rebuilds a table from a previous build's frozen binary bytes so an
+    /// incremental rebuild appends to the union instead of forking a new table
+    /// lineage. The restored table is unfrozen and its indexes match the
+    /// decoded row order, so re-freezing reproduces the same bytes.
+    pub fn from_binary(bytes: &[u8]) -> Result<Self, NamedError> {
+        let decoded = snapshot_table_binary::decode(bytes)?;
         let mut tables = SnapshotTables::new();
-        let rows_of =
-            |value: Option<&Json>| -> Option<Vec<Json>> { arr_of(value).map(|rows| rows.to_vec()) };
-        tables.typographies = rows_of(field(&parsed, "typographies"))
-            .ok_or_else(|| named("SnapshotTableSeedInvalid"))?;
-        tables.faces =
-            rows_of(field(&parsed, "faces")).ok_or_else(|| named("SnapshotTableSeedInvalid"))?;
-        tables.probes =
-            rows_of(field(&parsed, "probes")).ok_or_else(|| named("SnapshotTableSeedInvalid"))?;
-        tables.metrics =
-            rows_of(field(&parsed, "metrics")).ok_or_else(|| named("SnapshotTableSeedInvalid"))?;
+        tables.typographies = decoded.typographies;
+        tables.faces = decoded.faces;
+        tables.probes = decoded.probes;
+        tables.metrics = decoded.metrics;
+        tables.value_styles = decoded.value_styles;
         for (index, row) in tables.typographies.iter().enumerate() {
             tables
                 .typography_indexes
@@ -337,56 +294,44 @@ impl SnapshotTables {
         for (index, row) in tables.probes.iter().enumerate() {
             tables.probe_indexes.insert(stable_stringify(row), index);
         }
-        let strings =
-            rows_of(field(&parsed, "strings")).ok_or_else(|| named("SnapshotTableSeedInvalid"))?;
-        for row in &strings {
-            let Json::Str(_) = row else {
-                return Err(named("SnapshotTableSeedInvalid"));
-            };
-            tables.strings.intern(row)?;
-        }
-        tables.value_styles = match field(&parsed, "valueStyles") {
-            Some(Json::Arr(rows)) => rows
-                .iter()
-                .map(|row| match row {
-                    Json::Str(text) => Ok(text.clone()),
-                    _ => Err(named("SnapshotTableSeedInvalid")),
-                })
-                .collect::<Result<Vec<String>, NamedError>>()?,
-            _ => Vec::new(),
-        };
         for (index, declaration) in tables.value_styles.iter().enumerate() {
             tables
                 .value_style_indexes
                 .insert(declaration.clone(), index);
         }
-        if let Some(revisions) = field(&parsed, "revisions") {
-            tables.backend_revision = field(revisions, "backendRevision").cloned();
-            tables.harfbuzz_version = field(revisions, "harfbuzzVersion").cloned();
+        // Only the leading replay strings feed the string table; the probe
+        // aux strings re-intern through the probe walk on the next encode.
+        for row in decoded.strings.iter().take(decoded.replay_string_count) {
+            tables.strings.intern(row)?;
         }
+        if tables.strings.len() != decoded.replay_string_count {
+            return Err(named("SnapshotTableRestoreInvalid"));
+        }
+        tables.backend_revision = decoded.backend_revision;
+        tables.harfbuzz_version = decoded.harfbuzz_version;
         tables.rebuild_metric_keys()?;
         Ok(tables)
     }
 
     /// Restores the metric key index from compact rows: the key of a row is
     /// the replay key of its leading five columns, so the conflict gate keeps
-    /// working across seeded tables.
+    /// working across restored tables.
     fn rebuild_metric_keys(&mut self) -> Result<(), NamedError> {
         for (index, row) in self.metrics.iter().enumerate() {
             let Json::Arr(values) = row else {
-                return Err(named("SnapshotTableSeedInvalid"));
+                return Err(named("SnapshotTableRestoreInvalid"));
             };
             if values.len() < 5 {
-                return Err(named("SnapshotTableSeedInvalid"));
+                return Err(named("SnapshotTableRestoreInvalid"));
             }
             let string_at = |position: usize| -> Result<String, NamedError> {
                 let Json::Str(text) = self.string_row(values.get(position))? else {
-                    return Err(named("SnapshotTableSeedInvalid"));
+                    return Err(named("SnapshotTableRestoreInvalid"));
                 };
                 Ok(text.clone())
             };
             let Json::Num(weight) = &values[1] else {
-                return Err(named("SnapshotTableSeedInvalid"));
+                return Err(named("SnapshotTableRestoreInvalid"));
             };
             let italic = matches!(&values[2], Json::Num(value) if *value == 1.0);
             let key = metric_replay_key(
@@ -407,14 +352,14 @@ impl SnapshotTables {
             Some(Json::Num(number)) if number.fract() == 0.0 && *number >= 0.0 => {
                 trunc_sat_usize(*number)
             }
-            _ => return Err(named("SnapshotTableSeedInvalid")),
+            _ => return Err(named("SnapshotTableRestoreInvalid")),
         };
         if index >= self.strings.len() {
-            return Err(named("SnapshotTableSeedInvalid"));
+            return Err(named("SnapshotTableRestoreInvalid"));
         }
         match self.strings.row_at(index) {
             Some(row) => Ok(row),
-            None => Err(named("SnapshotTableSeedInvalid")),
+            None => Err(named("SnapshotTableRestoreInvalid")),
         }
     }
 
@@ -566,6 +511,19 @@ mod tests {
         ])
     }
 
+    fn full_probe() -> Json {
+        Json::Obj(vec![
+            ("text".to_string(), Json::str("测")),
+            ("advancePx".to_string(), Json::Num(18.0)),
+            ("fontSizePx".to_string(), Json::Num(18.0)),
+            ("fontWeight".to_string(), Json::Num(400.0)),
+            ("italic".to_string(), Json::Bool(false)),
+            ("script".to_string(), Json::str("hani")),
+            ("language".to_string(), Json::str("ZH")),
+            ("features".to_string(), Json::Arr(Vec::new())),
+        ])
+    }
+
     fn entry(key: &str, text: &str) -> Json {
         Json::Obj(vec![
             ("key".to_string(), Json::str(key)),
@@ -587,13 +545,7 @@ mod tests {
                             ("publicUrl".to_string(), Json::str("/fonts/main.woff2")),
                             ("family".to_string(), Json::str("serif")),
                             ("coverageText".to_string(), Json::str(text)),
-                            (
-                                "probe".to_string(),
-                                Json::Obj(vec![
-                                    ("advancePx".to_string(), Json::Num(18.0)),
-                                    ("fontSizePx".to_string(), Json::Num(18.0)),
-                                ]),
-                            ),
+                            ("probe".to_string(), full_probe()),
                         ])]),
                     ),
                     (
@@ -621,25 +573,13 @@ mod tests {
         assert_eq!(tables.absorb_prepared(&first).expect("absorbs"), 1);
         assert_eq!(tables.absorb_prepared(&second).expect("absorbs"), 1);
         let file = tables.finalize().expect("freezes");
-        let parsed = parse_json(&file.json).expect("renders json");
+        let decoded = snapshot_table_binary::decode(&file.bytes).expect("decodes");
         // Two entries with identical evidence share every row: one face, one
         // probe, one metric row, and the strings both shapes interned.
-        assert!(matches!(
-            crate::snapshot_manifest::field(&parsed, "faces"),
-            Some(Json::Arr(faces)) if faces.len() == 1
-        ));
-        assert!(matches!(
-            crate::snapshot_manifest::field(&parsed, "probes"),
-            Some(Json::Arr(probes)) if probes.len() == 1
-        ));
-        assert!(matches!(
-            crate::snapshot_manifest::field(&parsed, "metrics"),
-            Some(Json::Arr(metrics)) if metrics.len() == 1
-        ));
-        assert!(matches!(
-            crate::snapshot_manifest::field(&parsed, "strings"),
-            Some(Json::Arr(strings)) if strings.len() > 1
-        ));
+        assert_eq!(decoded.faces.len(), 1);
+        assert_eq!(decoded.probes.len(), 1);
+        assert_eq!(decoded.metrics.len(), 1);
+        assert!(decoded.strings.len() > 1);
     }
 
     #[test]
@@ -651,7 +591,7 @@ mod tests {
         let first = tables.finalize().expect("freezes");
         let again = tables.finalize().expect("refreezes");
         assert_eq!(first.sha256, again.sha256);
-        assert_eq!(first.json, again.json);
+        assert_eq!(first.bytes, again.bytes);
         let error = match tables.absorb_prepared(&Json::Arr(vec![entry("p2", "同文")])) {
             Ok(_) => panic!("frozen table rejects absorbs"),
             Err(error) => error,
@@ -725,23 +665,24 @@ mod tests {
     }
 
     #[test]
-    fn seed_restores_rows_and_keeps_the_url_stable() {
+    fn restore_rows_and_keep_the_url_stable() {
         let mut tables = SnapshotTables::new();
         tables
             .absorb_prepared(&Json::Arr(vec![entry("p1", "同文")]))
             .expect("absorbs");
         let file = tables.finalize().expect("freezes");
-        // A seed that appends nothing reproduces the same hash, so the union
-        // table keeps serving under one URL across rebuilds.
-        let mut reseeded = SnapshotTables::from_json(&file.json).expect("seeds");
-        let refile = reseeded.finalize().expect("refreezes");
+        // A restore that appends nothing reproduces the same hash, so the
+        // union table keeps serving under one URL across rebuilds.
+        let mut restored = SnapshotTables::from_binary(&file.bytes).expect("restores");
+        let refile = restored.finalize().expect("refreezes");
         assert_eq!(refile.sha256, file.sha256);
-        // A seed that absorbs a new entry appends rows and changes the hash;
-        // the restored indexes of the old rows stay valid.
-        let mut grown = SnapshotTables::from_json(&file.json).expect("seeds");
+        assert_eq!(refile.bytes, file.bytes);
+        // A restore that absorbs a new entry appends rows and changes the
+        // hash; the indexes of the old rows stay valid.
+        let mut grown = SnapshotTables::from_binary(&file.bytes).expect("restores");
         grown
             .absorb_prepared(&Json::Arr(vec![entry("p3", "异体")]))
-            .expect("absorbs after seed");
+            .expect("absorbs after restore");
         let grown_file = grown.finalize().expect("refreezes");
         assert_ne!(grown_file.sha256, file.sha256);
     }
@@ -871,10 +812,7 @@ mod tests {
         tables
             .absorb_prepared(&Json::Arr(vec![entry("p1", "同文")]))
             .expect("absorbs");
-        let probe = Json::Obj(vec![
-            ("advancePx".to_string(), Json::Num(18.0)),
-            ("fontSizePx".to_string(), Json::Num(18.0)),
-        ]);
+        let probe = full_probe();
         assert_eq!(tables.probe_ref(&probe).expect("resolves"), 0);
         let foreign = Json::Obj(vec![("advancePx".to_string(), Json::Num(19.0))]);
         let error = match tables.probe_ref(&foreign) {

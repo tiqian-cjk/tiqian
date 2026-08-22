@@ -575,7 +575,7 @@ export interface SnapshotTables {
 
 /** The finalized table file a host serves verbatim under its sha address. */
 export interface FinalizedSnapshotTables {
-  readonly json: string;
+  readonly bytes: Buffer;
   readonly sha256: string;
 }
 
@@ -595,8 +595,8 @@ export function createSnapshotTables(): SnapshotTables {
 }
 
 /** Restores a previous build's frozen table so a rebuild extends the union. */
-export function seedSnapshotTables(json: string): SnapshotTables {
-  return { kind: "snapshot-tables", handle: addon.seedSnapshotTables(json) };
+export function restoreSnapshotTables(bytes: Buffer): SnapshotTables {
+  return { kind: "snapshot-tables", handle: addon.restoreSnapshotTables(bytes) };
 }
 
 /**
@@ -620,12 +620,12 @@ export function absorbSnapshotTablesMetadata(
 }
 
 /**
- * Freezes the rows and returns `{json, sha256}`; hosts serve the json
+ * Freezes the rows and returns `{bytes, sha256}`; hosts serve the binary
  * verbatim under the sha address. The handle stays usable for assembly.
  */
 export function finalizeSnapshotTables(tables: SnapshotTables): FinalizedSnapshotTables {
-  const file = parse<FinalizedSnapshotTables>(addon.finalizeSnapshotTables(tables.handle));
-  return Object.freeze(file);
+  const file = addon.finalizeSnapshotTables(tables.handle);
+  return Object.freeze({ bytes: file.bytes, sha256: file.sha256 });
 }
 
 /** Drops the table set once every bundle assembled. */

@@ -43,6 +43,7 @@ pub mod shaping;
 pub mod snapshot_bundle;
 pub mod snapshot_manifest;
 pub mod snapshot_source;
+pub mod snapshot_table_binary;
 pub mod snapshot_tables;
 pub mod source_boundaries;
 pub mod submission;
