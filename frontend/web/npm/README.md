@@ -145,10 +145,12 @@ npm install @tiqian/prose @tiqian/precompute
 
 ```js
 import {
+  absorbSnapshotTables,
+  assembleSnapshotBundle,
   createPrecomputer,
-  renderFontContractBundle,
-  renderSnapshotBundle,
-  renderSnapshotTemplate,
+  createSnapshotTables,
+  finalizeSnapshotTables,
+  renderSnapshotBundleData,
 } from "@tiqian/precompute/precompute";
 
 const precomputer = await createPrecomputer({
@@ -173,47 +175,51 @@ if (paragraph.status !== "prepared") {
   throw new Error(paragraph.issue);
 }
 
-const snapshot = renderSnapshotTemplate([paragraph], { id: "tq-post-snapshot" });
+// 一次构建一组站级表：先吸收全部条目，渲染数据，冻结后拼装。
+const tables = createSnapshotTables();
+absorbSnapshotTables(tables, [paragraph]);
+const data = renderSnapshotBundleData([paragraph], {
+  id: "tq-post-snapshot",
+  snapshotTables: tables,
+});
+const file = finalizeSnapshotTables(tables); // { bytes, sha256 }
+const bundle = assembleSnapshotBundle(data, tables);
 precomputer.close();
 ```
 
 `source` 是构建机上的样式表路径；`publicUrl` 是同一张样式表部署后的地址，用来解析其中的相对
 字体 URL。需要程序化生成字体配置时，可以改用 `faces` 数组（与 `fontStylesheets` 二选一）。
 
-把 `snapshot` 原样写入 SSR HTML 中的 inert template，并让页面正文使用相同的 id 和 paragraph key
-引用它。原始 `<p>` 始终保留，负责无 JavaScript 显示、站内搜索和快照失效后的回退：
+`file.bytes` 是一次构建共享的站级表，按内容哈希命名写入静态目录（例如
+`/tiqian-tables/<sha256>`），页面根元素用 `tq-tables` 属性指向该地址。`bundle.inertTemplate`
+作为 HTML 写入 `<head>`，`bundle.initialStyle` 是 CSS 字符串，需要放进 `<style>`：
 
 ```html
 <head>
-  <!-- renderSnapshotTemplate() 的输出；自带 data-pagefind-ignore -->
+  <style data-tq-initial-snapshot="tq-post-snapshot"><!-- bundle.initialStyle --></style>
+  <!-- bundle.inertTemplate；自带 data-pagefind-ignore -->
 </head>
-<tiqian-prose snapshot-ref="tq-post-snapshot">
+<tiqian-prose snapshot-ref="tq-post-snapshot" tq-tables="/tiqian-tables/<sha256>">
   <p data-tq-snapshot-key="intro">需要预排的正文。</p>
 </tiqian-prose>
 ```
 
-快照以 inert template 的形式进入页面，不改变浏览器的首次绘制。浏览器只在正文内容、版心宽度、
-排版参数和宿主实际选中的字体全部匹配时采用快照；任何一项不匹配都会保留页面原文并在浏览器中
+原始 `<p>` 始终保留，负责无 JavaScript 显示、站内搜索和快照失效后的回退。快照以 inert
+template 的形式进入页面，不改变浏览器的首次绘制。浏览器只在正文内容、版心宽度、排版参数、
+站级表和宿主实际选中的字体全部匹配时采用快照；任何一项不匹配都会保留页面原文并在浏览器中
 重新排版。完整契约见
-[ADR 0040](https://github.com/tiqian-cjk/tiqian/blob/main/docs/adr/0040-build-time-web-font-snapshots.md)。
+[ADR 0040](https://github.com/tiqian-cjk/tiqian/blob/main/docs/adr/0040-build-time-web-font-snapshots.md)
+与
+[ADR 0052](https://github.com/tiqian-cjk/tiqian/blob/main/docs/adr/0052-precompute-cache-and-batch-renderer.md)。
 
-需要同时输出初始样式与客户端导航所需内容时，改用 `renderSnapshotBundle()`。`initialStyle` 是 CSS
-字符串，需要放进 `<style>`；`inertTemplate` 则作为 HTML 写入 `<head>`：
-
-```js
-const bundle = renderSnapshotBundle([paragraph], { id: "tq-post-snapshot" });
-const headHtml =
-  `<style data-tq-initial-snapshot="${bundle.id}">${bundle.initialStyle}</style>` +
-  bundle.inertTemplate;
-```
-
-页面正文仍按前面的例子设置 `snapshot-ref` 与 paragraph key。客户端导航照常传递原始正文 HTML；
-创建新的 `<tiqian-prose>` 前，用 `@tiqian/prose/snapshot-client` 的 `registerSnapshotBundle()` 注册
-bundle 中的客户端数据即可复用快照，不必重复传输整篇预排 HTML。
+客户端导航照常传递原始正文 HTML；创建新的 `<tiqian-prose>` 前，用 `@tiqian/prose/snapshot-client`
+的 `registerSnapshotBundle()` 注册 bundle 中的客户端数据即可复用快照，不必重复传输整篇预排
+HTML。
 
 若正文必须保留原始语义 DOM，并由浏览器完成布局（例如包含链接的富文本），可以在关闭
-precomputer 前用 `prepareFontContract()` 只生成字体与度量证据，再交给
-`renderFontContractBundle()`：
+precomputer 前用 `prepareFontContract()` 只生成字体与度量证据，再走同一条拆分路径，
+数据阶段换用 `renderFontContractBundleData()`，拼装换用 `assembleFontContractBundle()`，
+契约条目同样先进表：
 
 ```js
 const evidence = await precomputer.prepareFontContract({
@@ -224,10 +230,14 @@ if (evidence.status !== "prepared") {
   throw new Error(evidence.issue);
 }
 
-const fontBundle = renderFontContractBundle(
-  [evidence],
-  { id: "tq-post-font-contract" },
-);
+const contractTables = createSnapshotTables();
+absorbSnapshotTables(contractTables, [evidence]);
+const contractData = renderFontContractBundleData([evidence], {
+  id: "tq-post-font-contract",
+  snapshotTables: contractTables,
+});
+finalizeSnapshotTables(contractTables);
+const fontBundle = assembleFontContractBundle(contractData, contractTables);
 ```
 
 `fontBundle` 的注入和客户端注册方式与上面的 `bundle` 相同，`<tiqian-prose>` 仍用
