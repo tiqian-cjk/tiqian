@@ -193,8 +193,9 @@ renderSnapshotBundle 的职责收缩为产出数据，字符串拼装移出为�
 3. **呈现字段**：renderedContent、inert DOM、initialStyle、root 属性，逐根各自所有，
    不进共享表（initialStyle 在 306 篇中逐篇不同，没有可共享内容）。
 
-schema 自 1 升 2：读侧保留一个版本对 schema 1 的支持，写侧只产 schema 2；不经表的整函数
-路径保留，作为自包含回退（见 `TableTransport`）。
+schema 自 1 升 2：读侧保留一个版本对 schema 1 的支持，写侧只产 schema 2。
+renderSnapshotBundle 与 renderFontContractBundle 两个整函数保留，产出的 manifest 自包含
+全部数据，宿主在无表环境使用（见 `TableTransport` 的回退阶梯）。
 
 按附录的字节构成重排，blog3 形态的缓存体积预计约 50 MB，为当前 115.2 MB 的 43%
 左右；HTML 产物里内嵌的 manifest 同步变小。
