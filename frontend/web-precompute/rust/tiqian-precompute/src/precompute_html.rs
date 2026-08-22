@@ -782,6 +782,7 @@ impl HtmlPreparer {
                 paragraph_selector: None,
                 font_contract_paragraphs: Some(&contract_array),
                 shared_runtime_style: shared_runtime_style.as_str(),
+                snapshot_tables: None,
             };
             Some(render_snapshot_bundle(
                 Some(&Json::Arr(prepared_paragraphs)),
@@ -793,6 +794,7 @@ impl HtmlPreparer {
                 paragraph_selector: None,
                 font_contract_paragraphs: None,
                 shared_runtime_style: shared_runtime_style.as_str(),
+                snapshot_tables: None,
             };
             Some(render_font_contract_bundle(
                 Some(&Json::Arr(font_contracts)),

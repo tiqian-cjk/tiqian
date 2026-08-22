@@ -302,6 +302,7 @@ fn bundle_options<'a>(options: &'a Json, style: &'a str) -> SnapshotBundleOption
         font_contract_paragraphs: member(options, "fontContractParagraphs")
             .filter(|value| !matches!(value, Json::Null)),
         shared_runtime_style: style,
+        snapshot_tables: None,
     }
 }
 

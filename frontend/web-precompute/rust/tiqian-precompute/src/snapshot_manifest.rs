@@ -16,8 +16,9 @@ use crate::json::{parse_json, Json};
 use crate::replay::{metric_replay_key, shape_replay_key};
 use crate::schema::{stable_stringify, FONT_REPLAY_REVISION, FONT_REPLAY_TRANSPORT};
 use crate::snapshot_source::js_number_value;
+use crate::snapshot_tables::SnapshotTables;
 
-fn field<'a>(value: &'a Json, key: &str) -> Option<&'a Json> {
+pub(crate) fn field<'a>(value: &'a Json, key: &str) -> Option<&'a Json> {
     match value {
         Json::Obj(fields) => fields.iter().find(|(name, _)| name == key).map(|(_, v)| v),
         _ => None,
@@ -31,7 +32,7 @@ fn fields_of(value: &Json) -> Option<&[(String, Json)]> {
     }
 }
 
-fn arr_of(value: Option<&Json>) -> Option<&[Json]> {
+pub(crate) fn arr_of(value: Option<&Json>) -> Option<&[Json]> {
     match value {
         Some(Json::Arr(items)) => Some(items),
         _ => None,
@@ -43,7 +44,7 @@ fn named(message: impl Into<String>) -> NamedError {
 }
 
 /// js truthiness over a wire value.
-fn truthy(value: &Json) -> bool {
+pub(crate) fn truthy(value: &Json) -> bool {
     match value {
         Json::Null | Json::Bool(false) => false,
         Json::Num(inner) => *inner != 0.0,
@@ -60,12 +61,12 @@ fn is_safe_integer(value: f64) -> bool {
 
 /// A table index on the wire. The index addresses a table this module built,
 /// so the conversion fails only when the table outgrows i64.
-fn index_number(index: usize) -> Result<Json, NamedError> {
+pub(crate) fn index_number(index: usize) -> Result<Json, NamedError> {
     let number = i64::try_from(index).map_err(|_| named("SnapshotManifestIndexConversion"))?;
     Ok(Json::Num(js_int_to_number(number)))
 }
 
-fn key_string_of(value: &Json) -> String {
+pub(crate) fn key_string_of(value: &Json) -> String {
     match field(value, "key") {
         Some(Json::Str(text)) => text.clone(),
         Some(Json::Null) => "null".to_string(),
@@ -84,7 +85,7 @@ fn nullish(value: &Option<Json>) -> bool {
 /// `faceDescriptor`: the shared face identity drops per-paragraph coverage
 /// and probe evidence. Any non-null value without entries spreads to an empty
 /// descriptor, mirroring `Object.entries`.
-fn face_descriptor(face: &Json, entry_key: &str) -> Result<Json, NamedError> {
+pub(crate) fn face_descriptor(face: &Json, entry_key: &str) -> Result<Json, NamedError> {
     let filtered: Vec<(String, Json)> = match face {
         Json::Obj(fields) => fields
             .iter()
@@ -98,7 +99,11 @@ fn face_descriptor(face: &Json, entry_key: &str) -> Result<Json, NamedError> {
 }
 
 /// `tableIndex`: deduplicate by the stable rendering of the whole value.
-fn table_index(table: &mut Vec<Json>, indexes: &mut HashMap<String, usize>, value: Json) -> usize {
+pub(crate) fn table_index(
+    table: &mut Vec<Json>,
+    indexes: &mut HashMap<String, usize>,
+    value: Json,
+) -> usize {
     let signature = stable_stringify(&value);
     if let Some(existing) = indexes.get(&signature) {
         return *existing;
@@ -111,7 +116,7 @@ fn table_index(table: &mut Vec<Json>, indexes: &mut HashMap<String, usize>, valu
 
 /// `replayTableIndex`: replay rows deduplicate by key; a repeated key with a
 /// different payload is a conflict.
-fn replay_table_index(
+pub(crate) fn replay_table_index(
     table: &mut Vec<Json>,
     indexes: &mut HashMap<String, usize>,
     value: &Json,
@@ -147,131 +152,190 @@ fn replay_key_parts(
 }
 
 /// `compactFontReplay`: intern strings and flatten replay rows.
-pub fn compact_font_replay(shapes: &[Json], metrics: &[Json]) -> Result<Json, NamedError> {
-    let mut strings: Vec<Json> = Vec::new();
-    let mut string_indexes: HashMap<String, usize> = HashMap::new();
-    let string_ref = |value: &Json,
-                      strings: &mut Vec<Json>,
-                      indexes: &mut HashMap<String, usize>|
-     -> Result<usize, NamedError> {
+/// The replay-string intern table. Per-manifest compaction owns a local one;
+/// station tables own a process-lifetime one. Both flatten rows through
+/// [`ReplayStrings::intern`] so their string indexes cannot diverge.
+pub(crate) struct ReplayStrings {
+    strings: Vec<Json>,
+    indexes: HashMap<String, usize>,
+}
+
+impl ReplayStrings {
+    pub(crate) fn new() -> Self {
+        ReplayStrings {
+            strings: Vec::new(),
+            indexes: HashMap::new(),
+        }
+    }
+
+    /// `stringRef`: intern one wire string, returning its row index.
+    pub(crate) fn intern(&mut self, value: &Json) -> Result<usize, NamedError> {
         let Json::Str(text) = value else {
             return Err(named("SnapshotFontReplayStringInvalid"));
         };
-        if let Some(existing) = indexes.get(text) {
+        if let Some(existing) = self.indexes.get(text) {
             return Ok(*existing);
         }
-        let index = strings.len();
-        strings.push(value.clone());
-        indexes.insert(text.clone(), index);
+        let index = self.strings.len();
+        self.strings.push(value.clone());
+        self.indexes.insert(text.clone(), index);
         Ok(index)
-    };
+    }
 
+    /// Frozen-table lookup for rendering against finalized station tables: the
+    /// row must already have been interned by an absorb pass.
+    pub(crate) fn find(&self, value: &Json) -> Result<usize, NamedError> {
+        let Json::Str(text) = value else {
+            return Err(named("SnapshotFontReplayStringInvalid"));
+        };
+        match self.indexes.get(text) {
+            Some(existing) => Ok(*existing),
+            None => Err(named("SnapshotTableStringMissing")),
+        }
+    }
+
+    pub(crate) fn rows(&self) -> Vec<Json> {
+        self.strings.clone()
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.strings.len()
+    }
+
+    /// One row by index, for seed reconstruction over serialized rows.
+    pub(crate) fn row_at(&self, index: usize) -> Option<&Json> {
+        self.strings.get(index)
+    }
+}
+
+/// String-resolution mode of one row compaction. Absorb interns new strings
+/// into a mutable table; a render against finalized snapshot tables resolves
+/// every string without growing the table. Both modes build identical rows
+/// because intern is idempotent over the same values.
+pub(crate) enum StringSink<'a> {
+    Absorb(&'a mut ReplayStrings),
+    Frozen(&'a ReplayStrings),
+}
+
+impl StringSink<'_> {
+    fn resolve(&mut self, value: &Json) -> Result<usize, NamedError> {
+        match self {
+            StringSink::Absorb(table) => table.intern(value),
+            StringSink::Frozen(table) => table.find(value),
+        }
+    }
+}
+
+/// Flattens one canonical shape into its compact row, resolving every string
+/// through `sink`. Shared by the per-manifest encoding and the snapshot tables.
+pub(crate) fn compact_shape_row(item: &Json, sink: &mut StringSink) -> Result<Json, NamedError> {
+    let result = match field(item, "result") {
+        Some(result) if truthy(result) => result,
+        _ => return Err(named("SnapshotFontReplayShapeInvalid")),
+    };
+    let Some(Json::Str(key)) = field(item, "key") else {
+        return Err(named("SnapshotFontReplayShapeInvalid"));
+    };
+    let (Some(Json::Arr(features)), Some(Json::Arr(glyphs))) =
+        (field(result, "features"), field(result, "glyphs"))
+    else {
+        return Err(named("SnapshotFontReplayShapeInvalid"));
+    };
+    let parts = replay_key_parts(key, 7, "SnapshotFontReplayShapeKeyInvalid")?;
+    let mut glyphs_flat = Vec::with_capacity(glyphs.len() * 8);
+    for glyph in glyphs {
+        let glyph_fields: &[(String, Json)] = match glyph {
+            Json::Obj(fields) => fields,
+            Json::Arr(_) => &[],
+            _ => return Err(named("SnapshotFontReplayGlyphInvalid")),
+        };
+        let lookup = |name: &str| {
+            glyph_fields
+                .iter()
+                .find(|(key, _)| key == name)
+                .map(|(_, value)| value)
+        };
+        let bounds: Vec<Json> = match lookup("boundsEm") {
+            None | Some(Json::Null) => vec![Json::Null; 4],
+            Some(Json::Arr(values)) if values.len() == 4 => values.clone(),
+            _ => return Err(named("SnapshotFontReplayGlyphBoundsInvalid")),
+        };
+        for name in ["id", "advanceEm", "xEm", "yEm"] {
+            glyphs_flat.push(lookup(name).cloned().unwrap_or(Json::Null));
+        }
+        glyphs_flat.extend(bounds);
+    }
+    let part = |index: usize| parts.get(index).cloned().unwrap_or(Json::Null);
+    let mut row = vec![
+        index_number(sink.resolve(&part(0))?)?,
+        index_number(sink.resolve(&part(1))?)?,
+        part(2),
+        Json::Num(f64::from(u8::from(truthy(&part(3))))),
+        index_number(sink.resolve(&part(4))?)?,
+        index_number(sink.resolve(&part(5))?)?,
+        index_number(sink.resolve(&part(6))?)?,
+        index_number(sink.resolve(field(result, "faceId").unwrap_or(&Json::Null))?)?,
+        index_number(sink.resolve(field(result, "fontInstanceId").unwrap_or(&Json::Null))?)?,
+        index_number(sink.resolve(field(result, "script").unwrap_or(&Json::Null))?)?,
+    ];
+    row.push(Json::Arr(
+        features
+            .iter()
+            .map(|feature| sink.resolve(feature).and_then(index_number))
+            .collect::<Result<Vec<_>, _>>()?,
+    ));
+    row.push(
+        field(result, "unsafeBreakCount")
+            .cloned()
+            .unwrap_or(Json::Null),
+    );
+    row.push(field(result, "advanceEm").cloned().unwrap_or(Json::Null));
+    row.push(Json::Arr(glyphs_flat));
+    Ok(Json::Arr(row))
+}
+
+/// Flattens one canonical metric into its compact row, resolving every string
+/// through `sink`.
+pub(crate) fn compact_metric_row(item: &Json, sink: &mut StringSink) -> Result<Json, NamedError> {
+    let Some(Json::Str(key)) = field(item, "key") else {
+        return Err(named("SnapshotFontReplayMetricsInvalid"));
+    };
+    let values = arr_of(field(item, "valuesEm"))
+        .filter(|values| values.len() == 5)
+        .ok_or_else(|| named("SnapshotFontReplayMetricsInvalid"))?;
+    let parts = replay_key_parts(key, 5, "SnapshotFontReplayMetricsKeyInvalid")?;
+    let part = |index: usize| parts.get(index).cloned().unwrap_or(Json::Null);
+    let mut row = vec![
+        index_number(sink.resolve(&part(0))?)?,
+        part(1),
+        Json::Num(f64::from(u8::from(truthy(&part(2))))),
+        index_number(sink.resolve(&part(3))?)?,
+        index_number(sink.resolve(&part(4))?)?,
+    ];
+    row.extend(values.iter().cloned());
+    Ok(Json::Arr(row))
+}
+
+pub fn compact_font_replay(shapes: &[Json], metrics: &[Json]) -> Result<Json, NamedError> {
+    let mut strings = ReplayStrings::new();
     let mut compact_shapes = Vec::with_capacity(shapes.len());
     for item in shapes {
-        let result = match field(item, "result") {
-            Some(result) if truthy(result) => result,
-            _ => return Err(named("SnapshotFontReplayShapeInvalid")),
-        };
-        let Some(Json::Str(key)) = field(item, "key") else {
-            return Err(named("SnapshotFontReplayShapeInvalid"));
-        };
-        let (Some(Json::Arr(features)), Some(Json::Arr(glyphs))) =
-            (field(result, "features"), field(result, "glyphs"))
-        else {
-            return Err(named("SnapshotFontReplayShapeInvalid"));
-        };
-        let parts = replay_key_parts(key, 7, "SnapshotFontReplayShapeKeyInvalid")?;
-        let mut glyphs_flat = Vec::with_capacity(glyphs.len() * 8);
-        for glyph in glyphs {
-            let glyph_fields: &[(String, Json)] = match glyph {
-                Json::Obj(fields) => fields,
-                Json::Arr(_) => &[],
-                _ => return Err(named("SnapshotFontReplayGlyphInvalid")),
-            };
-            let lookup = |name: &str| {
-                glyph_fields
-                    .iter()
-                    .find(|(key, _)| key == name)
-                    .map(|(_, value)| value)
-            };
-            let bounds: Vec<Json> = match lookup("boundsEm") {
-                None | Some(Json::Null) => vec![Json::Null; 4],
-                Some(Json::Arr(values)) if values.len() == 4 => values.clone(),
-                _ => return Err(named("SnapshotFontReplayGlyphBoundsInvalid")),
-            };
-            for name in ["id", "advanceEm", "xEm", "yEm"] {
-                glyphs_flat.push(lookup(name).cloned().unwrap_or(Json::Null));
-            }
-            glyphs_flat.extend(bounds);
-        }
-        let part = |index: usize| parts.get(index).cloned().unwrap_or(Json::Null);
-        let mut row = vec![
-            index_number(string_ref(&part(0), &mut strings, &mut string_indexes)?)?,
-            index_number(string_ref(&part(1), &mut strings, &mut string_indexes)?)?,
-            part(2),
-            Json::Num(f64::from(u8::from(truthy(&part(3))))),
-            index_number(string_ref(&part(4), &mut strings, &mut string_indexes)?)?,
-            index_number(string_ref(&part(5), &mut strings, &mut string_indexes)?)?,
-            index_number(string_ref(&part(6), &mut strings, &mut string_indexes)?)?,
-            index_number(string_ref(
-                field(result, "faceId").unwrap_or(&Json::Null),
-                &mut strings,
-                &mut string_indexes,
-            )?)?,
-            index_number(string_ref(
-                field(result, "fontInstanceId").unwrap_or(&Json::Null),
-                &mut strings,
-                &mut string_indexes,
-            )?)?,
-            index_number(string_ref(
-                field(result, "script").unwrap_or(&Json::Null),
-                &mut strings,
-                &mut string_indexes,
-            )?)?,
-        ];
-        row.push(Json::Arr(
-            features
-                .iter()
-                .map(|feature| {
-                    string_ref(feature, &mut strings, &mut string_indexes).and_then(index_number)
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-        ));
-        row.push(
-            field(result, "unsafeBreakCount")
-                .cloned()
-                .unwrap_or(Json::Null),
-        );
-        row.push(field(result, "advanceEm").cloned().unwrap_or(Json::Null));
-        row.push(Json::Arr(glyphs_flat));
-        compact_shapes.push(Json::Arr(row));
+        compact_shapes.push(compact_shape_row(
+            item,
+            &mut StringSink::Absorb(&mut strings),
+        )?);
     }
-
     let mut compact_metrics = Vec::with_capacity(metrics.len());
     for item in metrics {
-        let Some(Json::Str(key)) = field(item, "key") else {
-            return Err(named("SnapshotFontReplayMetricsInvalid"));
-        };
-        let values = arr_of(field(item, "valuesEm"))
-            .filter(|values| values.len() == 5)
-            .ok_or_else(|| named("SnapshotFontReplayMetricsInvalid"))?;
-        let parts = replay_key_parts(key, 5, "SnapshotFontReplayMetricsKeyInvalid")?;
-        let part = |index: usize| parts.get(index).cloned().unwrap_or(Json::Null);
-        let mut row = vec![
-            index_number(string_ref(&part(0), &mut strings, &mut string_indexes)?)?,
-            part(1),
-            Json::Num(f64::from(u8::from(truthy(&part(2))))),
-            index_number(string_ref(&part(3), &mut strings, &mut string_indexes)?)?,
-            index_number(string_ref(&part(4), &mut strings, &mut string_indexes)?)?,
-        ];
-        row.extend(values.iter().cloned());
-        compact_metrics.push(Json::Arr(row));
+        compact_metrics.push(compact_metric_row(
+            item,
+            &mut StringSink::Absorb(&mut strings),
+        )?);
     }
-
     Ok(Json::Obj(vec![
         ("revision".to_string(), Json::str(FONT_REPLAY_REVISION)),
         ("encoding".to_string(), Json::str(FONT_REPLAY_TRANSPORT)),
-        ("strings".to_string(), Json::Arr(strings)),
+        ("strings".to_string(), Json::Arr(strings.rows())),
         ("shapes".to_string(), Json::Arr(compact_shapes)),
         ("metrics".to_string(), Json::Arr(compact_metrics)),
     ]))
@@ -630,6 +694,165 @@ pub fn compact_snapshot_manifest(entries: &Json, metadata: &Json) -> Result<Json
     ));
     output.push(("entries".to_string(), Json::Arr(compact_entries)));
     Ok(Json::Obj(output))
+}
+
+/// `compactSnapshotManifest` against finalized snapshot tables (ADR 0052
+/// schema 2, 「篇级 manifest」): entries resolve typography, face, probe, and
+/// replay-string references into the table by index, shape rows stay
+/// per-article, metric rows live only in the table, and the manifest pins the
+/// table's content hash. The value styles live in the table and drop out of
+/// the metadata spread. Entry validation mirrors the schema-1 walk; the two
+/// must gate identically because a build may emit either form.
+pub fn compact_snapshot_manifest_with_tables(
+    entries: &Json,
+    metadata: &Json,
+    tables: &SnapshotTables,
+) -> Result<Json, NamedError> {
+    let Some(table_sha) = tables.sha256() else {
+        return Err(named("SnapshotTablesNotFinalized"));
+    };
+    let entry_list =
+        arr_of(Some(entries)).ok_or_else(|| named("SnapshotFontEvidenceInvalid:undefined"))?;
+    let mut output: Vec<(String, Json)> = fields_of(metadata)
+        .map(|fields| {
+            fields
+                .iter()
+                .filter(|(name, _)| name != "valueStyles" && name != "valueStylesSha256")
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    output.push(("schema".to_string(), Json::Num(2.0)));
+    output.push((
+        "tables".to_string(),
+        Json::Obj(vec![("snapshot".to_string(), Json::str(table_sha))]),
+    ));
+
+    let mut replay_shapes: Vec<Json> = Vec::new();
+    let mut replay_shape_indexes: HashMap<String, usize> = HashMap::new();
+    let mut compact_shapes: Vec<Json> = Vec::new();
+    let mut compact_entries = Vec::with_capacity(entry_list.len());
+    for entry in entry_list {
+        let entry_key = key_string_of(entry);
+        let evidence = field(entry, "fontEvidence");
+        let faces_list = evidence.and_then(|value| arr_of(field(value, "faces")));
+        let evidence_ok =
+            evidence.is_some_and(truthy) && faces_list.is_some_and(|list| !list.is_empty());
+        if !evidence_ok {
+            return Err(named(format!("SnapshotFontEvidenceInvalid:{entry_key}")));
+        }
+        let (Some(evidence), Some(faces_list)) = (evidence, faces_list) else {
+            return Err(named(format!("SnapshotFontEvidenceInvalid:{entry_key}")));
+        };
+        let replay = field(evidence, "replay");
+        let replay_ok = replay.is_some_and(|value| {
+            field(value, "revision") == Some(&Json::str(FONT_REPLAY_REVISION))
+                && arr_of(field(value, "shapes")).is_some()
+                && arr_of(field(value, "metrics")).is_some()
+        });
+        if !replay_ok {
+            return Err(named(format!("SnapshotFontReplayInvalid:{entry_key}")));
+        }
+        let Some(replay) = replay else {
+            return Err(named(format!("SnapshotFontReplayInvalid:{entry_key}")));
+        };
+        let (Some(shapes), Some(metrics)) = (
+            arr_of(field(replay, "shapes")),
+            arr_of(field(replay, "metrics")),
+        ) else {
+            return Err(named(format!("SnapshotFontReplayInvalid:{entry_key}")));
+        };
+        for shape in shapes {
+            let fresh_key = match field(shape, "key") {
+                Some(Json::Str(text)) if !text.is_empty() => {
+                    !replay_shape_indexes.contains_key(text)
+                }
+                _ => false,
+            };
+            replay_table_index(
+                &mut replay_shapes,
+                &mut replay_shape_indexes,
+                shape,
+                "SnapshotFontReplayShapeConflict",
+            )?;
+            if fresh_key {
+                let row = compact_shape_row(shape, &mut StringSink::Frozen(tables.strings()))
+                    .map_err(|error| annotate_missing(error, &entry_key))?;
+                compact_shapes.push(row);
+            }
+        }
+        for metric in metrics {
+            tables
+                .metric_present(metric)
+                .map_err(|error| annotate_missing(error, &entry_key))?;
+        }
+        tables.versions_accept(evidence)?;
+        let typography_ref = tables
+            .typography_ref(entry)
+            .map_err(|error| annotate_missing(error, &entry_key))?;
+        let mut font_face_evidence = Vec::with_capacity(faces_list.len());
+        for face in faces_list {
+            let face_ref = tables
+                .face_ref(face, &entry_key)
+                .map_err(|error| annotate_missing(error, &entry_key))?;
+            let mut row = vec![("faceRef".to_string(), index_number(face_ref)?)];
+            if let Some(probe) = field(face, "probe") {
+                let probe_ref = tables
+                    .probe_ref(probe)
+                    .map_err(|error| annotate_missing(error, &entry_key))?;
+                row.push(("probeRef".to_string(), index_number(probe_ref)?));
+            }
+            font_face_evidence.push(Json::Obj(row));
+        }
+        let mut compact = Vec::new();
+        if let Some(value) = field(entry, "key") {
+            compact.push(("key".to_string(), value.clone()));
+        }
+        if let Some(value) = field(entry, "sourceSha256") {
+            compact.push(("sourceSha256".to_string(), value.clone()));
+        }
+        if let Some(Json::Str(artifact)) = field(entry, "sourceArtifactSha256") {
+            compact.push((
+                "sourceArtifactSha256".to_string(),
+                Json::str(artifact.clone()),
+            ));
+        }
+        if matches!(field(entry, "semantics"), Some(Json::Arr(list)) if !list.is_empty()) {
+            compact.push(("semantic".to_string(), Json::Bool(true)));
+        }
+        compact.push(("typographyRef".to_string(), index_number(typography_ref)?));
+        if let Some(value) = field(entry, "maxWidthPx") {
+            compact.push(("maxWidthPx".to_string(), value.clone()));
+        }
+        compact.push((
+            "fontFaceEvidence".to_string(),
+            Json::Arr(font_face_evidence),
+        ));
+        if let Some(value) = field(entry, "renderArtifactSha256") {
+            compact.push(("renderArtifactSha256".to_string(), value.clone()));
+        }
+        compact_entries.push(Json::Obj(compact));
+    }
+
+    output.push((
+        "fontReplay".to_string(),
+        Json::Obj(vec![
+            ("revision".to_string(), Json::str(FONT_REPLAY_REVISION)),
+            ("encoding".to_string(), Json::str(FONT_REPLAY_TRANSPORT)),
+            ("shapes".to_string(), Json::Arr(compact_shapes)),
+        ]),
+    ));
+    output.push(("entries".to_string(), Json::Arr(compact_entries)));
+    Ok(Json::Obj(output))
+}
+
+/// Appends the entry key to a table-missing error so a multi-article build
+/// names the article that outgrew its absorb pass.
+pub(crate) fn annotate_missing(error: NamedError, entry_key: &str) -> NamedError {
+    if error.0.starts_with("SnapshotTable") && error.0.ends_with("Missing") {
+        return NamedError(format!("{}:{entry_key}", error.0));
+    }
+    error
 }
 
 fn expanded_entry(

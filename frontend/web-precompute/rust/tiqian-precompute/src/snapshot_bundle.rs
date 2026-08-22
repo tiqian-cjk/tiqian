@@ -21,8 +21,12 @@ use crate::prepared_dom::{render_prepared_paragraph_artifact, PreparedRenderOpti
 use crate::schema::{
     stable_stringify, FONT_SOURCE_POLICY, LAYOUT_REVISION, RENDER_REVISION, SNAPSHOT_SCHEMA,
 };
-use crate::snapshot_manifest::compact_snapshot_manifest;
+use crate::snapshot_manifest::{
+    annotate_missing, compact_snapshot_manifest, compact_snapshot_manifest_with_tables,
+    index_number, key_string_of,
+};
 use crate::snapshot_source::js_string_value;
+use crate::snapshot_tables::SnapshotTables;
 
 /// `PLAIN_PARAGRAPH_SELECTOR`: canonical plain paragraphs of a snapshot root.
 pub const PLAIN_PARAGRAPH_SELECTOR: &str = ":is(p, li)[data-tq-snapshot-key]";
@@ -40,6 +44,9 @@ pub struct SnapshotBundleOptions<'a> {
     pub paragraph_selector: Option<&'a str>,
     pub font_contract_paragraphs: Option<&'a Json>,
     pub shared_runtime_style: &'a str,
+    /// Finalized snapshot tables (ADR 0052 schema 2). `None` keeps the
+    /// self-contained schema-1 manifest every current golden pins.
+    pub snapshot_tables: Option<&'a SnapshotTables>,
 }
 
 impl<'a> SnapshotBundleOptions<'a> {
@@ -49,6 +56,7 @@ impl<'a> SnapshotBundleOptions<'a> {
             paragraph_selector: None,
             font_contract_paragraphs: None,
             shared_runtime_style,
+            snapshot_tables: None,
         }
     }
 }
@@ -304,11 +312,38 @@ fn build_snapshot_bundle(
     ]);
     let mut corpus_entries = rendered_entries.clone();
     corpus_entries.extend(font_contract_entries.iter().cloned());
-    let compact = compact_snapshot_manifest(&Json::Arr(corpus_entries), &metadata)?;
-    let manifest = if font_contract_entries.is_empty() {
-        compact
-    } else {
-        split_contract_entries(compact, rendered_entries.len())
+    let (manifest, client_manifest) = match options.snapshot_tables {
+        Some(tables) => {
+            let compact = compact_snapshot_manifest_with_tables(
+                &Json::Arr(corpus_entries),
+                &metadata,
+                tables,
+            )?;
+            let manifest = if font_contract_entries.is_empty() {
+                compact
+            } else {
+                split_contract_entries(compact, rendered_entries.len())
+            };
+            // The schema-2 walk reads the prepared corpus: coverage text and
+            // probes left the compact entries but stay on the source faces.
+            let client = client_font_contract_manifest_with_tables(
+                entries,
+                font_contract_entries,
+                tables,
+                &manifest,
+            )?;
+            (manifest, client)
+        }
+        None => {
+            let compact = compact_snapshot_manifest(&Json::Arr(corpus_entries), &metadata)?;
+            let manifest = if font_contract_entries.is_empty() {
+                compact
+            } else {
+                split_contract_entries(compact, rendered_entries.len())
+            };
+            let client = client_font_contract_manifest(&manifest)?;
+            (manifest, client)
+        }
     };
     let manifest_json = manifest.render().replace('<', "\\u003c");
 
@@ -336,7 +371,6 @@ data-tq-snapshot-manifest>{}</script>{}</template>",
     // The compatibility alias deliberately stays inert; package output never
     // advertises a server-dom manifest.
     let template = inert_template.clone();
-    let client_manifest = client_font_contract_manifest(&manifest)?;
     let client_manifest_json = client_manifest.render().replace('<', "\\u003c");
     let client_template = format!(
         "<template id=\"{}\" data-tq-snapshot-schema=\"{}\" data-tq-layout-revision=\"{}\" \
@@ -555,6 +589,140 @@ fn client_font_contract_manifest(manifest: &Json) -> Result<Json, NamedError> {
     Ok(Json::Obj(fields))
 }
 
+/// `clientFontContractManifest` against finalized snapshot tables (ADR 0052
+/// schema 2): same per-face coverage unions and deduped probes, with faces and
+/// probes resolved through the frozen table. The walk reads the prepared
+/// corpus because coverage text and probes live on the source faces, not on
+/// the compact entries; the entry marker stays the literal the runtime gates
+/// on. A face or probe the absorb pass missed surfaces as a named error that
+/// carries the entry key.
+fn client_font_contract_manifest_with_tables(
+    entries: &[Json],
+    font_contract_entries: &[Json],
+    tables: &SnapshotTables,
+    manifest: &Json,
+) -> Result<Json, NamedError> {
+    struct Group {
+        face_index: usize,
+        coverage: Vec<char>,
+        probes: Vec<Option<usize>>,
+    }
+    let mut groups: Vec<Group> = Vec::new();
+    let mut group_indexes: HashMap<usize, usize> = HashMap::new();
+    for entry in entries.iter().chain(font_contract_entries) {
+        let entry_key = key_string_of(entry);
+        let faces_list = field(entry, "fontEvidence")
+            .and_then(|value| arr_of(field(value, "faces")))
+            .unwrap_or(&[]);
+        for face in faces_list {
+            let face_index = match tables.face_ref(face, &entry_key) {
+                Ok(index) => index,
+                Err(error) => return Err(annotate_missing(error, &entry_key)),
+            };
+            let index = match group_indexes.get(&face_index) {
+                Some(&index) => index,
+                None => {
+                    groups.push(Group {
+                        coverage: Vec::new(),
+                        face_index,
+                        probes: Vec::new(),
+                    });
+                    group_indexes.insert(face_index, groups.len() - 1);
+                    groups.len() - 1
+                }
+            };
+            let group = &mut groups[index];
+            let coverage_text = match field(face, "coverageText") {
+                Some(Json::Str(text)) if !text.is_empty() => Some(text.clone()),
+                _ => field(face, "probe")
+                    .and_then(|probe| field(probe, "text"))
+                    .and_then(|text| match text {
+                        Json::Str(text) if !text.is_empty() => Some(text.clone()),
+                        _ => None,
+                    }),
+            };
+            if let Some(text) = coverage_text {
+                for point in text.chars() {
+                    if !group.coverage.contains(&point) {
+                        group.coverage.push(point);
+                    }
+                }
+            }
+            // A probeless face keeps one row without a probe reference,
+            // mirroring the schema-1 contract.
+            let probe_index = match field(face, "probe") {
+                Some(probe) => match tables.probe_ref(probe) {
+                    Ok(index) => Some(index),
+                    Err(error) => return Err(annotate_missing(error, &entry_key)),
+                },
+                None => None,
+            };
+            if !group.probes.contains(&probe_index) {
+                group.probes.push(probe_index);
+            }
+        }
+    }
+    let mut contract_entries: Vec<Json> = Vec::new();
+    for group in &groups {
+        for probe_index in &group.probes {
+            let mut evidence_row = vec![
+                ("faceRef".to_string(), index_number(group.face_index)?),
+                (
+                    "coverageText".to_string(),
+                    Json::str(group.coverage.iter().collect::<String>()),
+                ),
+            ];
+            if let Some(index) = probe_index {
+                evidence_row.push(("probeRef".to_string(), index_number(*index)?));
+            }
+            contract_entries.push(Json::Obj(vec![
+                (
+                    "key".to_string(),
+                    Json::str(format!("font-contract-{}", contract_entries.len())),
+                ),
+                ("sourceSha256".to_string(), Json::str("0".repeat(64))),
+                ("typographyRef".to_string(), Json::Num(0.0)),
+                ("maxWidthPx".to_string(), Json::Num(1.0)),
+                (
+                    "fontFaceEvidence".to_string(),
+                    Json::Arr(vec![Json::Obj(evidence_row)]),
+                ),
+                (
+                    "renderArtifactSha256".to_string(),
+                    Json::str("0".repeat(64)),
+                ),
+            ]));
+        }
+    }
+    if contract_entries.is_empty() {
+        return Err(named("SnapshotClientFontContractEmpty"));
+    }
+    // The schema-2 client manifest drops fontContractEntries and replaces the
+    // entries; value styles stay table-scoped, and the table reference passes
+    // through so the client resolves probe rows by index.
+    let mut fields: Vec<(String, Json)> = match manifest {
+        Json::Obj(fields) => fields
+            .iter()
+            .filter(|(name, _)| name != "fontContractEntries")
+            .cloned()
+            .collect(),
+        _ => Vec::new(),
+    };
+    let mut has_entries = false;
+    for (name, value) in fields.iter_mut() {
+        if name == "entries" {
+            *value = Json::Arr(contract_entries.clone());
+            has_entries = true;
+            break;
+        }
+    }
+    fields.push(("entrySource".to_string(), Json::str("font-contract-v1")));
+    if !has_entries {
+        fields.push(("entries".to_string(), Json::Arr(contract_entries)));
+    }
+    Ok(Json::Obj(fields))
+}
+
 /// `preparedLocale`: a string typography is the locale itself, an object
 /// carries the locale field, anything nullish falls back to the default.
 fn prepared_locale(typography: Option<&Json>) -> String {
@@ -627,6 +795,7 @@ fn exact_render_font_style(id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::schema::FONT_REPLAY_REVISION;
 
     #[test]
     fn base36_strings_match_js_tostring36() {
@@ -647,5 +816,174 @@ mod tests {
         assert!(!valid_template_id("ab cd"));
         assert!(!valid_template_id("-abc"));
         assert!(!valid_template_id(""));
+    }
+
+    fn contract_entry(key: &str, coverage: &str, probe_text: &str) -> Json {
+        Json::Obj(vec![
+            ("key".to_string(), Json::str(key)),
+            (
+                "fontEvidence".to_string(),
+                Json::Obj(vec![
+                    (
+                        "faces".to_string(),
+                        Json::Arr(vec![Json::Obj(vec![
+                            ("family".to_string(), Json::str("serif")),
+                            ("weight".to_string(), Json::Num(400.0)),
+                            ("coverageText".to_string(), Json::str(coverage)),
+                            (
+                                "probe".to_string(),
+                                Json::Obj(vec![
+                                    ("text".to_string(), Json::str(probe_text)),
+                                    ("sizePx".to_string(), Json::Num(16.0)),
+                                ]),
+                            ),
+                        ])]),
+                    ),
+                    (
+                        "replay".to_string(),
+                        Json::Obj(vec![
+                            ("revision".to_string(), Json::str(FONT_REPLAY_REVISION)),
+                            ("shapes".to_string(), Json::Arr(Vec::new())),
+                            ("metrics".to_string(), Json::Arr(Vec::new())),
+                        ]),
+                    ),
+                ]),
+            ),
+        ])
+    }
+
+    #[test]
+    fn tables_client_contract_unions_coverage_and_references_probes() {
+        let mut tables = SnapshotTables::new();
+        let first = contract_entry("p1", "中文", "中");
+        let second = contract_entry("p2", "文字", "字");
+        tables
+            .absorb_prepared(&Json::Arr(vec![first.clone(), second.clone()]))
+            .expect("absorb succeeds");
+        tables.finalize().expect("finalize succeeds");
+        let manifest = Json::Obj(vec![
+            ("entries".to_string(), Json::Arr(Vec::new())),
+            (
+                "tables".to_string(),
+                Json::Obj(vec![(
+                    "snapshot".to_string(),
+                    Json::str(tables.sha256().unwrap_or("")),
+                )]),
+            ),
+        ]);
+        let client =
+            client_font_contract_manifest_with_tables(&[first, second], &[], &tables, &manifest)
+                .expect("client contract succeeds");
+        // Both entries share one face row; each distinct probe keeps its own
+        // contract entry, as in the schema-1 contract.
+        let entries = arr_of(field(&client, "entries")).unwrap_or(&[]);
+        assert_eq!(entries.len(), 2);
+        let mut probe_refs: Vec<f64> = Vec::new();
+        for entry in entries {
+            let evidence = arr_of(field(entry, "fontFaceEvidence")).unwrap_or(&[]);
+            assert_eq!(evidence.len(), 1);
+            let row = &evidence[0];
+            assert_eq!(field(row, "faceRef"), Some(&Json::Num(0.0)));
+            let coverage = match field(row, "coverageText") {
+                Some(Json::Str(text)) => text.clone(),
+                _ => String::new(),
+            };
+            for point in ["中", "文", "字"] {
+                assert!(coverage.contains(point));
+            }
+            match field(row, "probeRef") {
+                Some(Json::Num(value)) => probe_refs.push(*value),
+                _ => panic!("probe reference present"),
+            }
+        }
+        assert_eq!(probe_refs, vec![0.0, 1.0]);
+        assert_eq!(
+            field(&client, "entrySource"),
+            Some(&Json::str("font-contract-v1"))
+        );
+        assert!(field(&client, "tables").is_some());
+        assert!(field(&client, "valueStyles").is_none());
+    }
+
+    #[test]
+    fn tables_client_contract_keeps_a_row_for_a_probeless_face() {
+        let mut tables = SnapshotTables::new();
+        let stripped_entry = strip_probe(&contract_entry("p1", "中文", "中"));
+        tables
+            .absorb_prepared(&Json::Arr(vec![stripped_entry.clone()]))
+            .expect("absorb succeeds");
+        tables.finalize().expect("finalize succeeds");
+        let client = client_font_contract_manifest_with_tables(
+            &[stripped_entry],
+            &[],
+            &tables,
+            &Json::Obj(Vec::new()),
+        )
+        .expect("client contract succeeds");
+        let entries = arr_of(field(&client, "entries")).unwrap_or(&[]);
+        assert_eq!(entries.len(), 1);
+        let evidence = arr_of(field(&entries[0], "fontFaceEvidence")).unwrap_or(&[]);
+        assert!(field(&evidence[0], "probeRef").is_none());
+        assert!(field(&evidence[0], "coverageText").is_some());
+    }
+
+    #[test]
+    fn tables_client_contract_names_the_entry_that_missed_the_table() {
+        let mut tables = SnapshotTables::new();
+        tables.finalize().expect("finalize succeeds");
+        let stray = contract_entry("p9", "中", "中");
+        let error = client_font_contract_manifest_with_tables(
+            &[stray],
+            &[],
+            &tables,
+            &Json::Obj(Vec::new()),
+        )
+        .expect_err("face missed the absorb pass");
+        assert_eq!(error.0, "SnapshotTableFaceMissing:p9");
+    }
+
+    fn strip_probe(entry: &Json) -> Json {
+        let Json::Obj(fields) = entry else {
+            return entry.clone();
+        };
+        let mut rebuilt: Vec<(String, Json)> = Vec::new();
+        for (name, value) in fields {
+            if name == "fontEvidence" {
+                let Json::Obj(evidence_fields) = value else {
+                    rebuilt.push((name.clone(), value.clone()));
+                    continue;
+                };
+                let mut evidence_rebuilt: Vec<(String, Json)> = Vec::new();
+                for (evidence_name, evidence_value) in evidence_fields {
+                    if evidence_name == "faces" {
+                        let Json::Arr(faces) = evidence_value else {
+                            evidence_rebuilt.push((evidence_name.clone(), evidence_value.clone()));
+                            continue;
+                        };
+                        let mut stripped_faces: Vec<Json> = Vec::new();
+                        for face in faces {
+                            let Json::Obj(face_fields) = face else {
+                                stripped_faces.push(face.clone());
+                                continue;
+                            };
+                            stripped_faces.push(Json::Obj(
+                                face_fields
+                                    .iter()
+                                    .filter(|(face_name, _)| face_name != "probe")
+                                    .cloned()
+                                    .collect(),
+                            ));
+                        }
+                        evidence_rebuilt.push(("faces".to_string(), Json::Arr(stripped_faces)));
+                    } else {
+                        evidence_rebuilt.push((evidence_name.clone(), evidence_value.clone()));
+                    }
+                }
+                rebuilt.push(("fontEvidence".to_string(), Json::Obj(evidence_rebuilt)));
+            } else {
+                rebuilt.push((name.clone(), value.clone()));
+            }
+        }
+        Json::Obj(rebuilt)
     }
 }
