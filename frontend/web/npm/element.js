@@ -16,6 +16,11 @@ import {
 } from "./lazy-capabilities.js";
 import { ensureTiqianStyles } from "./styles.js";
 import { prefetchSnapshotTables } from "./snapshot-tables.js";
+import {
+  captureViewportAnchor,
+  compensateViewportAnchor,
+  releaseNativeScrollAnchoring,
+} from "./viewport-anchor.js";
 
 const ELEMENT_NAME = "tiqian-prose";
 const DEFAULT_PARAGRAPH_SELECTOR = "p, li";
@@ -647,6 +652,7 @@ class TiqianLayoutCoordinator {
     const quota = slot.quota;
     const grantDeadline = Date.now() + allowance;
     let processed = 0;
+    const viewportAnchor = captureViewportAnchor(element);
     try {
       // Drain the in-viewport tier like a polled grant round: one slice per
       // quota batch until the tier is empty or the allowance is spent, so a
@@ -670,10 +676,12 @@ class TiqianLayoutCoordinator {
       this.#immediateSpentMs += performance.now() - now;
     }
     if (processed > 0) {
+      compensateViewportAnchor(element, viewportAnchor);
       slot.deferCount = 0;
       slot.lastGrantFrame = this.#frameCounter;
     }
     slot.active = slot.runtime.workerHasJob(element);
+    if (!slot.active) releaseNativeScrollAnchoring(element);
     slot.pendingByTier[0] = slot.runtime.workerPendingInTier(element, 1);
     slot.pendingByTier[1] = slot.runtime.workerPendingInTier(element, 2);
     slot.pendingByTier[2] = slot.runtime.workerPendingInTier(element, 3);
@@ -785,6 +793,9 @@ class TiqianLayoutCoordinator {
         slot.pendingByTier[0] = 0;
         slot.pendingByTier[1] = 0;
         slot.pendingByTier[2] = 0;
+        // NativeAnchoringHandover: the job is over; hand the scroller back to
+        // the browser's own anchoring until the next slice commits.
+        releaseNativeScrollAnchoring(slot.element);
       }
     }
     slots.sort(this.#compareWorkerSlots);
@@ -795,6 +806,16 @@ class TiqianLayoutCoordinator {
     let grants = 0;
     let workDone = executedCount;
     const grantSlot = (slot, tier) => {
+      // SliceCommitAnchorCompensation: every slice this grant runs happens in
+      // this same task, so one capture/compensate pair around the drain sees
+      // the pure layout displacement of all its commits.
+      let viewportAnchor = null;
+      let anchorCaptured = false;
+      let grantProcessed = 0;
+      const finish = (result) => {
+        if (grantProcessed > 0) compensateViewportAnchor(slot.element, viewportAnchor);
+        return result;
+      };
       while (sumPendingUpTo(slot, tier) > 0) {
         const now = performance.now();
         // DeadlineGate: grants stop once the frame budget is spent. A frame
@@ -802,7 +823,7 @@ class TiqianLayoutCoordinator {
         // every slice outlasts the budget keeps making progress.
         const guaranteeForwardProgress = workDone === 0;
         if (!guaranteeForwardProgress && now >= deadline) {
-          return false;
+          return finish(false);
         }
         // GrantController: one controller per grant. It carries value-copied
         // stop terms for this recipient alone: the root, the job generation
@@ -811,6 +832,10 @@ class TiqianLayoutCoordinator {
         // coordinator state, so the runtime can reach no other root through
         // a grant. The loop asks shouldStop after each paragraph and obeys.
         const quota = slot.quota;
+        if (!anchorCaptured) {
+          anchorCaptured = true;
+          viewportAnchor = captureViewportAnchor(slot.element);
+        }
         const processed = slot.runtime.workerRunSlice({
           root: slot.element,
           generation: slot.generation,
@@ -823,6 +848,7 @@ class TiqianLayoutCoordinator {
         if (processed > 0) {
           grants += 1;
           workDone += 1;
+          grantProcessed += processed;
           slot.deferCount = 0;
           slot.lastGrantFrame = this.#frameCounter;
         }
@@ -831,9 +857,9 @@ class TiqianLayoutCoordinator {
         slot.pendingByTier[0] = slot.runtime.workerPendingInTier(slot.element, 1);
         slot.pendingByTier[1] = slot.runtime.workerPendingInTier(slot.element, 2);
         slot.pendingByTier[2] = slot.runtime.workerPendingInTier(slot.element, 3);
-        if (processed === 0) return true;
+        if (processed === 0) return finish(true);
       }
-      return true;
+      return finish(true);
     };
     // TierOrderedGrants: tiers drain in order across roots. Every visible
     // root finishes tier 1, its in-viewport paragraphs, before any root
@@ -1305,6 +1331,7 @@ class TiqianProseElement extends HTMLElementBase {
   #settleDisconnection() {
     coordinator.unregister(this);
     coordinator.cancelFrame(this.#boundResponsiveCommit);
+    releaseNativeScrollAnchoring(this);
     this.#stopIntersectionObservation();
     this.#stopParagraphTierObservation();
     ++this.#generation;
@@ -1508,6 +1535,7 @@ class TiqianProseElement extends HTMLElementBase {
     this.#runtimeStateActive = false;
     this.#releaseExactFontSession();
     this.removeAttribute(EXACT_RENDER_FONT_ATTRIBUTE);
+    releaseNativeScrollAnchoring(this);
     if (this.isConnected) this.connectedCallback();
   }
 

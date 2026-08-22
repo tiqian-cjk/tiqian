@@ -10,6 +10,15 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 include(FetchContent)
 
+# DOWNLOAD_EXTRACT_TIMESTAMP only exists on CMake 3.24+; 3.22 (the SDK-bundled
+# version this build still supports) swallows the unknown keyword into URL_HASH
+# and fails the declare, so it must be gated.
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.24)
+    set(TIQIAN_EXTRACT_TIMESTAMP DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+else()
+    set(TIQIAN_EXTRACT_TIMESTAMP "")
+endif()
+
 # Pinned upstream release archives. These sources are compiled into the AAR;
 # no Android private Minikin/HarfBuzz symbol is linked or called.
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
@@ -22,7 +31,7 @@ FetchContent_Declare(
     freetype
     URL https://codeload.github.com/freetype/freetype/tar.gz/refs/tags/VER-2-13-3
     URL_HASH SHA256=bc5c898e4756d373e0d991bab053036c5eb2aa7c0d5c67e8662ddc6da40c4103
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    ${TIQIAN_EXTRACT_TIMESTAMP}
 )
 FetchContent_MakeAvailable(freetype)
 
@@ -37,7 +46,7 @@ FetchContent_Declare(
     harfbuzz
     URL https://codeload.github.com/harfbuzz/harfbuzz/tar.gz/refs/tags/10.4.0
     URL_HASH SHA256=0d25a3f74af4e8744700ac19050af5a80ae330378a5802a5cd71e523bb6fda1f
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    ${TIQIAN_EXTRACT_TIMESTAMP}
 )
 FetchContent_MakeAvailable(harfbuzz)
 

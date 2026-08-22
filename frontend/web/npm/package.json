@@ -69,6 +69,7 @@
     "snapshot-tables.js",
     "styles.css",
     "styles.js",
+    "viewport-anchor.js",
     "worker-layout.js"
   ],
   "exports": {

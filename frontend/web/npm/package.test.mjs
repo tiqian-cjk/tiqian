@@ -548,6 +548,28 @@ test("layout coordinator implements visual prominence scoring, proportional back
     elementSource,
     /new CustomEvent\("tiqian:relayout-ready", \{[\s\S]*?bubbles: true,[\s\S]*?composed: true,/u,
   );
+
+  // 6. SliceCommitAnchorCompensation: both grant lanes bracket their slice
+  // drains with a same-task viewport anchor capture/compensate pair, and the
+  // element excludes itself from native scroll anchoring while a worker is
+  // attached.
+  assert.match(
+    elementSource,
+    /const viewportAnchor = captureViewportAnchor\(element\);[\s\S]*?compensateViewportAnchor\(element, viewportAnchor\);/u,
+  );
+  assert.match(
+    elementSource,
+    /viewportAnchor = captureViewportAnchor\(slot\.element\);[\s\S]*?const processed = slot\.runtime\.workerRunSlice\(/u,
+  );
+  assert.match(
+    elementSource,
+    /if \(grantProcessed > 0\) compensateViewportAnchor\(slot\.element, viewportAnchor\);/u,
+  );
+  // NativeAnchoringHandover: capture holds the scroller's native anchoring
+  // for the job window; every path that ends or abandons a job releases it.
+  assert.match(elementSource, /if \(!slot\.active\) releaseNativeScrollAnchoring\(element\);/u);
+  assert.match(elementSource, /releaseNativeScrollAnchoring\(slot\.element\);/u);
+  assert.match(elementSource, /releaseNativeScrollAnchoring\(this\);/u);
 });
 
 test("offscreen deferred lane keeps every pending callback per element", async () => {
