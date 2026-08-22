@@ -3,6 +3,8 @@
 //! selection and cache key first, uniformity and scaling only on a miss
 //! (ADR 0050 parity oracle).
 
+use std::sync::Arc;
+
 use crate::font_face::css_weight_matched;
 use crate::font_record::FontRecord;
 use crate::js_compat::js_number_string;
@@ -20,7 +22,7 @@ pub struct MetricSelection<'a> {
 /// `selectFace`, an absent or empty text takes the first `faceCandidates`
 /// entry.
 pub fn select_metrics_face<'a>(
-    records: &'a [FontRecord],
+    records: &'a [Arc<FontRecord>],
     families: &[String],
     font_size: f64,
     font_weight: f64,
@@ -94,13 +96,14 @@ pub fn metrics_equal(left: &[f64; 5], right: &[f64; 5]) -> bool {
 /// 1e-6 em units.
 pub fn resolve_metrics(
     selected: &FontRecord,
-    records: &[FontRecord],
+    records: &[Arc<FontRecord>],
     font_size: f64,
     font_weight: f64,
 ) -> Result<[f64; 5], String> {
     let selected_lower = selected.family.to_lowercase();
     let family_candidates: Vec<&FontRecord> = records
         .iter()
+        .map(|record| record.as_ref())
         .filter(|record| {
             record.family.to_lowercase() == selected_lower && record.style == selected.style
         })

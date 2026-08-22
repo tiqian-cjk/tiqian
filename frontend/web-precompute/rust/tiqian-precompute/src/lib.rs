@@ -17,6 +17,7 @@ pub mod engine_bridge;
 pub mod font_contract;
 pub mod font_face;
 pub mod font_record;
+pub mod font_record_cache;
 pub mod font_source;
 pub mod html_parse;
 pub mod js_compat;

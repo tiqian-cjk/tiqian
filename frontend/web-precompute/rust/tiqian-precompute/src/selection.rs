@@ -3,6 +3,8 @@
 //! `renderFamiliesFor` (ADR 0050 parity oracle). Error strings match the JS
 //! throws; the message builders live here so callers can embed them verbatim.
 
+use std::sync::Arc;
+
 use crate::font_face::{css_weight_matched, font_record_matches_family, unicode_range_contains};
 use crate::font_record::FontRecord;
 use crate::js_compat::js_number_string;
@@ -46,7 +48,7 @@ pub fn face_covers(record: &FontRecord, points: &[char]) -> Result<bool, NamedEr
 /// `faceCandidates`: first family with style and weight matches wins; the
 /// matches keep session order.
 pub fn face_candidates<'a>(
-    records: &'a [FontRecord],
+    records: &'a [Arc<FontRecord>],
     families: &[String],
     requested_weight: f64,
     italic: bool,
@@ -55,6 +57,7 @@ pub fn face_candidates<'a>(
     for family in families {
         let family_matches: Vec<&FontRecord> = records
             .iter()
+            .map(|record| record.as_ref())
             .filter(|record| {
                 font_record_matches_family(record.family.as_str(), &record.local_names, family)
                     && record.style == desired_style
@@ -74,7 +77,7 @@ pub fn face_candidates<'a>(
 /// points wins; composite faces prefer the later record. Fails with
 /// `SfntDecode` when the coverage probe cannot decode a record.
 pub fn find_face<'a>(
-    records: &'a [FontRecord],
+    records: &'a [Arc<FontRecord>],
     families: &[String],
     requested_weight: f64,
     italic: bool,
@@ -84,6 +87,7 @@ pub fn find_face<'a>(
     for family in families {
         let family_matches: Vec<&FontRecord> = records
             .iter()
+            .map(|record| record.as_ref())
             .filter(|record| {
                 font_record_matches_family(record.family.as_str(), &record.local_names, family)
                     && record.style == desired_style
@@ -105,7 +109,7 @@ pub fn find_face<'a>(
 
 /// `selectFace`: `findFace` with the `NoExactFontFace` throw on a miss.
 pub fn select_face<'a>(
-    records: &'a [FontRecord],
+    records: &'a [Arc<FontRecord>],
     families: &[String],
     requested_weight: f64,
     italic: bool,
@@ -121,7 +125,7 @@ pub fn select_face<'a>(
 /// text, then the source text with `displayCovered: false`, then fail
 /// through `selectFace`'s error.
 pub fn select_shape_face<'a>(
-    records: &'a [FontRecord],
+    records: &'a [Arc<FontRecord>],
     families: &[String],
     requested_weight: f64,
     italic: bool,
@@ -148,7 +152,7 @@ pub fn select_shape_face<'a>(
 /// `renderFamiliesFor`: host families backed by the corpus, in the host's
 /// order, deduped per canonical family.
 pub fn render_families(
-    records: &[FontRecord],
+    records: &[Arc<FontRecord>],
     requested_families: &[String],
 ) -> Result<Vec<String>, String> {
     let mut result: Vec<String> = Vec::new();

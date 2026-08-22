@@ -4,7 +4,8 @@
 //! hands out integer handles into a registry; this port returns the values
 //! directly, which is the surface the vtable protocol replays.
 
-use crate::font_record::{load_record, FontFaceSpec, FontRecord, LoadRecordError};
+use crate::font_record::{FontFaceSpec, FontRecord, LoadRecordError};
+use crate::font_record_cache::load_shared_record;
 use crate::js_compat::{js_number_string, js_trim, trunc_sat_u32};
 use crate::json::Json;
 use crate::metrics::{resolve_metrics, select_metrics_face};
@@ -218,7 +219,7 @@ pub struct FontSession {
     pub session_id: String,
     pub backend_revision: &'static str,
     pub harfbuzz_version: &'static str,
-    records: Vec<FontRecord>,
+    records: Vec<std::sync::Arc<FontRecord>>,
     base_features: Vec<String>,
     /// Evidence of the standalone session lane; `begin_capture` clears it.
     /// The batch lanes keep one [`CaptureEvidence`] per paragraph instead,
@@ -354,15 +355,15 @@ pub fn create_font_session(
         return Err(SessionError::MissingExplicitFontFaces);
     }
     let ordered = ordered_face_specs(&specs)?;
-    // The records spread over the configured workers; record loading shares
-    // no state, and the first load error by processing order wins, the
-    // sequential loop's `?` order.
+    // The records spread over the configured workers; SharedFontRecordCache
+    // serves already-decoded faces, and the first load error by processing
+    // order wins, the sequential loop's `?` order.
     let workers = crate::parallel::worker_count();
     let records = crate::parallel::indexed_collect(ordered.len(), workers, |position| {
         let (input_index, order) = ordered[position];
         let mut spec = specs[input_index].spec.clone();
         spec.source_order = order;
-        load_record(&spec).map_err(SessionError::Load)
+        load_shared_record(&spec).map_err(SessionError::Load)
     })?;
     let prefix = {
         let trimmed = js_trim(&options.session_prefix);
@@ -423,7 +424,7 @@ impl FontSession {
             .collect()
     }
 
-    pub fn records(&self) -> &[FontRecord] {
+    pub fn records(&self) -> &[std::sync::Arc<FontRecord>] {
         &self.records
     }
 
