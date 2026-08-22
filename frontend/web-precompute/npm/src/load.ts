@@ -146,7 +146,12 @@ export interface NativeAddon {
    * `precompute-html.ts`. Handles address the process-wide registries.
    */
   normalizeTypography(typographyJson: string): string;
-  createPrecomputer(typographyJson: string, faces: NativeFaceSpec[], sources: Buffer[]): string;
+  createPrecomputer(
+    typographyJson: string,
+    faces: NativeFaceSpec[],
+    sources: Buffer[],
+    budgetCode: number,
+  ): string;
   precomputerInfo(handle: string): string;
   prepareParagraph(handle: string, inputJson: string): string;
   /** The batch snapshot lane; the paragraph loop stays inside Rust. */

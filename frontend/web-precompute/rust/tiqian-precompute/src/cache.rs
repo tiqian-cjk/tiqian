@@ -85,10 +85,42 @@ impl CacheAdapter for NoCache {
     }
 }
 
-/// The write budget of [`DrainQueueAdapter`]. The buffer holds whole records
-/// until the host drains it; a full buffer surfaces as a named error so the
-/// host flushes instead of growing without bound.
-const DRAIN_QUEUE_MAX_BYTES: usize = 32 * 1024 * 1024;
+/// The host-declared write budget of [`DrainQueueAdapter`], as a posture
+/// tier rather than raw bytes (ADR 0052): the host knows its environment by
+/// feel while the record sizes that anchor the mapping are measured
+/// engine-side, so the host picks a tier and the engine owns the byte table.
+/// Every tier must clear the largest single record; the largest observed
+/// article product is about 3 MiB.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum WriteBudgetTier {
+    /// For constrained runners such as CI containers.
+    Tight,
+    /// The default; matches the historical fixed budget.
+    Normal,
+    /// For hosts that queue far between flushes (long SSR batches).
+    Generous,
+}
+
+impl WriteBudgetTier {
+    pub fn from_code(code: u8) -> Option<Self> {
+        match code {
+            0 => Some(WriteBudgetTier::Tight),
+            1 => Some(WriteBudgetTier::Normal),
+            2 => Some(WriteBudgetTier::Generous),
+            _ => None,
+        }
+    }
+
+    /// `Tight` clears the largest measured record twice over; `Generous`
+    /// stays a small fraction of the observed build memory peaks.
+    pub fn bytes(self) -> usize {
+        match self {
+            WriteBudgetTier::Tight => 8 * 1024 * 1024,
+            WriteBudgetTier::Normal => 32 * 1024 * 1024,
+            WriteBudgetTier::Generous => 128 * 1024 * 1024,
+        }
+    }
+}
 
 /// The adapter behind the Neon bridge: writes collect in a queue the host
 /// drains per batch, reads come only from the prefetch direction (the host
@@ -97,12 +129,14 @@ const DRAIN_QUEUE_MAX_BYTES: usize = 32 * 1024 * 1024;
 /// it.
 pub struct DrainQueueAdapter {
     queue: std::sync::Mutex<Vec<CacheRecord>>,
+    max_bytes: usize,
 }
 
 impl DrainQueueAdapter {
-    pub fn new() -> Self {
+    pub fn new(budget: WriteBudgetTier) -> Self {
         DrainQueueAdapter {
             queue: std::sync::Mutex::new(Vec::new()),
+            max_bytes: budget.bytes(),
         }
     }
 
@@ -112,10 +146,14 @@ impl DrainQueueAdapter {
         std::mem::take(&mut *queue)
     }
 
-    /// Buffered byte volume.
-    pub fn buffered_bytes(&self) -> usize {
+    /// Whether one more record of `incoming` bytes stays within the budget.
+    pub fn has_room_for(&self, incoming: usize) -> bool {
         let queue = crate::parallel::recover(self.queue.lock());
-        queue.iter().map(|record| record.artifact.len()).sum()
+        let buffered = queue
+            .iter()
+            .map(|record| record.artifact.len())
+            .sum::<usize>();
+        buffered.saturating_add(incoming) <= self.max_bytes
     }
 }
 
@@ -207,8 +245,11 @@ impl LayeredCacheStore {
 
     /// The bridge store: a drain queue shared between the adapter box and
     /// the handle the Neon layer drains through.
-    pub fn with_drain_queue(context: [u8; 32]) -> (Self, std::sync::Arc<DrainQueueAdapter>) {
-        let queue = std::sync::Arc::new(DrainQueueAdapter::new());
+    pub fn with_drain_queue(
+        context: [u8; 32],
+        budget: WriteBudgetTier,
+    ) -> (Self, std::sync::Arc<DrainQueueAdapter>) {
+        let queue = std::sync::Arc::new(DrainQueueAdapter::new(budget));
         (
             LayeredCacheStore {
                 context,
@@ -263,12 +304,10 @@ impl LayeredCacheStore {
     /// queue reports a named error once its budget is exhausted; the host
     /// drains and continues.
     pub fn store(&self, record: CacheRecord) -> Result<std::sync::Arc<CacheRecord>, NamedError> {
-        let buffered = match &self.drain_queue {
-            Some(queue) => queue.buffered_bytes(),
-            None => 0,
-        };
-        if buffered + record.artifact.len() > DRAIN_QUEUE_MAX_BYTES {
-            return Err(NamedError("CacheWriteBufferFull".to_string()));
+        if let Some(queue) = &self.drain_queue {
+            if !queue.has_room_for(record.artifact.len()) {
+                return Err(NamedError("CacheWriteBufferFull".to_string()));
+            }
         }
         let shared = {
             let mut memory = crate::parallel::recover(self.memory.write());
@@ -449,7 +488,7 @@ mod tests {
 
     #[test]
     fn drain_queue_adapter_collects_writes_in_order() {
-        let adapter = std::sync::Arc::new(DrainQueueAdapter::new());
+        let adapter = std::sync::Arc::new(DrainQueueAdapter::new(WriteBudgetTier::Normal));
         let view = SharedDrainQueue(adapter.clone());
         let context = [3; 32];
         CacheAdapter::write(&view, &context, vec![record(1, 1)]);
@@ -459,5 +498,39 @@ mod tests {
         assert_eq!(drained[0].artifact, b"artifact-1");
         assert_eq!(drained[1].artifact, b"artifact-2");
         assert!(adapter.drain().is_empty());
+    }
+
+    #[test]
+    fn write_budget_tiers_round_trip_and_order_bytes() {
+        assert_eq!(WriteBudgetTier::from_code(0), Some(WriteBudgetTier::Tight));
+        assert_eq!(WriteBudgetTier::from_code(1), Some(WriteBudgetTier::Normal));
+        assert_eq!(
+            WriteBudgetTier::from_code(2),
+            Some(WriteBudgetTier::Generous)
+        );
+        assert_eq!(WriteBudgetTier::from_code(3), None);
+        assert!(WriteBudgetTier::Tight.bytes() < WriteBudgetTier::Normal.bytes());
+        assert!(WriteBudgetTier::Normal.bytes() < WriteBudgetTier::Generous.bytes());
+        // Every tier must clear the largest observed article product
+        // (about 3 MiB); Tight is the binding constraint.
+        assert!(WriteBudgetTier::Tight.bytes() > 4 * 1024 * 1024);
+    }
+
+    #[test]
+    fn drain_queue_reports_named_error_past_its_budget() {
+        let (store, queue) = LayeredCacheStore::with_drain_queue([4; 32], WriteBudgetTier::Tight);
+        let mut oversized = record(9, 9);
+        // Tight is 8 MiB; this record alone exceeds it.
+        oversized.artifact = vec![b'x'; WriteBudgetTier::Tight.bytes() + 1];
+        let error = match store.store(oversized) {
+            Ok(_) => panic!("oversized store fails"),
+            Err(error) => error,
+        };
+        assert_eq!(error.0, "CacheWriteBufferFull");
+        // The failed record never entered the queue: the buffer stayed empty.
+        assert!(queue.drain().is_empty());
+        let fitting = record(1, 1);
+        assert!(store.store(fitting).is_ok());
+        assert_eq!(queue.drain().len(), 1);
     }
 }

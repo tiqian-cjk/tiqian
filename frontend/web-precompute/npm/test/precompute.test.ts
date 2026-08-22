@@ -334,6 +334,28 @@ test("v1 snapshot typography stays aligned with the browser fallback contract", 
   );
 });
 
+test("cache write budget tiers validate before font sources are resolved", { skip: precompute === null }, async () => {
+  assert.ok(precompute);
+  const base: CreatePrecomputerOptions = { faces: [], typography: baseTypography };
+  // A js caller can pass any string past the declared tier union.
+  await assert.rejects(
+    () => precompute.createPrecomputer({ ...base, cacheWriteBudget: "huge" as never }),
+    /UnknownCacheWriteBudget/u,
+  );
+  assert.throws(
+    () => precompute.setCacheWriteBudget("huge" as never),
+    /UnknownCacheWriteBudget/u,
+  );
+  // A valid tier restores the default and the create call reaches the
+  // ordinary font validation; tier semantics live in the rust suite.
+  precompute.setCacheWriteBudget(precompute.CacheWriteBudget.Tight);
+  await assert.rejects(
+    () => precompute.createPrecomputer(base),
+    /MissingBuildFontSource/u,
+  );
+  precompute.setCacheWriteBudget(precompute.CacheWriteBudget.Normal);
+});
+
 test("engine-owned hyphens are visual-only in the source-faithful copy contract", { skip: precompute === null }, () => {
   assert.ok(precompute);
   const html = precompute.renderPreparedParagraph({

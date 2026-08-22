@@ -324,12 +324,57 @@ export interface Precomputer {
   close(): void;
 }
 
+/**
+ * The write-budget posture of a precomputer's drain queue (ADR 0052): the
+ * host picks a tier by environment, the engine owns the tier-to-bytes table.
+ * Every tier clears the largest single record; a submit past the budget
+ * throws `CacheWriteBufferFull` until the host flushes.
+ */
+export type CacheWriteBudget = "tight" | "normal" | "generous";
+
+/** Name constants of {@link CacheWriteBudget}. */
+export const CacheWriteBudget = Object.freeze({
+  Tight: "tight",
+  Normal: "normal",
+  Generous: "generous",
+} as const);
+
+const writeBudgetCodes = new Map<CacheWriteBudget, number>([
+  ["tight", 0],
+  ["normal", 1],
+  ["generous", 2],
+]);
+
+function writeBudgetCode(value: CacheWriteBudget): number {
+  const code = writeBudgetCodes.get(value);
+  if (code === undefined) {
+    throw new TypeError(`UnknownCacheWriteBudget:${String(value)}`);
+  }
+  return code;
+}
+
+let defaultCacheWriteBudget: CacheWriteBudget = CacheWriteBudget.Normal;
+
+/**
+ * Sets the process default every later `createPrecomputer` call uses when its
+ * options name no tier. Precomputers already created keep theirs.
+ */
+export function setCacheWriteBudget(budget: CacheWriteBudget): void {
+  writeBudgetCode(budget);
+  defaultCacheWriteBudget = budget;
+}
+
 export interface CreatePrecomputerOptions {
   /** Normal integration: reuse the host's existing @font-face stylesheet. */
   fontStylesheets?: readonly BuildFontStylesheet[];
   /** Low-level integration for generated font systems. Mutually exclusive with fontStylesheets. */
   faces?: readonly BuildFontFace[];
   typography: SnapshotTypography;
+  /**
+   * The drain-queue write budget of this precomputer; defaults to the
+   * process default, initially "normal".
+   */
+  cacheWriteBudget?: CacheWriteBudget;
 }
 
 const precomputerHandles = new WeakMap<Precomputer, string>();
@@ -361,8 +406,10 @@ export async function createPrecomputer(options: CreatePrecomputerOptions): Prom
   // Typography validates before any font file is read, the js order; the
   // native create normalizes the same value again behind its boundary.
   addon.normalizeTypography(typographyJson);
+  // The tier validates before any font IO for the same reason.
+  const budgetCode = writeBudgetCode(options.cacheWriteBudget ?? defaultCacheWriteBudget);
   const { faces, sources } = await resolveFaces(options);
-  const handle = addon.createPrecomputer(typographyJson, faces, sources);
+  const handle = addon.createPrecomputer(typographyJson, faces, sources, budgetCode);
   const info = parse<PrecomputerInfo>(addon.precomputerInfo(handle));
   const precomputer: Precomputer = {
     typography: Object.freeze(info.typography),

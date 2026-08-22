@@ -7,6 +7,7 @@
 use neon::prelude::*;
 
 use tiqian_precompute::build_fonts::StylesheetFace;
+use tiqian_precompute::cache::WriteBudgetTier;
 use tiqian_precompute::font_record::FontWeightSpec;
 use tiqian_precompute::json::{member, parse_json, Json};
 use tiqian_precompute::normalize::TypographyInput;
@@ -56,23 +57,48 @@ pub fn normalize_typography(mut cx: FunctionContext) -> JsResult<JsString> {
     }
 }
 
-/// `createPrecomputer(typographyJson, faces, sources)`: registers the
-/// precomputer and returns its handle.
+/// `createPrecomputer(typographyJson, faces, sources, budgetCode?)`: registers
+/// the precomputer and returns its handle.
 pub fn create_precomputer(mut cx: FunctionContext) -> JsResult<JsString> {
     let typography = TypographyInput::from_json(&json_argument(&mut cx, 0, "typography")?);
     let faces = cx.argument::<JsArray>(1)?;
     let sources = cx.argument::<JsArray>(2)?;
     let (owned, fonts) = read_face_arguments(&mut cx, &faces, &sources)?;
     let specs = session_face_specs(&owned, &fonts);
-    match tiqian_precompute::precomputer::create_precomputer(PrecomputerOptions::new(
-        typography, specs,
-    )) {
+    let mut options = PrecomputerOptions::new(typography, specs);
+    options.write_budget = write_budget_argument(&mut cx, 3)?;
+    match tiqian_precompute::precomputer::create_precomputer(options) {
         Ok(precomputer) => {
             let (handle, _) = registry::insert_precomputer(precomputer);
             Ok(cx.string(handle))
         }
         Err(error) => cx.throw_error(error.0),
     }
+}
+
+/// The optional `budgetCode` argument: a write-budget tier code. Absent or
+/// undefined means `Normal`; the ts layer validates names, so an unknown code
+/// here is a wrapper bug and reports as one.
+fn write_budget_argument(cx: &mut FunctionContext, index: usize) -> NeonResult<WriteBudgetTier> {
+    let Some(value) = cx.argument_opt(index) else {
+        return Ok(WriteBudgetTier::Normal);
+    };
+    if value.is_a::<JsNull, _>(cx) || value.is_a::<JsUndefined, _>(cx) {
+        return Ok(WriteBudgetTier::Normal);
+    }
+    let code = value.downcast_or_throw::<JsNumber, _>(cx)?.value(cx);
+    // Whole-number comparison keeps NaN and fractions on the error arm
+    // without any saturation cast.
+    let tier = if code == 0.0 {
+        WriteBudgetTier::Tight
+    } else if code == 1.0 {
+        WriteBudgetTier::Normal
+    } else if code == 2.0 {
+        WriteBudgetTier::Generous
+    } else {
+        return cx.throw_error(format!("UnknownWriteBudgetCode:{code}"));
+    };
+    Ok(tier)
 }
 
 /// `precomputerInfo(handle)`: the normalized typography and the resolved

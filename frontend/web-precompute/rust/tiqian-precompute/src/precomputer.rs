@@ -7,7 +7,7 @@
 
 use tiqian::NamedError;
 
-use crate::cache::{CacheAdapter, LayeredCacheStore, NoCache};
+use crate::cache::{CacheAdapter, LayeredCacheStore, NoCache, WriteBudgetTier};
 use crate::emit::evidence_json;
 use crate::font_source::sha256_hex;
 use crate::js_compat::{js_int_to_number, trunc_sat_i32};
@@ -42,6 +42,8 @@ pub struct PrecomputerOptions<'a> {
     pub faces: Vec<SessionFaceSpec<'a>>,
     pub session_prefix: String,
     pub cache_adapter: Option<Box<dyn CacheAdapter>>,
+    /// The drain-queue write budget; `Normal` unless the host says otherwise.
+    pub write_budget: WriteBudgetTier,
 }
 
 impl<'a> PrecomputerOptions<'a> {
@@ -51,6 +53,7 @@ impl<'a> PrecomputerOptions<'a> {
             faces,
             session_prefix: BUILD_SESSION_PREFIX.to_string(),
             cache_adapter: None,
+            write_budget: WriteBudgetTier::Normal,
         }
     }
 }
@@ -92,7 +95,7 @@ pub fn create_precomputer(options: PrecomputerOptions) -> Result<Precomputer, Na
         crate::context::context_fingerprint(&precomputer.typography, &precomputer.session.faces());
     precomputer.cache = match options.cache_adapter {
         Some(adapter) => LayeredCacheStore::new(context, adapter),
-        None => LayeredCacheStore::with_drain_queue(context).0,
+        None => LayeredCacheStore::with_drain_queue(context, options.write_budget).0,
     };
     Ok(precomputer)
 }
