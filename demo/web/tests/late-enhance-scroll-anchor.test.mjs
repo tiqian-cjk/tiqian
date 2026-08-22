@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -69,6 +69,12 @@ class CdpClient {
   }
 }
 
+// One dev server serves every scenario in this file; killing it between
+// tests would race the HEAD preflight against a dying listener. The process
+// handle pins the event loop, so the file-level after hook is what lets the
+// serial runner move on.
+let spawnedServerProc = null;
+
 async function ensureServerRunning() {
   try {
     const res = await fetch("http://localhost:8888/", { method: "HEAD" });
@@ -82,13 +88,20 @@ async function ensureServerRunning() {
   for (let i = 0; i < 60; i++) {
     try {
       const res = await fetch("http://localhost:8888/", { method: "HEAD" });
-      if (res.ok) return proc;
+      if (res.ok) {
+        spawnedServerProc = proc;
+        return proc;
+      }
     } catch {}
     await new Promise((r) => setTimeout(r, 500));
   }
   proc.kill();
   throw new Error("Failed to start web demo server on port 8888");
 }
+
+after(() => {
+  spawnedServerProc?.kill();
+});
 
 // Marks every root disabled while the document streams in, so the page loads
 // with untouched native paragraphs — the "runtime arrives late" scenario.
