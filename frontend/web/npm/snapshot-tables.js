@@ -2,7 +2,12 @@
 // `tq-tables` attribute with space-separated references; each reference is a
 // URL of a content-addressed table file or `#id` of an in-page element
 // holding the same bytes. One global map deduplicates loads per reference,
-// so every root of a page shares one table instance.
+// so every root of a page shares one table instance. A file is either the
+// `TIQTBL02` binary or schema-2 JSON text; both load into the same accessor
+// surface, and the raw bytes travel on so the layout worker rebuilds the
+// table in its own context.
+
+import { decodeSnapshotTableBinary, isSnapshotTableBinary } from "./snapshot-table-binary.js";
 
 const TABLES_ATTRIBUTE = "tq-tables";
 
@@ -28,7 +33,7 @@ export function validateSnapshotTables(parsed) {
   return parsed;
 }
 
-/** Parses and validates one station-table file. */
+/** Parses and validates one station-table file of the JSON text form. */
 export function parseSnapshotTables(text) {
   let parsed;
   try {
@@ -39,8 +44,65 @@ export function parseSnapshotTables(text) {
   return validateSnapshotTables(parsed);
 }
 
-async function digestText(text) {
-  const bytes = new TextEncoder().encode(text);
+function tableRow(table, index, issue) {
+  if (!Number.isSafeInteger(index) || index < 0 || index >= table.length) {
+    throw new Error(issue);
+  }
+  return table[index];
+}
+
+/**
+ * The accessor surface of one parsed JSON table: the same methods the binary
+ * view exposes, resolved through the parsed arrays.
+ */
+export function textTableAccessors(parsed) {
+  validateSnapshotTables(parsed);
+  const stringAt = (ref) =>
+    tableRow(parsed.strings, ref, "SnapshotFontReplayStringReferenceInvalid");
+  return {
+    binary: false,
+    stringAt,
+    metricRows: () => parsed.metrics.map((row) => {
+      if (!Array.isArray(row) || row.length !== 10 || (row[2] !== 0 && row[2] !== 1)) {
+        throw new Error("SnapshotFontReplayMetricsTransportInvalid");
+      }
+      return {
+        serializedFamilies: stringAt(row[0]),
+        fontWeight: row[1],
+        italic: row[2] === 1,
+        role: stringAt(row[3]),
+        faceSelectionText: stringAt(row[4]),
+        valuesEm: row.slice(5),
+      };
+    }),
+    probeAt: (ref) => tableRow(parsed.probes, ref, "SnapshotProbeReferenceInvalid"),
+    typographyAt: (ref) => tableRow(parsed.typographies, ref, "SnapshotTypographyReferenceInvalid"),
+    faceAt: (ref) => tableRow(parsed.faces, ref, "SnapshotFontFaceReferenceInvalid"),
+    valueStyles: () => [...parsed.valueStyles],
+    revisions: () => ({
+      backendRevision: parsed.revisions?.backendRevision ?? null,
+      harfbuzzVersion: parsed.revisions?.harfbuzzVersion ?? null,
+    }),
+  };
+}
+
+/**
+ * Builds the accessor surface of one table file: the binary reader for the
+ * `TIQTBL02` magic, the parsed-text accessors for JSON bytes.
+ */
+export function snapshotTablesFromBytes(bytes) {
+  if (!(bytes instanceof Uint8Array)) throw new Error("SnapshotTablesInvalid");
+  if (isSnapshotTableBinary(bytes)) return decodeSnapshotTableBinary(bytes);
+  let text;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error("SnapshotTablesInvalid");
+  }
+  return textTableAccessors(parseSnapshotTables(text));
+}
+
+async function digestBytes(bytes) {
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
@@ -50,14 +112,15 @@ async function loadTableBytes(key, documentObject) {
     const element = documentObject?.getElementById?.(key.slice(1));
     const text = typeof element?.textContent === "string" ? element.textContent : "";
     if (text.trim() === "") throw new Error("SnapshotTablesReferenceMissing");
-    return text;
+    return new TextEncoder().encode(text);
   }
   if (typeof globalThis.fetch !== "function") {
     throw new Error("SnapshotTablesFetchUnavailable");
   }
   const response = await globalThis.fetch(key);
   if (!response?.ok) throw new Error("SnapshotTablesFetchFailed");
-  return await response.text();
+  const buffer = await response.arrayBuffer();
+  return new Uint8Array(buffer);
 }
 
 function tablePromiseFor(key, documentObject) {
@@ -66,8 +129,12 @@ function tablePromiseFor(key, documentObject) {
   // Failed loads stay uncached so a later root can retry after a transient
   // network failure; the map only memoizes verified tables.
   promise = (async () => {
-    const text = await loadTableBytes(key, documentObject);
-    const table = { json: parseSnapshotTables(text), sha256: await digestText(text), text };
+    const bytes = await loadTableBytes(key, documentObject);
+    const table = {
+      bytes,
+      view: snapshotTablesFromBytes(bytes),
+      sha256: await digestBytes(bytes),
+    };
     resolvedTables.set(key, table);
     return table;
   })();

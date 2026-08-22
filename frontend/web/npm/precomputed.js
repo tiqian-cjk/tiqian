@@ -1374,7 +1374,7 @@ function preflightTemplateManifest(template, root) {
   const expected = typeof parsed.tables?.snapshot === "string"
     ? parsed.tables.snapshot
     : null;
-  return expandSnapshotManifest(parsed, loadedSnapshotTablesForRoot(root, expected)?.json ?? null);
+  return expandSnapshotManifest(parsed, loadedSnapshotTablesForRoot(root, expected)?.view ?? null);
 }
 
 /**
@@ -1397,7 +1397,7 @@ async function resolveTemplateManifest(root, template) {
     expected,
   );
   if (table == null) throw new Error("SnapshotTablesMissing");
-  return expandSnapshotManifest(parsed, table.json);
+  return expandSnapshotManifest(parsed, table.view);
 }
 
 function manifestReadReason(error) {

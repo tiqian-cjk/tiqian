@@ -305,7 +305,7 @@ async function snapshotContext(root) {
   }
   let manifest;
   try {
-    manifest = expandSnapshotManifest(parsed, tables?.json ?? null);
+    manifest = expandSnapshotManifest(parsed, tables?.view ?? null);
   } catch (error) {
     fail("SnapshotManifestInvalid", reference, error);
   }
@@ -314,7 +314,7 @@ async function snapshotContext(root) {
     documentObject,
     template,
     manifestText: script.textContent,
-    tablesText: tables?.text ?? null,
+    tablesBytes: tables?.bytes ?? null,
     ...collected,
   };
 }
@@ -557,7 +557,7 @@ export function createBrowserFontSessionLoader(options = {}) {
         versions,
         cacheKey,
         manifestText: context.manifestText,
-        tablesText: context.tablesText,
+        tablesBytes: context.tablesBytes,
         session: null,
         renderFontFaces: context.faces.map((face) => ({
           family: face.family,
@@ -666,7 +666,7 @@ export function browserFontSessionWorkerContract(handle) {
     manifestText: snapshotContextFromState(token.state),
     // The station-table bytes the manifest pins; null for schema-1 manifests
     // whose replay rows are already self-contained.
-    tablesText: token.state.tablesText ?? null,
+    tablesBytes: token.state.tablesBytes ?? null,
   });
 }
 

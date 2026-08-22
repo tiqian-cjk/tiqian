@@ -5,7 +5,7 @@ import {
   shapeReplayKey,
   stableStringify,
 } from "./snapshot-schema.js";
-import { validateSnapshotTables } from "./snapshot-tables.js";
+import { textTableAccessors } from "./snapshot-tables.js";
 
 const FACE_DYNAMIC_KEYS = new Set(["coverageText", "probe"]);
 
@@ -122,24 +122,8 @@ function compactFontReplay(shapes, metrics) {
   };
 }
 
-function expandFontReplay(replay) {
-  if (!replay || replay.revision !== FONT_REPLAY_REVISION ||
-      !Array.isArray(replay.shapes) || !Array.isArray(replay.metrics)) {
-    throw new Error("SnapshotFontReplayInvalid");
-  }
-  // Canonical in-memory manifests remain accepted by the parser so callers can
-  // register a manifest without first serializing the compact transport.
-  if (replay.encoding == null) return replay;
-  if (replay.encoding !== FONT_REPLAY_TRANSPORT || !Array.isArray(replay.strings) ||
-      replay.strings.some((value) => typeof value !== "string")) {
-    throw new Error("SnapshotFontReplayTransportInvalid");
-  }
-  const stringAt = (index) => tableReference(
-    replay.strings,
-    index,
-    "SnapshotFontReplayStringReferenceInvalid",
-  );
-  const shapes = replay.shapes.map((row) => {
+function expandReplayShapes(shapes, stringAt) {
+  return shapes.map((row) => {
     if (!Array.isArray(row) || row.length !== 14 || !Array.isArray(row[10]) ||
         !Array.isArray(row[13]) || row[13].length % 8 !== 0 ||
         (row[3] !== 0 && row[3] !== 1)) {
@@ -188,6 +172,26 @@ function expandFontReplay(replay) {
       },
     };
   });
+}
+
+/** The schema-1 lane: the compact transport carries its own string table. */
+function expandFontReplay(replay) {
+  if (!replay || replay.revision !== FONT_REPLAY_REVISION ||
+      !Array.isArray(replay.shapes) || !Array.isArray(replay.metrics)) {
+    throw new Error("SnapshotFontReplayInvalid");
+  }
+  // Canonical in-memory manifests remain accepted by the parser so callers can
+  // register a manifest without first serializing the compact transport.
+  if (replay.encoding == null) return replay;
+  if (replay.encoding !== FONT_REPLAY_TRANSPORT || !Array.isArray(replay.strings) ||
+      replay.strings.some((value) => typeof value !== "string")) {
+    throw new Error("SnapshotFontReplayTransportInvalid");
+  }
+  const stringAt = (index) => tableReference(
+    replay.strings,
+    index,
+    "SnapshotFontReplayStringReferenceInvalid",
+  );
   const metrics = replay.metrics.map((row) => {
     if (!Array.isArray(row) || row.length !== 10 || (row[2] !== 0 && row[2] !== 1)) {
       throw new Error("SnapshotFontReplayMetricsTransportInvalid");
@@ -208,7 +212,7 @@ function expandFontReplay(replay) {
       valuesEm: row.slice(5),
     };
   });
-  return { revision: replay.revision, shapes, metrics };
+  return { revision: replay.revision, shapes: expandReplayShapes(replay.shapes, stringAt), metrics };
 }
 
 /**
@@ -304,17 +308,13 @@ function tableReference(table, index, issue) {
 /** Expands entry rows against whichever table region the schema carries. */
 function expandManifestEntries(
   entries,
-  typographies,
-  descriptors,
+  typographyAt,
+  faceAt,
   evidenceVersions,
   resolveProbe,
 ) {
   return entries.map((entry) => {
-    const typography = tableReference(
-      typographies,
-      entry?.typographyRef,
-      "SnapshotTypographyReferenceInvalid",
-    );
+    const typography = typographyAt(entry?.typographyRef);
     if (!typography || typeof typography.sha256 !== "string" || !typography.value) {
       throw new Error("SnapshotTypographyTableInvalid");
     }
@@ -322,11 +322,7 @@ function expandManifestEntries(
       throw new Error("SnapshotFontEvidenceReferenceInvalid");
     }
     const faces = entry.fontFaceEvidence.map((evidence) => ({
-      ...tableReference(
-        descriptors,
-        evidence?.faceRef,
-        "SnapshotFontFaceReferenceInvalid",
-      ),
+      ...faceAt(evidence?.faceRef),
       coverageText: evidence.coverageText,
       probe: resolveProbe(evidence),
     }));
@@ -349,35 +345,52 @@ function expandManifestEntries(
 /**
  * The schema-2 expansion: integer references resolve through the station
  * table the transport loaded and verified against `manifest.tables.snapshot`.
- * Replay rows pick up the table string region, metrics come from the table,
- * and value styles splice in so the style-installation site reads one shape
- * for both schemas.
+ * The table arrives as the accessor surface of either file form; a parsed
+ * JSON object stays accepted so in-memory callers register one table without
+ * serializing it first. Replay shapes pick up the table string region,
+ * metrics come from the table, and value styles splice in so the
+ * style-installation site reads one shape for both schemas.
  */
 function expandSnapshotManifestWithTables(manifest, tables) {
   if (tables == null) throw new Error("SnapshotTablesMissing");
-  validateSnapshotTables(tables);
+  const view = typeof tables.stringAt === "function" ? tables : textTableAccessors(tables);
   if (!manifest.tables || typeof manifest.tables !== "object" ||
       Array.isArray(manifest.tables) || typeof manifest.tables.snapshot !== "string") {
     throw new Error("SnapshotManifestTablesInvalid");
   }
-  const fontReplay = manifest.fontReplay == null
+  const replay = manifest.fontReplay;
+  if (replay != null &&
+      (replay.revision !== FONT_REPLAY_REVISION ||
+       replay.encoding !== FONT_REPLAY_TRANSPORT || !Array.isArray(replay.shapes))) {
+    throw new Error("SnapshotFontReplayInvalid");
+  }
+  const fontReplay = replay == null
     ? undefined
-    : expandFontReplay({
-      ...manifest.fontReplay,
-      strings: tables.strings,
-      metrics: tables.metrics,
-    });
+    : {
+      revision: replay.revision,
+      shapes: expandReplayShapes(replay.shapes, view.stringAt),
+      metrics: view.metricRows().map((row) => ({
+        key: metricReplayKey(
+          row.serializedFamilies,
+          row.fontWeight,
+          row.italic,
+          row.role,
+          row.faceSelectionText,
+        ),
+        valuesEm: row.valuesEm,
+      })),
+    };
   const evidenceVersions = {
-    backendRevision: tables.revisions?.backendRevision ?? null,
-    harfbuzzVersion: tables.revisions?.harfbuzzVersion ?? null,
+    backendRevision: view.revisions().backendRevision,
+    harfbuzzVersion: view.revisions().harfbuzzVersion,
   };
   const resolveProbe = (evidence) => evidence?.probeRef == null
     ? undefined
-    : tableReference(tables.probes, evidence.probeRef, "SnapshotProbeReferenceInvalid");
+    : view.probeAt(evidence.probeRef);
   const expandEntries = (entries) => expandManifestEntries(
     entries,
-    tables.typographies,
-    tables.faces,
+    view.typographyAt,
+    view.faceAt,
     evidenceVersions,
     resolveProbe,
   );
@@ -388,7 +401,7 @@ function expandSnapshotManifestWithTables(manifest, tables) {
   return {
     ...manifest,
     ...(fontReplay ? { fontReplay } : {}),
-    valueStyles: [...tables.valueStyles],
+    valueStyles: view.valueStyles(),
     entries,
     ...(fontContractEntries ? { fontContractEntries } : {}),
   };
@@ -412,8 +425,8 @@ export function expandSnapshotManifest(manifest, tables = null) {
     : expandFontReplay(manifest.fontReplay);
   const expandEntries = (entries) => expandManifestEntries(
     entries,
-    typographies,
-    descriptors,
+    (ref) => tableReference(typographies, ref, "SnapshotTypographyReferenceInvalid"),
+    (ref) => tableReference(descriptors, ref, "SnapshotFontFaceReferenceInvalid"),
     {
       backendRevision: manifest.fontEvidence.backendRevision,
       harfbuzzVersion: manifest.fontEvidence.harfbuzzVersion,

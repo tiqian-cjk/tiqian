@@ -6,6 +6,7 @@ import {
   parseSnapshotTables,
   prefetchSnapshotTables,
   snapshotTablesForRoot,
+  snapshotTablesFromBytes,
 } from "./snapshot-tables.js";
 
 const TABLE_JSON = JSON.stringify({
@@ -39,7 +40,7 @@ function installFetch(responses) {
     calls.push(url);
     const reply = responses[url]?.shift();
     if (reply instanceof Error) throw reply;
-    return { ok: true, text: async () => reply };
+    return { ok: true, arrayBuffer: async () => new TextEncoder().encode(reply) };
   };
   return {
     calls,
@@ -55,8 +56,10 @@ test("table references load by url and dedupe through the global map", async () 
   try {
     const first = await snapshotTablesForRoot(rootWithTables(key), null);
     const second = await snapshotTablesForRoot(rootWithTables(key), null, first.sha256);
-    assert.equal(second.json, first.json);
-    assert.equal(second.sha256, await sha256Text(TABLE_JSON));
+    assert.equal(second.sha256, first.sha256);
+    assert.deepEqual([...second.bytes], [...first.bytes]);
+    assert.equal(first.view.binary, false);
+    assert.equal(first.sha256, await sha256Text(TABLE_JSON));
     assert.deepEqual(stub.calls, [key]);
     assert.equal(loadedSnapshotTablesForRoot(rootWithTables(key)).sha256, first.sha256);
   } finally {
@@ -68,7 +71,7 @@ test("page element references load in-page bytes", async () => {
   const element = { textContent: TABLE_JSON };
   const documentObject = { getElementById: (id) => (id === "station-tables" ? element : null) };
   const table = await snapshotTablesForRoot(rootWithTables("#station-tables"), documentObject);
-  assert.equal(table.json.schema, 2);
+  assert.deepEqual(table.view.revisions(), { backendRevision: null, harfbuzzVersion: null });
   assert.equal(table.sha256, await sha256Text(TABLE_JSON));
 });
 
@@ -82,7 +85,7 @@ test("failed loads stay uncached so a later root can retry", async () => {
     assert.equal(await snapshotTablesForRoot(failing), null);
     assert.equal(loadedSnapshotTablesForRoot(failing), null);
     const retrying = await snapshotTablesForRoot(rootWithTables(key));
-    assert.equal(retrying.json.schema, 2);
+    assert.deepEqual(retrying.view.valueStyles(), []);
     assert.deepEqual(stub.calls, [key, key]);
   } finally {
     stub.restore();
@@ -101,7 +104,7 @@ test("a digest mismatch walks to the next reference of the attribute", async () 
       null,
       expected,
     );
-    assert.equal(table.text, otherJson);
+    assert.equal(new TextDecoder().decode(table.bytes), otherJson);
     assert.deepEqual(stub.calls, [stale, fresh]);
     assert.equal(await snapshotTablesForRoot(rootWithTables(stale), null, expected), null);
   } finally {
@@ -115,6 +118,10 @@ test("invalid table bytes fail closed on parse", () => {
   const parsed = JSON.parse(TABLE_JSON);
   assert.throws(
     () => parseSnapshotTables(JSON.stringify({ ...parsed, valueStyles: [17] })),
+    /SnapshotTablesInvalid/u,
+  );
+  assert.throws(
+    () => snapshotTablesFromBytes(new Uint8Array([0x7b, 0x22, 0x61, 0xff, 0xff])),
     /SnapshotTablesInvalid/u,
   );
 });
