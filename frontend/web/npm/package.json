@@ -65,6 +65,7 @@
     "snapshot-client.d.ts",
     "snapshot-client.js",
     "snapshot-schema.js",
+    "snapshot-tables.js",
     "styles.css",
     "styles.js",
     "worker-layout.js"

@@ -318,6 +318,7 @@ test("browser font sessions expose only replay identity to the layout Worker", a
   assert.deepEqual(contract, {
     sessionKey: handle.id,
     manifestText: JSON.stringify(manifest),
+    tablesText: null,
   });
   assert.equal(state.loader.release(handle), true);
   assert.throws(() => browserFontSessionWorkerContract(handle), assertCode("BrowserFontSessionHandleInvalid"));

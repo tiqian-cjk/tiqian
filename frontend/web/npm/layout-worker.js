@@ -4,12 +4,18 @@ import {
   workerExactSubsetSourceBoundaries,
 } from "./font-face-boundaries.js";
 import { parseSnapshotManifest } from "./snapshot-manifest.js";
+import { parseSnapshotTables } from "./snapshot-tables.js";
 import { precomputeParagraph } from "./precompute-runtime/Tiqian-tiqian-ffi-js.mjs";
 
 const sessions = new Map();
 
-function manifestSession(manifestText, sessionKey) {
-  const manifest = parseSnapshotManifest(manifestText);
+function manifestSession(manifestText, tablesText, sessionKey) {
+  // The coordinator verified the table bytes against the manifest pin before
+  // handing them over; parse revalidates the shape for the worker context.
+  const tables = typeof tablesText === "string" && tablesText.length > 0
+    ? parseSnapshotTables(tablesText)
+    : null;
+  const manifest = parseSnapshotManifest(manifestText, tables);
   const entries = [...(manifest.entries ?? []), ...(manifest.fontContractEntries ?? [])];
   const evidence = entries.flatMap((entry) => entry?.fontEvidence?.faces ?? []);
   if (evidence.length === 0 || !manifest.fontReplay) {
@@ -57,7 +63,7 @@ globalThis.addEventListener("message", async (event) => {
     if (type === "init") {
       let session = sessions.get(sessionKey);
       if (!session) {
-        session = await manifestSession(message.manifestText, sessionKey);
+        session = await manifestSession(message.manifestText, message.tablesText, sessionKey);
         sessions.set(sessionKey, session);
       }
       globalThis.postMessage({ id, ok: true });

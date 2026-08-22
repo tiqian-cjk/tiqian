@@ -15,6 +15,7 @@ import {
   waitForTypographyFonts,
 } from "./lazy-capabilities.js";
 import { ensureTiqianStyles } from "./styles.js";
+import { prefetchSnapshotTables } from "./snapshot-tables.js";
 
 const ELEMENT_NAME = "tiqian-prose";
 const DEFAULT_PARAGRAPH_SELECTOR = "p, li";
@@ -32,6 +33,10 @@ const HTMLElementBase = typeof globalThis.HTMLElement === "function"
   : class TiqianSsrElement {};
 let exactFontFallbackPromise;
 installTiqianCopyHandler();
+// Station-table loads start at module evaluation, ahead of the first root
+// hydrating (ADR 0052 `TableTransport`); the scan is document-guarded and a
+// no-op in non-browser entry points.
+prefetchSnapshotTables();
 const TYPOGRAPHY_PROPERTIES = [
   "display",
   "font-family",

@@ -4,14 +4,16 @@ import {
   FONT_SOURCE_POLICY,
   LAYOUT_REVISION,
   RENDER_REVISION,
-  SNAPSHOT_SCHEMA,
+  SNAPSHOT_TABLES_SCHEMA,
+  readableSnapshotSchema,
   stableStringify,
 } from "./snapshot-schema.js";
 import {
   installPreparedValueStyles,
   releasePreparedValueStyleRoot,
 } from "./prepared-dom.js";
-import { parseSnapshotManifest } from "./snapshot-manifest.js";
+import { expandSnapshotManifest } from "./snapshot-manifest.js";
+import { loadedSnapshotTablesForRoot, snapshotTablesForRoot } from "./snapshot-tables.js";
 import {
   snapshotSourceArtifactFromDom,
   snapshotSourceArtifactString,
@@ -1354,13 +1356,63 @@ async function validateFontEvidenceGroups(
   }
 }
 
-function templateManifest(template) {
+function manifestScriptText(template) {
   const script = template.content?.querySelector?.("[data-tq-snapshot-manifest]");
   if (!script?.textContent) throw new Error("MissingSnapshotManifest");
-  return parseSnapshotManifest(script.textContent);
+  return script.textContent;
+}
+
+/**
+ * The expanded manifest of one template for the synchronous preflight. The
+ * schema-2 form resolves its station table from the transport's verified
+ * cache only; a table that has not finished loading fails the read and the
+ * preflight reports a miss.
+ */
+function preflightTemplateManifest(template, root) {
+  const parsed = JSON.parse(manifestScriptText(template));
+  if (parsed?.tables == null) return expandSnapshotManifest(parsed);
+  const expected = typeof parsed.tables?.snapshot === "string"
+    ? parsed.tables.snapshot
+    : null;
+  return expandSnapshotManifest(parsed, loadedSnapshotTablesForRoot(root, expected)?.json ?? null);
+}
+
+/**
+ * Expands the template manifest in either schema. A schema-2 manifest
+ * resolves its station table through the root's `tq-tables` attribute and
+ * verifies the loaded bytes against the sha the manifest pins before any
+ * table row is trusted; a failed or mismatched load surfaces as
+ * `SnapshotTablesMissing` so the caller records the miss and falls back.
+ */
+async function resolveTemplateManifest(root, template) {
+  const text = manifestScriptText(template);
+  const parsed = JSON.parse(text);
+  if (parsed?.tables == null) return expandSnapshotManifest(parsed);
+  const expected = typeof parsed.tables?.snapshot === "string"
+    ? parsed.tables.snapshot
+    : null;
+  const table = await snapshotTablesForRoot(
+    root,
+    root?.ownerDocument || globalThis.document,
+    expected,
+  );
+  if (table == null) throw new Error("SnapshotTablesMissing");
+  return expandSnapshotManifest(parsed, table.json);
+}
+
+function manifestReadReason(error) {
+  return error?.message === "SnapshotTablesMissing"
+    ? "SnapshotTablesMissing"
+    : "SnapshotManifestInvalid";
 }
 
 async function manifestValueStylesAreValid(manifest) {
+  if (manifest?.schema === SNAPSHOT_TABLES_SCHEMA) {
+    // The table content hash was verified against the manifest pin before
+    // expansion; the spliced rows need shape validation only.
+    return Array.isArray(manifest.valueStyles) &&
+      manifest.valueStyles.every((row) => typeof row === "string");
+  }
   return Array.isArray(manifest?.valueStyles) &&
     typeof manifest.valueStylesSha256 === "string" &&
     await sha256Text(stableStringify(manifest.valueStyles)) === manifest.valueStylesSha256;
@@ -1626,12 +1678,12 @@ export async function validatePrecomputedSnapshotExactFontContract(root, isCurre
   if (!template?.content) return { matches: false, reason: "SnapshotTemplateMissing" };
   let manifest;
   try {
-    manifest = templateManifest(template);
-  } catch {
-    return { matches: false, reason: "SnapshotManifestInvalid" };
+    manifest = await resolveTemplateManifest(root, template);
+  } catch (error) {
+    return { matches: false, reason: manifestReadReason(error) };
   }
   if (
-    manifest.schema !== SNAPSHOT_SCHEMA || manifest.layoutRevision !== LAYOUT_REVISION ||
+    !readableSnapshotSchema(manifest.schema) || manifest.layoutRevision !== LAYOUT_REVISION ||
     manifest.renderRevision !== RENDER_REVISION || manifest.fontSourcePolicy !== FONT_SOURCE_POLICY ||
     !Array.isArray(manifest.entries) || typeof manifest.paragraphSelector !== "string" ||
     !manifestRenderFontFamiliesAreValid(manifest)
@@ -1771,12 +1823,12 @@ export async function validatePrecomputedExactFontReplayContract(root, isCurrent
   const manifestText = manifestScript?.textContent;
   let manifest;
   try {
-    manifest = templateManifest(template);
-  } catch {
-    return { matches: false, reason: "SnapshotManifestInvalid" };
+    manifest = await resolveTemplateManifest(root, template);
+  } catch (error) {
+    return { matches: false, reason: manifestReadReason(error) };
   }
   if (
-    manifest.schema !== SNAPSHOT_SCHEMA || manifest.layoutRevision !== LAYOUT_REVISION ||
+    !readableSnapshotSchema(manifest.schema) || manifest.layoutRevision !== LAYOUT_REVISION ||
     manifest.renderRevision !== RENDER_REVISION || manifest.fontSourcePolicy !== FONT_SOURCE_POLICY ||
     !Array.isArray(manifest.entries) || typeof manifest.paragraphSelector !== "string" ||
     !manifestRenderFontFamiliesAreValid(manifest)
@@ -1956,7 +2008,7 @@ export function precomputedSnapshotMaximumMeasureMatches(root) {
   if (!template?.content) return false;
   let manifest;
   try {
-    manifest = templateManifest(template);
+    manifest = preflightTemplateManifest(template, root);
   } catch {
     return false;
   }
@@ -2053,12 +2105,12 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
 
   let manifest;
   try {
-    manifest = templateManifest(template);
-  } catch {
-    return miss(root, "SnapshotManifestInvalid");
+    manifest = await resolveTemplateManifest(root, template);
+  } catch (error) {
+    return miss(root, manifestReadReason(error));
   }
   if (
-    manifest.schema !== SNAPSHOT_SCHEMA || manifest.layoutRevision !== LAYOUT_REVISION ||
+    !readableSnapshotSchema(manifest.schema) || manifest.layoutRevision !== LAYOUT_REVISION ||
     manifest.renderRevision !== RENDER_REVISION || manifest.fontSourcePolicy !== FONT_SOURCE_POLICY ||
     !manifestRenderFontFamiliesAreValid(manifest)
   ) return miss(root, "SnapshotRevisionMismatch");

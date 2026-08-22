@@ -5,6 +5,7 @@ import {
   shapeReplayKey,
   stableStringify,
 } from "./snapshot-schema.js";
+import { validateSnapshotTables } from "./snapshot-tables.js";
 
 const FACE_DYNAMIC_KEYS = new Set(["coverageText", "probe"]);
 
@@ -300,22 +301,15 @@ function tableReference(table, index, issue) {
   return table[index];
 }
 
-/** Expands the compact transport into the canonical runtime manifest shape. */
-export function expandSnapshotManifest(manifest) {
-  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
-    throw new Error("SnapshotManifestInvalid");
-  }
-  if (!Array.isArray(manifest.typographies) ||
-      !manifest.fontEvidence || !Array.isArray(manifest.fontEvidence.faces) ||
-      !Array.isArray(manifest.entries)) {
-    throw new Error("SnapshotManifestTablesInvalid");
-  }
-  const typographies = manifest.typographies;
-  const descriptors = manifest.fontEvidence.faces;
-  const fontReplay = manifest.fontReplay == null
-    ? undefined
-    : expandFontReplay(manifest.fontReplay);
-  const expandEntries = (entries) => entries.map((entry) => {
+/** Expands entry rows against whichever table region the schema carries. */
+function expandManifestEntries(
+  entries,
+  typographies,
+  descriptors,
+  evidenceVersions,
+  resolveProbe,
+) {
+  return entries.map((entry) => {
     const typography = tableReference(
       typographies,
       entry?.typographyRef,
@@ -334,7 +328,7 @@ export function expandSnapshotManifest(manifest) {
         "SnapshotFontFaceReferenceInvalid",
       ),
       coverageText: evidence.coverageText,
-      probe: evidence.probe,
+      probe: resolveProbe(evidence),
     }));
     return {
       key: entry.key,
@@ -346,14 +340,86 @@ export function expandSnapshotManifest(manifest) {
       typographySha256: typography.sha256,
       typography: typography.value,
       maxWidthPx: entry.maxWidthPx,
-      fontEvidence: {
-        backendRevision: manifest.fontEvidence.backendRevision,
-        harfbuzzVersion: manifest.fontEvidence.harfbuzzVersion,
-        faces,
-      },
+      fontEvidence: { ...evidenceVersions, faces },
       renderArtifactSha256: entry.renderArtifactSha256,
     };
   });
+}
+
+/**
+ * The schema-2 expansion: integer references resolve through the station
+ * table the transport loaded and verified against `manifest.tables.snapshot`.
+ * Replay rows pick up the table string region, metrics come from the table,
+ * and value styles splice in so the style-installation site reads one shape
+ * for both schemas.
+ */
+function expandSnapshotManifestWithTables(manifest, tables) {
+  if (tables == null) throw new Error("SnapshotTablesMissing");
+  validateSnapshotTables(tables);
+  if (!manifest.tables || typeof manifest.tables !== "object" ||
+      Array.isArray(manifest.tables) || typeof manifest.tables.snapshot !== "string") {
+    throw new Error("SnapshotManifestTablesInvalid");
+  }
+  const fontReplay = manifest.fontReplay == null
+    ? undefined
+    : expandFontReplay({
+      ...manifest.fontReplay,
+      strings: tables.strings,
+      metrics: tables.metrics,
+    });
+  const evidenceVersions = {
+    backendRevision: tables.revisions?.backendRevision ?? null,
+    harfbuzzVersion: tables.revisions?.harfbuzzVersion ?? null,
+  };
+  const resolveProbe = (evidence) => evidence?.probeRef == null
+    ? undefined
+    : tableReference(tables.probes, evidence.probeRef, "SnapshotProbeReferenceInvalid");
+  const expandEntries = (entries) => expandManifestEntries(
+    entries,
+    tables.typographies,
+    tables.faces,
+    evidenceVersions,
+    resolveProbe,
+  );
+  const entries = expandEntries(manifest.entries);
+  const fontContractEntries = Array.isArray(manifest.fontContractEntries)
+    ? expandEntries(manifest.fontContractEntries)
+    : undefined;
+  return {
+    ...manifest,
+    ...(fontReplay ? { fontReplay } : {}),
+    valueStyles: [...tables.valueStyles],
+    entries,
+    ...(fontContractEntries ? { fontContractEntries } : {}),
+  };
+}
+
+/** Expands the compact transport into the canonical runtime manifest shape. */
+export function expandSnapshotManifest(manifest, tables = null) {
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+    throw new Error("SnapshotManifestInvalid");
+  }
+  if (manifest.tables != null) return expandSnapshotManifestWithTables(manifest, tables);
+  if (!Array.isArray(manifest.typographies) ||
+      !manifest.fontEvidence || !Array.isArray(manifest.fontEvidence.faces) ||
+      !Array.isArray(manifest.entries)) {
+    throw new Error("SnapshotManifestTablesInvalid");
+  }
+  const typographies = manifest.typographies;
+  const descriptors = manifest.fontEvidence.faces;
+  const fontReplay = manifest.fontReplay == null
+    ? undefined
+    : expandFontReplay(manifest.fontReplay);
+  const expandEntries = (entries) => expandManifestEntries(
+    entries,
+    typographies,
+    descriptors,
+    {
+      backendRevision: manifest.fontEvidence.backendRevision,
+      harfbuzzVersion: manifest.fontEvidence.harfbuzzVersion,
+    },
+    (evidence) => evidence.probe,
+  );
   const entries = expandEntries(manifest.entries);
   const fontContractEntries = Array.isArray(manifest.fontContractEntries)
     ? expandEntries(manifest.fontContractEntries)
@@ -366,6 +432,6 @@ export function expandSnapshotManifest(manifest) {
   };
 }
 
-export function parseSnapshotManifest(text) {
-  return expandSnapshotManifest(JSON.parse(text));
+export function parseSnapshotManifest(text, tables = null) {
+  return expandSnapshotManifest(JSON.parse(text), tables);
 }

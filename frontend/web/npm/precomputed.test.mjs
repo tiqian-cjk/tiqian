@@ -327,6 +327,8 @@ function fixture({
   nativeText = false,
   fontDisplay = "block",
   entrySource = undefined,
+  stationTables = false,
+  stationTablesSha = null,
   paragraphTag = "p",
   paragraphSelector = "p[data-tq-snapshot-key]",
   paragraphWidth = 360,
@@ -496,6 +498,51 @@ function fixture({
   script.textContent = JSON.stringify(manifest);
   template.content.append(script, entry);
   documentObject.elements.set("tq-page", template);
+
+  // The schema-2 variant of the same fixture: the shared rows move into an
+  // in-page station table, the manifest pins its digest, and the root
+  // references it by element id.
+  if (stationTables) {
+    const table = {
+      schema: 2,
+      typographies: manifest.typographies,
+      faces: manifest.fontEvidence.faces,
+      valueStyles: [],
+      fontPreloads: ["/assets/fixture-deadbeef.woff2"],
+      revisions: {
+        backendRevision: manifest.fontEvidence.backendRevision,
+        harfbuzzVersion: manifest.fontEvidence.harfbuzzVersion,
+        fontReplay: FONT_REPLAY_REVISION,
+        fontReplayTransport: "shared-strings-v1",
+      },
+      strings: [],
+      probes: [evidence.probe],
+      metrics: [],
+    };
+    const tableText = JSON.stringify(table);
+    const tableElement = documentObject.createElement("script");
+    tableElement.textContent = tableText;
+    documentObject.elements.set("tq-station-tables", tableElement);
+    root.setAttribute("tq-tables", "#tq-station-tables");
+    script.textContent = JSON.stringify({
+      schema: 2,
+      tables: { snapshot: stationTablesSha ?? sha256(tableText) },
+      layoutRevision: manifest.layoutRevision,
+      renderRevision: manifest.renderRevision,
+      fontSourcePolicy: manifest.fontSourcePolicy,
+      renderFontFamilies: manifest.renderFontFamilies,
+      paragraphSelector,
+      fontReplay: { revision: FONT_REPLAY_REVISION, encoding: "shared-strings-v1", shapes: [] },
+      entries: [{
+        key: "p-1",
+        sourceSha256: sha256("中国"),
+        typographyRef: 0,
+        maxWidthPx: maximumWidth,
+        fontFaceEvidence: [{ faceRef: 0, probeRef: 0 }],
+        renderArtifactSha256: manifest.entries[0].renderArtifactSha256,
+      }],
+    });
+  }
 
   const source = `${localSource ? `local("${localName}"),` : ""}url("/assets/fixture-deadbeef.woff2")`;
   const fontFaceStyle = styleDeclaration({
@@ -1253,6 +1300,37 @@ test("maximum-measure preflight is non-destructive and follows live paragraph wi
     paragraph.width = 240;
     assert.equal(precomputedSnapshotMaximumMeasureMatches(root), false);
     assert.strictEqual(paragraph.firstChild, originalText);
+  } finally {
+    globalThis.getComputedStyle = previousGetComputedStyle;
+  }
+});
+
+test("schema-2 snapshots adopt through a station table reference", async () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = fixtureComputedStyle;
+  try {
+    const { root, paragraph } = fixture({ stationTables: true });
+
+    // The table is not in the sync cache yet, so the preflight reads a miss
+    // without touching the DOM.
+    assert.equal(precomputedSnapshotMaximumMeasureMatches(root), false);
+    assert.equal(paragraph.getAttribute("data-tq-rendered"), null);
+
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(root), { adopted: true, count: 1 });
+    assert.equal(paragraph.getAttribute("data-tq-rendered"), "true");
+
+    // After adoption the verified table sits in the transport cache and the
+    // synchronous preflight answers from it.
+    assert.equal(precomputedSnapshotMaximumMeasureMatches(root), true);
+
+    // A manifest pinning a different digest reads the cached reference as a
+    // mismatch and misses without adopting anything.
+    const mismatch = fixture({ stationTables: true, stationTablesSha: "0".repeat(64) });
+    assert.deepEqual(await tryAdoptPrecomputedSnapshot(mismatch.root), {
+      adopted: false,
+      reason: "SnapshotTablesMissing",
+    });
+    assert.equal(isPrecomputedSnapshotAdopted(mismatch.root), false);
   } finally {
     globalThis.getComputedStyle = previousGetComputedStyle;
   }

@@ -5,6 +5,7 @@ import {
   compactSnapshotManifest,
   expandSnapshotManifest,
 } from "./snapshot-manifest.js";
+import { metricReplayKey, shapeReplayKey } from "./snapshot-schema.js";
 
 function preparedEntry(key, coverageText, probeText) {
   const typography = {
@@ -139,4 +140,119 @@ test("invalid replay string references fail closed", () => {
   compact.fontReplay.shapes[0][0] = 99;
 
   assert.throws(() => expandSnapshotManifest(compact), /SnapshotFontReplayStringReferenceInvalid/u);
+});
+
+function stationTablesFixture() {
+  return {
+    schema: 2,
+    typographies: [{
+      sha256: "t".repeat(64),
+      value: {
+        fontFamilies: ["Fixture CJK"],
+        fontSizePx: 18,
+        lineHeightPx: 27,
+        locale: "zh-Hans",
+      },
+    }],
+    faces: [{
+      family: "Fixture CJK",
+      style: "normal",
+      weight: [400, 400],
+      unicodeRange: "U+4E00-9FFF",
+      publicUrl: "/fixture-deadbeef.woff2",
+      sourceSha256: "a".repeat(64),
+      sfntSha256: "b".repeat(64),
+      faceIndex: 0,
+      sourceOrder: 0,
+      axes: {},
+      localNames: ["Fixture CJK"],
+    }],
+    valueStyles: ["font-variant-numeric: lining-nums"],
+    fontPreloads: ["/fixture-deadbeef.woff2"],
+    revisions: {
+      backendRevision: "fixture-backend",
+      harfbuzzVersion: "fixture-hb",
+      fontReplay: "tiqian-server-shaping-replay-v1",
+      fontReplayTransport: "shared-strings-v1",
+    },
+    strings: ["a", "Fixture CJK", "zh-Hans", "CjkText", "fixture-face", "fixture-instance", "Hani"],
+    probes: [{ text: "中", advancePx: 18 }],
+    metrics: [[1, 400, 0, 3, 0, 1, 0, 0, 1, 0]],
+  };
+}
+
+function tablesManifestFixture(tables) {
+  return {
+    schema: 2,
+    tables: { snapshot: "0".repeat(64) },
+    layoutRevision: "tiqian-layout-v2",
+    renderRevision: "prebroken-dom-v15",
+    fontSourcePolicy: "host-compatible-stylesheet-v1",
+    paragraphSelector: "p[data-tq-snapshot-key]",
+    renderFontFamilies: ["Fixture CJK"],
+    fontReplay: {
+      revision: "tiqian-server-shaping-replay-v1",
+      encoding: "shared-strings-v1",
+      shapes: [[0, 1, 400, 0, 2, 3, 0, 4, 5, 6, [], 0, 1, [1, 1, 0, 0, 0, -0.8, 1, 0.2]]],
+    },
+    entries: [{
+      key: "a",
+      sourceSha256: "a".repeat(64),
+      typographyRef: 0,
+      maxWidthPx: 360,
+      fontFaceEvidence: [{ faceRef: 0, probeRef: 0 }],
+      renderArtifactSha256: "r".repeat(64),
+    }],
+  };
+}
+
+test("schema-2 manifests expand through the station table", () => {
+  const tables = stationTablesFixture();
+  const manifest = tablesManifestFixture(tables);
+  const expanded = expandSnapshotManifest(manifest, tables);
+
+  assert.deepEqual(expanded.entries[0].typography, tables.typographies[0].value);
+  assert.equal(expanded.entries[0].typographySha256, tables.typographies[0].sha256);
+  assert.equal(expanded.entries[0].fontEvidence.backendRevision, "fixture-backend");
+  assert.equal(expanded.entries[0].fontEvidence.harfbuzzVersion, "fixture-hb");
+  const face = expanded.entries[0].fontEvidence.faces[0];
+  assert.equal(face.family, "Fixture CJK");
+  assert.equal(face.probe.text, "中");
+  assert.equal(face.coverageText, undefined);
+  assert.deepEqual(expanded.valueStyles, tables.valueStyles);
+  assert.deepEqual(expanded.entries[0].fontFaceEvidence, undefined);
+  assert.deepEqual(expanded.fontReplay.shapes[0].key, shapeReplayKey(
+    "a",
+    "Fixture CJK",
+    400,
+    false,
+    "zh-Hans",
+    "CjkText",
+    "a",
+  ));
+  assert.deepEqual(expanded.fontReplay.metrics, [{
+    key: metricReplayKey("Fixture CJK", 400, false, "CjkText", "a"),
+    valuesEm: [1, 0, 0, 1, 0],
+  }]);
+});
+
+test("schema-2 expansion keeps inline coverage of client contract rows", () => {
+  const tables = stationTablesFixture();
+  const manifest = tablesManifestFixture(tables);
+  manifest.entrySource = "font-contract-v1";
+  manifest.entries[0].fontFaceEvidence[0].coverageText = "中国正文";
+
+  const expanded = expandSnapshotManifest(manifest, tables);
+  assert.equal(expanded.entries[0].fontEvidence.faces[0].coverageText, "中国正文");
+  assert.equal(expanded.entries[0].fontEvidence.faces[0].probe.text, "中");
+});
+
+test("schema-2 manifests fail closed without or against a broken table", () => {
+  const tables = stationTablesFixture();
+  const manifest = tablesManifestFixture(tables);
+
+  assert.throws(() => expandSnapshotManifest(manifest), /SnapshotTablesMissing/u);
+  assert.throws(() => expandSnapshotManifest(manifest, { ...tables, schema: 1 }), /SnapshotTablesInvalid/u);
+  manifest.entries[0].fontFaceEvidence[0].probeRef = 9;
+  assert.throws(() => expandSnapshotManifest(manifest, tables), /SnapshotProbeReferenceInvalid/u);
 });

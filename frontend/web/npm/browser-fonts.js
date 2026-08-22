@@ -5,9 +5,10 @@ import {
   FONT_SOURCE_POLICY,
   LAYOUT_REVISION,
   RENDER_REVISION,
-  SNAPSHOT_SCHEMA,
+  readableSnapshotSchema,
 } from "./snapshot-schema.js";
-import { parseSnapshotManifest } from "./snapshot-manifest.js";
+import { expandSnapshotManifest } from "./snapshot-manifest.js";
+import { snapshotTablesForRoot } from "./snapshot-tables.js";
 import {
   validatePrecomputedExactFontReplayContract,
   validatePrecomputedExactFontReplayLiveContract,
@@ -156,7 +157,7 @@ function evidenceFace(value) {
 function collectManifestFaces(manifest) {
   if (
     !manifest || typeof manifest !== "object" || Array.isArray(manifest) ||
-    manifest.schema !== SNAPSHOT_SCHEMA || manifest.layoutRevision !== LAYOUT_REVISION ||
+    !readableSnapshotSchema(manifest.schema) || manifest.layoutRevision !== LAYOUT_REVISION ||
     manifest.renderRevision !== RENDER_REVISION || manifest.fontSourcePolicy !== FONT_SOURCE_POLICY
   ) fail("SnapshotRevisionMismatch");
   if (!Array.isArray(manifest.entries) || manifest.entries.length === 0) {
@@ -274,7 +275,7 @@ function collectManifestFaces(manifest) {
   };
 }
 
-function snapshotContext(root) {
+async function snapshotContext(root) {
   if (!root || typeof root.getAttribute !== "function") fail("SnapshotRootInvalid");
   const reference = root.getAttribute("snapshot-ref");
   if (!reference) fail("SnapshotReferenceMissing");
@@ -285,9 +286,26 @@ function snapshotContext(root) {
   if (typeof script?.textContent !== "string" || script.textContent.trim() === "") {
     fail("SnapshotManifestMissing", reference);
   }
+  let parsed;
+  try {
+    parsed = JSON.parse(script.textContent);
+  } catch (error) {
+    fail("SnapshotManifestInvalid", reference, error);
+  }
+  // A schema-2 manifest resolves its station table through the root
+  // attribute; the loaded bytes verify against the sha the manifest pins
+  // before any row is read.
+  let tables = null;
+  if (parsed?.tables != null) {
+    const expected = typeof parsed.tables?.snapshot === "string"
+      ? parsed.tables.snapshot
+      : null;
+    tables = await snapshotTablesForRoot(root, documentObject, expected);
+    if (tables == null) fail("SnapshotTablesMissing", reference);
+  }
   let manifest;
   try {
-    manifest = parseSnapshotManifest(script.textContent);
+    manifest = expandSnapshotManifest(parsed, tables?.json ?? null);
   } catch (error) {
     fail("SnapshotManifestInvalid", reference, error);
   }
@@ -296,6 +314,7 @@ function snapshotContext(root) {
     documentObject,
     template,
     manifestText: script.textContent,
+    tablesText: tables?.text ?? null,
     ...collected,
   };
 }
@@ -524,7 +543,7 @@ export function createBrowserFontSessionLoader(options = {}) {
     // HostCompatibleReplayContract: both snapshots and runtime replay paint
     // through the host family, so the same live CSS/probe proof gates both.
     await requirePreparedOrExactContract(root);
-    const context = snapshotContext(root);
+    const context = await snapshotContext(root);
     const cacheKey = context.manifestText;
     let versions = cache.get(context.template);
     if (!versions) {
@@ -538,6 +557,7 @@ export function createBrowserFontSessionLoader(options = {}) {
         versions,
         cacheKey,
         manifestText: context.manifestText,
+        tablesText: context.tablesText,
         session: null,
         renderFontFaces: context.faces.map((face) => ({
           family: face.family,
@@ -562,7 +582,7 @@ export function createBrowserFontSessionLoader(options = {}) {
     try {
       session = await state.promise;
       await validateExactPreparedContract(root);
-      const current = snapshotContext(root);
+      const current = await snapshotContext(root);
       if (
         current.template !== context.template || current.manifestText !== context.manifestText
       ) fail("SnapshotManifestChangedDuringFontPreparation");
@@ -587,7 +607,7 @@ export function createBrowserFontSessionLoader(options = {}) {
     // ExistingSessionLiveContractRevalidation: replay data is immutable, but
     // the host font cascade remains a live rendering dependency.
     await requirePreparedOrExactContract(root);
-    const context = snapshotContext(root);
+    const context = await snapshotContext(root);
     const cacheKey = context.manifestText;
     const { state } = token;
     if (cacheKey !== state.cacheKey) {
@@ -644,6 +664,9 @@ export function browserFontSessionWorkerContract(handle) {
   return Object.freeze({
     sessionKey: token.state.session.id,
     manifestText: snapshotContextFromState(token.state),
+    // The station-table bytes the manifest pins; null for schema-1 manifests
+    // whose replay rows are already self-contained.
+    tablesText: token.state.tablesText ?? null,
   });
 }
 
