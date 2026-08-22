@@ -109,6 +109,13 @@ A 目标与 workspace 骨架，B 字体会话，C 编排与 Neon，D 平台包�
 于 2026-08-20 删除，parity 由固定不变的 golden（plan、build-fonts、precompute-html、
 plain-text-issue）与 crate 单元测试、引擎链接测试承担。D 只剩平台包发布，等 crates.io key。
 
+当前并行推进 **Slice 40：持久缓存与预填接入**（2026-08-21，
+[ADR 0052](adr/0052-precompute-cache-and-batch-renderer.md)）。`PersistentCache`
+在两个参考站点完成接入：页面批次、语料预填与逐篇 flush 的使用形态得到验证，
+snapshotId 采用 context 复合形式，宿主的同步内容判断与其分离。同语料从空缓存
+构建 56.5 s 对 54.0 s，产物按内容逐份配对比较零差异；测量见 0050 第三、四轮
+附录，接入形态见 0052 第二批附录。
+
 最近完成的是 **Slice 35：Web 真实站点宿主接入**（2026-07-11）。`@tiqian/prose` 以
 ESM 包和 light-DOM `<tiqian-prose>` 接入真实博客；SSR、无 JavaScript、Pagefind、宿主 CSS、
 源忠实复制与客户端导航生命周期均有自动化测试和真实浏览器验证。完整取舍见
