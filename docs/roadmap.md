@@ -112,7 +112,8 @@ plain-text-issue）与 crate 单元测试、引擎链接测试承担。D 只剩�
 当前并行推进 **Slice 40：持久缓存与预填接入**（2026-08-21，
 [ADR 0052](adr/0052-precompute-cache-and-batch-renderer.md)）。`PersistentCache`
 在两个参考站点完成接入：页面批次、语料预填与逐篇 flush 的使用形态得到验证，
-snapshotId 采用 context 复合形式，宿主的同步内容判断与其分离。同语料从空缓存
+snapshotId 采用 context 复合形式，宿主的同步内容判断与其分离。写缓冲预算以
+tight/normal/generous 档位声明，默认 normal。同语料从空缓存
 构建 56.5 s 对 54.0 s，产物按内容逐份配对比较零差异；测量见 0050 第三、四轮
 附录，接入形态见 0052 第二批附录。
 
