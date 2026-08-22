@@ -292,15 +292,14 @@ async function snapshotContext(root) {
   } catch (error) {
     fail("SnapshotManifestInvalid", reference, error);
   }
-  // A schema-2 manifest resolves its station table through the root
-  // attribute; the loaded bytes verify against the sha the manifest pins
-  // before any row is read.
+  // The station table resolves through the root attribute; the loaded bytes
+  // verify against the sha the manifest pins before any row is read.
   let tables = null;
   if (parsed?.tables != null) {
     const expected = typeof parsed.tables?.snapshot === "string"
       ? parsed.tables.snapshot
       : null;
-    tables = await snapshotTablesForRoot(root, documentObject, expected);
+    tables = await snapshotTablesForRoot(root, expected);
     if (tables == null) fail("SnapshotTablesMissing", reference);
   }
   let manifest;

@@ -60,35 +60,8 @@ const TABLE = {
   fontPreloads: [],
   revisions: { backendRevision: "r123", harfbuzzVersion: "11.0.1" },
 };
-const TEXT_TABLE_STRINGS = [
-  ...TABLE.replayStrings,
-  ...new Set(TABLE.metrics.map((row) => row.faceSelectionText)),
-  "永", "ZH", "kern",
-];
 
-function textTable() {
-  return {
-    schema: 2,
-    typologies: [],
-    typographies: TABLE.typographies,
-    faces: TABLE.faces,
-    valueStyles: TABLE.valueStyles,
-    fontPreloads: [],
-    revisions: TABLE.revisions,
-    strings: TEXT_TABLE_STRINGS,
-    probes: TABLE.probes,
-    metrics: TABLE.metrics.map((row) => [
-      TEXT_TABLE_STRINGS.indexOf(row.serializedFamilies),
-      row.fontWeight,
-      row.italic ? 1 : 0,
-      TEXT_TABLE_STRINGS.indexOf(row.role),
-      TEXT_TABLE_STRINGS.indexOf(row.faceSelectionText),
-      ...row.valuesEm,
-    ]),
-  };
-}
-
-/** A schema-2 manifest whose references address the fixture table. */
+/** A manifest whose references address the fixture table. */
 function manifestPinning() {
   return {
     tables: { snapshot: "0".repeat(64) },
@@ -169,22 +142,20 @@ test("the binary lane loads through the transport", async () => {
   }
 });
 
-test("text and binary tables expand to the identical manifest", () => {
+test("the binary table expands the manifest it pins", () => {
   const binary = expandSnapshotManifest(
     manifestPinning(),
     decodeSnapshotTableBinary(writeBinaryTable(TABLE)),
   );
-  const text = expandSnapshotManifest(manifestPinning(), textTable());
-  assert.deepEqual(binary, text);
   assert.equal(binary.entries[0].fontEvidence.faces[0].probe.advancePx, 16.5);
   assert.equal(binary.entries[0].fontEvidence.faces[0].probe.features.length, 0);
   assert.equal(binary.fontReplay.shapes[0].result.features[0], "kern");
   assert.equal(binary.fontReplay.metrics.length, 2);
-});
-
-test("a binary fixture without a table region stays text", () => {
-  const textBytes = new TextEncoder().encode(JSON.stringify(textTable()));
-  const view = snapshotTablesFromBytes(textBytes);
-  assert.equal(view.binary, false);
-  assert.deepEqual(view.metricRows(), TABLE.metrics);
+  assert.throws(
+    () => expandSnapshotManifest(
+      manifestPinning(),
+      snapshotTablesFromBytes(new TextEncoder().encode("{\"schema\":2}")),
+    ),
+    /SnapshotTablesInvalid/u,
+  );
 });

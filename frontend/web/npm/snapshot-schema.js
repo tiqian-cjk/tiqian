@@ -7,9 +7,9 @@ export const FONT_BACKEND_REVISION = "tiqian-shared-harfbuzz-v5";
 export const FONT_REPLAY_REVISION = "tiqian-server-shaping-replay-v1";
 export const FONT_REPLAY_TRANSPORT = "shared-strings-v1";
 
-/** The manifest schemas one runtime build reads: 1 self-contained, 2 tables. */
+/** The manifest schema this runtime build reads: station tables. */
 export function readableSnapshotSchema(schema) {
-  return schema === SNAPSHOT_SCHEMA || schema === SNAPSHOT_TABLES_SCHEMA;
+  return schema === SNAPSHOT_TABLES_SCHEMA;
 }
 
 export function shapeReplayKey(

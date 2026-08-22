@@ -3,124 +3,7 @@ import {
   FONT_REPLAY_TRANSPORT,
   metricReplayKey,
   shapeReplayKey,
-  stableStringify,
 } from "./snapshot-schema.js";
-import { textTableAccessors } from "./snapshot-tables.js";
-
-const FACE_DYNAMIC_KEYS = new Set(["coverageText", "probe"]);
-
-function faceDescriptor(face) {
-  return Object.fromEntries(Object.entries(face).filter(([key]) => !FACE_DYNAMIC_KEYS.has(key)));
-}
-
-function tableIndex(table, indexes, value) {
-  const signature = stableStringify(value);
-  const existing = indexes.get(signature);
-  if (existing != null) return existing;
-  const index = table.length;
-  table.push(value);
-  indexes.set(signature, index);
-  return index;
-}
-
-function replayTableIndex(table, indexes, value, conflictIssue) {
-  if (!value || typeof value.key !== "string" || !value.key) {
-    throw new Error(conflictIssue.replace("Conflict", "Invalid"));
-  }
-  const existing = indexes.get(value.key);
-  if (existing != null) {
-    if (stableStringify(table[existing]) !== stableStringify(value)) {
-      throw new Error(conflictIssue);
-    }
-    return existing;
-  }
-  const index = table.length;
-  table.push(value);
-  indexes.set(value.key, index);
-  return index;
-}
-
-function replayKeyParts(key, expectedLength, issue) {
-  let parts;
-  try {
-    parts = JSON.parse(key);
-  } catch {
-    throw new Error(issue);
-  }
-  if (!Array.isArray(parts) || parts.length !== expectedLength) throw new Error(issue);
-  return parts;
-}
-
-function compactFontReplay(shapes, metrics) {
-  const strings = [];
-  const indexes = new Map();
-  const stringRef = (value) => {
-    if (typeof value !== "string") throw new Error("SnapshotFontReplayStringInvalid");
-    const existing = indexes.get(value);
-    if (existing != null) return existing;
-    const index = strings.length;
-    strings.push(value);
-    indexes.set(value, index);
-    return index;
-  };
-  const compactShapes = shapes.map((item) => {
-    if (!item || typeof item.key !== "string" || !item.result ||
-        !Array.isArray(item.result.features) || !Array.isArray(item.result.glyphs)) {
-      throw new Error("SnapshotFontReplayShapeInvalid");
-    }
-    const [displayText, serializedFamilies, fontWeight, italic, locale, role, sourceText] =
-      replayKeyParts(item.key, 7, "SnapshotFontReplayShapeKeyInvalid");
-    const glyphs = item.result.glyphs.flatMap((glyph) => {
-      if (!glyph || typeof glyph !== "object") {
-        throw new Error("SnapshotFontReplayGlyphInvalid");
-      }
-      const bounds = glyph.boundsEm == null ? [null, null, null, null] : glyph.boundsEm;
-      if (!Array.isArray(bounds) || bounds.length !== 4) {
-        throw new Error("SnapshotFontReplayGlyphBoundsInvalid");
-      }
-      return [glyph.id, glyph.advanceEm, glyph.xEm, glyph.yEm, ...bounds];
-    });
-    return [
-      stringRef(displayText),
-      stringRef(serializedFamilies),
-      fontWeight,
-      italic ? 1 : 0,
-      stringRef(locale),
-      stringRef(role),
-      stringRef(sourceText),
-      stringRef(item.result.faceId),
-      stringRef(item.result.fontInstanceId),
-      stringRef(item.result.script),
-      item.result.features.map(stringRef),
-      item.result.unsafeBreakCount,
-      item.result.advanceEm,
-      glyphs,
-    ];
-  });
-  const compactMetrics = metrics.map((item) => {
-    if (!item || typeof item.key !== "string" || !Array.isArray(item.valuesEm) ||
-        item.valuesEm.length !== 5) {
-      throw new Error("SnapshotFontReplayMetricsInvalid");
-    }
-    const [serializedFamilies, fontWeight, italic, role, faceSelectionText] =
-      replayKeyParts(item.key, 5, "SnapshotFontReplayMetricsKeyInvalid");
-    return [
-      stringRef(serializedFamilies),
-      fontWeight,
-      italic ? 1 : 0,
-      stringRef(role),
-      stringRef(faceSelectionText),
-      ...item.valuesEm,
-    ];
-  });
-  return {
-    revision: FONT_REPLAY_REVISION,
-    encoding: FONT_REPLAY_TRANSPORT,
-    strings,
-    shapes: compactShapes,
-    metrics: compactMetrics,
-  };
-}
 
 function expandReplayShapes(shapes, stringAt) {
   return shapes.map((row) => {
@@ -174,138 +57,7 @@ function expandReplayShapes(shapes, stringAt) {
   });
 }
 
-/** The schema-1 lane: the compact transport carries its own string table. */
-function expandFontReplay(replay) {
-  if (!replay || replay.revision !== FONT_REPLAY_REVISION ||
-      !Array.isArray(replay.shapes) || !Array.isArray(replay.metrics)) {
-    throw new Error("SnapshotFontReplayInvalid");
-  }
-  // Canonical in-memory manifests remain accepted by the parser so callers can
-  // register a manifest without first serializing the compact transport.
-  if (replay.encoding == null) return replay;
-  if (replay.encoding !== FONT_REPLAY_TRANSPORT || !Array.isArray(replay.strings) ||
-      replay.strings.some((value) => typeof value !== "string")) {
-    throw new Error("SnapshotFontReplayTransportInvalid");
-  }
-  const stringAt = (index) => tableReference(
-    replay.strings,
-    index,
-    "SnapshotFontReplayStringReferenceInvalid",
-  );
-  const metrics = replay.metrics.map((row) => {
-    if (!Array.isArray(row) || row.length !== 10 || (row[2] !== 0 && row[2] !== 1)) {
-      throw new Error("SnapshotFontReplayMetricsTransportInvalid");
-    }
-    const serializedFamilies = stringAt(row[0]);
-    const fontWeight = row[1];
-    const italic = row[2] === 1;
-    const role = stringAt(row[3]);
-    const faceSelectionText = stringAt(row[4]);
-    return {
-      key: metricReplayKey(
-        serializedFamilies,
-        fontWeight,
-        italic,
-        role,
-        faceSelectionText,
-      ),
-      valuesEm: row.slice(5),
-    };
-  });
-  return { revision: replay.revision, shapes: expandReplayShapes(replay.shapes, stringAt), metrics };
-}
-
-/**
- * SharedSnapshotManifestTables: large immutable typography and font-face
- * descriptors live once per snapshot. Paragraph entries retain only table
- * references plus their source-specific coverage/probe evidence.
- */
-export function compactSnapshotManifest(entries, metadata) {
-  const typographies = [];
-  const typographyIndexes = new Map();
-  const faces = [];
-  const faceIndexes = new Map();
-  let backendRevision = null;
-  let harfbuzzVersion = null;
-  const replayShapes = [];
-  const replayShapeIndexes = new Map();
-  const replayMetrics = [];
-  const replayMetricIndexes = new Map();
-
-  const compactEntries = entries.map((entry) => {
-    const evidence = entry.fontEvidence;
-    if (!evidence || !Array.isArray(evidence.faces) || evidence.faces.length === 0) {
-      throw new Error(`SnapshotFontEvidenceInvalid:${entry.key}`);
-    }
-    if (
-      evidence.replay?.revision !== FONT_REPLAY_REVISION ||
-      !Array.isArray(evidence.replay.shapes) ||
-      !Array.isArray(evidence.replay.metrics)
-    ) {
-      throw new Error(`SnapshotFontReplayInvalid:${entry.key}`);
-    }
-    for (const shape of evidence.replay.shapes) {
-      replayTableIndex(
-        replayShapes,
-        replayShapeIndexes,
-        shape,
-        "SnapshotFontReplayShapeConflict",
-      );
-    }
-    for (const metric of evidence.replay.metrics) {
-      replayTableIndex(
-        replayMetrics,
-        replayMetricIndexes,
-        metric,
-        "SnapshotFontReplayMetricsConflict",
-      );
-    }
-    backendRevision ??= evidence.backendRevision;
-    harfbuzzVersion ??= evidence.harfbuzzVersion;
-    if (backendRevision !== evidence.backendRevision || harfbuzzVersion !== evidence.harfbuzzVersion) {
-      throw new Error("SnapshotFontEvidenceVersionConflict");
-    }
-    const typographyRef = tableIndex(
-      typographies,
-      typographyIndexes,
-      { sha256: entry.typographySha256, value: entry.typography },
-    );
-    const fontFaceEvidence = evidence.faces.map((face) => ({
-      faceRef: tableIndex(faces, faceIndexes, faceDescriptor(face)),
-      coverageText: face.coverageText,
-      probe: face.probe,
-    }));
-    return {
-      key: entry.key,
-      sourceSha256: entry.sourceSha256,
-      ...(typeof entry.sourceArtifactSha256 === "string"
-        ? { sourceArtifactSha256: entry.sourceArtifactSha256 }
-        : {}),
-      ...(Array.isArray(entry.semantics) && entry.semantics.length > 0 ? { semantic: true } : {}),
-      typographyRef,
-      maxWidthPx: entry.maxWidthPx,
-      fontFaceEvidence,
-      renderArtifactSha256: entry.renderArtifactSha256,
-    };
-  });
-
-  return {
-    ...metadata,
-    typographies,
-    fontEvidence: { backendRevision, harfbuzzVersion, faces },
-    fontReplay: compactFontReplay(replayShapes, replayMetrics),
-    entries: compactEntries,
-  };
-}
-
-function tableReference(table, index, issue) {
-  if (!Number.isSafeInteger(index) || index < 0 || index >= table.length) {
-    throw new Error(issue);
-  }
-  return table[index];
-}
-
-/** Expands entry rows against whichever table region the schema carries. */
+/** Expands entry rows against the station-table accessors. */
 function expandManifestEntries(
   entries,
   typographyAt,
@@ -342,15 +94,6 @@ function expandManifestEntries(
   });
 }
 
-/**
- * The schema-2 expansion: integer references resolve through the station
- * table the transport loaded and verified against `manifest.tables.snapshot`.
- * The table arrives as the accessor surface of either file form; a parsed
- * JSON object stays accepted so in-memory callers register one table without
- * serializing it first. Replay shapes pick up the table string region,
- * metrics come from the table, and value styles splice in so the
- * style-installation site reads one shape for both schemas.
- */
 /** View to its replay-metric rows; one build's expansions share the mapping. */
 const replayMetricsByView = new WeakMap();
 
@@ -372,11 +115,38 @@ function replayMetricsOf(view) {
   return metrics;
 }
 
-function expandSnapshotManifestWithTables(manifest, tables) {
+/**
+ * The table view the expansion reads: the accessor surface
+ * `snapshotTablesFromBytes` builds from the binary file. Any other shape
+ * fails closed instead of failing on a missing method later.
+ */
+function tableViewOf(tables) {
+  if (typeof tables.stringAt !== "function" || typeof tables.metricRows !== "function" ||
+      typeof tables.probeAt !== "function" || typeof tables.typographyAt !== "function" ||
+      typeof tables.faceAt !== "function" || typeof tables.valueStyles !== "function" ||
+      typeof tables.revisions !== "function") {
+    throw new Error("SnapshotTablesInvalid");
+  }
+  return tables;
+}
+
+/**
+ * Expands the compact transport into the canonical runtime manifest shape.
+ * Integer references resolve through the station table the transport loaded
+ * and verified against `manifest.tables.snapshot`; a manifest without the
+ * tables pin is not a shape this build reads. Replay shapes pick up the table
+ * string region, metrics come from the table, and value styles splice in so
+ * the style-installation site reads one shape.
+ */
+export function expandSnapshotManifest(manifest, tables = null) {
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+    throw new Error("SnapshotManifestInvalid");
+  }
+  if (manifest.tables == null) throw new Error("SnapshotManifestTablesInvalid");
   if (tables == null) throw new Error("SnapshotTablesMissing");
-  const view = typeof tables.stringAt === "function" ? tables : textTableAccessors(tables);
-  if (!manifest.tables || typeof manifest.tables !== "object" ||
-      Array.isArray(manifest.tables) || typeof manifest.tables.snapshot !== "string") {
+  const view = tableViewOf(tables);
+  if (typeof manifest.tables !== "object" || Array.isArray(manifest.tables) ||
+      typeof manifest.tables.snapshot !== "string") {
     throw new Error("SnapshotManifestTablesInvalid");
   }
   const replay = manifest.fontReplay;
@@ -414,44 +184,6 @@ function expandSnapshotManifestWithTables(manifest, tables) {
     ...manifest,
     ...(fontReplay ? { fontReplay } : {}),
     valueStyles: view.valueStyles(),
-    entries,
-    ...(fontContractEntries ? { fontContractEntries } : {}),
-  };
-}
-
-/** Expands the compact transport into the canonical runtime manifest shape. */
-export function expandSnapshotManifest(manifest, tables = null) {
-  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
-    throw new Error("SnapshotManifestInvalid");
-  }
-  if (manifest.tables != null) return expandSnapshotManifestWithTables(manifest, tables);
-  if (!Array.isArray(manifest.typographies) ||
-      !manifest.fontEvidence || !Array.isArray(manifest.fontEvidence.faces) ||
-      !Array.isArray(manifest.entries)) {
-    throw new Error("SnapshotManifestTablesInvalid");
-  }
-  const typographies = manifest.typographies;
-  const descriptors = manifest.fontEvidence.faces;
-  const fontReplay = manifest.fontReplay == null
-    ? undefined
-    : expandFontReplay(manifest.fontReplay);
-  const expandEntries = (entries) => expandManifestEntries(
-    entries,
-    (ref) => tableReference(typographies, ref, "SnapshotTypographyReferenceInvalid"),
-    (ref) => tableReference(descriptors, ref, "SnapshotFontFaceReferenceInvalid"),
-    {
-      backendRevision: manifest.fontEvidence.backendRevision,
-      harfbuzzVersion: manifest.fontEvidence.harfbuzzVersion,
-    },
-    (evidence) => evidence.probe,
-  );
-  const entries = expandEntries(manifest.entries);
-  const fontContractEntries = Array.isArray(manifest.fontContractEntries)
-    ? expandEntries(manifest.fontContractEntries)
-    : undefined;
-  return {
-    ...manifest,
-    ...(fontReplay ? { fontReplay } : {}),
     entries,
     ...(fontContractEntries ? { fontContractEntries } : {}),
   };

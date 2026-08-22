@@ -3,27 +3,34 @@ import test from "node:test";
 
 import {
   loadedSnapshotTablesForRoot,
-  parseSnapshotTables,
   prefetchSnapshotTables,
   snapshotTablesForRoot,
   snapshotTablesFromBytes,
 } from "./snapshot-tables.js";
+import { writeBinaryTable } from "./table-binary-writer.mjs";
 
-const TABLE_JSON = JSON.stringify({
-  schema: 2,
-  typologies: [],
-  typographies: [],
+const TABLE_BYTES = writeBinaryTable({
+  replayStrings: [],
+  metrics: [],
+  probes: [{ text: "中", advancePx: 18, fontSizePx: 18, fontWeight: 400, italic: false, script: "Hani", language: "zh-Hans", features: [] }],
+  typographies: [{ sha256: "t".repeat(64), value: { fontFamilies: ["Fixture CJK"] } }],
   faces: [],
   valueStyles: [],
   fontPreloads: [],
-  revisions: {},
-  strings: [],
-  probes: [],
+  revisions: { backendRevision: "fixture-backend", harfbuzzVersion: "fixture-hb" },
+});
+const OTHER_TABLE_BYTES = writeBinaryTable({
+  replayStrings: [],
   metrics: [],
+  probes: [],
+  typographies: [],
+  faces: [],
+  valueStyles: [".tq-root { line-height: 1.7; }"],
+  fontPreloads: [],
+  revisions: {},
 });
 
-async function sha256Text(value) {
-  const bytes = new TextEncoder().encode(value);
+async function sha256Bytes(bytes) {
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
@@ -40,7 +47,7 @@ function installFetch(responses) {
     calls.push(url);
     const reply = responses[url]?.shift();
     if (reply instanceof Error) throw reply;
-    return { ok: true, arrayBuffer: async () => new TextEncoder().encode(reply) };
+    return { ok: true, arrayBuffer: async () => reply };
   };
   return {
     calls,
@@ -51,15 +58,16 @@ function installFetch(responses) {
 }
 
 test("table references load by url and dedupe through the global map", async () => {
-  const key = "https://tables.test/dedupe-deadbeef.json";
-  const stub = installFetch({ [key]: [TABLE_JSON] });
+  const key = "https://tables.test/dedupe-deadbeef.tiqtbl";
+  const stub = installFetch({ [key]: [TABLE_BYTES] });
   try {
-    const first = await snapshotTablesForRoot(rootWithTables(key), null);
-    const second = await snapshotTablesForRoot(rootWithTables(key), null, first.sha256);
+    const first = await snapshotTablesForRoot(rootWithTables(key));
+    const second = await snapshotTablesForRoot(rootWithTables(key), first.sha256);
     assert.equal(second.sha256, first.sha256);
     assert.deepEqual([...second.bytes], [...first.bytes]);
-    assert.equal(first.view.binary, false);
-    assert.equal(first.sha256, await sha256Text(TABLE_JSON));
+    assert.equal(first.view.binary, true);
+    assert.equal(first.view.revisions().backendRevision, "fixture-backend");
+    assert.equal(first.sha256, await sha256Bytes(TABLE_BYTES));
     assert.deepEqual(stub.calls, [key]);
     assert.equal(loadedSnapshotTablesForRoot(rootWithTables(key)).sha256, first.sha256);
   } finally {
@@ -67,18 +75,10 @@ test("table references load by url and dedupe through the global map", async () 
   }
 });
 
-test("page element references load in-page bytes", async () => {
-  const element = { textContent: TABLE_JSON };
-  const documentObject = { getElementById: (id) => (id === "station-tables" ? element : null) };
-  const table = await snapshotTablesForRoot(rootWithTables("#station-tables"), documentObject);
-  assert.deepEqual(table.view.revisions(), { backendRevision: null, harfbuzzVersion: null });
-  assert.equal(table.sha256, await sha256Text(TABLE_JSON));
-});
-
 test("failed loads stay uncached so a later root can retry", async () => {
-  const key = "https://tables.test/retry-deadbeef.json";
+  const key = "https://tables.test/retry-deadbeef.tiqtbl";
   const stub = installFetch({
-    [key]: [new Error("offline"), TABLE_JSON],
+    [key]: [new Error("offline"), TABLE_BYTES],
   });
   try {
     const failing = rootWithTables(key);
@@ -93,42 +93,41 @@ test("failed loads stay uncached so a later root can retry", async () => {
 });
 
 test("a digest mismatch walks to the next reference of the attribute", async () => {
-  const stale = "https://tables.test/stale-cafe.json";
-  const fresh = "https://tables.test/fresh-beef.json";
-  const otherJson = TABLE_JSON.replace('"strings":[]', '"strings":["x"]');
-  const stub = installFetch({ [stale]: [TABLE_JSON], [fresh]: [otherJson] });
+  const stale = "https://tables.test/stale-cafe.tiqtbl";
+  const fresh = "https://tables.test/fresh-beef.tiqtbl";
+  const stub = installFetch({ [stale]: [TABLE_BYTES], [fresh]: [OTHER_TABLE_BYTES] });
   try {
-    const expected = await sha256Text(otherJson);
+    const expected = await sha256Bytes(OTHER_TABLE_BYTES);
     const table = await snapshotTablesForRoot(
       rootWithTables(`${stale} ${fresh}`),
-      null,
       expected,
     );
-    assert.equal(new TextDecoder().decode(table.bytes), otherJson);
+    assert.deepEqual([...table.bytes], [...OTHER_TABLE_BYTES]);
     assert.deepEqual(stub.calls, [stale, fresh]);
-    assert.equal(await snapshotTablesForRoot(rootWithTables(stale), null, expected), null);
+    assert.equal(await snapshotTablesForRoot(rootWithTables(stale), expected), null);
   } finally {
     stub.restore();
   }
 });
 
-test("invalid table bytes fail closed on parse", () => {
-  assert.throws(() => parseSnapshotTables("{not json"), /SnapshotTablesInvalid/u);
-  assert.throws(() => parseSnapshotTables("{}"), /SnapshotTablesInvalid/u);
-  const parsed = JSON.parse(TABLE_JSON);
+test("bytes without the station-table magic fail closed", () => {
   assert.throws(
-    () => parseSnapshotTables(JSON.stringify({ ...parsed, valueStyles: [17] })),
+    () => snapshotTablesFromBytes(new TextEncoder().encode("{\"schema\":2}")),
     /SnapshotTablesInvalid/u,
   );
   assert.throws(
     () => snapshotTablesFromBytes(new Uint8Array([0x7b, 0x22, 0x61, 0xff, 0xff])),
     /SnapshotTablesInvalid/u,
   );
+  assert.throws(
+    () => snapshotTablesFromBytes(TABLE_BYTES.subarray(0, TABLE_BYTES.length - 1)),
+    /SnapshotTablesInvalid/u,
+  );
 });
 
 test("the document pre-scan starts loading every referenced table", async () => {
-  const key = "https://tables.test/prefetch-deadbeef.json";
-  const stub = installFetch({ [key]: [TABLE_JSON] });
+  const key = "https://tables.test/prefetch-deadbeef.tiqtbl";
+  const stub = installFetch({ [key]: [TABLE_BYTES] });
   const previousDocument = globalThis.document;
   globalThis.document = {
     querySelectorAll: (selector) => selector === "[tq-tables]" ? [rootWithTables(key)] : [],

@@ -16,6 +16,22 @@ import {
   validatePrecomputedSnapshotExactFontContract,
 } from "./precomputed.js";
 import { FONT_REPLAY_REVISION, stableStringify } from "./snapshot-schema.js";
+import { snapshotTablesForRoot } from "./snapshot-tables.js";
+import { writeBinaryTable } from "./table-binary-writer.mjs";
+
+/**
+ * Station tables of the fixtures. Each fixture registers its own bytes under
+ * a unique URL; the fetch stub serves them so the transport loads through
+ * the lane a host page uses.
+ */
+let tableCounter = 0;
+const tableBytesByUrl = new Map();
+const chainFetch = globalThis.fetch;
+globalThis.fetch = async (url, init) => {
+  const bytes = tableBytesByUrl.get(String(url));
+  if (bytes != null) return { ok: true, arrayBuffer: async () => bytes };
+  return chainFetch(url, init);
+};
 
 function matchesSelector(element, selector) {
   if (selector === "*") return element.nodeType === 1;
@@ -327,8 +343,8 @@ function fixture({
   nativeText = false,
   fontDisplay = "block",
   entrySource = undefined,
-  stationTables = false,
   stationTablesSha = null,
+  entryCount = 1,
   paragraphTag = "p",
   paragraphSelector = "p[data-tq-snapshot-key]",
   paragraphWidth = 360,
@@ -457,92 +473,70 @@ function fixture({
     renderedParent.appendChild(rendered);
   }
   entry.append(marker, renderedParent ?? rendered, sentinel);
+  // The shared rows live in one binary station table; the manifest pins its
+  // digest and the root references it by URL. The global fetch stub of this
+  // file serves the bytes, so every fixture walks the transport a host page
+  // uses. Beyond the first entry, per-entry probes cover distinct text so
+  // article-sized evidence loads exercise every row.
+  const probes = [];
+  const manifestEntries = [];
+  for (let index = 0; index < entryCount; index += 1) {
+    const coverageText = index === 0
+      ? evidence.coverageText
+      : `中国${String.fromCodePoint(0x4e00 + index)}`;
+    manifestEntries.push({
+      key: `p-${index + 1}`,
+      sourceSha256: sha256("中国"),
+      typographyRef: 0,
+      maxWidthPx: maximumWidth,
+      fontFaceEvidence: [{
+        faceRef: 0,
+        coverageText,
+        probeRef: probes.push({ features: [], ...evidence.probe,
+          ...(index === 0 ? {} : { text: coverageText }) }) - 1,
+      }],
+      renderArtifactSha256: sha256(stableStringify(entry.childNodes.map(canonicalFixtureNode))),
+    });
+  }
+  const tableBytes = writeBinaryTable({
+    replayStrings: [],
+    metrics: [],
+    probes,
+    typographies: [{
+      sha256: typographyDigest ?? sha256(stableStringify(typography)),
+      value: typography,
+    }],
+    faces: [{
+      ...Object.fromEntries(Object.entries(evidence).filter(([key]) =>
+        key !== "coverageText" && key !== "probe")),
+    }],
+    valueStyles: [],
+    fontPreloads: ["/assets/fixture-deadbeef.woff2"],
+    revisions: {
+      backendRevision: "tiqian-shared-harfbuzz-v5",
+      harfbuzzVersion: "fixture",
+    },
+  });
+  const tableUrl = `https://tables.test/precomputed-${tableCounter += 1}.tiqtbl`;
+  tableBytesByUrl.set(tableUrl, tableBytes);
+  root.setAttribute("tq-tables", tableUrl);
   const manifest = {
-    schema: 1,
+    schema: 2,
+    tables: { snapshot: stationTablesSha ?? sha256(tableBytes) },
     layoutRevision: "tiqian-layout-v2",
     renderRevision: "prebroken-dom-v15",
     fontSourcePolicy: "host-compatible-stylesheet-v1",
     ...(entrySource === undefined ? {} : { entrySource }),
     renderFontFamilies: ["Fixture CJK"],
     paragraphSelector,
-    valueStyles: [],
-    valueStylesSha256: sha256(stableStringify([])),
-    typographies: [{
-      sha256: typographyDigest ?? sha256(stableStringify(typography)),
-      value: typography,
-    }],
-    fontEvidence: {
-      backendRevision: "tiqian-shared-harfbuzz-v5",
-      harfbuzzVersion: "fixture",
-      faces: [{
-        ...Object.fromEntries(Object.entries(evidence).filter(([key]) =>
-          key !== "coverageText" && key !== "probe")),
-      }],
-    },
-    fontReplay: {
-      revision: FONT_REPLAY_REVISION,
-      shapes: [],
-      metrics: [],
-    },
-    entries: [{
-      key: "p-1",
-      sourceSha256: sha256("中国"),
-      typographyRef: 0,
-      maxWidthPx: maximumWidth,
-      fontFaceEvidence: [{ faceRef: 0, coverageText: evidence.coverageText, probe: evidence.probe }],
-      renderArtifactSha256: sha256(stableStringify(entry.childNodes.map(canonicalFixtureNode))),
-    }],
+    fontReplay: { revision: FONT_REPLAY_REVISION, encoding: "shared-strings-v1", shapes: [] },
+    entries: manifestEntries,
   };
   const script = documentObject.createElement("script");
   script.setAttribute("data-tq-snapshot-manifest", "");
   script.textContent = JSON.stringify(manifest);
   template.content.append(script, entry);
   documentObject.elements.set("tq-page", template);
-
-  // The schema-2 variant of the same fixture: the shared rows move into an
-  // in-page station table, the manifest pins its digest, and the root
-  // references it by element id.
-  if (stationTables) {
-    const table = {
-      schema: 2,
-      typographies: manifest.typographies,
-      faces: manifest.fontEvidence.faces,
-      valueStyles: [],
-      fontPreloads: ["/assets/fixture-deadbeef.woff2"],
-      revisions: {
-        backendRevision: manifest.fontEvidence.backendRevision,
-        harfbuzzVersion: manifest.fontEvidence.harfbuzzVersion,
-        fontReplay: FONT_REPLAY_REVISION,
-        fontReplayTransport: "shared-strings-v1",
-      },
-      strings: [],
-      probes: [evidence.probe],
-      metrics: [],
-    };
-    const tableText = JSON.stringify(table);
-    const tableElement = documentObject.createElement("script");
-    tableElement.textContent = tableText;
-    documentObject.elements.set("tq-station-tables", tableElement);
-    root.setAttribute("tq-tables", "#tq-station-tables");
-    script.textContent = JSON.stringify({
-      schema: 2,
-      tables: { snapshot: stationTablesSha ?? sha256(tableText) },
-      layoutRevision: manifest.layoutRevision,
-      renderRevision: manifest.renderRevision,
-      fontSourcePolicy: manifest.fontSourcePolicy,
-      renderFontFamilies: manifest.renderFontFamilies,
-      paragraphSelector,
-      fontReplay: { revision: FONT_REPLAY_REVISION, encoding: "shared-strings-v1", shapes: [] },
-      entries: [{
-        key: "p-1",
-        sourceSha256: sha256("中国"),
-        typographyRef: 0,
-        maxWidthPx: maximumWidth,
-        fontFaceEvidence: [{ faceRef: 0, probeRef: 0 }],
-        renderArtifactSha256: manifest.entries[0].renderArtifactSha256,
-      }],
-    });
-  }
 
   const source = `${localSource ? `local("${localName}"),` : ""}url("/assets/fixture-deadbeef.woff2")`;
   const fontFaceStyle = styleDeclaration({
@@ -819,26 +813,8 @@ test("article-sized exact font evidence loads by face and shares one layout snap
     const { documentObject, root, measuredProbeStyles } = fixture({
       entrySource: "font-contract-v1",
       paragraphSelector: "p",
+      entryCount: 40,
     });
-    const template = documentObject.elements.get("tq-page");
-    const manifestScript = template.content.querySelector("[data-tq-snapshot-manifest]");
-    const manifest = JSON.parse(manifestScript.textContent);
-    const original = manifest.entries[0];
-    for (let index = 1; index < 40; index += 1) {
-      manifest.entries.push({
-        ...original,
-        key: `p-${index + 1}`,
-        fontFaceEvidence: [{
-          ...original.fontFaceEvidence[0],
-          coverageText: `中国${String.fromCodePoint(0x4e00 + index)}`,
-          probe: {
-            ...original.fontFaceEvidence[0].probe,
-            text: `中国${String.fromCodePoint(0x4e00 + index)}`,
-          },
-        }],
-      });
-    }
-    manifestScript.textContent = JSON.stringify(manifest);
 
     let fontLoads = 0;
     documentObject.fonts.load = async () => {
@@ -1281,11 +1257,14 @@ test("duplicate manifest keys cannot corrupt source restoration", async () => {
   }
 });
 
-test("maximum-measure preflight is non-destructive and follows live paragraph width", () => {
+test("maximum-measure preflight is non-destructive and follows live paragraph width", async () => {
   const previousGetComputedStyle = globalThis.getComputedStyle;
   globalThis.getComputedStyle = fixtureComputedStyle;
   try {
     const { root, paragraph, originalText } = fixture();
+    // The preflight answers from the transport's verified cache, so the
+    // fixture's table loads once before the synchronous reads.
+    assert.notEqual(await snapshotTablesForRoot(root), null);
     assert.equal(precomputedSnapshotMaximumMeasureMatches(root), true);
     assert.strictEqual(paragraph.firstChild, originalText);
 
@@ -1305,11 +1284,11 @@ test("maximum-measure preflight is non-destructive and follows live paragraph wi
   }
 });
 
-test("schema-2 snapshots adopt through a station table reference", async () => {
+test("snapshots adopt through the station table reference", async () => {
   const previousGetComputedStyle = globalThis.getComputedStyle;
   globalThis.getComputedStyle = fixtureComputedStyle;
   try {
-    const { root, paragraph } = fixture({ stationTables: true });
+    const { root, paragraph } = fixture();
 
     // The table is not in the sync cache yet, so the preflight reads a miss
     // without touching the DOM.
@@ -1325,7 +1304,7 @@ test("schema-2 snapshots adopt through a station table reference", async () => {
 
     // A manifest pinning a different digest reads the cached reference as a
     // mismatch and misses without adopting anything.
-    const mismatch = fixture({ stationTables: true, stationTablesSha: "0".repeat(64) });
+    const mismatch = fixture({ stationTablesSha: "0".repeat(64) });
     assert.deepEqual(await tryAdoptPrecomputedSnapshot(mismatch.root), {
       adopted: false,
       reason: "SnapshotTablesMissing",

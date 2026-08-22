@@ -11,10 +11,26 @@ import {
   FONT_BACKEND_REVISION,
   FONT_REPLAY_REVISION,
 } from "./snapshot-schema.js";
+import { writeBinaryTable } from "./table-binary-writer.mjs";
 
 function digest(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
+
+/**
+ * Station tables of the manifests the fixtures build. Each manifest pins its
+ * own table; the global fetch stub serves the bytes by URL so the transport
+ * walks the same lane a host page uses.
+ */
+let tableCounter = 0;
+let currentTable = null;
+const tableBytesByUrl = new Map();
+const chainFetch = globalThis.fetch;
+globalThis.fetch = async (url, init) => {
+  const bytes = tableBytesByUrl.get(String(url));
+  if (bytes != null) return { ok: true, arrayBuffer: async () => bytes };
+  return chainFetch(url, init);
+};
 
 function faceEvidence(sourceSha256, overrides = {}) {
   const weight = overrides.weight ?? [100, 900];
@@ -49,9 +65,11 @@ function manifestWithFaces(
   facesByEntry,
   versions = facesByEntry.map(() => "fixture-hb"),
   typography = {},
+  extras = {},
 ) {
   const descriptors = [];
   const descriptorIndexes = new Map();
+  const probes = [];
   const fontFaceEvidence = facesByEntry.map((faces) => faces.map((face) => {
     const descriptor = Object.fromEntries(Object.entries(face).filter(([key]) =>
       key !== "coverageText" && key !== "probe"));
@@ -62,27 +80,92 @@ function manifestWithFaces(
       descriptors.push(descriptor);
       descriptorIndexes.set(signature, faceRef);
     }
-    return { faceRef, coverageText: face.coverageText, probe: face.probe };
+    const probe = { features: [], ...face.probe };
+    const probeSignature = JSON.stringify(probe);
+    let probeRef = probes.findIndex((existing) => JSON.stringify(existing) === probeSignature);
+    if (probeRef < 0) {
+      probeRef = probes.length;
+      probes.push(probe);
+    }
+    return { faceRef, coverageText: face.coverageText, probeRef };
   }));
+  // Replay and metric strings intern at the head of the table strings, the
+  // order the encoder writes; probe strings follow through the writer.
+  const replayStrings = [];
+  const replayStringRef = (text) => {
+    const existing = replayStrings.indexOf(text);
+    if (existing >= 0) return existing;
+    replayStrings.push(text);
+    return replayStrings.length - 1;
+  };
+  const shapeRows = (extras.replayShapes ?? []).map((shape) => {
+    const [displayText, serializedFamilies, fontWeight, italic, locale, role, sourceText] =
+      JSON.parse(shape.key);
+    return [
+      replayStringRef(displayText),
+      replayStringRef(serializedFamilies),
+      fontWeight,
+      italic ? 1 : 0,
+      replayStringRef(locale),
+      replayStringRef(role),
+      replayStringRef(sourceText),
+      replayStringRef(shape.result.faceId),
+      replayStringRef(shape.result.fontInstanceId),
+      replayStringRef(shape.result.script),
+      shape.result.features.map(replayStringRef),
+      shape.result.unsafeBreakCount,
+      shape.result.advanceEm,
+      shape.result.glyphs.flatMap((glyph) => [
+        glyph.id, glyph.advanceEm, glyph.xEm, glyph.yEm,
+        ...(glyph.boundsEm ?? [null, null, null, null]),
+      ]),
+    ];
+  });
+  const metricRows = (extras.replayMetrics ?? []).map((metric) => {
+    const [serializedFamilies, fontWeight, italic, role, faceSelectionText] =
+      JSON.parse(metric.key);
+    return {
+      serializedFamilies,
+      fontWeight,
+      italic,
+      role,
+      faceSelectionText,
+      valuesEm: metric.valuesEm,
+    };
+  });
+  for (const row of metricRows) {
+    replayStringRef(row.serializedFamilies);
+    replayStringRef(row.role);
+    replayStringRef(row.faceSelectionText);
+  }
+  const tableBytes = writeBinaryTable({
+    replayStrings,
+    metrics: metricRows,
+    probes,
+    typographies: [{ sha256: "fixture", value: typography }],
+    faces: descriptors,
+    valueStyles: [],
+    fontPreloads: [],
+    revisions: {
+      backendRevision: extras.backendRevision ?? FONT_BACKEND_REVISION,
+      harfbuzzVersion: versions[0],
+    },
+  });
+  const url = `https://tables.test/fixture-${tableCounter += 1}.tiqtbl`;
+  tableBytesByUrl.set(url, tableBytes);
+  currentTable = { url, bytes: tableBytes, sha256: digest(tableBytes) };
   return {
-    schema: 1,
+    schema: 2,
+    tables: { snapshot: currentTable.sha256 },
     layoutRevision: "tiqian-layout-v2",
     renderRevision: "prebroken-dom-v15",
     fontSourcePolicy: "host-compatible-stylesheet-v1",
     renderFontFamilies: ["Fixture CJK"],
     paragraphSelector: "p[data-tq-snapshot-key]",
-    valueStyles: [],
-    valueStylesSha256: "fixture",
-    typographies: [{ sha256: "fixture", value: typography }],
-    fontEvidence: {
-      backendRevision: FONT_BACKEND_REVISION,
-      harfbuzzVersion: versions[0],
-      faces: descriptors,
-    },
     fontReplay: {
       revision: FONT_REPLAY_REVISION,
-      shapes: [],
-      metrics: [],
+      encoding: "shared-strings-v1",
+      shapes: shapeRows,
     },
     entries: facesByEntry.map((_faces, index) => ({
       key: `p-${index + 1}`,
@@ -111,7 +194,9 @@ function snapshotRoot(manifest, documentOverrides = {}) {
   return {
     ownerDocument: documentObject,
     getAttribute(name) {
-      return name === "snapshot-ref" ? "tq-page" : null;
+      if (name === "snapshot-ref") return "tq-page";
+      if (name === "tq-tables" && currentTable) return currentTable.url;
+      return null;
     },
   };
 }
@@ -318,7 +403,7 @@ test("browser font sessions expose only replay identity to the layout Worker", a
   assert.deepEqual(contract, {
     sessionKey: handle.id,
     manifestText: JSON.stringify(manifest),
-    tablesBytes: null,
+    tablesBytes: currentTable.bytes,
   });
   assert.equal(state.loader.release(handle), true);
   assert.throws(() => browserFontSessionWorkerContract(handle), assertCode("BrowserFontSessionHandleInvalid"));
@@ -1018,8 +1103,9 @@ test("duplicate sourceOrder across distinct faces misses before fetching", async
 test("manifest backend revisions must agree with the browser backend", async () => {
   const bytes = new TextEncoder().encode("fixture-font-source");
   const sourceSha256 = digest(bytes);
-  const manifest = manifestWithFaces([[faceEvidence(sourceSha256)]]);
-  manifest.fontEvidence.backendRevision = "stale-backend";
+  const manifest = manifestWithFaces([[faceEvidence(sourceSha256)]], undefined, {}, {
+    backendRevision: "stale-backend",
+  });
   const state = harness(manifest, { bytes });
 
   await assert.rejects(
@@ -1031,7 +1117,6 @@ test("manifest backend revisions must agree with the browser backend", async () 
 
 test("the default browser session scales server shaping evidence without loading HarfBuzz", async () => {
   const bytes = new TextEncoder().encode("fixture-font-source");
-  const manifest = manifestWithFaces([[faceEvidence(digest(bytes))]]);
   const families = "Fixture CJK";
   const shapeKey = JSON.stringify([
     "正文",
@@ -1049,28 +1134,30 @@ test("the default browser session scales server shaping evidence without loading
     "CjkText",
     "正文",
   ]);
-  manifest.fontReplay.shapes = [{
-    key: shapeKey,
-    result: {
-      faceId: "fixture-face",
-      fontInstanceId: "fixture-instance",
-      script: "Hani",
-      features: [],
-      unsafeBreakCount: 0,
-      advanceEm: 2,
-      glyphs: [{
-        id: 42,
+  const manifest = manifestWithFaces([[faceEvidence(digest(bytes))]], undefined, {}, {
+    replayShapes: [{
+      key: shapeKey,
+      result: {
+        faceId: "fixture-face",
+        fontInstanceId: "fixture-instance",
+        script: "Hani",
+        features: [],
+        unsafeBreakCount: 0,
         advanceEm: 2,
-        xEm: 0,
-        yEm: 0,
-        boundsEm: [0, -0.8, 2, 0.2],
-      }],
-    },
-  }];
-  manifest.fontReplay.metrics = [{
-    key: metricKey,
-    valuesEm: [0.8, 0.2, 0, 0.8, 0.2],
-  }];
+        glyphs: [{
+          id: 42,
+          advanceEm: 2,
+          xEm: 0,
+          yEm: 0,
+          boundsEm: [0, -0.8, 2, 0.2],
+        }],
+      },
+    }],
+    replayMetrics: [{
+      key: metricKey,
+      valuesEm: [0.8, 0.2, 0, 0.8, 0.2],
+    }],
+  });
   const state = harness(manifest, { bytes, useDefaultSession: true });
 
   const handle = await state.loader.prepare(state.root);

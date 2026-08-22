@@ -4,7 +4,6 @@ import {
   FONT_SOURCE_POLICY,
   LAYOUT_REVISION,
   RENDER_REVISION,
-  SNAPSHOT_TABLES_SCHEMA,
   readableSnapshotSchema,
   stableStringify,
 } from "./snapshot-schema.js";
@@ -1364,13 +1363,12 @@ function manifestScriptText(template) {
 
 /**
  * The expanded manifest of one template for the synchronous preflight. The
- * schema-2 form resolves its station table from the transport's verified
- * cache only; a table that has not finished loading fails the read and the
- * preflight reports a miss.
+ * station table resolves from the transport's verified cache only; a table
+ * that has not finished loading fails the read and the preflight reports a
+ * miss.
  */
 function preflightTemplateManifest(template, root) {
   const parsed = JSON.parse(manifestScriptText(template));
-  if (parsed?.tables == null) return expandSnapshotManifest(parsed);
   const expected = typeof parsed.tables?.snapshot === "string"
     ? parsed.tables.snapshot
     : null;
@@ -1378,24 +1376,19 @@ function preflightTemplateManifest(template, root) {
 }
 
 /**
- * Expands the template manifest in either schema. A schema-2 manifest
- * resolves its station table through the root's `tq-tables` attribute and
- * verifies the loaded bytes against the sha the manifest pins before any
- * table row is trusted; a failed or mismatched load surfaces as
- * `SnapshotTablesMissing` so the caller records the miss and falls back.
+ * Expands the template manifest. The station table resolves through the
+ * root's `tq-tables` attribute and the loaded bytes verify against the sha
+ * the manifest pins before any table row is trusted; a failed or mismatched
+ * load surfaces as `SnapshotTablesMissing` so the caller records the miss
+ * and falls back.
  */
 async function resolveTemplateManifest(root, template) {
   const text = manifestScriptText(template);
   const parsed = JSON.parse(text);
-  if (parsed?.tables == null) return expandSnapshotManifest(parsed);
   const expected = typeof parsed.tables?.snapshot === "string"
     ? parsed.tables.snapshot
     : null;
-  const table = await snapshotTablesForRoot(
-    root,
-    root?.ownerDocument || globalThis.document,
-    expected,
-  );
+  const table = await snapshotTablesForRoot(root, expected);
   if (table == null) throw new Error("SnapshotTablesMissing");
   return expandSnapshotManifest(parsed, table.view);
 }
@@ -1406,16 +1399,11 @@ function manifestReadReason(error) {
     : "SnapshotManifestInvalid";
 }
 
-async function manifestValueStylesAreValid(manifest) {
-  if (manifest?.schema === SNAPSHOT_TABLES_SCHEMA) {
-    // The table content hash was verified against the manifest pin before
-    // expansion; the spliced rows need shape validation only.
-    return Array.isArray(manifest.valueStyles) &&
-      manifest.valueStyles.every((row) => typeof row === "string");
-  }
+function manifestValueStylesAreValid(manifest) {
+  // The table content hash was verified against the manifest pin before
+  // expansion; the spliced rows need shape validation only.
   return Array.isArray(manifest?.valueStyles) &&
-    typeof manifest.valueStylesSha256 === "string" &&
-    await sha256Text(stableStringify(manifest.valueStyles)) === manifest.valueStylesSha256;
+    manifest.valueStyles.every((row) => typeof row === "string");
 }
 
 function manifestEntryKeysAreUnique(manifest) {
@@ -2120,7 +2108,7 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
   if (!manifestEntryKeysAreUnique(manifest)) {
     return miss(root, "SnapshotManifestEntryKeyInvalid");
   }
-  if (!await manifestValueStylesAreValid(manifest)) {
+  if (!manifestValueStylesAreValid(manifest)) {
     return miss(root, "SnapshotValueStylesDigestMismatch");
   }
   if (fontContractOnlyManifest(manifest)) {
