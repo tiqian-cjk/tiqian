@@ -1,6 +1,5 @@
-//! Shared tables of one precomputer (ADR 0052 `BundleLayering`, 「站级表」):
-//! the rows every article manifest of one precomputer references by index. A
-//! build
+//! Shared snapshot tables (ADR 0052 `BundleLayering`, station tables): the
+//! rows every article manifest of one build references by index. A build
 //! absorbs the corpus entry by entry, then freezes the table once; the frozen
 //! bytes are content-addressed by the sha of their canonical rendering and
 //! every article manifest of that build carries the same sha. Rendering against
@@ -33,7 +32,7 @@ pub struct SnapshotTableFile {
     pub sha256: String,
 }
 
-/// One precomputer's shared rows. Indexes are append-stable: seeding restores the
+/// One table set's shared rows. Indexes are append-stable: seeding restores the
 /// previous build's rows so an incremental rebuild keeps serving the union
 /// table under one URL.
 pub struct SnapshotTables {
