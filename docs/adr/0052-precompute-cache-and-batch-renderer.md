@@ -182,9 +182,9 @@ renderSnapshotBundle 的职责收缩为产出数据，字符串拼装移出为�
 宿主选。产出三层：
 
 1. **站级表**：faces、typographies、valueStyles、fontPreloads、strings 行、probe 行、
-   metrics 行、revision 常量。每个 precomputer 一组表，内容寻址，表内容的哈希即键。
-   按附录测量，faces 全站 110.1 KB、probe 行 602.3 KB、metrics 行折算 0.56 MB、strings
-   行折算 0.2 MB，进表后按 precomputer 存一份。
+   metrics 行、revision 常量。一组表由一次构建持有，构建内多个 precomputer 的行并入
+   同一组；内容寻址，表内容的哈希即键。按附录测量，faces 全站 110.1 KB、probe 行
+   602.3 KB、metrics 行折算 0.56 MB、strings 行折算 0.2 MB，进表后整组一份。
 2. **篇级 manifest**：entries 以整数索引引用站级表；条目的 fontFaceEvidence 不再内嵌
    coverageText 文本与 probe 对象，改为 face 引用加 probe 行引用，正文在条目对应的
    来源里已有。fontReplay 的 shapes 留篇级：去掉双份内嵌后，shape 行跨篇去重的余额约
@@ -193,8 +193,8 @@ renderSnapshotBundle 的职责收缩为产出数据，字符串拼装移出为�
 3. **呈现字段**：renderedContent、inert DOM、initialStyle、root 属性，逐根各自所有，
    不进共享表（initialStyle 在 306 篇中逐篇不同，没有可共享内容）。
 
-schema 自 1 升 2：读侧保留一个版本对 schema 1 的支持，写侧只产 schema 2；manifestPlacement
-选项提供自包含回退（见 `TableTransport`）。
+schema 自 1 升 2：读侧保留一个版本对 schema 1 的支持，写侧只产 schema 2；不经表的整函数
+路径保留，作为自包含回退（见 `TableTransport`）。
 
 按附录的字节构成重排，blog3 形态的缓存体积预计约 50 MB，为当前 115.2 MB 的 43%
 左右；HTML 产物里内嵌的 manifest 同步变小。
@@ -367,3 +367,47 @@ context 指纹失效，结构不匹配时宿主可整文件重建。三张表设
 收集，宿主里同步判断「内容是否变过」的路径不应重造这个 id：宿主以自己的内容
 指纹作同步判断，路由命中检查以 snapshotId 判断，两个判断各自独立，一侧改形式
 不影响另一侧。
+
+## 附录（2026-08-21 第三批）：站级表与表传输的实施测量
+
+`BundleLayering` 与 `TableTransport` 已实施，推迟项解除。npm 侧 API 拆为六步：
+`createSnapshotTables`、`absorbSnapshotTables`、`renderSnapshotBundleData`、
+`finalizeSnapshotTables`、`assembleSnapshotBundle`、`closeSnapshotTables`。数据阶段
+开始前吸收该构建的全部条目，冻结一次后逐篇拼装；拼装只解析引用，命中条目不进新表。
+写侧只产 schema 2，读侧保留 schema 1。
+
+### 宿主接入形态（blog3）
+
+一次构建一组表，吸收该构建三个 precomputer 的段落与 FontContract 条目。表文件按内容
+哈希命名存入仓库目录，经预渲染路由 `/tiqian-tables/[sha].json` 带 immutable 缓存头
+原样返回。缓存条目记录 `tablesSha256`，根属性 `tq-tables` 指向表 URL。缓存压实时清扫
+表目录，删除不被任何存活条目引用的表文件。表地址与宿主的内容指纹、snapshotId 采用
+同一规则：以内容命名，存活由引用者决定。
+
+### 构建测量（306 条目）
+
+| 场景 | 耗时 | 表产物 |
+| --- | --- | --- |
+| 空缓存构建 | 1m5s–1m9s | 一张表 1,065,655 B；两次独立构建产出同一 sha |
+| 全命中构建 | 10.4 s | 无新表，引用不变 |
+| 单篇修改构建 | 11.6 s | 新表约 96 KB；305 条目保留旧表引用 |
+| 修改还原后的构建 | 未计时 | 引用清零的表在压实时删除 |
+
+### 体积测量
+
+条目文件合计 115,266,611 B 降至 63,426,406 B（-45.0%），计入表后 64,492,061 B
+（-44.1%）。第一附录预计约 50 MB，实测高于预计。
+
+clientTemplate 语料（306 条目合计）：
+
+| 度量 | schema 1 | schema 2 | schema 2 计入表 |
+| --- | --- | --- | --- |
+| 字节 | 47,334,489 | 28,179,763（-40.5%） | 29,245,418（-38.2%） |
+| gzip | 7,140,336 | 2,954,606（-58.6%） | 3,094,798（-56.7%） |
+
+表 gzip 140,192 B，同一访客只取一次。条目 gzip 均值 23,334 B 降至 9,656 B，均值节省
+13,678 B；10.2 篇的节省等于一次表传输。最大条目（about-learning 一文）1,052,941 B
+降至 775,902 B，gzip 89,533 B 降至 52,018 B。Chromium 实测一页：根元素带 `tq-tables`
+属性，表请求 200，页面段落全部携带 data-tiqian-rendered。
+
+表文件的二进制编码是下一批次，继续压低表传输字节。
