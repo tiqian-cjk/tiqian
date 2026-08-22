@@ -665,7 +665,7 @@ mod tests {
     }
 
     #[test]
-    fn restore_rows_and_keep_the_url_stable() {
+    fn restore_keeps_rows_and_the_url_stable() {
         let mut tables = SnapshotTables::new();
         tables
             .absorb_prepared(&Json::Arr(vec![entry("p1", "同文")]))

@@ -54,20 +54,21 @@ fn invalid() -> NamedError {
     NamedError("SnapshotTableBinaryInvalid".to_string())
 }
 
-/// Checked addition as the single overflow guard of the reader paths.
-fn add(a: usize, b: usize) -> Result<usize, NamedError> {
+/// Every size and offset computation runs through these guards so overflow
+/// surfaces as the named decode issue instead of wrapping.
+fn checked_add(a: usize, b: usize) -> Result<usize, NamedError> {
     a.checked_add(b).ok_or_else(invalid)
 }
 
-fn scale(a: usize, factor: usize) -> Result<usize, NamedError> {
-    a.checked_mul(factor).ok_or_else(invalid)
+fn checked_mul(count: usize, unit_bytes: usize) -> Result<usize, NamedError> {
+    count.checked_mul(unit_bytes).ok_or_else(invalid)
 }
 
-fn usize_of(value: u32) -> Result<usize, NamedError> {
+fn try_usize(value: u32) -> Result<usize, NamedError> {
     usize::try_from(value).map_err(|_| invalid())
 }
 
-fn u32_of_len(value: usize) -> Result<u32, NamedError> {
+fn try_u32(value: usize) -> Result<u32, NamedError> {
     u32::try_from(value).map_err(|_| invalid())
 }
 
@@ -209,7 +210,7 @@ impl StringRegion {
         if let Some(existing) = self.map.get(text) {
             return Ok(*existing);
         }
-        let index = u32_of_len(self.texts.len())?;
+        let index = try_u32(self.texts.len())?;
         self.texts.push(text.to_string());
         self.map.insert(text.to_string(), index);
         Ok(index)
@@ -234,7 +235,7 @@ pub(crate) fn encode(tables: &SnapshotTables) -> Result<Vec<u8>, NamedError> {
         let pool_ref = match value_pool_indexes.get(&row.value_bits) {
             Some(existing) => *existing,
             None => {
-                let index = u32_of_len(value_pool.len())?;
+                let index = try_u32(value_pool.len())?;
                 value_pool.push(row.value_bits);
                 value_pool_indexes.insert(row.value_bits, index);
                 index
@@ -273,7 +274,7 @@ pub(crate) fn encode(tables: &SnapshotTables) -> Result<Vec<u8>, NamedError> {
         let advance_pool_ref = match advance_indexes.get(&advance_bits) {
             Some(existing) => *existing,
             None => {
-                let index = u32_of_len(advance_pool.len())?;
+                let index = try_u32(advance_pool.len())?;
                 advance_pool.push(advance_bits);
                 advance_indexes.insert(advance_bits, index);
                 index
@@ -289,7 +290,7 @@ pub(crate) fn encode(tables: &SnapshotTables) -> Result<Vec<u8>, NamedError> {
         let style_pool_ref = match style_indexes.get(&style_key) {
             Some(existing) => *existing,
             None => {
-                let index = u32_of_len(style_pool.len())?;
+                let index = try_u32(style_pool.len())?;
                 style_pool.push(ProbeStyle {
                     font_size,
                     weight,
@@ -304,7 +305,7 @@ pub(crate) fn encode(tables: &SnapshotTables) -> Result<Vec<u8>, NamedError> {
         let features_pool_ref = match features_indexes.get(&feature_refs) {
             Some(existing) => *existing,
             None => {
-                let index = u32_of_len(features_pool.len())?;
+                let index = try_u32(features_pool.len())?;
                 features_pool.push(feature_refs.clone());
                 features_indexes.insert(feature_refs, index);
                 index
@@ -341,18 +342,18 @@ pub(crate) fn encode(tables: &SnapshotTables) -> Result<Vec<u8>, NamedError> {
 
     let mut writer = Writer::new();
     writer.bytes(&MAGIC);
-    writer.u32(u32_of_len(strings.replay_count)?);
-    writer.u32(u32_of_len(strings.texts.len())?);
-    writer.u32(u32_of_len(metrics.len())?);
-    writer.u32(u32_of_len(value_pool.len())?);
-    writer.u32(u32_of_len(probes.len())?);
-    writer.u32(u32_of_len(advance_pool.len())?);
-    writer.u32(u32_of_len(style_pool.len())?);
-    writer.u32(u32_of_len(features_pool.len())?);
-    writer.u32(u32_of_len(face_texts.len())?);
-    writer.u32(u32_of_len(typography_texts.len())?);
-    writer.u32(u32_of_len(tables.value_styles.len())?);
-    writer.u32(u32_of_len(font_preloads.len())?);
+    writer.u32(try_u32(strings.replay_count)?);
+    writer.u32(try_u32(strings.texts.len())?);
+    writer.u32(try_u32(metrics.len())?);
+    writer.u32(try_u32(value_pool.len())?);
+    writer.u32(try_u32(probes.len())?);
+    writer.u32(try_u32(advance_pool.len())?);
+    writer.u32(try_u32(style_pool.len())?);
+    writer.u32(try_u32(features_pool.len())?);
+    writer.u32(try_u32(face_texts.len())?);
+    writer.u32(try_u32(typography_texts.len())?);
+    writer.u32(try_u32(tables.value_styles.len())?);
+    writer.u32(try_u32(font_preloads.len())?);
 
     write_offsets(
         &mut writer,
@@ -361,7 +362,7 @@ pub(crate) fn encode(tables: &SnapshotTables) -> Result<Vec<u8>, NamedError> {
     let mut sorted_refs: Vec<usize> = (0..strings.texts.len()).collect();
     sorted_refs.sort_by(|a, b| strings.texts[*a].as_str().cmp(strings.texts[*b].as_str()));
     for reference in &sorted_refs {
-        writer.u32(u32_of_len(*reference)?);
+        writer.u32(try_u32(*reference)?);
     }
 
     for row in &metrics {
@@ -505,7 +506,7 @@ impl<'a> Reader<'a> {
         Reader { bytes, position: 0 }
     }
     fn take(&mut self, count: usize) -> Result<&'a [u8], NamedError> {
-        let end = add(self.position, count)?;
+        let end = checked_add(self.position, count)?;
         if end > self.bytes.len() {
             return Err(invalid());
         }
@@ -517,19 +518,19 @@ impl<'a> Reader<'a> {
 
 fn read_u32_at(bytes: &[u8], at: usize) -> Result<u32, NamedError> {
     let mut raw = [0u8; 4];
-    raw.copy_from_slice(bytes.get(at..add(at, 4)?).ok_or_else(invalid)?);
+    raw.copy_from_slice(bytes.get(at..checked_add(at, 4)?).ok_or_else(invalid)?);
     Ok(u32::from_le_bytes(raw))
 }
 
 fn read_u16_at(bytes: &[u8], at: usize) -> Result<u16, NamedError> {
     let mut raw = [0u8; 2];
-    raw.copy_from_slice(bytes.get(at..add(at, 2)?).ok_or_else(invalid)?);
+    raw.copy_from_slice(bytes.get(at..checked_add(at, 2)?).ok_or_else(invalid)?);
     Ok(u16::from_le_bytes(raw))
 }
 
 fn read_f64_at(bytes: &[u8], at: usize) -> Result<f64, NamedError> {
     let mut raw = [0u8; 8];
-    raw.copy_from_slice(bytes.get(at..add(at, 8)?).ok_or_else(invalid)?);
+    raw.copy_from_slice(bytes.get(at..checked_add(at, 8)?).ok_or_else(invalid)?);
     Ok(f64::from_le_bytes(raw))
 }
 
@@ -597,40 +598,42 @@ fn decode_layout(bytes: &[u8]) -> Result<Layout, NamedError> {
 
     let string_offsets = read_offsets(&mut reader, string_count)?;
     let string_bytes_start = reader.position;
-    let string_bytes_len = usize_of(*string_offsets.last().ok_or_else(invalid)?)?;
+    let string_bytes_len = try_usize(*string_offsets.last().ok_or_else(invalid)?)?;
     reader.take(string_bytes_len)?;
     let sorted_refs_start = reader.position;
-    reader.take(scale(string_count, 4)?)?;
+    reader.take(checked_mul(string_count, 4)?)?;
 
     let metric_rows_start = reader.position;
-    reader.take(scale(metric_count, METRIC_ROW_BYTES)?)?;
+    reader.take(checked_mul(metric_count, METRIC_ROW_BYTES)?)?;
     let metric_value_pool_start = reader.position;
-    reader.take(scale(metric_value_pool_count, METRIC_POOL_ROW_BYTES)?)?;
+    reader.take(checked_mul(metric_value_pool_count, METRIC_POOL_ROW_BYTES)?)?;
     let probe_rows_start = reader.position;
-    reader.take(scale(probe_count, PROBE_ROW_BYTES)?)?;
+    reader.take(checked_mul(probe_count, PROBE_ROW_BYTES)?)?;
     let probe_advance_pool_start = reader.position;
-    reader.take(scale(probe_advance_pool_count, 8)?)?;
+    reader.take(checked_mul(probe_advance_pool_count, 8)?)?;
     let probe_style_pool_start = reader.position;
-    reader.take(scale(probe_style_pool_count, PROBE_STYLE_ROW_BYTES)?)?;
+    reader.take(checked_mul(probe_style_pool_count, PROBE_STYLE_ROW_BYTES)?)?;
     let probe_features_offsets = read_offsets(&mut reader, probe_features_pool_count)?;
     let probe_features_rows_start = reader.position;
-    let features_bytes_len = usize_of(*probe_features_offsets.last().ok_or_else(invalid)?)?;
+    let features_bytes_len = try_usize(*probe_features_offsets.last().ok_or_else(invalid)?)?;
     reader.take(features_bytes_len)?;
 
     let face_text_offsets = read_offsets(&mut reader, face_count)?;
     let face_text_start = reader.position;
-    reader.take(usize_of(*face_text_offsets.last().ok_or_else(invalid)?)?)?;
+    reader.take(try_usize(*face_text_offsets.last().ok_or_else(invalid)?)?)?;
     let typography_text_offsets = read_offsets(&mut reader, typography_count)?;
     let typography_text_start = reader.position;
-    reader.take(usize_of(
+    reader.take(try_usize(
         *typography_text_offsets.last().ok_or_else(invalid)?,
     )?)?;
     let value_style_offsets = read_offsets(&mut reader, value_style_count)?;
     let value_style_start = reader.position;
-    reader.take(usize_of(*value_style_offsets.last().ok_or_else(invalid)?)?)?;
+    reader.take(try_usize(*value_style_offsets.last().ok_or_else(invalid)?)?)?;
     let font_preload_offsets = read_offsets(&mut reader, font_preload_count)?;
     let font_preload_text_start = reader.position;
-    reader.take(usize_of(*font_preload_offsets.last().ok_or_else(invalid)?)?)?;
+    reader.take(try_usize(
+        *font_preload_offsets.last().ok_or_else(invalid)?,
+    )?)?;
     let revision_text_start = reader.position;
 
     validate_strings(&string_offsets, string_count, string_bytes_start, bytes)?;
@@ -701,7 +704,7 @@ fn decode_layout(bytes: &[u8]) -> Result<Layout, NamedError> {
 }
 
 fn read_offsets(reader: &mut Reader, count: usize) -> Result<Vec<u32>, NamedError> {
-    let mut offsets = Vec::with_capacity(add(count, 1)?);
+    let mut offsets = Vec::with_capacity(checked_add(count, 1)?);
     for _ in 0..=count {
         let mut raw = [0u8; 4];
         raw.copy_from_slice(reader.take(4)?);
@@ -721,10 +724,10 @@ fn string_slice_at<'a>(
     bytes: &'a [u8],
     index: usize,
 ) -> Result<&'a [u8], NamedError> {
-    let start = usize_of(*offsets.get(index).ok_or_else(invalid)?)?;
-    let end = usize_of(*offsets.get(add(index, 1)?).ok_or_else(invalid)?)?;
+    let start = try_usize(*offsets.get(index).ok_or_else(invalid)?)?;
+    let end = try_usize(*offsets.get(checked_add(index, 1)?).ok_or_else(invalid)?)?;
     bytes
-        .get(add(string_bytes_start, start)?..add(string_bytes_start, end)?)
+        .get(checked_add(string_bytes_start, start)?..checked_add(string_bytes_start, end)?)
         .ok_or_else(invalid)
 }
 
@@ -753,9 +756,9 @@ fn validate_sorted_refs(
 ) -> Result<(), NamedError> {
     let mut previous: Option<&[u8]> = None;
     for index in 0..count {
-        let at = add(sorted_refs_start, scale(index, 4)?)?;
+        let at = checked_add(sorted_refs_start, checked_mul(index, 4)?)?;
         let reference = read_u32_at(bytes, at)?;
-        let content = string_slice_at(offsets, string_bytes_start, bytes, usize_of(reference)?)?;
+        let content = string_slice_at(offsets, string_bytes_start, bytes, try_usize(reference)?)?;
         if let Some(previous) = previous {
             if previous >= content {
                 return Err(invalid());
@@ -767,13 +770,13 @@ fn validate_sorted_refs(
 }
 
 fn metric_key_at(bytes: &[u8], start: usize, index: usize) -> Result<MetricKey, NamedError> {
-    let at = add(start, scale(index, METRIC_ROW_BYTES)?)?;
+    let at = checked_add(start, checked_mul(index, METRIC_ROW_BYTES)?)?;
     Ok(MetricKey {
         families_ref: read_u32_at(bytes, at)?,
-        weight: read_f64_at(bytes, add(at, 4)?)?,
-        italic: read_u8_at(bytes, add(at, 12)?)?,
-        role_ref: read_u32_at(bytes, add(at, 13)?)?,
-        face_selection_ref: read_u32_at(bytes, add(at, 17)?)?,
+        weight: read_f64_at(bytes, checked_add(at, 4)?)?,
+        italic: read_u8_at(bytes, checked_add(at, 12)?)?,
+        role_ref: read_u32_at(bytes, checked_add(at, 13)?)?,
+        face_selection_ref: read_u32_at(bytes, checked_add(at, 17)?)?,
     })
 }
 
@@ -795,17 +798,20 @@ fn validate_metric_rows(
         if !key.weight.is_finite() || key.italic > 1 {
             return Err(invalid());
         }
-        if usize_of(key.families_ref)? >= string_count
-            || usize_of(key.role_ref)? >= string_count
-            || usize_of(key.face_selection_ref)? >= string_count
+        if try_usize(key.families_ref)? >= string_count
+            || try_usize(key.role_ref)? >= string_count
+            || try_usize(key.face_selection_ref)? >= string_count
         {
             return Err(invalid());
         }
         let pool_ref = read_u32_at(
             bytes,
-            add(add(start, scale(index, METRIC_ROW_BYTES)?)?, 21)?,
+            checked_add(
+                checked_add(start, checked_mul(index, METRIC_ROW_BYTES)?)?,
+                21,
+            )?,
         )?;
-        if usize_of(pool_ref)? >= value_pool_count {
+        if try_usize(pool_ref)? >= value_pool_count {
             return Err(invalid());
         }
     }
@@ -818,9 +824,9 @@ fn validate_metric_value_pool(start: usize, count: usize, bytes: &[u8]) -> Resul
         for slot in 0..5 {
             let value = read_f64_at(
                 bytes,
-                add(
-                    add(start, scale(index, METRIC_POOL_ROW_BYTES)?)?,
-                    scale(slot, 8)?,
+                checked_add(
+                    checked_add(start, checked_mul(index, METRIC_POOL_ROW_BYTES)?)?,
+                    checked_mul(slot, 8)?,
                 )?,
             )?;
             if !value.is_finite() && value.to_bits() != f64::NAN.to_bits() {
@@ -841,15 +847,15 @@ fn validate_probe_rows(
     bytes: &[u8],
 ) -> Result<(), NamedError> {
     for index in 0..count {
-        let at = add(start, scale(index, PROBE_ROW_BYTES)?)?;
+        let at = checked_add(start, checked_mul(index, PROBE_ROW_BYTES)?)?;
         let limits = [
             (read_u32_at(bytes, at)?, string_count),
-            (read_u32_at(bytes, add(at, 4)?)?, advance_count),
-            (read_u32_at(bytes, add(at, 8)?)?, style_count),
-            (read_u32_at(bytes, add(at, 12)?)?, features_count),
+            (read_u32_at(bytes, checked_add(at, 4)?)?, advance_count),
+            (read_u32_at(bytes, checked_add(at, 8)?)?, style_count),
+            (read_u32_at(bytes, checked_add(at, 12)?)?, features_count),
         ];
         for (reference, limit) in limits {
-            if usize_of(reference)? >= limit {
+            if try_usize(reference)? >= limit {
                 return Err(invalid());
             }
         }
@@ -859,7 +865,7 @@ fn validate_probe_rows(
 
 fn validate_probe_advance_pool(start: usize, count: usize, bytes: &[u8]) -> Result<(), NamedError> {
     for index in 0..count {
-        let value = read_f64_at(bytes, add(start, scale(index, 8)?)?)?;
+        let value = read_f64_at(bytes, checked_add(start, checked_mul(index, 8)?)?)?;
         if !value.is_finite() {
             return Err(invalid());
         }
@@ -874,16 +880,16 @@ fn validate_probe_style_pool(
     bytes: &[u8],
 ) -> Result<(), NamedError> {
     for index in 0..count {
-        let at = add(start, scale(index, PROBE_STYLE_ROW_BYTES)?)?;
+        let at = checked_add(start, checked_mul(index, PROBE_STYLE_ROW_BYTES)?)?;
         let font_size = read_f64_at(bytes, at)?;
-        let weight = read_f64_at(bytes, add(at, 8)?)?;
-        let italic = read_u8_at(bytes, add(at, 16)?)?;
-        let script_ref = read_u32_at(bytes, add(at, 17)?)?;
-        let language_ref = read_u32_at(bytes, add(at, 21)?)?;
+        let weight = read_f64_at(bytes, checked_add(at, 8)?)?;
+        let italic = read_u8_at(bytes, checked_add(at, 16)?)?;
+        let script_ref = read_u32_at(bytes, checked_add(at, 17)?)?;
+        let language_ref = read_u32_at(bytes, checked_add(at, 21)?)?;
         if !font_size.is_finite() || !weight.is_finite() || italic > 1 {
             return Err(invalid());
         }
-        if usize_of(script_ref)? >= string_count || usize_of(language_ref)? >= string_count {
+        if try_usize(script_ref)? >= string_count || try_usize(language_ref)? >= string_count {
             return Err(invalid());
         }
     }
@@ -897,18 +903,18 @@ fn validate_probe_features(
     bytes: &[u8],
 ) -> Result<(), NamedError> {
     for index in 0..offsets.len().saturating_sub(1) {
-        let from = usize_of(offsets[index])?;
-        let to = usize_of(*offsets.get(add(index, 1)?).ok_or_else(invalid)?)?;
+        let from = try_usize(offsets[index])?;
+        let to = try_usize(*offsets.get(checked_add(index, 1)?).ok_or_else(invalid)?)?;
         let row = bytes
-            .get(add(rows_start, from)?..add(rows_start, to)?)
+            .get(checked_add(rows_start, from)?..checked_add(rows_start, to)?)
             .ok_or_else(invalid)?;
         let count = read_u16_at(row, 0)?;
-        if row.len() != add(2, scale(usize::from(count), 4)?)? {
+        if row.len() != checked_add(2, checked_mul(usize::from(count), 4)?)? {
             return Err(invalid());
         }
         for slot in 0..usize::from(count) {
-            let reference = read_u32_at(row, add(2, scale(slot, 4)?)?)?;
-            if usize_of(reference)? >= string_count {
+            let reference = read_u32_at(row, checked_add(2, checked_mul(slot, 4)?)?)?;
+            if try_usize(reference)? >= string_count {
                 return Err(invalid());
             }
         }
@@ -917,9 +923,9 @@ fn validate_probe_features(
 }
 
 fn validate_text_region(offsets: &[u32], start: usize, bytes: &[u8]) -> Result<(), NamedError> {
-    let region_len = usize_of(*offsets.last().ok_or_else(invalid)?)?;
+    let region_len = try_usize(*offsets.last().ok_or_else(invalid)?)?;
     let region = bytes
-        .get(start..add(start, region_len)?)
+        .get(start..checked_add(start, region_len)?)
         .ok_or_else(invalid)?;
     std::str::from_utf8(region).map_err(|_| invalid())?;
     Ok(())
@@ -949,10 +955,10 @@ fn region_text(
     bytes: &[u8],
     index: usize,
 ) -> Result<String, NamedError> {
-    let from = usize_of(*offsets.get(index).ok_or_else(invalid)?)?;
-    let to = usize_of(*offsets.get(add(index, 1)?).ok_or_else(invalid)?)?;
+    let from = try_usize(*offsets.get(index).ok_or_else(invalid)?)?;
+    let to = try_usize(*offsets.get(checked_add(index, 1)?).ok_or_else(invalid)?)?;
     let slice = bytes
-        .get(add(start, from)?..add(start, to)?)
+        .get(checked_add(start, from)?..checked_add(start, to)?)
         .ok_or_else(invalid)?;
     String::from_utf8(slice.to_vec()).map_err(|_| invalid())
 }
@@ -976,29 +982,41 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedTable, NamedError> {
     }
     let string_at = |reference: u32| -> Result<Json, NamedError> {
         Ok(strings
-            .get(usize_of(reference)?)
+            .get(try_usize(reference)?)
             .ok_or_else(invalid)?
             .clone())
     };
 
     let mut metrics: Vec<Json> = Vec::with_capacity(layout.metric_count);
     for index in 0..layout.metric_count {
-        let at = add(layout.metric_rows_start, scale(index, METRIC_ROW_BYTES)?)?;
-        let pool_at = add(
+        let at = checked_add(
+            layout.metric_rows_start,
+            checked_mul(index, METRIC_ROW_BYTES)?,
+        )?;
+        let pool_at = checked_add(
             layout.metric_value_pool_start,
-            scale(
-                usize_of(read_u32_at(bytes, add(at, 21)?)?)?,
+            checked_mul(
+                try_usize(read_u32_at(bytes, checked_add(at, 21)?)?)?,
                 METRIC_POOL_ROW_BYTES,
             )?,
         )?;
         let mut values: Vec<Json> = Vec::with_capacity(10);
         values.push(Json::Num(f64::from(read_u32_at(bytes, at)?)));
-        values.push(Json::Num(read_f64_at(bytes, add(at, 4)?)?));
-        values.push(Json::Num(f64::from(read_u8_at(bytes, add(at, 12)?)?)));
-        values.push(Json::Num(f64::from(read_u32_at(bytes, add(at, 13)?)?)));
-        values.push(Json::Num(f64::from(read_u32_at(bytes, add(at, 17)?)?)));
+        values.push(Json::Num(read_f64_at(bytes, checked_add(at, 4)?)?));
+        values.push(Json::Num(f64::from(read_u8_at(
+            bytes,
+            checked_add(at, 12)?,
+        )?)));
+        values.push(Json::Num(f64::from(read_u32_at(
+            bytes,
+            checked_add(at, 13)?,
+        )?)));
+        values.push(Json::Num(f64::from(read_u32_at(
+            bytes,
+            checked_add(at, 17)?,
+        )?)));
         for slot in 0..5 {
-            let bits = read_f64_at(bytes, add(pool_at, scale(slot, 8)?)?)?.to_bits();
+            let bits = read_f64_at(bytes, checked_add(pool_at, checked_mul(slot, 8)?)?)?.to_bits();
             if bits == f64::NAN.to_bits() {
                 values.push(Json::Null);
             } else {
@@ -1010,40 +1028,43 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedTable, NamedError> {
 
     let mut probes: Vec<Json> = Vec::with_capacity(layout.probe_count);
     for index in 0..layout.probe_count {
-        let at = add(layout.probe_rows_start, scale(index, PROBE_ROW_BYTES)?)?;
+        let at = checked_add(
+            layout.probe_rows_start,
+            checked_mul(index, PROBE_ROW_BYTES)?,
+        )?;
         let text_ref = read_u32_at(bytes, at)?;
         let advance = read_f64_at(
             bytes,
-            add(
+            checked_add(
                 layout.probe_advance_pool_start,
-                scale(usize_of(read_u32_at(bytes, add(at, 4)?)?)?, 8)?,
+                checked_mul(try_usize(read_u32_at(bytes, checked_add(at, 4)?)?)?, 8)?,
             )?,
         )?;
-        let style_at = add(
+        let style_at = checked_add(
             layout.probe_style_pool_start,
-            scale(
-                usize_of(read_u32_at(bytes, add(at, 8)?)?)?,
+            checked_mul(
+                try_usize(read_u32_at(bytes, checked_add(at, 8)?)?)?,
                 PROBE_STYLE_ROW_BYTES,
             )?,
         )?;
-        let features_pool_ref = read_u32_at(bytes, add(at, 12)?)?;
+        let features_pool_ref = read_u32_at(bytes, checked_add(at, 12)?)?;
         let features_row = {
-            let from = usize_of(
+            let from = try_usize(
                 *layout
                     .probe_features_offsets
-                    .get(usize_of(features_pool_ref)?)
+                    .get(try_usize(features_pool_ref)?)
                     .ok_or_else(invalid)?,
             )?;
-            let to = usize_of(
+            let to = try_usize(
                 *layout
                     .probe_features_offsets
-                    .get(add(usize_of(features_pool_ref)?, 1)?)
+                    .get(checked_add(try_usize(features_pool_ref)?, 1)?)
                     .ok_or_else(invalid)?,
             )?;
             bytes
                 .get(
-                    add(layout.probe_features_rows_start, from)?
-                        ..add(layout.probe_features_rows_start, to)?,
+                    checked_add(layout.probe_features_rows_start, from)?
+                        ..checked_add(layout.probe_features_rows_start, to)?,
                 )
                 .ok_or_else(invalid)?
         };
@@ -1052,7 +1073,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedTable, NamedError> {
         for slot in 0..usize::from(features_count) {
             features.push(string_at(read_u32_at(
                 features_row,
-                add(2, scale(slot, 4)?)?,
+                checked_add(2, checked_mul(slot, 4)?)?,
             )?)?);
         }
         probes.push(Json::Obj(vec![
@@ -1064,19 +1085,19 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedTable, NamedError> {
             ),
             (
                 "fontWeight".to_string(),
-                Json::Num(read_f64_at(bytes, add(style_at, 8)?)?),
+                Json::Num(read_f64_at(bytes, checked_add(style_at, 8)?)?),
             ),
             (
                 "italic".to_string(),
-                Json::Bool(read_u8_at(bytes, add(style_at, 16)?)? == 1),
+                Json::Bool(read_u8_at(bytes, checked_add(style_at, 16)?)? == 1),
             ),
             (
                 "script".to_string(),
-                string_at(read_u32_at(bytes, add(style_at, 17)?)?)?,
+                string_at(read_u32_at(bytes, checked_add(style_at, 17)?)?)?,
             ),
             (
                 "language".to_string(),
-                string_at(read_u32_at(bytes, add(style_at, 21)?)?)?,
+                string_at(read_u32_at(bytes, checked_add(style_at, 21)?)?)?,
             ),
             ("features".to_string(), Json::Arr(features)),
         ]));
@@ -1332,14 +1353,14 @@ mod tests {
         let layout = decode_layout(&bytes).expect("layout");
         assert!(layout.string_count >= 2, "fixture interned strings");
         // sortedRefs begin right after the string bytes.
-        let sorted_start = add(
+        let sorted_start = checked_add(
             layout.string_bytes_start,
-            usize_of(*layout.string_offsets.last().expect("offsets")).expect("len"),
+            try_usize(*layout.string_offsets.last().expect("offsets")).expect("len"),
         )
         .expect("offset");
         let mut swapped = bytes.clone();
         let a = read_u32_at(&swapped, sorted_start).expect("ref");
-        let b = read_u32_at(&swapped, add(sorted_start, 4).expect("offset")).expect("ref");
+        let b = read_u32_at(&swapped, checked_add(sorted_start, 4).expect("offset")).expect("ref");
         swapped[sorted_start..sorted_start + 4].copy_from_slice(&b.to_le_bytes());
         swapped[sorted_start + 4..sorted_start + 8].copy_from_slice(&a.to_le_bytes());
         let error = match decode_layout(&swapped) {
@@ -1362,8 +1383,9 @@ mod tests {
         }
         // Swap the two metric rows; the strict-order validation must trip.
         for byte in 0..METRIC_ROW_BYTES {
-            let first = add(layout.metric_rows_start, byte).expect("offset");
-            let second = add(layout.metric_rows_start, METRIC_ROW_BYTES + byte).expect("offset");
+            let first = checked_add(layout.metric_rows_start, byte).expect("offset");
+            let second =
+                checked_add(layout.metric_rows_start, METRIC_ROW_BYTES + byte).expect("offset");
             bytes.swap(first, second);
         }
         let error = match decode_layout(&bytes) {

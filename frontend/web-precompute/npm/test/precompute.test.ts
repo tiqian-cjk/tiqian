@@ -67,19 +67,27 @@ function invalidTypography(patch: {
   return { ...baseTypography, ...patch } as SnapshotTypography;
 }
 
-function sha256(value: string): string {
+function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function sha256Bytes(value: Buffer): string {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-// The binary table header: 8 magic bytes then twelve little-endian u32 counts
-// (replay strings, strings, metrics, metric values, probes, probe advances,
-// probe styles, probe features, faces, typographies, value styles, preloads).
-function tableHeaderCounts(bytes: Buffer): number[] {
-  return Array.from({ length: 12 }, (_, index) => bytes.readUInt32LE(8 + index * 4));
+// The binary table header: 8 magic bytes then twelve little-endian u32 counts.
+function readTableHeader(bytes: Buffer) {
+  const count = (index: number) => bytes.readUInt32LE(8 + index * 4);
+  return {
+    replayStringCount: count(0),
+    stringCount: count(1),
+    metricCount: count(2),
+    metricValueCount: count(3),
+    probeCount: count(4),
+    probeAdvanceCount: count(5),
+    probeStyleCount: count(6),
+    probeFeatureCount: count(7),
+    faceCount: count(8),
+    typographyCount: count(9),
+    valueStyleCount: count(10),
+    fontPreloadCount: count(11),
+  };
 }
 
 function fixturePlan(text: string) {
@@ -339,11 +347,11 @@ test("split render assembles per-article bundles against one frozen table", { sk
 
   const file = precompute.finalizeSnapshotTables(tables);
   assert.equal(file.bytes.subarray(0, 8).toString("latin1"), "TIQTBL02");
-  assert.equal(file.sha256, sha256Bytes(file.bytes));
-  const counts = tableHeaderCounts(file.bytes);
+  assert.equal(file.sha256, sha256(file.bytes));
+  const header = readTableHeader(file.bytes);
   // Both articles share one face row; each distinct probe keeps its own row.
-  assert.equal(counts[8], 1);
-  assert.equal(counts[4], 2);
+  assert.equal(header.faceCount, 1);
+  assert.equal(header.probeCount, 2);
 
   const bundleFirst = precompute.assembleSnapshotBundle(dataFirst, tables);
   const bundleSecond = precompute.assembleSnapshotBundle(dataSecond, tables);
