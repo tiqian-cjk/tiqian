@@ -5,7 +5,8 @@
   2026-07-14 Web native-list + first-paint + strong opt-in amendments;
   2026-07-15 Kotlin/JS-only runtime + semantic snapshot amendment;
   2026-07-16 server shaping replay + mixed snapshot/runtime amendment;
-  2026-07-18 direct SSR / navigation transport + progressive proof amendment)
+  2026-07-18 direct SSR / navigation transport + progressive proof amendment;
+  2026-08-20 native precompute migration pointer, see ADR 0050)
 - Date: 2026-07-07
 - Relates: [ADR 0008](0008-shaping-adapter-contract.md)(shaping adapter 契约)、
   [ADR 0014](0014-ink-bounds-calibrated-punctuation-geometry.md)(`halt` = 度量入口非渲染依赖)、
@@ -61,6 +62,10 @@ source hash、CSSOM face contract、FontFaceSet 与可见 DOM advance 仍现场�
 Node precompute 的依赖树仍包含 HarfBuzz WASM，但它不进入或运行于浏览器。Kotlin 的 `@JsFun` 目前
 仍使用名为 `ExperimentalWasmJsInterop` 的编译器 opt-in；该注解名称不是 WebAssembly target 或
 运行时依赖。
+
+2026-08-20 追记：[ADR 0050](0050-native-precompute-rust-bindings.md) 把 Node precompute 迁往
+Kotlin/Native 静态库加 Rust 绑定，HarfBuzz 改为原生依赖，precompute 迁入独立的
+`@tiqian/precompute` 包。本节的 WASM 依赖描述适用于迁移完成前的发布。浏览器路径不受影响。
 
 ### `OffscreenMeasureTextShaping` —— 度量而非渲染
 

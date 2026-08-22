@@ -1,0 +1,106 @@
+{
+  "name": "@tiqian/precompute",
+  "version": "0.1.0-alpha.3",
+  "description": "Native font session and precompute entry points for Tiqian.",
+  "keywords": [
+    "cjk",
+    "chinese",
+    "typography",
+    "layout",
+    "precompute",
+    "neon"
+  ],
+  "homepage": "https://github.com/tiqian-cjk/tiqian#readme",
+  "bugs": {
+    "url": "https://github.com/tiqian-cjk/tiqian/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tiqian-cjk/tiqian.git",
+    "directory": "frontend/web-precompute/npm"
+  },
+  "license": "MPL-2.0",
+  "type": "module",
+  "main": "./lib/fonts.js",
+  "types": "./lib/fonts.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/fonts.d.ts",
+      "default": "./lib/fonts.js"
+    },
+    "./precompute": {
+      "types": "./lib/precompute.d.ts",
+      "default": "./lib/precompute.js"
+    },
+    "./cache": {
+      "types": "./lib/cache.d.ts",
+      "default": "./lib/cache.js"
+    },
+    "./persistence": {
+      "types": "./lib/persistence.d.ts",
+      "default": "./lib/persistence.js"
+    },
+    "./sqlite-store": {
+      "types": "./lib/sqlite-store.d.ts",
+      "default": "./lib/sqlite-store.js"
+    },
+    "./precompute-html": {
+      "types": "./lib/precompute-html.d.ts",
+      "default": "./lib/precompute-html.js"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "pretest": "npm run build",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "debug:native": "cargo build --manifest-path ../rust/tiqian-precompute-neon/Cargo.toml --message-format=json-render-diagnostics > cargo.log && neon dist --name tiqian-precompute-neon --platform $(neon current-platform) < cargo.log",
+    "build:native": "cargo build --manifest-path ../rust/tiqian-precompute-neon/Cargo.toml --release --message-format=json-render-diagnostics > cargo.log && neon dist --name tiqian-precompute-neon < cargo.log",
+    "sync:shared": "cp ../../web/npm/prepared-dom.js ../../web/npm/snapshot-source.js ../../web/npm/snapshot-schema.js ../../web/npm/styles.css shared/",
+    "check:shared": "npm run sync:shared && git diff --exit-code -- shared"
+  },
+  "neon": {
+    "type": "library",
+    "org": "@tiqian",
+    "prefix": "precompute-",
+    "platforms": [
+      "win32-x64-msvc",
+      "darwin-arm64",
+      "linux-x64-gnu",
+      "linux-arm64-gnu"
+    ],
+    "load": "./lib/load.js"
+  },
+  "files": [
+    "LICENSE",
+    "README.md",
+    "lib",
+    "shared"
+  ],
+  "dependencies": {
+    "@neon-rs/load": "^0.1.82"
+  },
+  "optionalDependencies": {
+    "@tiqian/precompute-darwin-arm64": "0.1.0-alpha.3",
+    "@tiqian/precompute-linux-arm64-gnu": "0.1.0-alpha.3",
+    "@tiqian/precompute-linux-x64-gnu": "0.1.0-alpha.3",
+    "@tiqian/precompute-win32-x64-msvc": "0.1.0-alpha.3"
+  },
+  "devDependencies": {
+    "@eslint-community/eslint-plugin-eslint-comments": "^4.7.2",
+    "@eslint/js": "^10.0.1",
+    "@neon-rs/cli": "^0.1.82",
+    "@types/node": "^26.2.0",
+    "eslint": "^10.8.1",
+    "typescript": "^6",
+    "typescript-eslint": "^8.67.0"
+  }
+}

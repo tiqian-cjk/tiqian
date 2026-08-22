@@ -4,14 +4,15 @@ import {
   FONT_SOURCE_POLICY,
   LAYOUT_REVISION,
   RENDER_REVISION,
-  SNAPSHOT_SCHEMA,
+  readableSnapshotSchema,
   stableStringify,
 } from "./snapshot-schema.js";
 import {
   installPreparedValueStyles,
   releasePreparedValueStyleRoot,
 } from "./prepared-dom.js";
-import { parseSnapshotManifest } from "./snapshot-manifest.js";
+import { expandSnapshotManifest } from "./snapshot-manifest.js";
+import { loadedSnapshotTablesForRoot, snapshotTablesForRoot } from "./snapshot-tables.js";
 import {
   snapshotSourceArtifactFromDom,
   snapshotSourceArtifactString,
@@ -1354,16 +1355,55 @@ async function validateFontEvidenceGroups(
   }
 }
 
-function templateManifest(template) {
+function manifestScriptText(template) {
   const script = template.content?.querySelector?.("[data-tq-snapshot-manifest]");
   if (!script?.textContent) throw new Error("MissingSnapshotManifest");
-  return parseSnapshotManifest(script.textContent);
+  return script.textContent;
 }
 
-async function manifestValueStylesAreValid(manifest) {
+/**
+ * The expanded manifest of one template for the synchronous preflight. The
+ * station table resolves from the transport's verified cache only; a table
+ * that has not finished loading fails the read and the preflight reports a
+ * miss.
+ */
+function preflightTemplateManifest(template, root) {
+  const parsed = JSON.parse(manifestScriptText(template));
+  const expected = typeof parsed.tables?.snapshot === "string"
+    ? parsed.tables.snapshot
+    : null;
+  return expandSnapshotManifest(parsed, loadedSnapshotTablesForRoot(root, expected)?.view ?? null);
+}
+
+/**
+ * Expands the template manifest. The station table resolves through the
+ * root's `tq-tables` attribute and the loaded bytes verify against the sha
+ * the manifest pins before any table row is trusted; a failed or mismatched
+ * load surfaces as `SnapshotTablesMissing` so the caller records the miss
+ * and falls back.
+ */
+async function resolveTemplateManifest(root, template) {
+  const text = manifestScriptText(template);
+  const parsed = JSON.parse(text);
+  const expected = typeof parsed.tables?.snapshot === "string"
+    ? parsed.tables.snapshot
+    : null;
+  const table = await snapshotTablesForRoot(root, expected);
+  if (table == null) throw new Error("SnapshotTablesMissing");
+  return expandSnapshotManifest(parsed, table.view);
+}
+
+function manifestReadReason(error) {
+  return error?.message === "SnapshotTablesMissing"
+    ? "SnapshotTablesMissing"
+    : "SnapshotManifestInvalid";
+}
+
+function manifestValueStylesAreValid(manifest) {
+  // The table content hash was verified against the manifest pin before
+  // expansion; the spliced rows need shape validation only.
   return Array.isArray(manifest?.valueStyles) &&
-    typeof manifest.valueStylesSha256 === "string" &&
-    await sha256Text(stableStringify(manifest.valueStyles)) === manifest.valueStylesSha256;
+    manifest.valueStyles.every((row) => typeof row === "string");
 }
 
 function manifestEntryKeysAreUnique(manifest) {
@@ -1626,12 +1666,12 @@ export async function validatePrecomputedSnapshotExactFontContract(root, isCurre
   if (!template?.content) return { matches: false, reason: "SnapshotTemplateMissing" };
   let manifest;
   try {
-    manifest = templateManifest(template);
-  } catch {
-    return { matches: false, reason: "SnapshotManifestInvalid" };
+    manifest = await resolveTemplateManifest(root, template);
+  } catch (error) {
+    return { matches: false, reason: manifestReadReason(error) };
   }
   if (
-    manifest.schema !== SNAPSHOT_SCHEMA || manifest.layoutRevision !== LAYOUT_REVISION ||
+    !readableSnapshotSchema(manifest.schema) || manifest.layoutRevision !== LAYOUT_REVISION ||
     manifest.renderRevision !== RENDER_REVISION || manifest.fontSourcePolicy !== FONT_SOURCE_POLICY ||
     !Array.isArray(manifest.entries) || typeof manifest.paragraphSelector !== "string" ||
     !manifestRenderFontFamiliesAreValid(manifest)
@@ -1771,12 +1811,12 @@ export async function validatePrecomputedExactFontReplayContract(root, isCurrent
   const manifestText = manifestScript?.textContent;
   let manifest;
   try {
-    manifest = templateManifest(template);
-  } catch {
-    return { matches: false, reason: "SnapshotManifestInvalid" };
+    manifest = await resolveTemplateManifest(root, template);
+  } catch (error) {
+    return { matches: false, reason: manifestReadReason(error) };
   }
   if (
-    manifest.schema !== SNAPSHOT_SCHEMA || manifest.layoutRevision !== LAYOUT_REVISION ||
+    !readableSnapshotSchema(manifest.schema) || manifest.layoutRevision !== LAYOUT_REVISION ||
     manifest.renderRevision !== RENDER_REVISION || manifest.fontSourcePolicy !== FONT_SOURCE_POLICY ||
     !Array.isArray(manifest.entries) || typeof manifest.paragraphSelector !== "string" ||
     !manifestRenderFontFamiliesAreValid(manifest)
@@ -1956,7 +1996,7 @@ export function precomputedSnapshotMaximumMeasureMatches(root) {
   if (!template?.content) return false;
   let manifest;
   try {
-    manifest = templateManifest(template);
+    manifest = preflightTemplateManifest(template, root);
   } catch {
     return false;
   }
@@ -2053,12 +2093,12 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
 
   let manifest;
   try {
-    manifest = templateManifest(template);
-  } catch {
-    return miss(root, "SnapshotManifestInvalid");
+    manifest = await resolveTemplateManifest(root, template);
+  } catch (error) {
+    return miss(root, manifestReadReason(error));
   }
   if (
-    manifest.schema !== SNAPSHOT_SCHEMA || manifest.layoutRevision !== LAYOUT_REVISION ||
+    !readableSnapshotSchema(manifest.schema) || manifest.layoutRevision !== LAYOUT_REVISION ||
     manifest.renderRevision !== RENDER_REVISION || manifest.fontSourcePolicy !== FONT_SOURCE_POLICY ||
     !manifestRenderFontFamiliesAreValid(manifest)
   ) return miss(root, "SnapshotRevisionMismatch");
@@ -2068,7 +2108,7 @@ export async function tryAdoptPrecomputedSnapshot(root, isCurrent = () => true) 
   if (!manifestEntryKeysAreUnique(manifest)) {
     return miss(root, "SnapshotManifestEntryKeyInvalid");
   }
-  if (!await manifestValueStylesAreValid(manifest)) {
+  if (!manifestValueStylesAreValid(manifest)) {
     return miss(root, "SnapshotValueStylesDigestMismatch");
   }
   if (fontContractOnlyManifest(manifest)) {

@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import {
   createHtmlPreparer,
   renderSnapshotServerAssets,
-} from "@tiqian/prose/precompute-html";
+} from "@tiqian/precompute/precompute-html";
 
 const SNAPSHOT_REFERENCE = /<tiqian-prose\b[^>]*\bsnapshot-ref=(["'])([A-Za-z][A-Za-z0-9_-]*)\1[^>]*>/giu;
 

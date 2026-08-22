@@ -1,0 +1,7 @@
+node_modules/
+lib/
+cargo.log
+pack-output/
+platforms/*/index.node
+index.node
+.snapshot-swap.json

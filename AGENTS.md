@@ -39,7 +39,7 @@
 ./gradlew runComposeDemo
 
 ./gradlew :frontend:web:jsBrowserTest
-./gradlew :frontend:web-precompute:jsNodeTest
+./gradlew :ffi:js:jsNodeTest
 ./gradlew :frontend:web:assembleNpmPackage
 (cd frontend/web/npm && npm test)
 ```

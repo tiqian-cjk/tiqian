@@ -1,0 +1,402 @@
+{
+  "cases": [
+    {
+      "name": "plain-merge",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":3,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":48,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"排\",\"display\":\"排\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0},{\"rangeStart\":1,\"rangeEnd\":2,\"source\":\"版\",\"display\":\"版\",\"drawX\":16,\"naturalWidth\":16,\"leadingLayoutAdvance\":0},{\"rangeStart\":2,\"rangeEnd\":3,\"source\":\"引\",\"display\":\"引\",\"drawX\":32,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {},
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"48\" data-tq-line-index=\"0\" data-tq-line-range=\"0-3\" data-tq-line-top=\"0\" data-tq-line-width=\"48\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span>排版引<span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"48\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-3\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"48\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"#\",\"排版引\"],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 1
+      }
+    },
+    {
+      "name": "letter-spacing-merge",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":3,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":49.5,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"排\",\"display\":\"排\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0},{\"rangeStart\":1,\"rangeEnd\":2,\"source\":\"版\",\"display\":\"版\",\"drawX\":16.5,\"naturalWidth\":16,\"leadingLayoutAdvance\":0},{\"rangeStart\":2,\"rangeEnd\":3,\"source\":\"引\",\"display\":\"引\",\"drawX\":33,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {},
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"49.5\" data-tq-line-index=\"0\" data-tq-line-range=\"0-3\" data-tq-line-top=\"0\" data-tq-line-width=\"49.5\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span><span data-tq-advance=\"49.5\" data-tq-geometry=\"true\" data-tq-x=\"0\" style=\"letter-spacing:0.5px!important\">排版引</span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"49.5\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-3\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"49.5\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"span\",[[\"data-tq-advance\",\"49.5\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-x\",\"0\"],[\"style\",\"letter-spacing:0.5px!important\"]],[[\"#\",\"排版引\"]]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 1
+      }
+    },
+    {
+      "name": "letter-spacing-with-classes",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":2,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":32.5,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"排\",\"display\":\"排\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0},{\"rangeStart\":1,\"rangeEnd\":2,\"source\":\"版\",\"display\":\"版\",\"drawX\":16.5,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {
+        "styleClassFor": "declaration-length"
+      },
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line tqc-72\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"32.5\" data-tq-line-index=\"0\" data-tq-line-range=\"0-2\" data-tq-line-top=\"0\" data-tq-line-width=\"32.5\" data-tq-paragraph-height=\"48\"></span><span class=\"tqc-30\" data-tq-advance=\"16.5\" data-tq-geometry=\"true\" data-tq-x=\"0\">排</span>版<span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line tqc-72\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"32.5\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-2\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"32.5\"],[\"data-tq-paragraph-height\",\"48\"]],[]],[\"span\",[[\"class\",\"tqc-30\"],[\"data-tq-advance\",\"16.5\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-x\",\"0\"]],[[\"#\",\"排\"]]],[\"#\",\"版\"],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 1
+      }
+    },
+    {
+      "name": "overlap-margin",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":2,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":31.5,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"排\",\"display\":\"排\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0},{\"rangeStart\":1,\"rangeEnd\":2,\"source\":\"版\",\"display\":\"版\",\"drawX\":15.5,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {},
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"31.5\" data-tq-line-index=\"0\" data-tq-line-range=\"0-2\" data-tq-line-top=\"0\" data-tq-line-width=\"31.5\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span><span data-tq-advance=\"15.5\" data-tq-geometry=\"true\" data-tq-x=\"0\" style=\"letter-spacing:-0.5px!important\">排</span>版<span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"31.5\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-2\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"31.5\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"span\",[[\"data-tq-advance\",\"15.5\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-x\",\"0\"],[\"style\",\"letter-spacing:-0.5px!important\"]],[[\"#\",\"排\"]]],[\"#\",\"版\"],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 1
+      }
+    },
+    {
+      "name": "trailing-letter-carrier",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":2,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":16.4,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":2,\"source\":\"排版\",\"display\":\"排版\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {},
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"16.4\" data-tq-line-index=\"0\" data-tq-line-range=\"0-2\" data-tq-line-top=\"0\" data-tq-line-width=\"16.4\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span><span data-tq-advance=\"16.4\" data-tq-geometry=\"true\" data-tq-x=\"0\">排版<span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-spacing-carrier=\"true\" style=\"display:inline-block!important;inline-size:0.4px!important;height:0!important;line-height:0!important;letter-spacing:0.4px!important;overflow:hidden!important;vertical-align:baseline!important;white-space:pre!important\"> </span></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"16.4\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-2\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"16.4\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"span\",[[\"data-tq-advance\",\"16.4\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-x\",\"0\"]],[[\"#\",\"排版\"],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-spacing-carrier\",\"true\"],[\"style\",\"display:inline-block!important;inline-size:0.4px!important;height:0!important;line-height:0!important;letter-spacing:0.4px!important;overflow:hidden!important;vertical-align:baseline!important;white-space:pre!important\"]],[[\"#\",\" \"]]]]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 1
+      }
+    },
+    {
+      "name": "dyadic-tie-px",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":1,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":16.015625,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"排\",\"display\":\"排\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {},
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"16.015625\" data-tq-line-index=\"0\" data-tq-line-range=\"0-1\" data-tq-line-top=\"0\" data-tq-line-width=\"16.015625\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span><span data-tq-advance=\"16.015625\" data-tq-geometry=\"true\" data-tq-x=\"0\" style=\"letter-spacing:0.01563px!important\">排</span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"16.015625\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-1\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"16.015625\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"span\",[[\"data-tq-advance\",\"16.015625\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-x\",\"0\"],[\"style\",\"letter-spacing:0.01563px!important\"]],[[\"#\",\"排\"]]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 1
+      }
+    },
+    {
+      "name": "semantics-nested",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":5,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":80,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"强\",\"display\":\"强\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0},{\"rangeStart\":1,\"rangeEnd\":2,\"source\":\"大\",\"display\":\"大\",\"drawX\":16,\"naturalWidth\":16,\"leadingLayoutAdvance\":0},{\"rangeStart\":2,\"rangeEnd\":3,\"source\":\"的\",\"display\":\"的\",\"drawX\":32,\"naturalWidth\":16,\"leadingLayoutAdvance\":0},{\"rangeStart\":3,\"rangeEnd\":4,\"source\":\"排\",\"display\":\"排\",\"drawX\":48,\"naturalWidth\":16,\"leadingLayoutAdvance\":0},{\"rangeStart\":4,\"rangeEnd\":5,\"source\":\"版\",\"display\":\"版\",\"drawX\":64,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {
+        "semantics": [
+          {
+            "start": 0,
+            "end": 5,
+            "tagName": "strong"
+          },
+          {
+            "start": 1,
+            "end": 3,
+            "tagName": "em"
+          }
+        ]
+      },
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"80\" data-tq-line-index=\"0\" data-tq-line-range=\"0-5\" data-tq-line-top=\"0\" data-tq-line-width=\"80\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span><strong data-tq-source-semantic=\"true\">强<em data-tq-source-semantic=\"true\">大的</em>排版</strong><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"80\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-5\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"80\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"strong\",[[\"data-tq-source-semantic\",\"true\"]],[[\"#\",\"强\"],[\"em\",[[\"data-tq-source-semantic\",\"true\"]],[[\"#\",\"大的\"]]],[\"#\",\"排版\"]]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 1
+      }
+    },
+    {
+      "name": "semantic-anchor-attributes",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":3,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":48,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"入\",\"display\":\"入\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0},{\"rangeStart\":1,\"rangeEnd\":2,\"source\":\"口\",\"display\":\"口\",\"drawX\":16,\"naturalWidth\":16,\"leadingLayoutAdvance\":0},{\"rangeStart\":2,\"rangeEnd\":3,\"source\":\"在\",\"display\":\"在\",\"drawX\":32,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {
+        "semantics": [
+          {
+            "start": 1,
+            "end": 2,
+            "tagName": "a",
+            "attributes": [
+              [
+                "title",
+                "入口"
+              ],
+              [
+                "href",
+                "/entry"
+              ],
+              [
+                "class",
+                "x"
+              ]
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"48\" data-tq-line-index=\"0\" data-tq-line-range=\"0-3\" data-tq-line-top=\"0\" data-tq-line-width=\"48\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span>入<a class=\"x\" data-tq-source-semantic=\"true\" href=\"/entry\" title=\"入口\">口</a>在<span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"48\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-3\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"48\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"#\",\"入\"],[\"a\",[[\"class\",\"x\"],[\"data-tq-source-semantic\",\"true\"],[\"href\",\"/entry\"],[\"title\",\"入口\"]],[[\"#\",\"口\"]]],[\"#\",\"在\"],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 1
+      }
+    },
+    {
+      "name": "render-text-span-projection",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":5,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":48,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"c\",\"display\":\"c\",\"drawX\":0,\"naturalWidth\":8,\"leadingLayoutAdvance\":0},{\"rangeStart\":1,\"rangeEnd\":2,\"source\":\"o\",\"display\":\"o\",\"drawX\":8,\"naturalWidth\":8,\"leadingLayoutAdvance\":0},{\"rangeStart\":2,\"rangeEnd\":3,\"source\":\"d\",\"display\":\"d\",\"drawX\":16,\"naturalWidth\":8,\"leadingLayoutAdvance\":0},{\"rangeStart\":3,\"rangeEnd\":4,\"source\":\"e\",\"display\":\"e\",\"drawX\":24,\"naturalWidth\":8,\"leadingLayoutAdvance\":0},{\"rangeStart\":4,\"rangeEnd\":5,\"source\":\"排\",\"display\":\"排\",\"drawX\":32,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {
+        "renderTextSpans": [
+          {
+            "start": 0,
+            "end": 4,
+            "fontFamilies": [
+              "Fira Code",
+              " Mono "
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"48\" data-tq-line-index=\"0\" data-tq-line-range=\"0-5\" data-tq-line-top=\"0\" data-tq-line-width=\"48\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span><span data-tq-advance=\"32\" data-tq-geometry=\"true\" data-tq-render-font-projection=\"true\" data-tq-x=\"0\" style=\"font-family:&quot;Fira Code&quot;,&quot;Mono&quot;!important\">code</span>排<span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"48\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-5\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"48\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"span\",[[\"data-tq-advance\",\"32\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-render-font-projection\",\"true\"],[\"data-tq-x\",\"0\"],[\"style\",\"font-family:\\\"Fira Code\\\",\\\"Mono\\\"!important\"]],[[\"#\",\"code\"]]],[\"#\",\"排\"],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 1
+      }
+    },
+    {
+      "name": "inline-box-edges",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":4,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":25,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":2,\"source\":\"甲\",\"display\":\"甲\",\"drawX\":0,\"naturalWidth\":10,\"leadingLayoutAdvance\":3},{\"rangeStart\":2,\"rangeEnd\":4,\"source\":\"乙\",\"display\":\"乙\",\"drawX\":15,\"naturalWidth\":10,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {
+        "inlineBoxes": [
+          {
+            "start": 0,
+            "end": 2,
+            "inlineStartPx": 3,
+            "inlineEndPx": 2
+          }
+        ]
+      },
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"25\" data-tq-line-index=\"0\" data-tq-line-range=\"0-4\" data-tq-line-shift=\"true\" data-tq-line-top=\"0\" data-tq-line-width=\"25\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important;--tq-line-flow-start:-3px!important\"></span><span data-tq-advance=\"13\" data-tq-geometry=\"true\" data-tq-x=\"0\" style=\"letter-spacing:3px!important\">甲</span>乙<span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"25\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-4\"],[\"data-tq-line-shift\",\"true\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"25\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important;--tq-line-flow-start:-3px!important\"]],[]],[\"span\",[[\"data-tq-advance\",\"13\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-x\",\"0\"],[\"style\",\"letter-spacing:3px!important\"]],[[\"#\",\"甲\"]]],[\"#\",\"乙\"],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 1
+      }
+    },
+    {
+      "name": "hyphen-locale-gap",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":2,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":36,\"hyphenAdvance\":8,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":2,\"source\":\"示例\",\"display\":\"示例\",\"drawX\":0,\"naturalWidth\":32,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hant",
+      "options": {},
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"44\" data-tq-line-index=\"0\" data-tq-line-range=\"0-2\" data-tq-line-top=\"0\" data-tq-line-width=\"44\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span>示例<span aria-hidden=\"true\" data-tq-advance=\"8\" data-tq-copy-ignore=\"true\" data-tq-engine-hyphen=\"true\" data-tq-geometry=\"true\" data-tq-x=\"36\" lang=\"zh-Hant\" style=\"margin-left:4px!important\">-</span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"44\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-2\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"44\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"#\",\"示例\"],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-advance\",\"8\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-engine-hyphen\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-x\",\"36\"],[\"lang\",\"zh-Hant\"],[\"style\",\"margin-left:4px!important\"]],[[\"#\",\"-\"]]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 1
+      }
+    },
+    {
+      "name": "mandatory-break",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":2,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":32,\"hyphenAdvance\":0,\"endReason\":\"MandatoryBreak\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"甲\",\"display\":\"甲\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0},{\"rangeStart\":1,\"rangeEnd\":2,\"source\":\"乙\",\"display\":\"乙\",\"drawX\":16,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]},{\"rangeStart\":2,\"rangeEnd\":3,\"top\":32,\"bottom\":64,\"baseline\":56,\"indent\":0,\"visualWidth\":16,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":2,\"rangeEnd\":3,\"source\":\"丙\",\"display\":\"丙\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {},
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"MandatoryBreak\" data-tq-line-flow-width=\"32\" data-tq-line-index=\"0\" data-tq-line-range=\"0-2\" data-tq-line-top=\"0\" data-tq-line-width=\"32\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span>甲乙<span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span data-tq-geometry=\"true\" data-tq-hard-break=\"true\" data-tq-src=\"\n\"></span><br data-tq-engine-break=\"MandatoryBreak\"><span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"56\" data-tq-line-bottom=\"64\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"16\" data-tq-line-index=\"1\" data-tq-line-range=\"2-3\" data-tq-line-top=\"32\" data-tq-line-width=\"16\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span>丙<span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"1\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"MandatoryBreak\"],[\"data-tq-line-flow-width\",\"32\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-2\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"32\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"#\",\"甲乙\"],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"data-tq-geometry\",\"true\"],[\"data-tq-hard-break\",\"true\"],[\"data-tq-src\",\"\\n\"]],[]],[\"br\",[[\"data-tq-engine-break\",\"MandatoryBreak\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"56\"],[\"data-tq-line-bottom\",\"64\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"16\"],[\"data-tq-line-index\",\"1\"],[\"data-tq-line-range\",\"2-3\"],[\"data-tq-line-top\",\"32\"],[\"data-tq-line-width\",\"16\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"#\",\"丙\"],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"1\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 2
+      }
+    },
+    {
+      "name": "soft-wrap-br",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":2,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":32,\"hyphenAdvance\":0,\"endReason\":\"AutoWrap\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"甲\",\"display\":\"甲\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0},{\"rangeStart\":1,\"rangeEnd\":2,\"source\":\"乙\",\"display\":\"乙\",\"drawX\":16,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]},{\"rangeStart\":2,\"rangeEnd\":3,\"top\":32,\"bottom\":64,\"baseline\":56,\"indent\":0,\"visualWidth\":16,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":2,\"rangeEnd\":3,\"source\":\"丙\",\"display\":\"丙\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {},
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"AutoWrap\" data-tq-line-flow-width=\"32\" data-tq-line-index=\"0\" data-tq-line-range=\"0-2\" data-tq-line-top=\"0\" data-tq-line-width=\"32\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span>甲乙<span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><br aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-engine-break=\"AutoWrap\"><span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"56\" data-tq-line-bottom=\"64\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"16\" data-tq-line-index=\"1\" data-tq-line-range=\"2-3\" data-tq-line-top=\"32\" data-tq-line-width=\"16\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span>丙<span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"1\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"AutoWrap\"],[\"data-tq-line-flow-width\",\"32\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-2\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"32\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"#\",\"甲乙\"],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"br\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-engine-break\",\"AutoWrap\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"56\"],[\"data-tq-line-bottom\",\"64\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"16\"],[\"data-tq-line-index\",\"1\"],[\"data-tq-line-range\",\"2-3\"],[\"data-tq-line-top\",\"32\"],[\"data-tq-line-width\",\"16\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"#\",\"丙\"],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"1\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 2
+      }
+    },
+    {
+      "name": "crossing-boundary",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":2,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":32,\"hyphenAdvance\":0,\"endReason\":\"AutoWrap\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"甲\",\"display\":\"甲\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0},{\"rangeStart\":1,\"rangeEnd\":2,\"source\":\"乙\",\"display\":\"乙\",\"drawX\":16,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]},{\"rangeStart\":2,\"rangeEnd\":4,\"top\":32,\"bottom\":64,\"baseline\":56,\"indent\":0,\"visualWidth\":32,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":2,\"rangeEnd\":3,\"source\":\"丙\",\"display\":\"丙\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0},{\"rangeStart\":3,\"rangeEnd\":4,\"source\":\"丁\",\"display\":\"丁\",\"drawX\":16,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {
+        "semantics": [
+          {
+            "start": 0,
+            "end": 4,
+            "tagName": "em"
+          }
+        ]
+      },
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"AutoWrap\" data-tq-line-flow-width=\"32\" data-tq-line-index=\"0\" data-tq-line-range=\"0-2\" data-tq-line-top=\"0\" data-tq-line-width=\"32\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span><em data-tq-source-semantic=\"true\">甲乙<span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><br aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-engine-break=\"AutoWrap\"><span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"56\" data-tq-line-bottom=\"64\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"32\" data-tq-line-index=\"1\" data-tq-line-range=\"2-4\" data-tq-line-top=\"32\" data-tq-line-width=\"32\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span>丙丁</em><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"1\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"AutoWrap\"],[\"data-tq-line-flow-width\",\"32\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-2\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"32\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"em\",[[\"data-tq-source-semantic\",\"true\"]],[[\"#\",\"甲乙\"],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"br\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-engine-break\",\"AutoWrap\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"56\"],[\"data-tq-line-bottom\",\"64\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"32\"],[\"data-tq-line-index\",\"1\"],[\"data-tq-line-range\",\"2-4\"],[\"data-tq-line-top\",\"32\"],[\"data-tq-line-width\",\"32\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"#\",\"丙丁\"]]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"1\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 2
+      }
+    },
+    {
+      "name": "shaping-boundary",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":2,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":16,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":2,\"source\":\"😀\",\"display\":\"😀\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0,\"shapingBoundary\":true}]}]}",
+      "locale": "zh-Hans",
+      "options": {},
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"16\" data-tq-line-index=\"0\" data-tq-line-range=\"0-2\" data-tq-line-top=\"0\" data-tq-line-width=\"16\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span><span data-tq-advance=\"16\" data-tq-geometry=\"true\" data-tq-shaping-boundary data-tq-x=\"0\">😀</span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"16\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-2\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"16\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"span\",[[\"data-tq-advance\",\"16\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-shaping-boundary\",\"\"],[\"data-tq-x\",\"0\"]],[[\"#\",\"😀\"]]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 1
+      }
+    },
+    {
+      "name": "open-type-features",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":1,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":8,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"1\",\"display\":\"1\",\"drawX\":0,\"naturalWidth\":8,\"leadingLayoutAdvance\":0,\"openTypeFeatures\":[\"pwid\",\"palt\"]}]}]}",
+      "locale": "zh-Hans",
+      "options": {},
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"8\" data-tq-line-index=\"0\" data-tq-line-range=\"0-1\" data-tq-line-top=\"0\" data-tq-line-width=\"8\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span><span data-tq-advance=\"8\" data-tq-geometry=\"true\" data-tq-open-type-features=\"pwid,palt\" data-tq-shaping-boundary data-tq-x=\"0\">1</span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"8\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-1\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"8\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"span\",[[\"data-tq-advance\",\"8\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-open-type-features\",\"pwid,palt\"],[\"data-tq-shaping-boundary\",\"\"],[\"data-tq-x\",\"0\"]],[[\"#\",\"1\"]]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 1
+      }
+    },
+    {
+      "name": "open-type-features-full-width",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":1,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":8,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"1\",\"display\":\"1\",\"drawX\":0,\"naturalWidth\":8,\"leadingLayoutAdvance\":0,\"openTypeFeatures\":[\"fwid\"]}]}]}",
+      "locale": "zh-Hans",
+      "options": {},
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"8\" data-tq-line-index=\"0\" data-tq-line-range=\"0-1\" data-tq-line-top=\"0\" data-tq-line-width=\"8\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span><span data-tq-advance=\"8\" data-tq-geometry=\"true\" data-tq-open-type-features=\"fwid\" data-tq-shaping-boundary data-tq-x=\"0\">1</span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"8\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-1\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"8\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"span\",[[\"data-tq-advance\",\"8\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-open-type-features\",\"fwid\"],[\"data-tq-shaping-boundary\",\"\"],[\"data-tq-x\",\"0\"]],[[\"#\",\"1\"]]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 1
+      }
+    },
+    {
+      "name": "source-display-diff",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":1,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":16,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"　\",\"display\":\" \",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {},
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"false\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"16\" data-tq-line-index=\"0\" data-tq-line-range=\"0-1\" data-tq-line-top=\"0\" data-tq-line-width=\"16\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span><span data-tq-advance=\"16\" data-tq-geometry=\"true\" data-tq-src=\"　\" data-tq-x=\"0\"> </span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"false\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"16\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-1\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"16\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"span\",[[\"data-tq-advance\",\"16\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-src\",\"　\"],[\"data-tq-x\",\"0\"]],[[\"#\",\" \"]]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 1
+      }
+    },
+    {
+      "name": "empty-line",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":0,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":0,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[]}]}",
+      "locale": "zh-Hans",
+      "options": {},
+      "expect": {
+        "kind": "ok",
+        "html": "<span aria-hidden=\"true\" class=\"tq-line\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-baseline=\"24\" data-tq-line-bottom=\"32\" data-tq-line-empty=\"true\" data-tq-line-end=\"ParagraphEnd\" data-tq-line-flow-width=\"0\" data-tq-line-index=\"0\" data-tq-line-range=\"0-0\" data-tq-line-top=\"0\" data-tq-line-width=\"0\" data-tq-paragraph-height=\"48\" style=\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-line-end-sentinel=\"0\"></span><span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-selection-end=\"true\">​</span>",
+        "artifact": "[[\"span\",[[\"aria-hidden\",\"true\"],[\"class\",\"tq-line\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-baseline\",\"24\"],[\"data-tq-line-bottom\",\"32\"],[\"data-tq-line-empty\",\"true\"],[\"data-tq-line-end\",\"ParagraphEnd\"],[\"data-tq-line-flow-width\",\"0\"],[\"data-tq-line-index\",\"0\"],[\"data-tq-line-range\",\"0-0\"],[\"data-tq-line-top\",\"0\"],[\"data-tq-line-width\",\"0\"],[\"data-tq-paragraph-height\",\"48\"],[\"style\",\"--tq-line-height:32px!important;--tq-line-baseline-offset:-8px!important\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-line-end-sentinel\",\"0\"]],[]],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-selection-end\",\"true\"]],[[\"#\",\"​\"]]]]",
+        "liveSemanticCount": 0,
+        "markerCount": 1
+      }
+    },
+    {
+      "name": "error-leading-layout-advance",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":2,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":32,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"甲\",\"display\":\"甲\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":3},{\"rangeStart\":1,\"rangeEnd\":2,\"source\":\"乙\",\"display\":\"乙\",\"drawX\":16,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {
+        "inlineBoxes": [
+          {
+            "start": 0,
+            "end": 1,
+            "inlineStartPx": 5,
+            "inlineEndPx": 0
+          }
+        ]
+      },
+      "expect": {
+        "kind": "error",
+        "error": "SnapshotRenderFlowMismatch:line=0;leading-layout-advance"
+      }
+    },
+    {
+      "name": "error-layout-revision",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v1\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":1,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":16,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"排\",\"display\":\"排\",\"drawX\":0,\"naturalWidth\":16,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {},
+      "expect": {
+        "kind": "error",
+        "error": "UnsupportedPreparedLayoutRevision"
+      }
+    },
+    {
+      "name": "error-open-type-features",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":1,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":8,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"1\",\"display\":\"1\",\"drawX\":0,\"naturalWidth\":8,\"leadingLayoutAdvance\":0,\"openTypeFeatures\":[\"pwid\"]}]}]}",
+      "locale": "zh-Hans",
+      "options": {},
+      "expect": {
+        "kind": "error",
+        "error": "UnsupportedPreparedOpenTypeFeatures: pwid"
+      }
+    },
+    {
+      "name": "error-conflicting-render-text-span",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":2,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":32,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":2,\"source\":\"甲乙\",\"display\":\"甲乙\",\"drawX\":0,\"naturalWidth\":32,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {
+        "renderTextSpans": [
+          {
+            "start": 0,
+            "end": 2,
+            "fontFamilies": [
+              "A"
+            ]
+          },
+          {
+            "start": 0,
+            "end": 2,
+            "fontFamilies": [
+              "B"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "kind": "error",
+        "error": "ConflictingPreparedRenderTextSpan"
+      }
+    },
+    {
+      "name": "error-invalid-render-text-span",
+      "plan": "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":320,\"height\":48,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":2,\"top\":0,\"bottom\":32,\"baseline\":24,\"indent\":0,\"visualWidth\":32,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":2,\"source\":\"甲乙\",\"display\":\"甲乙\",\"drawX\":0,\"naturalWidth\":32,\"leadingLayoutAdvance\":0}]}]}",
+      "locale": "zh-Hans",
+      "options": {
+        "renderTextSpans": [
+          {
+            "start": 0,
+            "end": 99,
+            "fontFamilies": [
+              "A"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "kind": "error",
+        "error": "InvalidPreparedRenderTextSpan"
+      }
+    }
+  ]
+}

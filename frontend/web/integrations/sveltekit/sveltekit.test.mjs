@@ -48,7 +48,11 @@ test("Svelte SSR omits a false disabled Boolean attribute", () => {
 test("package manifest publishes only the component and server boundary", async () => {
   const manifest = JSON.parse(await readFile(new URL("./package.json", import.meta.url), "utf8"));
   const prose = JSON.parse(await readFile(new URL("../../npm/package.json", import.meta.url), "utf8"));
+  const precompute = JSON.parse(
+    await readFile(new URL("../../../web-precompute/npm/package.json", import.meta.url), "utf8"),
+  );
   assert.equal(manifest.peerDependencies["@tiqian/prose"], prose.version);
+  assert.equal(manifest.peerDependencies["@tiqian/precompute"], precompute.version);
   assert.equal(manifest.engines.node, prose.engines.node);
   assert.deepEqual(Object.keys(manifest.exports).sort(), [".", "./server"]);
   assert.ok(manifest.files.includes("TiqianProse.svelte"));

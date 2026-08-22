@@ -28,11 +28,13 @@
     "node": ">=22"
   },
   "peerDependencies": {
-    "@tiqian/prose": "0.1.0-alpha.3",
+    "@tiqian/precompute": "0.1.0-alpha.3",
+    "@tiqian/prose": "0.1.0-alpha.5",
     "astro": ">=5"
   },
   "devDependencies": {
     "@astrojs/compiler-rs": "0.3.1",
+    "@tiqian/precompute": "file:../../../web-precompute/npm",
     "@tiqian/prose": "file:../../npm",
     "astro": "7.0.7"
   },

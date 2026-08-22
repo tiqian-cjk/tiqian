@@ -34,10 +34,12 @@
   },
   "peerDependencies": {
     "@sveltejs/kit": ">=2",
-    "@tiqian/prose": "0.1.0-alpha.3",
+    "@tiqian/precompute": "0.1.0-alpha.3",
+    "@tiqian/prose": "0.1.0-alpha.5",
     "svelte": ">=5"
   },
   "devDependencies": {
+    "@tiqian/precompute": "file:../../../web-precompute/npm",
     "@tiqian/prose": "file:../../npm",
     "svelte": "5.56.7"
   },

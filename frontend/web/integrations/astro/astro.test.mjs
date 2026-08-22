@@ -13,10 +13,31 @@ import {
   renderAstroSnapshotAssets,
 } from "./transport.js";
 
+// The real-site build prerenders snapshot assets through the native addon.
+// A checkout without an addon build cannot exercise that path. The suite for
+// `@tiqian/precompute` skips on the same condition.
+let addonBuildExists = false;
+try {
+  const precomputeHtml = await import("@tiqian/precompute/precompute-html");
+  precomputeHtml.renderSnapshotServerAssets({
+    id: "addon-probe",
+    initialStyle: "",
+    inertTemplate: "",
+    fontPreloads: [],
+  });
+  addonBuildExists = true;
+} catch {
+  addonBuildExists = false;
+}
+
 test("package manifest publishes only the integration surface", async () => {
   const manifest = JSON.parse(await readFile(new URL("./package.json", import.meta.url), "utf8"));
   const prose = JSON.parse(await readFile(new URL("../../npm/package.json", import.meta.url), "utf8"));
+  const precompute = JSON.parse(
+    await readFile(new URL("../../../web-precompute/npm/package.json", import.meta.url), "utf8"),
+  );
   assert.equal(manifest.peerDependencies["@tiqian/prose"], prose.version);
+  assert.equal(manifest.peerDependencies["@tiqian/precompute"], precompute.version);
   assert.equal(manifest.engines.node, prose.engines.node);
   assert.deepEqual(Object.keys(manifest.exports).sort(), [".", "./TiqianProse.astro"]);
   assert.ok(manifest.files.includes("TiqianProse.astro"));
@@ -86,7 +107,7 @@ test("static transport preserves JavaScript replacement tokens in snapshot asset
   assert.ok(result.html.includes(`<template id="tq-page">${replacementTokens}</template>`));
 });
 
-test("runtime-only component builds in a real static Astro site", async () => {
+test("runtime-only component builds in a real static Astro site", { skip: addonBuildExists ? false : "no @tiqian/precompute addon build" }, async () => {
   const root = await mkdtemp(path.join(process.cwd(), ".astro-fixture-"));
   try {
     const pages = path.join(root, "src", "pages");

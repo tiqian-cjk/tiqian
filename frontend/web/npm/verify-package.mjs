@@ -16,7 +16,7 @@ const RUNTIMES = [
   },
   {
     directory: "precompute-runtime/",
-    path: "precompute-runtime/Tiqian-tiqian-web-precompute.mjs",
+    path: "precompute-runtime/Tiqian-tiqian-ffi-js.mjs",
     marker: "precomputePlainParagraph",
   },
 ];
@@ -39,8 +39,6 @@ export async function verifyPackage(packageRoot = new URL("./", import.meta.url)
     "LICENSE",
     "README.md",
     "layout-worker.js",
-    "precompute-html.js",
-    "precompute-html.d.ts",
     "worker-layout.js",
   ]) {
     const metadata = await stat(new URL(required, packageRoot));

@@ -67,7 +67,9 @@ ADR 记录已经做出的架构与排版决定。它们按编号保留当时的 
 - [0047 Core Text 渲染前端](0047-core-text-rendering-frontend.md)
 - [0048 套件 Maven 坐标与包命名](0048-suite-maven-and-package-namespaces.md)
 - [0049 虚拟正文选区使用逻辑文档坐标](0049-logical-document-selection.md)
-- [0050 API<31 自然簇串合并绘制](0050-natural-run-coalesced-draw.md)
+- [0050 原生 precompute 引擎绑定与 Rust / npm 双生态分发](0050-native-precompute-rust-bindings.md)
+- [0051 API<31 自然簇串合并绘制](0051-natural-run-coalesced-draw.md)
+- [0052 precompute 缓存分层、批量渲染器与二进制过桥协议](0052-precompute-cache-and-batch-renderer.md)
 
 ## 早期状态说明
 
@@ -86,3 +88,5 @@ ADR 记录已经做出的架构与排版决定。它们按编号保留当时的 
   快照失配但证据仍有效时继续走回放，证据不可用时才保留原生正文或回到 0039 的具名降级路径。
 - 0042 把 0040 的字体证据与固定版心几何拆成两个公共输入：字体回放不要求宿主宽度，只有显式快照
   继续使用 `maxWidthPx`；SvelteKit / Astro 生命周期由同仓库独立 npm adapter 持有。
+- 0039 / 0040 的 Node precompute 运行时由 0050 迁往 Kotlin/Native 静态库加 Rust 绑定，precompute
+  迁入独立的 `@tiqian/precompute` 包；迁移完成前两文中的 WASM 依赖与 npm 结构描述仍有效。

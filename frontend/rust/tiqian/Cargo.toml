@@ -1,0 +1,11 @@
+[package]
+name = "tiqian"
+description = "Neutral Rust bindings for the Tiqian CJK paragraph layout engine's native C ABI"
+version.workspace = true
+edition.workspace = true
+
+[lints.rust]
+# build.rs emits this cfg when TIQIAN_NATIVE_LIB_DIR provides the engine archive.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tiqian_engine_link)'] }
+
+[dependencies]

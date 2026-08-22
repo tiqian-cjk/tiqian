@@ -1,0 +1,29 @@
+{
+  "name": "@tiqian/precompute-linux-arm64-gnu",
+  "description": "Prebuilt binary package for @tiqian/precompute on `linux-arm64-gnu`.",
+  "version": "0.1.0-alpha.3",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tiqian-cjk/tiqian.git",
+    "directory": "frontend/web-precompute/npm"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "index.node",
+  "files": [
+    "index.node"
+  ],
+  "neon": {
+    "type": "binary",
+    "rust": "aarch64-unknown-linux-gnu",
+    "node": "linux-arm64-gnu",
+    "os": "linux",
+    "arch": "arm64",
+    "abi": "gnu"
+  },
+  "license": "MPL-2.0"
+}

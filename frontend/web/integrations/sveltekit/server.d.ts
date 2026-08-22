@@ -5,7 +5,7 @@ import type {
   HtmlPreparerOptions,
   PreparedHtmlIssue,
   SnapshotServerAssets,
-} from "@tiqian/prose/precompute-html";
+} from "@tiqian/precompute/precompute-html";
 import type { ClientSnapshotBundle } from "@tiqian/prose/snapshot-client";
 
 export interface PreparedTiqianProse {

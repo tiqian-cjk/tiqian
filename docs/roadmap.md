@@ -28,8 +28,8 @@ Kotlin/JS layout core 重放服务器生成的 shaping / metrics。回放证据�
 并行推进 **全段动态规划断行**（2026-07-17，[ADR 0041](adr/0041-paragraph-dp-line-breaking.md)）：
 `ParagraphDpLineBreaker` 以 ADR 0038 的同一代价做全段精确 DP，推入以压缩边进解
 （`CompressionAsDpEdge`）。2026-07-18 真实语料目检否决转默认：全局最优暴露出
-代价模型四缺陷——邻行差项在自然密排处的过零行为造成松散传染、总 gap 平均掩盖
-中西间距集中拉伸、末行免检、压缩被平坦罚分定成最后手段（与 CLREQ 先挤压后拉伸
+代价模型四缺陷——邻行差项在自然密排处的过零行为造成松散传染、总 gap 平均之后
+中西间距的集中拉伸不可见、末行免检、压缩被平坦罚分定成最后手段（与 CLREQ 先挤压后拉伸
 相反）。二次目检再证伪邻行差项本身：v3 换 `StretchRunSparsity`（可见拉伸行
 游程递增罚）。三轮目检后**收档冻结**：v3 下 DP 与 lookahead 在真实语料基本
 收敛，残余收益不足以转默认——lookahead + ADR 0031/0038 已接近修正后感知
@@ -41,6 +41,44 @@ Kotlin/JS layout core 重放服务器生成的 shaping / metrics。回放证据�
 已经命名但尚未开工的候选：
 
 - `OpaqueInlineObjectGeometryInvalidation`：图片或静态 inline object 加载后几何变化时重新测量。
+- `JsWorkspaceMonorepo`：JS 包仓库重组（2026-08-20 裁定）。`@tiqian/prose`、
+  `@tiqian/precompute` 等包迁入统一 workspace，集中管理版本号、bump、lock 更新与发版，
+  以 blurest 的 workspace 组织为参照；`frontend/web` 的 `src`、`npm`、`integrations`
+  三目录收拢为对等源码布局；Rust 侧按 `tiqian-precompute-core` / `tiqian-precompute-binding`
+  命名分层。分层不变式：precompute 域对引擎的全部访问只经 `frontend/rust` 的绑定；
+  Kotlin 出口（js 门面与 C ABI 门面）归引擎层，不留在 precompute 目录；plan JSON 契约与
+  snapshot revision / replay 契约独立为 web-core，prose 与 precompute 共同依赖，
+  消掉 revision 常量两侧声明靠测试对齐的重复。允许的唯一耦合：`frontend/rust` 同时
+  绑定引擎与 web-core，ABI 携带 web plan JSON 由此合法；除此之外各层不得互串，
+  `frontend/rust` 不再宣称中性引擎绑定。现状的出口错层、供给方与消费方同目录、
+  契约散落是 ADR 0050 施工顺序造成的历史形态，按本裁定修正，不留渐进回转；
+  ADR 0050 随重组出修订段。Gradle/KMP 只约束 Kotlin 模块与其产物路径，npm 目录
+  布局与命名不受它强制。动工时机随 Slice 39 收尾确定，先于 Neon 编排接入可避免
+  在旧布局上加建。
+- `LayeredCacheAndBatchRenderer`：precompute 缓存分层、批量渲染器与二进制过桥协议
+  （2026-08-21，ADR 0052，承接 0050 未实施的缓存设计）。三层缓存（FontContracts、
+  Paragraph、Article 索引）用内容哈希键，桶失效取全部现存文章哈希并集的反连接；
+  `CacheAdapterTrait` 嵌入常驻线程池批量渲染器，SSR 逐段配对、SSG 流式输出与同步框架
+  同步等待三种消费方式共用一条队列，Neon 过桥按类型分传、单 Buffer 返回，内容哈希由
+  宿主用运行时内建函数计算，已知哈希的请求不再传输正文；bundle 渲染拆站级表、
+  篇级 manifest 与呈现字段，表经根属性按需加载；npm 侧提供 node / bun / Deno
+  内建 SQLite 参考实现。
+  blog3 缓存按附录测量预计从 115.2 MB 降到约 50 MB。实施分三批：协议与批量渲染器、
+  缓存分层与 bundle 拆分、表传输与 SQLite 封装。2026-08-21 状态：批次一（协议、
+  批量渲染器、过桥）与批次二的 TS 持久化 SDK 已实现，规范形式的 golden 向量在
+  Rust 与 TS 两侧固定同一组字节，持久化命中经本地副本校验后不再过桥正文。批次三的
+  SQLite 参考存储已实现：npm 包按 node:sqlite、bun:sqlite 的顺序探测宿主内建
+  SQLite，单表按不透明地址存条目记录字节，WAL、预编译语句与单事务批量写出，附按
+  context 前缀清理的 prune；Deno 没有内建 sqlite 模块，该运行时的宿主自带存储
+  适配器。2026-08-22 状态：批次三的 bundle 拆分与 TableTransport 已实施，测量与
+  接入形态见 ADR 0052 附录；表文件以 TIQTBL03 二进制形式发布，schema 1 的读取路径
+  与产出路径先后删除，一次性整函数 renderSnapshotBundle、renderFontContractBundle、
+  renderSnapshotTemplate 删除。文章表与
+  文章哈希表属于 Article 索引层，未实施。手动触发的 snapshot 发布
+  流水线已就绪（snapshot-precompute.yml）：每次 dispatch 自打时间戳 tag，五个包临时
+  换运行仓库 owner 的 scope（GitHub Packages 要求 npm scope 等于 owner，canonical
+  仓库为 @tiqian-cjk）发到 GitHub Packages 的 snapshot dist-tag，发布后还原 manifest；
+  npmjs.org 的 release 流程不变。
 
 当前并行推进 **Slice 37：Compose 静态正文 selection**：只读 `CjkText` 已接入源忠实拖选、
 双击选词、三击选段、触摸长按、Foundation 平台手柄、Android 文本放大镜、系统 `ActionMode`
@@ -59,6 +97,27 @@ artifact 的 minSdk 为 23，默认只依赖 `shaping/android-adapter`：API 31+
 metrics / ink / outline replay，但不再传递进 Compose artifact。两条路径都只向
 `LayoutResult` 提供证据，能力报告不参与正文 renderer 路由。决策修订见
 [ADR 0016](adr/0016-android-textpaint-adapter.md)。
+
+当前并行推进 **Slice 39：precompute 原生迁移**（2026-08-20，
+[ADR 0050](adr/0050-native-precompute-rust-bindings.md)）。Node precompute 从 Kotlin/JS 与
+WASM 运行时迁往 Kotlin/Native 静态库与 Rust 编排：`ffi/native` 以 linuxX64、linuxArm64、
+macosArm64、mingwX64 四个目标暴露引擎级 packed C ABI，js 门面迁入 `ffi/js` 服务浏览器回退与
+parity oracle；Rust 侧分两个 workspace，`frontend/rust` 持有 `tiqian` sys 绑定，
+`frontend/web-precompute/rust` 持有 `tiqian-precompute` 与 `tiqian-precompute-neon`；npm 侧
+precompute 迁入独立的 `@tiqian/precompute` 包，现有导出同名同签名保留。实现按四个切片推进：
+A 目标与 workspace 骨架，B 字体会话，C 编排与 Neon，D 平台包发布与 legacy 移除。A、B、C
+已完成：批处理入口（`prepareParagraphs`、`prepareFontContracts`、`prepareHtml` 文档循环）
+按 `TIQIAN_PRECOMPUTE_THREADS` 在 worker 线程间分摊，输出与线程数无关；legacy JS 实现已
+于 2026-08-20 删除，parity 由固定不变的 golden（plan、build-fonts、precompute-html、
+plain-text-issue）与 crate 单元测试、引擎链接测试承担。D 只剩平台包发布，等 crates.io key。
+
+当前并行推进 **Slice 40：持久缓存与预填接入**（2026-08-21，
+[ADR 0052](adr/0052-precompute-cache-and-batch-renderer.md)）。`PersistentCache`
+在两个参考站点完成接入：页面批次、语料预填与逐篇 flush 的使用形态得到验证，
+snapshotId 采用 context 复合形式，宿主的同步内容判断与其分离。写缓冲预算以
+tight/normal/generous 档位声明，默认 normal。同语料从空缓存
+构建 56.5 s 对 54.0 s，产物按内容逐份配对比较零差异；测量见 0050 第三、四轮
+附录，接入形态见 0052 第二批附录。
 
 最近完成的是 **Slice 35：Web 真实站点宿主接入**（2026-07-11）。`@tiqian/prose` 以
 ESM 包和 light-DOM `<tiqian-prose>` 接入真实博客；SSR、无 JavaScript、Pagefind、宿主 CSS、
@@ -134,7 +193,7 @@ Last（同日）:    **行调整方向**（ADR 0031）落地：CLREQ §6.2.2「�
 | 33 | — | Compose LinkAnnotation click actions：`CjkText(AnnotatedString)` 用 Tiqian `LayoutResult` 几何命中链接；`LinkInteractionListener` 优先，`LinkAnnotation.Url` 回退 `LocalUriHandler`；annotation-only 重组不强制重排也能复用当前布局命中 | `CjkTextLinkClickTest`（listener、URL router、正文不变只增加 annotation）+ `CjkTextCompatibilityTest`（LinkAnnotation 不再报 capability issue） | `:frontend:compose:jvmTest --tests 'org.tiqian.compose.CjkTextLinkClickTest' --tests 'org.tiqian.compose.CjkTextCompatibilityTest'` + `:frontend:compose:compileAndroidMain` | done (2026-07-07；当时未声明 selection/TalkBack 几何，静态 selection 后由 Slice 37 接入) |
 | 34 | — | Web 端引擎跑通（ADR 0039，第二阶段起步）：引擎链（core→layout）提供 browser Kotlin/JS target；`shaping/web-adapter`（`OffscreenMeasureTextShaping`）；`frontend/web`（`PreBrokenLineDom` + `ReflowByRebreak` + `CopyTransparentSpacingSpans` + `EngineOwnedHyphenation`）；引擎自持全部行布局（推入推出照跑），DOM 只画预断行的文本节点，不把断行/断词交给浏览器 | `:frontend:web` 浏览器内真机验收（半宽标点/两端对齐/邻行均摊/`⸺`/中西间距/首行缩进/选中复制源忠实）；JVM golden 零漂移 | `:frontend:web:jsBrowserTest` + `:frontend:web:jsBrowserProductionWebpack` + `:layout:jvmTest`（portability 零漂移） | done (2026-07-08；2026-07-15 由 Wasm 迁移到纯 Kotlin/JS；命名降级：`halt`/`locl` 未接走 policy、web 默认 `NoHyphenator`、替换字符复制为显示形、`ReflowByRebreak` 暂重跑整趟) |
 | 35 | — | Web 真实站点宿主接入（ADR 0039 amendment）：`@tiqian/prose` ESM package + light-DOM `<tiqian-prose>`；原 `<p>`/语义 inline/CSS 仍由宿主持有；纯文本 formatting context 保真 lower；可测量非交互对象以 `MeasurableOpaqueInlineObject` 进入 core 断行与行高，原 DOM 深克隆；U+200B 以 `ZeroWidthSpaceSoftBreakNoShape` 进入结构断行而非字体 shaping；比例宽中文标点按 profile 补盒并输出 glyph shift；不合格 U+2E3A 按两字宽目标回滚；其余情况具名原生回退；custom element 自管连接/断开与 Swup；viewport 优先逐段原子增强；源忠实复制区分软折行/强制换行 | neo-blog 全文章 dogfood；未知 `inline-block`/`img`/裸 SVG；U+200B 不回退且复制保真；中文/英文上下文弯引号；缺 U+2E3A 字体的 `——` 回滚；链接跨行与 hover；宿主字体/颜色/伪类；stateful unsupported 原生；桌面/移动 resize；Swup 前进后退不重复增强；复制无 U+FFFC、无软换行且保留 `<br>` | `:frontend:web:jsBrowserTest` + `:frontend:web:assembleNpmPackage` + `:layout:jvmTest`；neo-blog `pnpm check && pnpm build`；真实浏览器 QA | done (2026-07-11；已命名后续：`WidthIndependentAnnotationCache`、`OpaqueInlineObjectGeometryInvalidation`) |
-| 36 | — | 构建期 Web font evidence + 最大版心 snapshot（ADR 0040）：独立 Node Kotlin/JS runtime 以 exact WOFF2/SFNT + HarfBuzz 跑当前 segment 语义的真实 pipeline；`PreparedParagraphV1` 绑定 source / semantic artifact / typography / font / width contract；受控链接、强调进入同一预排 pipeline，行内代码仅在宿主显式提供 exact 等宽 face、完整字体 span 与 box contract 时进入，否则该段保留 runtime source；snapshot 级 `renderFontFamilies` 让 prepared DOM 与 exact browser Kotlin/JS runtime 使用同一绘制字体；弯引号按 core role 选择 Hani/default 或 Latn+`pwid,palt` 并随 plan 重放；canonical prepared DOM 的固定几何声明由共享 CSS 持有，动态数值与 manifest 证据用 root-scoped style / shared table 去重；SSR 始终保留可响应的 native source，prepared DOM 留在 inert template；manifest 内 keyed candidate 严格整批校验，命中后采用其快照并由 runtime 只补齐 unkeyed candidate | 固定授权 webfont 下纯文本 / mandatory break / 链接；exact host mono + 完整 inline-code contract；缺等宽字体时整段 native；`contextual-curly-quotes`；最大版心命中；source / semantics / width / typography / face / probe 逐项 miss；混合 snapshot/runtime 接管；cold reload / client navigation；最大→窄→最大；copy / no-JS / Pagefind | `:frontend:web-precompute:jsNodeTest` + `:frontend:web:jsBrowserTest` + `:frontend:web:assembleNpmPackage` + `:layout:jvmTest --tests 'org.tiqian.layout.LayoutDumpGoldenTest'` + `(cd frontend/web/npm && npm test)` | wip |
+| 36 | — | 构建期 Web font evidence + 最大版心 snapshot（ADR 0040）：独立 Node Kotlin/JS runtime 以 exact WOFF2/SFNT + HarfBuzz 跑当前 segment 语义的真实 pipeline；`PreparedParagraphV1` 绑定 source / semantic artifact / typography / font / width contract；受控链接、强调进入同一预排 pipeline，行内代码仅在宿主显式提供 exact 等宽 face、完整字体 span 与 box contract 时进入，否则该段保留 runtime source；snapshot 级 `renderFontFamilies` 让 prepared DOM 与 exact browser Kotlin/JS runtime 使用同一绘制字体；弯引号按 core role 选择 Hani/default 或 Latn+`pwid,palt` 并随 plan 重放；canonical prepared DOM 的固定几何声明由共享 CSS 持有，动态数值与 manifest 证据用 root-scoped style / shared table 去重；SSR 始终保留可响应的 native source，prepared DOM 留在 inert template；manifest 内 keyed candidate 严格整批校验，命中后采用其快照并由 runtime 只补齐 unkeyed candidate | 固定授权 webfont 下纯文本 / mandatory break / 链接；exact host mono + 完整 inline-code contract；缺等宽字体时整段 native；`contextual-curly-quotes`；最大版心命中；source / semantics / width / typography / face / probe 逐项 miss；混合 snapshot/runtime 接管；cold reload / client navigation；最大→窄→最大；copy / no-JS / Pagefind | `:ffi:js:jsNodeTest` + `:frontend:web:jsBrowserTest` + `:frontend:web:assembleNpmPackage` + `:layout:jvmTest --tests 'org.tiqian.layout.LayoutDumpGoldenTest'` + `(cd frontend/web/npm && npm test)` | wip |
 | 37 | — | Compose 静态正文 selection：`CjkSelectionContainer` 直接消费 Tiqian `LayoutResult` 的 UTF-16 source range、caret 与 occupied box；支持鼠标拖选/双击/三击、触摸长按、Foundation 平台手柄与 Android 文本放大镜、Android 系统 `ActionMode`/`PROCESS_TEXT` 与 Desktop 右键文本菜单、快捷键、selection semantics、跨 `CjkText` source-faithful copy；interaction endpoint 不切开已覆盖的组合/emoji 序列；拖选与链接点击正确竞争；普通点按容器空白会释放既有 Tiqian 选区，和可编辑 Compose 文本互换焦点时只保留当前选区；replay index、节点顺序/range 缓存与按变化节点失效约束拖选热路径；连续 `ScrollState` 宿主在真实拖动进入边缘后逐帧滚动并刷新 endpoint，菜单锚点与非拖动手柄跟随祖先裁剪后的可见视口，静止长按和 slop 内抖动不启动；完整 `AnnotatedString` 语义保留 link/URL/TTS annotation，非空选区才发布 copy action，容器不再产生空白 a11y focus stop | `LayoutQueriesTest`（interaction boundary、跨 engine cluster、word boundary）+ `CjkSelectionTest`（拖选/绘制/复制/双击/三击/触摸/手柄交叉/跨节点/链接竞争/点按外部释放/系统菜单/菜单滚动锚点/边缘滚动/a11y semantics）+ `CjkTextLinkClickTest` 回归 | `:core:jvmTest --tests 'org.tiqian.core.LayoutQueriesTest'` + `:frontend:compose:jvmTest --tests 'org.tiqian.compose.CjkSelectionTest' --tests 'org.tiqian.compose.CjkTextLinkClickTest'` + `:frontend:compose:compileAndroidMain` | wip (2026-08-10 Pixel 9 Pro XL Android beta 真机已验证：长按只读 `CjkText` 出现系统浮动菜单“复制/全选/朗读”，其中“朗读”为 `PROCESS_TEXT`；此前 Pixel 10 Pro Android 37 AVD 已验证静止长按、边缘滚动、无障碍节点与性能。Compose Android 只在拿到真实 `TextLayoutResult` 时提供逐字符屏幕框；该项、lazy selection 与 editor/IME 仍未并入) |
 | 38 | — | Android 字体与同源重放后端：Compose 默认 API 31+ shape-once / `drawGlyphs`，API 23–30 用 `LegacyPlatformRunReplay` 重放同一平台 run；受控 native 模块另行提供平台无关 replayable face contract、宿主 file / `ByteArray` / asset catalog、有序 family fallback + catalog revision、HarfBuzz cluster/glyph/advance/placement/features 与同 face FreeType metrics/ink/outline；两者都只产生 `LayoutResult` 证据，Compose 不路由回旧 renderer | `AndroidPaintTextShaperTest` + `AndroidLegacyTextShaperTest` + `AndroidFontCatalogContractTest` + `LegacyFontConfigParserTest` + `AndroidNativeFontBackendTest`（平台 run 上下文、字体源身份、有序 fallback、revision、旧结果重放、locl/halt、missing glyph、outline、长文）及同字体 native/platform 对照 + 共享 Compose Demo 截图 | `:shaping:android-adapter:connectedDebugAndroidTest` on API 23/30/31/current + `:shaping:android-native-font:testDebugUnitTest` + 按需运行 native connected tests + `:frontend:compose:compileAndroidMain` + `:demo:android:assembleDebug` + layout golden/report | wip (2026-08-13：Compose 默认依赖已移除 native ABI；API 31+ 保留平台 glyph/font 重放；API 23–30 改用具名的平台 run replay；受控 native backend 仍作为独立可选模块保留) |
 

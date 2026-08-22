@@ -17,8 +17,6 @@ test("published package includes the generated runtime and no repository-only bi
   assert.ok(manifest.files.includes("README.md"));
   assert.ok(manifest.files.includes("runtime/"));
   assert.ok(manifest.files.includes("precompute-runtime/"));
-  assert.ok(manifest.files.includes("precompute-node-fonts.js"));
-  assert.ok(manifest.files.includes("precompute-html.js"));
   assert.ok(manifest.files.includes("browser-font-replay.js"));
   assert.ok(manifest.files.includes("browser-fonts.js"));
   assert.ok(manifest.files.includes("font-face-boundaries.js"));
@@ -29,14 +27,20 @@ test("published package includes the generated runtime and no repository-only bi
   assert.ok(manifest.files.includes("snapshot-source.js"));
   assert.ok(manifest.files.includes("snapshot-client.js"));
   assert.ok(manifest.files.includes("worker-layout.js"));
-  assert.equal(manifest.exports["./precompute"].default, "./precompute.js");
-  assert.equal(manifest.exports["./precompute-html"].default, "./precompute-html.js");
-  assert.equal(manifest.exports["./snapshot-client"].default, "./snapshot-client.js");
+  // The server-side precompute entries moved to @tiqian/precompute; only the
+  // client snapshot adoption module and the layout worker runtime remain.
+  assert.deepEqual(Object.keys(manifest.exports).sort(), [
+    ".",
+    "./element",
+    "./snapshot-client",
+    "./styles.css",
+  ]);
   assert.equal(manifest.bin, undefined);
   assert.equal(manifest.exports["./build-runtime"], undefined);
-  assert.equal(manifest.dependencies?.puppeteer, undefined);
-  assert.equal(manifest.dependencies?.playwright, undefined);
-  assert.equal(manifest.dependencies?.linkedom, "0.18.13");
+  assert.equal(manifest.dependencies, undefined);
+  for (const removed of ["precompute.js", "precompute-html.js", "precompute-fonts.js", "precompute-node-fonts.js"]) {
+    assert.equal(manifest.files.includes(removed), false, `${removed} must not ship`);
+  }
   assert.ok(manifest.sideEffects.includes("./prepared-dom.js"));
   assert.equal(
     manifest.scripts.prepack,
@@ -88,7 +92,7 @@ test("the release verifier accepts both assembled Kotlin/JS runtimes", async () 
     artifacts.map((artifact) => artifact.path),
     [
       "runtime/tiqian-web.js",
-      "precompute-runtime/Tiqian-tiqian-web-precompute.mjs",
+      "precompute-runtime/Tiqian-tiqian-ffi-js.mjs",
     ],
   );
   assert.ok(artifacts.every((artifact) => artifact.size > 8));
@@ -101,36 +105,10 @@ test("the release build clears both Kotlin/JS package targets and bypasses build
   assert.match(source, /"\.\.\/\.\.\/\.\.\/gradlew\.bat"/u);
   assert.match(source, /process\.env\.ComSpec/u);
   assert.match(source, /\["\/d", "\/c", "call", gradleWrapper, \.\.\.gradleArguments\]/u);
-  assert.match(source, /":frontend:web-precompute:clean"/u);
+  assert.match(source, /":ffi:js:clean"/u);
   assert.match(source, /":frontend:web:clean"/u);
   assert.match(source, /":frontend:web:assembleNpmPackage"/u);
   assert.match(source, /"--no-build-cache"/u);
-});
-
-test("the precompute public surface matches its declarations", async () => {
-  const source = await readFile(new URL("./precompute.js", import.meta.url), "utf8");
-  const declarations = await readFile(new URL("./precompute.d.ts", import.meta.url), "utf8");
-  const publicModule = await import("./precompute.js");
-
-  assert.match(source, /export \{ renderPreparedParagraph \} from "\.\/prepared-dom\.js"/u);
-  assert.deepEqual(Object.keys(publicModule).sort(), [
-    "createPrecomputer",
-    "renderFontContractBundle",
-    "renderPreparedParagraph",
-    "renderSnapshotBundle",
-    "renderSnapshotTemplate",
-    "snapshotPlainTextIssue",
-  ]);
-  assert.match(declarations, /function renderPreparedParagraph\(/u);
-  assert.match(declarations, /function renderFontContractBundle\(/u);
-  assert.match(declarations, /interface FontContractInput[\s\S]*?maxWidthPx\?: number/u);
-  assert.match(declarations, /prepareFontContract\(input: FontContractInput\)/u);
-  assert.match(source, /WidthIndependentFontEvidenceCaptureMeasure/u);
-  assert.match(declarations, /readonly inertTemplate: string/u);
-  assert.doesNotMatch(declarations, /renderPreparedParagraphArtifact/u);
-  assert.doesNotMatch(declarations, /renderPreparedParagraphInto/u);
-  assert.match(source, /SEMANTIC_CAPABILITY_ISSUES/u);
-  assert.match(source, /unsupportedParagraph\(key, capabilityIssue, error\)/u);
 });
 
 test("the custom element validates a snapshot before dynamically loading the browser runtime", async () => {
@@ -140,7 +118,6 @@ test("the custom element validates a snapshot before dynamically loading the bro
   const apiDeclarations = await readFile(new URL("./api.d.ts", import.meta.url), "utf8");
   const browserFontsSource = await readFile(new URL("./browser-fonts.js", import.meta.url), "utf8");
   const layoutWorkerSource = await readFile(new URL("./layout-worker.js", import.meta.url), "utf8");
-  const precomputeFontsSource = await readFile(new URL("./precompute-fonts.js", import.meta.url), "utf8");
   const lazyCapabilitiesSource = await readFile(new URL("./lazy-capabilities.js", import.meta.url), "utf8");
   const runtimeSource = await readFile(new URL("./runtime.js", import.meta.url), "utf8");
   const stylesSource = await readFile(new URL("./styles.css", import.meta.url), "utf8");
@@ -207,7 +184,6 @@ test("the custom element validates a snapshot before dynamically loading the bro
   assert.doesNotMatch(apiSource, /from "\.\/font-shaping\.js"/u);
   assert.match(lazyCapabilitiesSource, /import\("\.\/precomputed\.js"\)/u);
   assert.doesNotMatch(lazyCapabilitiesSource, /font-shaping\.js/u);
-  assert.doesNotMatch(browserFontsSource, /precompute-fonts\.js/u);
   assert.doesNotMatch(layoutWorkerSource, /precompute-fonts\.js|harfbuzzjs|woff2-encoder/u);
   assert.match(layoutWorkerSource, /workerExactSubsetSourceBoundaries\(session\.faces, request\)/u);
   assert.doesNotMatch(browserFontsSource, /harfbuzzjs|woff2-encoder/u);
@@ -302,7 +278,6 @@ test("the custom element validates a snapshot before dynamically loading the bro
     elementSource,
     /#recoverRuntimeAfterSnapshotMiss\(operation, reason, runtimeSnapshotBackingRestored = false\)/u,
   );
-  assert.doesNotMatch(precomputeFontsSource, /spec\.contentAddressed/u);
   assert.doesNotMatch(elementSource, /tq-inline-size-probe/u);
   assert.match(elementSource, /observer\.observe\(target, \{ box: "border-box" \}\)/u);
   assert.match(

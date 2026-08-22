@@ -1,0 +1,391 @@
+name: Publish precompute packages
+
+# Release workflow for @tiqian/precompute and its four platform packages
+# (ADR 0050). The linux addons link the Kotlin/Native engine archive: that
+# link is the one wired in frontend/rust/tiqian/build.rs and covered by the
+# parity job of ci-native-precompute.yml. The darwin and windows addons build
+# without the archive; their paragraph entry reports EngineNotLinked until
+# those links gain their own system-library evidence.
+on:
+  push:
+    tags:
+      - "@tiqian/precompute@*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-tiqian-precompute
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Validate release tag and package set
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./frontend/web-precompute/npm/package.json').version")"
+          expected_tag="@tiqian/precompute@${version}"
+          if [[ "${GITHUB_REF_NAME}" != "${expected_tag}" ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package version ${version}"
+            exit 1
+          fi
+          if [[ "$(git cat-file -t "${GITHUB_REF_NAME}")" != "tag" ]]; then
+            echo "::error::Release tag must be annotated"
+            exit 1
+          fi
+          tag_commit="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
+          if [[ "${tag_commit}" != "${GITHUB_SHA}" ]]; then
+            echo "::error::Tag target ${tag_commit} does not match workflow commit ${GITHUB_SHA}"
+            exit 1
+          fi
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "${tag_commit}" refs/remotes/origin/main; then
+            echo "::error::Release tag must point to a commit on origin/main"
+            exit 1
+          fi
+          for platform in darwin-arm64 linux-arm64-gnu linux-x64-gnu win32-x64-msvc; do
+            platform_name="$(node -p "require('./frontend/web-precompute/npm/platforms/${platform}/package.json').name")"
+            platform_version="$(node -p "require('./frontend/web-precompute/npm/platforms/${platform}/package.json').version")"
+            if [[ "${platform_name}" != "@tiqian/precompute-${platform}" || "${platform_version}" != "${version}" ]]; then
+              echo "::error::Platform package ${platform} is ${platform_name}@${platform_version}, expected @tiqian/precompute-${platform}@${version}"
+              exit 1
+            fi
+          done
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+  engine-linux:
+    name: Build engine archives linux x64 arm64
+    runs-on: ubuntu-latest
+    needs: [validate]
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses > /dev/null
+      - name: Install Android platform pieces
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0" > /dev/null
+
+      - name: Cache Gradle
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'gradle/gradle-daemon-jvm.properties', '**/*.gradle.kts') }}
+          restore-keys: gradle-${{ runner.os }}-
+      - name: Cache Kotlin/Native toolchains
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-publish-precompute-${{ hashFiles('**/*.gradle.kts') }}
+          restore-keys: |
+            konan-${{ runner.os }}-publish-precompute-
+            konan-${{ runner.os }}-
+
+      - name: Link static libraries
+        run: >
+          ./gradlew
+          :ffi:native:linkReleaseStaticLinuxX64
+          :ffi:native:linkReleaseStaticLinuxArm64
+
+      - name: Upload linuxX64 engine archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: engine-linuxX64
+          path: ffi/native/build/bin/linuxX64/releaseStatic
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload linuxArm64 engine archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: engine-linuxArm64
+          path: ffi/native/build/bin/linuxArm64/releaseStatic
+          if-no-files-found: error
+          retention-days: 7
+
+  binaries:
+    name: Build addon (${{ matrix.platform }})
+    needs: [engine-linux]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x64-gnu
+            os: ubuntu-latest
+            engine-archive: engine-linuxX64
+          - platform: linux-arm64-gnu
+            os: ubuntu-24.04-arm
+            engine-archive: engine-linuxArm64
+          - platform: darwin-arm64
+            os: macos-latest
+            engine-archive: ""
+          - platform: win32-x64-msvc
+            os: windows-latest
+            engine-archive: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Download the engine archive
+        if: matrix.engine-archive != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ matrix.engine-archive }}
+          path: engine
+
+      - name: Install npm dependencies
+        working-directory: frontend/web-precompute/npm
+        run: npm install --no-audit --no-fund
+
+      # An empty TIQIAN_NATIVE_LIB_DIR keeps the engine call compiled out for
+      # the platforms without a wired engine link; the font session and the
+      # registry entries still load and smoke test.
+      - name: Build addon and place platform binary
+        working-directory: frontend/web-precompute/npm
+        shell: bash
+        env:
+          NEON_BUILD_PLATFORM: ${{ matrix.platform }}
+          TIQIAN_NATIVE_LIB_DIR: ${{ matrix.engine-archive != '' && format('{0}/engine', github.workspace) || '' }}
+        run: |
+          cargo build --manifest-path ../rust/tiqian-precompute-neon/Cargo.toml \
+            --release --message-format=json-render-diagnostics > cargo.log
+          npx neon dist --name tiqian-precompute-neon < cargo.log
+          test -f "platforms/${NEON_BUILD_PLATFORM}/index.node"
+
+      - name: Smoke test through the npm loader
+        working-directory: frontend/web-precompute/npm
+        shell: bash
+        run: npm test
+
+      - name: Pack platform package
+        working-directory: frontend/web-precompute/npm/platforms/${{ matrix.platform }}
+        shell: bash
+        run: |
+          mkdir -p ../../pack-output
+          PACK_OUTPUT=$(npm pack --pack-destination ../../pack-output | grep '\.tgz$' | head -n 1)
+          if [[ -z "$PACK_OUTPUT" ]]; then
+            echo "::error::Failed to pack the platform package."
+            exit 1
+          fi
+          FILENAME=$(basename "$PACK_OUTPUT")
+          echo "filename=$FILENAME" >> "$GITHUB_OUTPUT"
+        id: pack
+
+      - name: Upload platform package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: binary-package-${{ matrix.platform }}
+          path: frontend/web-precompute/npm/pack-output/${{ steps.pack.outputs.filename }}
+          if-no-files-found: error
+          retention-days: 7
+
+  main-package:
+    name: Pack main package
+    needs: [validate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Install npm dependencies
+        working-directory: frontend/web-precompute/npm
+        run: npm install --no-audit --no-fund
+
+      - name: Lint, typecheck, and build the JS entry
+        working-directory: frontend/web-precompute/npm
+        run: |
+          npm run lint
+          npm run build
+          npm run typecheck
+      # The packed package vendors the browser-shared modules; a stale copy
+      # would fork the render contract between server and browser.
+      - name: Check vendored shared modules
+        working-directory: frontend/web-precompute/npm
+        run: npm run check:shared
+
+      - name: Pack
+        working-directory: frontend/web-precompute/npm
+        shell: bash
+        id: pack
+        run: |
+          mkdir -p pack-output
+          PACK_OUTPUT=$(npm pack --pack-destination pack-output | grep '\.tgz$' | head -n 1)
+          if [[ -z "$PACK_OUTPUT" ]]; then
+            echo "::error::Failed to pack the main package."
+            exit 1
+          fi
+          echo "filename=$(basename "$PACK_OUTPUT")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload main package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: main-package
+          path: frontend/web-precompute/npm/pack-output/${{ steps.pack.outputs.filename }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish verified tarballs to alpha
+    needs: [validate, binaries, main-package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Use an OIDC-capable npm CLI
+        run: npm install --global npm@11.12.1
+
+      - name: Download all package artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: packages
+
+      - name: Verify a complete package set
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="binary-package-darwin-arm64 binary-package-linux-arm64-gnu binary-package-linux-x64-gnu binary-package-win32-x64-msvc main-package"
+          for name in $expected; do
+            if ! find "packages/$name" -name '*.tgz' | grep -q .; then
+              echo "::error::Artifact $name contains no package."
+              exit 1
+            fi
+          done
+          while IFS= read -r -d '' tarball; do
+            if [[ "$(basename "$tarball")" != *"-${RELEASE_VERSION}.tgz" ]]; then
+              echo "::error::$(basename "$tarball") does not carry version ${RELEASE_VERSION}."
+              exit 1
+            fi
+          done < <(find packages -name '*.tgz' -print0)
+
+      # Platform packages first: the main package lists them as optional
+      # dependencies at the same version.
+      - name: Publish each tarball
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in binary-package-darwin-arm64 binary-package-linux-arm64-gnu binary-package-linux-x64-gnu binary-package-win32-x64-msvc; do
+            tarball="$(find "packages/$name" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+            npm publish "${tarball}" --ignore-scripts --access public --tag alpha
+          done
+          tarball="$(find packages/main-package -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          npm publish "${tarball}" --ignore-scripts --access public --tag alpha
+
+  sync-latest:
+    name: Synchronize latest dist-tags
+    needs: [validate, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Use the release npm CLI
+        run: npm install --global npm@11.12.1
+
+      - name: Point latest at the published alpha
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_DIST_TAG_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${NODE_AUTH_TOKEN}" ]]; then
+            echo "::error::NPM_DIST_TAG_TOKEN is not configured"
+            exit 1
+          fi
+          for package in \
+            @tiqian/precompute \
+            @tiqian/precompute-darwin-arm64 \
+            @tiqian/precompute-linux-arm64-gnu \
+            @tiqian/precompute-linux-x64-gnu \
+            @tiqian/precompute-win32-x64-msvc; do
+            npm dist-tag add "${package}@${RELEASE_VERSION}" latest
+          done
+
+      - name: Verify alpha and latest
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..12}; do
+            converged=1
+            for package in \
+              @tiqian/precompute \
+              @tiqian/precompute-darwin-arm64 \
+              @tiqian/precompute-linux-arm64-gnu \
+              @tiqian/precompute-linux-x64-gnu \
+              @tiqian/precompute-win32-x64-msvc; do
+              tags="$(npm view "${package}" dist-tags --json)"
+              if ! DIST_TAGS="${tags}" node -e '
+                const tags = JSON.parse(process.env.DIST_TAGS);
+                const version = process.env.RELEASE_VERSION;
+                if (tags.alpha !== version || tags.latest !== version) process.exit(1);
+              '; then
+                converged=0
+              fi
+            done
+            if [[ "${converged}" -eq 1 ]]; then
+              echo "alpha and latest both point to ${RELEASE_VERSION} for all five packages"
+              exit 0
+            fi
+            if [[ "${attempt}" -lt 12 ]]; then sleep 5; fi
+          done
+          echo "::error::npm dist-tags did not converge on ${RELEASE_VERSION}"
+          exit 1

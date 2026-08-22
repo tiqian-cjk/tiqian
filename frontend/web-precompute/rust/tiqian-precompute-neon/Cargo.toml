@@ -1,0 +1,17 @@
+[package]
+name = "tiqian-precompute-neon"
+description = "Neon addon exposing the Tiqian font session and precompute APIs"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[lints.rust]
+# This crate's build.rs emits the cfg when TIQIAN_NATIVE_LIB_DIR provides the
+# engine archive.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tiqian_engine_link)'] }
+
+[dependencies]
+neon = "1"
+tiqian-precompute = { path = "../tiqian-precompute" }

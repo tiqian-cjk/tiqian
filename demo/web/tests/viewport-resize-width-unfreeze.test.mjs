@@ -397,8 +397,16 @@ test("ViewportResizeWidthUnfreeze: rapid viewport widening keeps every prose roo
         round.report.length > 0,
         `${round.label}: page must expose prose roots`,
       );
+      // A root counts as caught up when it either finished a relayout inside
+      // the round or its last committed width already matches the settled
+      // width. LineLengthGridResponsiveInvalidation skips dispatching a
+      // relayout when a squeeze-widen cycle returns to the committed measure,
+      // so those roots correctly fire no event; a root frozen at its pre-drag
+      // width fails the width comparison and is still flagged.
       const stalled = round.report.filter(
-        (r) => r.readyDelta < 0 && !r.capabilityIssue,
+        (r) => r.readyDelta < 0
+          && Math.abs(r.width - r.lastReadyWidth) >= 0.5
+          && !r.capabilityIssue,
       );
       assert.strictEqual(
         stalled.length,

@@ -1,0 +1,29 @@
+{
+  "name": "@tiqian/precompute-darwin-arm64",
+  "description": "Prebuilt binary package for @tiqian/precompute on `darwin-arm64`.",
+  "version": "0.1.0-alpha.3",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tiqian-cjk/tiqian.git",
+    "directory": "frontend/web-precompute/npm"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "index.node",
+  "files": [
+    "index.node"
+  ],
+  "neon": {
+    "type": "binary",
+    "rust": "aarch64-apple-darwin",
+    "node": "darwin-arm64",
+    "os": "darwin",
+    "arch": "arm64",
+    "abi": null
+  },
+  "license": "MPL-2.0"
+}

@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-08
+- Amended: 2026-08-20（macosX64 处置状态表述修正，决定不变）
 - Refines: [ADR 0001](0001-core-pipeline-and-platform-boundary.md)（核心 pipeline 与平台边界）
 
 ## Context
@@ -16,7 +17,9 @@
 
 - 组合核心为纯 `commonMain`,且**已能编译到 Kotlin/JS**——这证明它不含 `java.*` / `android.*` 依赖,Kotlin/Native 面对的是同一约束。
 - 全核心只有 **2 个 `expect/actual`**,都是西文断词资源加载:`:layout` 的 `defaultHyphenator()` 与 `:linebreak` 的 `loadBundledEnglishHyphenationPatterns()`。补 `macosArm64Main` actual:前者返回 `EnglishHyphenation.enUs`(与 JVM/JS/Android 一致);后者复用嵌入式常量——把原 JS 专用的 `generateJsHyphenationPatterns` 任务泛化为 `generateEmbeddedHyphenationPatterns`(**Web 与 Kotlin/Native 都无同步资源加载**,从同一份 `hyph-en-us.tex` 生成 `EN_US_HYPHENATION_PATTERNS`),`jsMain` 与 `macosArm64Main` 共用同一真源。
-- **不加 `macosX64`**:Kotlin 2.3.20 已移除该目标。iOS 同时保留 device 与 Apple Silicon simulator slice。
+- **不加 `macosX64`**:Kotlin 2.3.0 起该目标进入弃用流程，官方计划 2.4.0 移除。2026-08-20
+  修正：本条原写「Kotlin 2.3.20 已移除该目标」，版本号与处置状态均有误；不加该目标的决定
+  不变。iOS 同时保留 device 与 Apple Silicon simulator slice。
 - 平台 shaping / 度量 / 绘制不在核心,由独立适配器提供(见 [ADR 0046](0046-core-text-shaping-adapter.md) / [ADR 0047](0047-core-text-rendering-frontend.md)),核心保持平台无关,继续遵守 ADR 0001 的边界。
 
 ## Consequences

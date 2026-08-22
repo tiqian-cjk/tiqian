@@ -1,0 +1,27 @@
+simpleFace	[{"family":"Test","publicUrl":"/styles/font.woff2","source":"/srv/styles/font.woff2","style":"normal","unicodeRange":"","weight":400}]
+quotedFamilyAndUrl	[{"family":"Dela Gothic One","publicUrl":"https://cdn.example/styles/font.ttf","source":"/srv/styles/font.ttf","style":"normal","unicodeRange":"","weight":400}]
+subdirTraversal	[{"family":"Test","publicUrl":"/fonts/f.woff2","source":"/srv/fonts/f.woff2","style":"normal","unicodeRange":"","weight":400}]
+absoluteAssetPath	[{"family":"Test","publicUrl":"/assets/f.woff2","source":"/assets/f.woff2","style":"normal","unicodeRange":"","weight":400}]
+queryHash	[{"family":"Test","publicUrl":"/styles/font.woff2?v=3#h","source":"/srv/styles/font.woff2","style":"normal","unicodeRange":"","weight":400}]
+weightRange	[{"family":"T","publicUrl":"/styles/f","source":"/srv/styles/f","style":"normal","unicodeRange":"","weight":[300,500]}]
+propertyCasing	[{"family":"T","publicUrl":"/styles/f","source":"/srv/styles/f","style":"normal","unicodeRange":"","weight":700}]
+missingFamily	ERROR:MissingFontStylesheetFamily
+localSourceOnly	ERROR:MissingFontStylesheetUrl:T
+badWeight	ERROR:UnsupportedFontStylesheetWeight:bold
+descendingWeight	ERROR:UnsupportedFontStylesheetWeight:500 300
+negativeWeight	ERROR:UnsupportedFontStylesheetWeight:-400
+italicStyleUpper	[{"family":"T","publicUrl":"/styles/f","source":"/srv/styles/f","style":"italic","unicodeRange":"","weight":400}]
+obliqueStyle	ERROR:UnsupportedFontStylesheetStyle:oblique
+unicodeRangePresent	[{"family":"T","publicUrl":"/styles/f","source":"/srv/styles/f","style":"normal","unicodeRange":"U+4E00-9FFF","weight":400}]
+commentedOutRule	[{"family":"T","publicUrl":"/styles/f","source":"/srv/styles/f","style":"normal","unicodeRange":"","weight":400}]
+inlineComment	[{"family":"T","publicUrl":"/styles/f","source":"/srv/styles/f","style":"normal","unicodeRange":"","weight":400}]
+plainRulesOnly	ERROR:MissingFontFacesInStylesheet:/srv/styles/main.css
+noPublicUrlRelative	ERROR:MissingFontStylesheetPublicUrl:font.woff2
+schemeAssetUrl	ERROR:RemoteFontSourceNotSupported:https://cdn.example/f.woff2
+spacesInUrl	[{"family":"T","publicUrl":"/styles/my%20font.ttf","source":"/srv/styles/my font.ttf","style":"normal","unicodeRange":"","weight":400}]
+firstUrlWins	[{"family":"T","publicUrl":"/styles/a.woff2","source":"/srv/styles/a.woff2","style":"normal","unicodeRange":"","weight":400}]
+uppercaseAtRule	[{"family":"T","publicUrl":"/styles/f","source":"/srv/styles/f","style":"normal","unicodeRange":"","weight":400}]
+noSpaceBeforeBrace	[{"family":"T","publicUrl":"/styles/f","source":"/srv/styles/f","style":"normal","unicodeRange":"","weight":400}]
+twoFaces	[{"family":"A","publicUrl":"/styles/a","source":"/srv/styles/a","style":"normal","unicodeRange":"","weight":400},{"family":"B","publicUrl":"/styles/b","source":"/srv/styles/b","style":"normal","unicodeRange":"","weight":550}]
+driveLetterAsset	ERROR:RemoteFontSourceNotSupported:c:/fonts/f.ttf
+decimalWeight	[{"family":"T","publicUrl":"/styles/f","source":"/srv/styles/f","style":"normal","unicodeRange":"","weight":400.5}]

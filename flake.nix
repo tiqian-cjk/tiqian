@@ -3,10 +3,14 @@
 
   inputs = {
     nixpkgs.url = "flake:nixpkgs";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
-    { self, nixpkgs }:
+    { self, nixpkgs, rust-overlay }:
     let
       systems = [
         "x86_64-linux"
@@ -21,6 +25,7 @@
           f (
             import nixpkgs {
               inherit system;
+              overlays = [ rust-overlay.overlays.default ];
               config = {
                 allowUnfree = true;
                 android_sdk.accept_license = true;
@@ -34,6 +39,9 @@
         pkgs:
         let
           jdk = pkgs.jdk25;
+          # ADR 0050: the Rust precompute stack uses a pinned overlay toolchain;
+          # cross-link flags live in Cargo config, not in system probing.
+          rustToolchain = pkgs.rust-bin.stable.latest.default;
           androidComposition = pkgs.androidenv.composeAndroidPackages {
             platformVersions = [ "36" ];
             buildToolsVersions = [ "36.0.0" ];
@@ -53,6 +61,7 @@
                 jdk
                 nodejs_22
                 git
+                rustToolchain
               ]
               ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
                 chromium

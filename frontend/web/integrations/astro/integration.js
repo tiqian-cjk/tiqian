@@ -46,7 +46,7 @@ export function tiqian(options = {}) {
     throw new Error("InvalidMaximumMeasure");
   }
   const virtualSource = precomputeEnabled ? `
-      import { createHtmlPreparer } from "@tiqian/prose/precompute-html";
+      import { createHtmlPreparer } from "@tiqian/precompute/precompute-html";
       const preparer = await createHtmlPreparer(${JSON.stringify(htmlOptions)});
       const defaultSnapshot = ${JSON.stringify(defaultSnapshot)};
       export async function prepareTiqianHtml(html, options = {}) {
@@ -76,6 +76,17 @@ export function tiqian(options = {}) {
             plugins: [{
               name: "@tiqian/astro-preparer",
               enforce: "pre",
+              // `@tiqian/precompute` reads font and style files relative to
+              // its own modules and loads a native addon at first use.
+              // Inlining it into a server chunk moves those lookups onto the
+              // chunk path. The top-level `ssr.external` key reaches only the
+              // `ssr` environment; the prerendered chunks come from the
+              // `prerender` environment, so every server environment names
+              // the package here.
+              configEnvironment(name) {
+                if (name !== "ssr" && name !== "prerender" && name !== "astro") return undefined;
+                return { resolve: { external: ["@tiqian/precompute"] } };
+              },
               resolveId(id) {
                 return id === VIRTUAL_MODULE_ID ? RESOLVED_VIRTUAL_MODULE_ID : null;
               },
@@ -98,7 +109,7 @@ export function tiqian(options = {}) {
           filename: "tiqian-astro.d.ts",
           content: `
             declare module "virtual:@tiqian/astro/preparer" {
-              import type { HtmlPrepareOptions, PreparedHtml } from "@tiqian/prose/precompute-html";
+              import type { HtmlPrepareOptions, PreparedHtml } from "@tiqian/precompute/precompute-html";
               export function prepareTiqianHtml(
                 html: string,
                 options?: HtmlPrepareOptions,

@@ -12,7 +12,8 @@
   HarfBuzz / WOFF2 WebAssembly，并允许已验证 keyed snapshot 与 unkeyed runtime completion 共存）；
   2026-07-18（默认字体所有权改为 host-compatible：构建端直接读取宿主 `@font-face` 样式表，浏览器
   不再下载字体字节或生成 render-family alias；响应式 SSR 始终保留 semantic source；采用与计数验证
-  改为可中断的渐进证明）；2026-08-11（相邻引文列举项的上下文不再泄漏前一项内容）
+  改为可中断的渐进证明）；2026-08-11（相邻引文列举项的上下文不再泄漏前一项内容）；
+  2026-08-20 native precompute migration pointer, see ADR 0050
 - Amends: [ADR 0039 Web 渲染路径与真实站点接入](0039-web-rendering-path.md)
 
 ## Context
@@ -37,6 +38,10 @@ pipeline 断行并生成可选择的 DOM。这个路径在任意宿主 CSS、任
 独立 Node Kotlin/JS 入口读取明确声明的 WOFF2 / SFNT；HarfBuzz backend 负责把 WOFF2 还原为
 SFNT、计算 source 与 SFNT SHA-256、选择 face / unicode-range / variation，并建立只读 session。
 Kotlin/JS 继续调用 `ParagraphLayoutEngine`，不复制断行、标点 glue、推入推出或 justify 规则。
+
+2026-08-20 追记：[ADR 0050](0050-native-precompute-rust-bindings.md) 把本节的 Node 侧
+HarfBuzz 会话与编排迁往 Kotlin/Native 静态库加 Rust 绑定。Node snapshot serializer 与浏览器
+runtime 共享 `prepared-dom.js` 的单文件不变量由 0050 的常驻双向 golden 断言接替。
 
 构建 session 对本 root 实际发生的每个 `ShapingInput` 与 `FontMetricsRequest` 同时记录输入签名和
 HarfBuzz / OpenType 结果。glyph advance、placement、ink bounds 与纵向 metrics 除以请求字号后进入

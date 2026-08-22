@@ -11,7 +11,7 @@ const gradleWrapper = fileURLToPath(new URL(
 ));
 const gradleArguments = [
   ":shaping:web-adapter:clean",
-  ":frontend:web-precompute:clean",
+  ":ffi:js:clean",
   ":frontend:web:clean",
   ":frontend:web:assembleNpmPackage",
   "--no-build-cache",

@@ -46,6 +46,9 @@ kotlin {
     macosArm64()
     iosArm64()
     iosSimulatorArm64()
+    linuxX64()
+    linuxArm64()
+    mingwX64()
 
     sourceSets {
         commonMain.dependencies {
@@ -60,9 +63,9 @@ kotlin {
             kotlin.srcDir(generateEmbeddedHyphenationPatterns)
         }
 
-        // appleMain is an intermediate source set from the default hierarchy template; it is
+        // nativeMain is an intermediate source set from the default hierarchy template; it is
         // realized lazily, so configure it via matching{} rather than an eager named() lookup.
-        matching { it.name == "appleMain" }.configureEach {
+        matching { it.name == "nativeMain" }.configureEach {
             kotlin.srcDir(generateEmbeddedHyphenationPatterns)
         }
     }

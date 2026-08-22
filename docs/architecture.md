@@ -218,8 +218,10 @@ Web 列表保留原生 marker 与语义，只把列表正文交给 Tiqian 排版
 回退为原生 DOM；无 JavaScript、异步加载失败、复制、Pagefind 和客户端路由都以原始语义 HTML
 为基础。详细边界见 [ADR 0039](adr/0039-web-rendering-path.md)。
 
-`frontend/web-precompute` 是独立的 Node Kotlin/JS 工具入口。它从站点明确发布的字体文件建立
-HarfBuzz session，并调用同一个 `layout` 生成宽度无关的字体回放证据，以及可选的最大版心预排结果。纯文本与受控语义 inline
+构建期 precompute 由 `frontend/web-precompute/rust` 的 Rust 编排承担：从站点明确发布的字体文件建立
+HarfBuzz session，并调用同一个 `layout` 生成宽度无关的字体回放证据，以及可选的最大版心预排结果。
+引擎的 Kotlin/JS 出口在 `ffi/js` 编译，服务浏览器 exact-font 回退 worker 与 parity oracle；
+Kotlin/Native 出口在 `ffi/native`，以引擎级 C ABI 供 Rust 编排调用（ADR 0050）。纯文本与受控语义 inline
 共用 source / semantic artifact / typography / font / width 证据；prepared DOM 留在正文之外的 inert
 template，SSR 正文始终是可响应的 native semantic backing。浏览器只有在 live width、字体与 artifact
 证据全部匹配时才整批采用快照；窄屏等 snapshot miss 使用构建期捕获的字号无关 shaping / metrics
@@ -276,7 +278,10 @@ caret/selection 几何；平台 tokenizer 不参与 shaping、断行或字位计
 - `frontend/apple/coretext-render`：Apple 内部 Core Text renderer 与 paragraph backend。
 - `frontend/apple`：生产 Swift facade、静态 XCFramework、`AttributedString` authoring 与 Apple
   原生 view package；不拥有示例内容或排版规则。
-- `frontend/web-precompute`：Node exact-font session、构建期 layout 入口与快照 wire；不拥有排版规则。
+- `ffi/native`：引擎级 packed C ABI 的 Kotlin/Native 门面；不拥有排版规则。
+- `ffi/js`：引擎的 Kotlin/JS 门面（`@JsExport` wire 与 HarfBuzz session 后端）；不拥有排版规则。
+- `frontend/web-precompute`：Rust workspace（`tiqian-precompute`、`tiqian-precompute-neon`）与
+  `@tiqian/precompute` npm 包；Node exact-font session 与构建期编排；不拥有排版规则。
 - `frontend/web/integrations/*`：框架 SSR / build / navigation transport；消费 `@tiqian/prose` 的公共
   HTML prepare 与 snapshot contract，不拥有排版或字体 policy。
 - `demo`：Desktop / Android 共用的 Compose 示例界面与 Desktop 启动入口。

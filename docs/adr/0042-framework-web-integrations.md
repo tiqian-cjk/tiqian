@@ -47,6 +47,9 @@
 增加版本漂移，却不会形成真正独立的能力所有权。独立 npm 包仍使未使用 Svelte 或 Astro 的用户不必
 安装相应框架依赖。
 
+2026-08-20 追记：[ADR 0050](0050-native-precompute-rust-bindings.md) 把 precompute 从
+`@tiqian/prose` 迁入独立的 `@tiqian/precompute` 包。框架包改引新包并锁步发版。
+
 ### `WidthIndependentFontEvidenceCaptureMeasure`：字体契约不要求宿主宽度
 
 `prepareFontContract()` 的公共输入不再要求 `maxWidthPx`。Node 内部为跑通同一条真实 layout / shaping

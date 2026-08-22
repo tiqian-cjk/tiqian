@@ -1,0 +1,9 @@
+# ADR 0050: web-domain Rust precompute stack (font session, orchestration, Neon).
+# Depends on the neutral engine binding via path + version.
+[workspace]
+resolver = "2"
+members = ["tiqian-precompute", "tiqian-precompute-neon"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"

@@ -1,0 +1,11 @@
+# ADR 0050: neutral Rust binding of the layout engine. Language and ecosystem
+# surfaces live under frontend/ (same reasoning as ADR 0045 adding K/N targets
+# inside the engine modules instead of new root dirs); web-domain crates live in
+# frontend/web-precompute/rust.
+[workspace]
+resolver = "2"
+members = ["tiqian"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"

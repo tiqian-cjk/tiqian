@@ -3,7 +3,7 @@ import type {
   BuildFontFace,
   BuildFontStylesheet,
   SnapshotTypography,
-} from "@tiqian/prose/precompute";
+} from "@tiqian/precompute/precompute";
 
 export interface TiqianAstroPrecomputeOptions {
   readonly typography: SnapshotTypography;

@@ -55,12 +55,6 @@
     "font-contract.js",
     "lazy-capabilities.js",
     "layout-worker.js",
-    "precompute.d.ts",
-    "precompute.js",
-    "precompute-html.d.ts",
-    "precompute-html.js",
-    "precompute-fonts.js",
-    "precompute-node-fonts.js",
     "precompute-runtime/",
     "precomputed.js",
     "prepared-dom.js",
@@ -71,6 +65,8 @@
     "snapshot-client.d.ts",
     "snapshot-client.js",
     "snapshot-schema.js",
+    "snapshot-table-binary.js",
+    "snapshot-tables.js",
     "styles.css",
     "styles.js",
     "viewport-anchor.js",
@@ -85,14 +81,6 @@
       "types": "./element.d.ts",
       "default": "./element.js"
     },
-    "./precompute": {
-      "types": "./precompute.d.ts",
-      "default": "./precompute.js"
-    },
-    "./precompute-html": {
-      "types": "./precompute-html.d.ts",
-      "default": "./precompute-html.js"
-    },
     "./snapshot-client": {
       "types": "./snapshot-client.d.ts",
       "default": "./snapshot-client.js"
@@ -104,10 +92,5 @@
     "./element.js",
     "./prepared-dom.js",
     "./styles.css"
-  ],
-  "dependencies": {
-    "harfbuzzjs": "1.4.0",
-    "linkedom": "0.18.13",
-    "woff2-encoder": "2.0.0"
-  }
+  ]
 }
