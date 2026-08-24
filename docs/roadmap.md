@@ -13,6 +13,11 @@
 
 ## 当前位置
 
+**跨实现一致性套件 v1 已落地**（2026-08-23，[ADR 0058](adr/0058-language-neutral-conformance-suite.md)）：
+顶层 `conformance/` 以语言中立 JSON fixture + 逐字节 dump 契约服务 Rust 等价实现等
+多实现路线；Kotlin 侧 golden 改从该目录加载，v2（真实字体 shaping 对齐）待立项。
+
+
 当前主线是 **Slice 36：构建期 Web 字体证据与最大版心快照**。站点用明确发布的字体文件在
 Node + HarfBuzz 中跑同一条 Tiqian layout pipeline；桌面最大版心的 source / typography / font
 证据全部命中时采用预断行 DOM；宽度失配或 runtime-only 段落在字体证据仍有效时，由 browser

@@ -72,6 +72,7 @@ ADR 记录已经做出的架构与排版决定。它们按编号保留当时的 
 - [0052 precompute 缓存分层、批量渲染器与二进制过桥协议](0052-precompute-cache-and-batch-renderer.md)
 - [0055 Maven Central 文件配额：native 发布过滤与 SNAPSHOT 通道](0055-maven-central-file-quota.md)
 - [0056 engine 单模块合并与按平台的仓库重组](0056-engine-module-and-platform-reorg.md)
+- [0058 语言中立的布局一致性套件](0058-language-neutral-conformance-suite.md)
 
 ## 早期状态说明
 

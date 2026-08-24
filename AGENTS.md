@@ -51,7 +51,9 @@ Layout report 位于
 
 1. 同步 fixture 与结构化 decision。
 2. 运行相关模块测试和 `LayoutDumpGoldenTest`。
-3. 行为变化需要更新 golden 时，使用
+3. golden 的 fixture 与 dump 位于顶层 `conformance/`（语言中立契约，
+   规格见 [conformance/SPEC.md](conformance/SPEC.md)；新增用例直接写 JSON）。
+   行为变化需要更新 golden 时，使用
    `TIQIAN_UPDATE_GOLDEN=1 ./gradlew :engine:jvmTest --tests 'org.tiqian.layout.LayoutDumpGoldenTest'`，
    然后逐项检查 golden diff。
 4. 生成 layout report，并按涉及平台做浏览器、桌面或 Android 真机检查。
