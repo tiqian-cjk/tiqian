@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "id": "adaptive-short-line-indent",
+  "text": "提椠是一个面向中文正文的排版引擎",
+  "maxWidth": 160.0,
+  "notes": "MeasureAdaptiveFirstLineIndent: with no explicit indent and a short measure (10 字 < 14), the段首缩进 default narrows to 1 字 (not 2). The firstindent decision line records measure/threshold/source.",
+  "firstLineIndentDefault": true
+}

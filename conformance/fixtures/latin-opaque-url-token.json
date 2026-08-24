@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "latin-opaque-url-token",
+  "text": "链接 https://example.com/path/to/abc123def456ghi789",
+  "maxWidth": 160.0,
+  "notes": "LatinOpaqueTokenBreak (ADR 0029): URL / identifier-like Latin runs break at clean separator or character boundaries without adding a synthetic hyphen."
+}

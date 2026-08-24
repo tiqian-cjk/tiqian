@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "id": "interlinear-lines",
+  "text": "屈原写下离骚，顾炎武王夫之并称。",
+  "maxWidth": 224.0,
+  "notes": "行间线 (ADR 0024): 专名号 underlines 屈原/顾炎武/王夫之, 书名号甲式 wavy line under 离骚. 顾炎武 and 王夫之 are adjacent — AdjacentInterlinearLineShortening pulls each adjacent edge back 1/16em so the two marks read separately. No explicit lineHeight: InterlinearMarkLineSpacingFloor raises the line height to 1.5em.",
+  "decorations": [
+    {
+      "start": 0,
+      "end": 2,
+      "kind": "ProperNoun"
+    },
+    {
+      "start": 4,
+      "end": 6,
+      "kind": "BookTitle"
+    },
+    {
+      "start": 7,
+      "end": 10,
+      "kind": "ProperNoun"
+    },
+    {
+      "start": 10,
+      "end": 13,
+      "kind": "ProperNoun"
+    }
+  ]
+}

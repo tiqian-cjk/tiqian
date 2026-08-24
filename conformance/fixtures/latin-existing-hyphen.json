@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "latin-existing-hyphen",
+  "text": "out-of-the-way",
+  "maxWidth": 128.0,
+  "notes": "ExistingHyphenBreak (CY/T 154-2017 §9.3): a hyphenated compound wraps AT its existing '-' (no new hyphen, no synthetic 短横线 atom). Keeps ≥2 letters each side (§9.4)."
+}

@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "id": "kinsoku-push-in",
+  "text": "中文中。",
+  "maxWidth": 60.0,
+  "notes": "Forces PushIn: greedy would put 。 at line start, then line-end punctuation glue shrinks enough to keep it on the previous line.",
+  "pinBasicNoHang": true
+}

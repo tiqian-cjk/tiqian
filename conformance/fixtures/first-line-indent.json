@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "id": "first-line-indent",
+  "text": "咖啡的风味因产地而各异，烘焙的深浅同样会改变口感与香气。",
+  "maxWidth": 200.0,
+  "notes": "段首缩进: first line indents 2em (CLREQ standard) — its usable measure shrinks to maxWidth-2em and the LineBox carries the indent; later lines use the full measure. Justify targets the indented measure on line 0.",
+  "firstLineIndentEm": 2.0
+}

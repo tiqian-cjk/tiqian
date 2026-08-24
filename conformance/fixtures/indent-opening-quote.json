@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "id": "indent-opening-quote",
+  "text": "“好咖啡要趁热喝。”他说完便把杯子推了过来，让大家依次尝一口。",
+  "maxWidth": 192.0,
+  "notes": "段首缩进 composed with an opening quote at paragraph start: the additive model's line-start leading-glue trim halves the quote (CLREQ 缩减该符号始侧二分之一个汉字大小的空白) — visual blank before the quote ink is exactly the 2em indent.",
+  "firstLineIndentEm": 2.0
+}

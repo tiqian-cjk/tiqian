@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "ascii-brackets-in-cjk",
+  "text": "中文段落(English)和[mixed]说明。",
+  "maxWidth": 240.0,
+  "notes": "ASCII (, ), [, ] do not share code points with the CJK fullwidth forms （）【】, so they always classify as Latin. (English) and [mixed] cluster as Latin runs and render in latin-primary even when surrounded by CJK content."
+}

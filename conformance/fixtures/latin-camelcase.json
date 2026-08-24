@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "latin-camelcase",
+  "text": "用PowerPoint做",
+  "maxWidth": 128.0,
+  "notes": "CamelCaseBreak: a camelCase token wraps at its hump (Power|Point) with NO hyphen — the capital signals the break. All-caps abbreviations (NASA) and single Title-case words are NOT treated this way."
+}

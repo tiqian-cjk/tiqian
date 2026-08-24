@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "mandatory-single-newline",
+  "text": "第一行\n第二行",
+  "maxWidth": 160.0,
+  "notes": "ADR 0037: a single source newline is a mandatory break, zero-width and unshaped."
+}

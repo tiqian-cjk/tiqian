@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "id": "justify-unbreakable-number-symbol",
+  "text": "中文50℃中文中文中文Example",
+  "maxWidth": 128.0,
+  "notes": "CLREQ stretch prohibition: the inseparable 50|℃ boundary stays closed while other legal gaps justify the line.",
+  "lineLengthGridEnabled": false
+}

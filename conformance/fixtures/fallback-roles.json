@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "fallback-roles",
+  "text": "提椠……Hello——世界。",
+  "maxWidth": 240.0,
+  "notes": "Covers cluster font role classification for CJK text, CJK punctuation, and Latin words."
+}

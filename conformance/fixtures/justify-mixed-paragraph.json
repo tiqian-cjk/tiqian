@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "justify-mixed-paragraph",
+  "text": "中文Hello中文，世界。",
+  "maxWidth": 144.0,
+  "notes": "Justification uses CjkLatinSpace at the CJK↔Latin boundary plus PunctuationGlue if a spacing reduction landed on the line."
+}

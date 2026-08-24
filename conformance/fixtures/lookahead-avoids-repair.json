@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "id": "lookahead-avoids-repair",
+  "text": "中文中文中文。",
+  "maxWidth": 48.0,
+  "notes": "At width 48 greedy ends up with a CarryPrevious repair on the last line; lookahead shifts the first break earlier to avoid the conflict entirely.",
+  "pinBasicNoHang": true
+}

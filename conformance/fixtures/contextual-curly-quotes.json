@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "contextual-curly-quotes",
+  "text": "中‘that’s’中’，‘",
+  "maxWidth": 192.0,
+  "notes": "NonCjkInWordApostrophe keeps the apostrophe in that’s on the Western run while the surrounding single quotes retain CJK punctuation geometry; the trailing ’，‘ sequence exercises both adjacent-punctuation compression boundaries."
+}

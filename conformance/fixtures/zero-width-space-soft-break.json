@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "zero-width-space-soft-break",
+  "text": "A.​.​.Complete？AaFont？",
+  "maxWidth": 96.0,
+  "notes": "UAX #14 ZW: U+200B is a source-faithful zero-width soft break control. It is not shaped, never creates a blank visual line, and does not weaken the visible-zero-advance capability guard."
+}

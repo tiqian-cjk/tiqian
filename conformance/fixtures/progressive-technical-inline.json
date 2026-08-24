@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "id": "progressive-technical-inline",
+  "text": "中文 internationalization 命令",
+  "maxWidth": 160.0,
+  "notes": "ProgressiveTechnicalBreak: semantic link/code text uses structural, letter-digit, camel, then syllable boundaries without a displayed hyphen. Ordinary paragraph opportunities remain first; only an otherwise unfillable auto-wrapped technical line uses explicit grapheme tracking.",
+  "useEnglishHyphenation": true,
+  "lineBreakSpans": [
+    {
+      "start": 3,
+      "end": 23,
+      "policy": "ProgressiveTechnical"
+    }
+  ]
+}

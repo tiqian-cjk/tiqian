@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "mandatory-blank-lines",
+  "text": "甲\n\n乙\n",
+  "maxWidth": 160.0,
+  "notes": "ADR 0037: consecutive and trailing mandatory breaks preserve blank lines."
+}

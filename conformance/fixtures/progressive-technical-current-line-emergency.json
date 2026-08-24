@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "id": "progressive-technical-current-line-emergency",
+  "text": "Swift 这边是我最有体感的。JSONDecoder 慢是个老问题，SR-6252[36] 那个 issue 里挖出的根因是底层走 NSJSONSerialization 再桥接回 Objective-C，swift_dynamicCast 吃掉大量时间。",
+  "maxWidth": 579.0,
+  "notes": "CurrentLineTechnicalTierRejection: a technical token is reconsidered against the current line's stretch, regardless of whether the complete token fits a full measure. A clean tier that needs unbounded tracking is rejected; the hierarchy continues to a rightmost Emergency cut before terminal technical tracking is allowed.",
+  "lineLengthGridEnabled": false,
+  "lineBreakSpans": [
+    {
+      "start": 16,
+      "end": 27,
+      "policy": "ProgressiveTechnical"
+    },
+    {
+      "start": 67,
+      "end": 86,
+      "policy": "ProgressiveTechnical"
+    },
+    {
+      "start": 104,
+      "end": 121,
+      "policy": "ProgressiveTechnical"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "mixed-script-quote-paragraph-language",
+  "text": "“Json是谁？”",
+  "maxWidth": 192.0,
+  "notes": "A quote-only Chinese paragraph begins with a Latin identifier; full content evidence is mixed, so ParagraphLanguageQuoteContext keeps the pair on CJK punctuation geometry."
+}

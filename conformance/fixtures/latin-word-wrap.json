@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "latin-word-wrap",
+  "text": "他引用了一句话：The quick brown fox jumps over the lazy dog，然后继续讲。",
+  "maxWidth": 240.0,
+  "notes": "LatinWordSegmentation: the English sentence wraps at word boundaries instead of overflowing as one unbreakable cluster; spaces collapse at line edges; word spaces stretch under justify."
+}

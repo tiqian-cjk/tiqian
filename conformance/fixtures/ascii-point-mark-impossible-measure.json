@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "id": "ascii-point-mark-impossible-measure",
+  "text": "中,文",
+  "maxWidth": 15.0,
+  "notes": "AttachedAsciiPointMarkImpossibleMeasureHang: when even the preceding character plus its attached Latin comma cannot fit, the applied contextual fallback hangs the comma instead of accepting it at line start. The ordinary profile hanging policy remains disabled.",
+  "pinBasicNoHang": true
+}

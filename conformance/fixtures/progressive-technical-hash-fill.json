@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "progressive-technical-hash-fill",
+  "text": "deadbeefcafebabefeedfaceabcdefabcdef",
+  "maxWidth": 173.0,
+  "notes": "ExplicitEmergencyGraphemeTracking: a standalone technical hash skips syllable classification, hard-breaks at source graphemes, and exactly fills every non-last line. The final line remains naturally aligned.",
+  "useEnglishHyphenation": true,
+  "lineLengthGridEnabled": false,
+  "lineBreakSpans": [
+    {
+      "start": 0,
+      "end": 36,
+      "policy": "ProgressiveTechnical"
+    }
+  ]
+}

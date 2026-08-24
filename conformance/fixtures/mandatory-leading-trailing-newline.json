@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "mandatory-leading-trailing-newline",
+  "text": "\n开头和结尾\n",
+  "maxWidth": 160.0,
+  "notes": "ADR 0037: leading and trailing mandatory breaks produce visible empty lines."
+}

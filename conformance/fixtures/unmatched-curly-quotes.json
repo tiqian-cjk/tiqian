@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "unmatched-curly-quotes",
+  "text": "’90s James’； “truncated；中文“未闭",
+  "maxWidth": 240.0,
+  "notes": "UnmatchedQuoteSurroundingScriptContext keeps leading elisions, trailing possessives, and spaced truncated Latin quotations proportional while an unspaced truncated quote in Chinese remains CJK punctuation."
+}

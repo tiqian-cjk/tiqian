@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "id": "ruby-line-height",
+  "text": "甲乙丙丁戊己庚辛壬癸子丑",
+  "maxWidth": 64.0,
+  "notes": "ConditionalRubyLineHeight: an 18px line leaves only 2px above the 16px base face, so the 8px pinyin box adds the 6px deficit only before its annotated line in the default PerLine mode.",
+  "lineHeight": 18.0,
+  "rubySpans": [
+    {
+      "start": 4,
+      "end": 5,
+      "text": "wù"
+    }
+  ]
+}

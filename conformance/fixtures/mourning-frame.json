@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "id": "mourning-frame",
+  "text": "悼念：王小明同志、张大同同志。",
+  "maxWidth": 72.0,
+  "notes": "示亡号 (mourning frames) around 王小明 and 张大同. maxWidth 72 would naturally break inside 王小明 — MourningSpanKeptUnbroken moves the break to the span start instead. Frame rects hug the font-declared character face; the InterlinearMarkLineSpacingFloor (0.5em) keeps frames clear of neighbouring lines without an explicit lineHeight.",
+  "decorations": [
+    {
+      "start": 3,
+      "end": 6,
+      "kind": "Mourning"
+    },
+    {
+      "start": 9,
+      "end": 12,
+      "kind": "Mourning"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "bopomofo-tone-em-box",
+  "text": "好",
+  "maxWidth": 64.0,
+  "notes": "BopomofoToneSharedAnnotationEmSizing: the ordinary tone mark shares the 0.3em annotation size; its 5×5 slot only positions it, and glyph ink does not rescale it.",
+  "rubySpans": [
+    {
+      "start": 0,
+      "end": 1,
+      "text": "ㄏㄠˇ",
+      "kind": "Bopomofo",
+      "locale": "zh-TW"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "id": "lookahead-future-push-in",
+  "text": "中文中文中文。",
+  "maxWidth": 60.0,
+  "notes": "Forces a PushIn repair inside lookahead's future lines; lookahead should score that cheap repair instead of adding an earlier break.",
+  "pinBasicNoHang": true
+}

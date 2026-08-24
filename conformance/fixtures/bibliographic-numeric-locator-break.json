@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "id": "bibliographic-numeric-locator-break",
+  "text": "中文中文中文44(10):21-38.",
+  "maxWidth": 224.0,
+  "notes": "BibliographicNumericLocatorBreak lets the preceding Chinese line take 44(10): and wraps before the intact page range 21-38.; the volume and issue digit runs remain cohesive and no synthetic hyphen is added.",
+  "lineLengthGridEnabled": false
+}

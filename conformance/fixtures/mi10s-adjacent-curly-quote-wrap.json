@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "mi10s-adjacent-curly-quote-wrap",
+  "text": "所以这个和 “骑ji” “说shui”“斜xiá”不一样，港台是从众的，大陆读音大多数源自韵书。",
+  "maxWidth": 160.0,
+  "notes": "Mi 10s dogfood regression: PairedPunctuationOuterScriptContext gives the adjacent ‘斜xiá’ pair its enclosing Chinese prose context, while Uax14WesternPunctuationBoundary keeps Western closing/opening punctuation attached even when a shared code point uses a Latin face."
+}

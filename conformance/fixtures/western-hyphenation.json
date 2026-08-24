@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "id": "western-hyphenation",
+  "text": "请运行 internationalization 命令",
+  "maxWidth": 160.0,
+  "notes": "LineEndHangingHyphen (ADR 0029): the long English word is split at en-US syllable points so it wraps inside the measure; a hyphen is reserved inside the line when possible, and only hangs when it cannot fit. The 'hyphen=' line tag marks where. Needs the injected English hyphenator.",
+  "useEnglishHyphenation": true
+}

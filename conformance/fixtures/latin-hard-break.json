@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "latin-hard-break",
+  "text": "中Network",
+  "maxWidth": 64.0,
+  "notes": "LatinForcedHyphenBreak (ADR 0029): with NO hyphenator (default), an over-long Latin word still hard-breaks at character boundaries with a hanging hyphen, keeping 前二后三 — 'Ne' head, 'ork' tail."
+}

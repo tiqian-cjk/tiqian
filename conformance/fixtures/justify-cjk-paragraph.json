@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "justify-cjk-paragraph",
+  "text": "中文中文中文中文中文中文",
+  "maxWidth": 100.0,
+  "notes": "Justification fills the small deficit on the first line by adding CjkInterChar glue between adjacent CJK clusters."
+}

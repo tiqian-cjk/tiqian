@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "mandatory-wraps-long-line",
+  "text": "中文中文中文中文中文\n尾行",
+  "maxWidth": 64.0,
+  "notes": "ADR 0037: long source lines still auto-wrap before the mandatory break; mandatory-break lines are not justified."
+}

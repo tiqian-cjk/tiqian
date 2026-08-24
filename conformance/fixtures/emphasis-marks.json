@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "id": "emphasis-marks",
+  "text": "他强调：豆子新鲜最要紧，烘焙其次。",
+  "maxWidth": 128.0,
+  "notes": "CLREQ emphasis dots (着重号): span covers 豆子新鲜最要紧，烘焙其次 including the comma — Han text gets a dot anchor, punctuation is skipped per CLREQ. Narrow measure wraps the span across lines; lineHeight 25.6px (1.6×16) leaves room for the dots below the em box.",
+  "lineHeight": 25.6,
+  "decorations": [
+    {
+      "start": 4,
+      "end": 16,
+      "kind": "Emphasis"
+    }
+  ]
+}

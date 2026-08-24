@@ -28,7 +28,7 @@ import kotlin.test.fail
  */
 class LayoutDumpGoldenTest {
 
-    private val goldenDir = File("src/jvmTest/resources/golden/layout-dumps")
+    private val goldenDir = File("../conformance/dumps")
     private val updateMode = System.getenv("TIQIAN_UPDATE_GOLDEN") == "1"
 
     @Test

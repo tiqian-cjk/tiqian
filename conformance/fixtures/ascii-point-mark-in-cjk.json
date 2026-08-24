@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "id": "ascii-point-mark-in-cjk",
+  "text": "中文中文,中文",
+  "maxWidth": 64.0,
+  "notes": "AttachedAsciiPointMarkKinsoku: a directly attached ASCII comma keeps its Latin face and proportional advance, but cannot start a wrapped Chinese line. The structured contextual-kinsoku decision explains the exception without creating CJK punctuation glue.",
+  "pinBasicNoHang": true
+}

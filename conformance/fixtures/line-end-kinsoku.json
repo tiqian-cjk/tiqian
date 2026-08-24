@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "id": "line-end-kinsoku",
+  "text": "中文中文（中文）中文",
+  "maxWidth": 80.0,
+  "notes": "CLREQ 行尾禁则 (Basic): 开括号不得居行尾. maxWidth 80 (5字) would end line 0 on （ — the break retreats so （ starts line 1 (CarryNext, cascade-free). Pinned Fixed(Basic) so the measure doesn't auto-escalate.",
+  "pinBasicNoHang": true
+}

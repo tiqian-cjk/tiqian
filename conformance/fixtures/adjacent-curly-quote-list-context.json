@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "adjacent-curly-quote-list-context",
+  "text": "中文“对A”“波霸”；中文“欧派”“double”“double may”呢",
+  "maxWidth": 320.0,
+  "notes": "PairedPunctuationOuterScriptContext evaluates ordinary text at the enclosing level and excludes every quoted sibling, so Latin content in one item cannot switch a following CJK-context quote pair to proportional Latin geometry."
+}

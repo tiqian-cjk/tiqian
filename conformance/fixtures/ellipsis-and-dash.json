@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "ellipsis-and-dash",
+  "text": "中文……English——中文。",
+  "maxWidth": 220.0,
+  "notes": "Covers CJK ellipsis and dash fallback decisions."
+}

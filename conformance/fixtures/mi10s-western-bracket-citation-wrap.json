@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "id": "mi10s-western-bracket-citation-wrap",
+  "text": "史力军,姚晨,杨国玉,等.常见有机化合物中文词汇的读音详解[J].化学教育(中英文), 2023, 44(10):21-38.",
+  "maxWidth": 272.0,
+  "notes": "Mi 10s dogfood regression: WesternBracketCjkInterChar lets proportional ASCII parentheses touching Chinese share tier-3 equal expansion without changing their Latin face; BibliographicNumericLocatorBreak exposes clean volume(issue):page-range boundaries while each digit run and the page range remain intact.",
+  "lineLengthGridEnabled": false
+}

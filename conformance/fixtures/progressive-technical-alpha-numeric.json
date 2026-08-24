@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "progressive-technical-alpha-numeric",
+  "text": "Machine2Machine",
+  "maxWidth": 76.0,
+  "notes": "TechnicalAlphaNumericTransitionBreak: the real-font report selects Machine2|Machine at the letter-digit structural boundary; the cut stays clean and adds no hyphen.",
+  "useEnglishHyphenation": true,
+  "lineLengthGridEnabled": false,
+  "lineBreakSpans": [
+    {
+      "start": 0,
+      "end": 15,
+      "policy": "ProgressiveTechnical"
+    }
+  ]
+}
