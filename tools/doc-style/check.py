@@ -26,6 +26,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # verb or noun; swapping one metaphor for a near-synonym metaphor is not a
 # fix (收窄 was such a failed replacement for 瘦身 and is banned as well).
 WORDS = [
+    # aviation shorthand for running/dispatched work (2026-09-05 correction)
+    "在飞",
     # gate and doorway metaphors
     "门面", "扇门", "门控", "门禁", "缓存门", "字体门",
     # gate / threshold 直译（CI gate、graduation gate）
@@ -52,18 +54,21 @@ WORDS = [
     # internet jargon verbs
     "链路", "打通", "拉齐", "沉淀", "反哺", "赋能", "抓手", "打磨", "深耕",
     "复盘", "一把梭", "弃坑", "跑通", "回流", "通路", "真·", "波次",
+    # alignment-dimension metaphor (2026-09-05 correction): 轴 as in 对齐轴
+    "轴",
+    # gate metaphor for the verification suite (2026-09-05 correction)
+    "四门",
+    # coined compressions (2026-09-05 corrections)
+    "降级链", "终态", "横比",
     # misattributed or vague causal wording
     "根因", "归因", "掩盖", "口径", "挡住", "契约", "缺口", "夹具", "刀次",
     "包袱", "载体", "收束", "下沉", "节拍",
     # measurement metaphors and coined measurement words
     "车道", "lane", "wall", "墙钟", "仪表", "亚毫", "膨胀", "显形", "重录",
     "冷构建", "热构建", "冷热", "全冷", "多重集", "构建链", "排空", "惰性",
-    "互不推导", "三面", "三段式", "会话级", "进程级", "字节级", "内容级",
+    "互不推导", "三面", "三段式",
     "全 0",
     "零漂移", "零差异", "零改动", "零引擎", "归零",
-    "引擎级", "段落级", "浏览器级", "段级", "帧级", "符号级", "字段级",
-    "子串级", "微秒级", "版面级", "站级", "篇级", "元素级", "更末级",
-    "document 级", "audit 级", "glyph 级",
     "导出面", "消费面", "使用面", "调用面", "语义面", "运行时面", "改动面",
     "构造面", "不稳定面", "引擎面",
     "证据带", "整数带", "带表", "带条目",
@@ -115,7 +120,31 @@ PATTERNS = [
     (r"算不上", "putdown"),
     (r"根本不是", "putdown"),
     (r"纯粹是", "putdown"),
+    # The X-level suffix classes, banned whole instead of enumerated:
+    # English coinages (file-level, module-level) and Chinese glue words
+    # (会话级, 帧级). "top-level" is platform vocabulary and stays the
+    # single English exemption.
+    (r"(?i)\b(?!top-levels?\b)[a-z]+-levels?\b", "coinage"),
 ]
+
+# Dictionary compounds where 级 is part of a standard word, not a glued
+# granularity coinage. The suffix check skips these; everything else of
+# the shape 名词+级 reports for manual judgment.
+LEVEL_STANDARD = (
+    "优先级", "等级", "级别", "升级", "降级", "上级", "下级",
+    "一级", "二级", "三级", "四级", "五级", "星级", "阶级",
+    "量级", "分级", "层级", "同级", "两级", "平级", "评级",
+)
+
+
+def matchedLevelSuffix(line: str) -> list[str]:
+    hits = []
+    for m in re.finditer(r"[一-龥A-Za-z0-9]{1,12} ?级", line):
+        token = m.group(0)
+        if any(token.endswith(word) for word in LEVEL_STANDARD):
+            continue
+        hits.append(token)
+    return hits
 
 # Known accepted uses. A line matching this regex is skipped entirely, so
 # keep entries narrow: a line holding both an accepted use and a real
@@ -167,6 +196,8 @@ def main() -> int:
                 continue
             for word in matched_words(line):
                 hits.append((str(shown), number, "word", word, line.strip()))
+            for token in matchedLevelSuffix(line):
+                hits.append((str(shown), number, "coinage", token, line.strip()))
             for regex, tag in PATTERNS:
                 if re.search(regex, line):
                     hits.append((str(shown), number, tag, regex, line.strip()))

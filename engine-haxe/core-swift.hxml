@@ -1,0 +1,220 @@
+# Stage A Swift generation entry for the all-target f64 consistency
+# matrix (no float-precision define; full Float precision). Mirrors
+# core-kotlin.hxml module coverage. Run from the worktree root:
+#   nix develop -c bash -c 'haxe engine-haxe/core-swift.hxml.hxml'
+-lib reflaxe
+-lib boring
+-cp .haxelib/boring/git/packages/compiler/reflaxe/swift/std-shadow
+-cp .haxelib/boring/git/packages/compiler/reflaxe/swift
+-cp .haxelib/boring/git/samples
+-cp engine-haxe/src
+-cp engine-haxe/macros
+--macro Intercept.run(['engine-haxe/src'])
+--macro GoldenDataMacros.init()
+--macro haxe.macro.Compiler.addGlobalMetadata('org.tiqian', '@:build(std.RecordMember.build())')
+--macro swiftcompiler.Compiler.use()
+-D swift-output=engine-haxe/out/swift-gen
+-D swift-test-output=engine-haxe/out/swift-gen-tests
+-D swift-test-runner=native
+-D runtime-import=@tiqian/runtime
+-D runtime-emit=.
+-D package-shell=none
+org.tiqian.core.TextRange
+org.tiqian.core.TextRangeError
+org.tiqian.core.TiqianIllegalArgumentException
+org.tiqian.core.TextRangeTest
+org.tiqian.core.Size
+org.tiqian.core.Rect
+org.tiqian.core.LayoutConstraints
+org.tiqian.core.Ic
+org.tiqian.core.MaxLinesDecisionInfo
+org.tiqian.core.LayoutDebugInfo
+org.tiqian.core.CoreUnitsGeometryTest
+org.tiqian.core.UnicodeNumber
+org.tiqian.core.UnicodeNumberData
+org.tiqian.core.UnicodeNumberTest
+org.tiqian.core.UnicodeScriptEvidence
+org.tiqian.core.UnicodeScriptEvidenceClassifier
+org.tiqian.core.UnicodeScriptEvidenceData
+org.tiqian.core.UnicodeScriptEvidenceTest
+org.tiqian.core.UnicodeWordCharacter
+org.tiqian.core.UnicodeWordCharacterData
+org.tiqian.core.UnicodeWordCharacterTest
+org.tiqian.core.UnicodeCombiningMarkData
+org.tiqian.core.EastAsianSpacing
+org.tiqian.core.EastAsianSpacingValue
+org.tiqian.core.EastAsianSpacingEdges
+org.tiqian.core.EastAsianSpacingData
+org.tiqian.core.UnicodeEastAsianSpacing
+org.tiqian.core.EastAsianSpacingTest
+org.tiqian.core.EastAsianSpacingCoverageTest
+org.tiqian.core.EastAsianSpacingLookupCoverageTest
+org.tiqian.core.SourceBoundaryBias
+org.tiqian.core.SourceInteractionBoundaries
+org.tiqian.core.LayoutQueries
+org.tiqian.core.CoreLayoutQueriesGapsTest
+org.tiqian.core.LayoutQueriesTest
+org.tiqian.core.TiqianNoSuchElementException
+org.tiqian.core.LayoutQueriesResidualCoverageTest
+org.tiqian.core.CoreBoundaryTest
+org.tiqian.core.LinkAddressDisplayTest
+org.tiqian.core.SourceInteractionBoundariesCoverageTest
+org.tiqian.core.TextModelCoverageTest
+org.tiqian.core.UnicodeEmojiModifierBaseData
+org.tiqian.core.UnicodeExtendedPictographicData
+org.tiqian.layout.PunctuationModel
+org.tiqian.layout.PunctuationModelCoverageTest
+org.tiqian.layout.PunctuationAtomBuilderHaltTest
+org.tiqian.layout.LineOptimization
+org.tiqian.layout.LineOptimizationCoverageTest
+org.tiqian.layout.ContextualQuoteRoleResolverCoverageTest
+org.tiqian.layout.ContextualQuoteRoleResolverNestedAndSurrogateTest
+org.tiqian.layout.ContextualDashEllipsisRoleResolverCoverageTest
+org.tiqian.layout.ContextualDashEllipsisRoleResolverTest
+org.tiqian.layout.ContextualDashEllipsisClusterCoverageTest
+org.tiqian.layout.ContextualRoleExtensionCoverageTest
+org.tiqian.layout.Justifier
+org.tiqian.layout.JustifierTest
+org.tiqian.layout.JustifierCoverageTest
+org.tiqian.layout.JustifierCompressionTest
+org.tiqian.layout.JustifierJfTest
+org.tiqian.layout.UnicodePunctuationBoundaryResolver
+org.tiqian.layout.UnicodePunctuationBoundaryResolverCoverageTest
+org.tiqian.layout.PunctuationGeometryStage
+org.tiqian.layout.PunctuationGeometryStageCoverageTest
+org.tiqian.layout.LineBreaker
+org.tiqian.layout.LineRepair
+org.tiqian.layout.GreedyLineBreakerTest
+org.tiqian.layout.ClusterRoleResolution
+org.tiqian.layout.ClusterRoleResolutionCoverageTest
+org.tiqian.layout.ClusterRoleResolutionSurrogateAndExtenderEdgeTest
+org.tiqian.layout.DefaultHyphenator
+org.tiqian.layout.LineRepairCoverageTest
+org.tiqian.layout.LineRepairTailCoverageTest
+org.tiqian.font.UnicodeSymbolData
+org.tiqian.layout.AnnotationGeometryStage
+org.tiqian.layout.ParagraphLayoutEngine
+org.tiqian.layout.LineGeometryStage
+org.tiqian.layout.PunctuationGeometryLedger
+org.tiqian.layout.ContextualPunctuationDisplaySubstitution
+org.tiqian.layout.LineGeometryDirectTailTest
+org.tiqian.layout.PunctuationGeometryLedgerCoverageTest
+org.tiqian.layout.PunctuationSpacingRuleTest
+org.tiqian.layout.PreparedParagraph
+org.tiqian.layout.PreparedParagraphJsonNumberTest
+org.tiqian.shaping.ReplayableFontBackend
+org.tiqian.shaping.ReplayableFontBackendCoverageTest
+org.tiqian.layout.ParagraphDpLineBreaker
+org.tiqian.layout.ParagraphDpLineBreakerTest
+org.tiqian.layout.ParagraphDpLineBreakerCoverageTest
+org.tiqian.layout.ParagraphDpLineBreakerCoverage2Test
+org.tiqian.layout.LookaheadLineBreakerTest
+org.tiqian.layout.LineBreakerCoverage2Test
+org.tiqian.layout.LineCandidateValidationTest
+org.tiqian.layout.ProgressiveTechnicalBreakTest
+org.tiqian.layout.ParagraphDpTierPromotionPoolTest
+org.tiqian.layout.PreparedParagraphPlanConstructionTest
+org.tiqian.layout.PunctuationGeometryBranchArmsCoverageTest
+org.tiqian.layout.UnicodeEmoji17RgiRoleAuditTest
+org.tiqian.layout.OpeningBracketLineStartTest
+org.tiqian.layout.VerbatimRangeAutoSpaceTest
+org.tiqian.layout.ZeroWidthBreakControlLayoutTest
+org.tiqian.layout.PunctuationBodyFloorInvariantTest
+org.tiqian.layout.BaselineAlignmentTest
+org.tiqian.layout.InterpunctShrinkOpportunityTest
+org.tiqian.layout.AsciiPointMarkKinsokuTest
+org.tiqian.layout.AutoSpaceSingleGapTest
+org.tiqian.layout.R3GeometryTailCoverageTest
+org.tiqian.layout.HyphenationLayoutTest
+org.tiqian.layout.BilingualEmphasisTest
+org.tiqian.layout.BilingualEmphasisTestSupport
+org.tiqian.layout.BopomofoLayoutTest
+org.tiqian.layout.BopomofoLayoutTestSupport
+org.tiqian.layout.InlineBoxLayoutTest
+org.tiqian.layout.InlineBoxLayoutTestSupport
+org.tiqian.layout.FontInstanceMetricsRequestTest
+org.tiqian.layout.UnicodePunctuationBoundaryTest
+org.tiqian.layout.LineBreakRepairEngineTest
+org.tiqian.layout.KinsokuAndCohesionRepairEngineTest
+org.tiqian.layout.LineAdjustmentPushInTest
+org.tiqian.layout.LineAdjustmentStageJfTest
+org.tiqian.layout.EmergencyGraphemeTrackingTest
+org.tiqian.layout.WidthIndependentAnnotationCacheTest
+org.tiqian.layout.DisplayGlyphSubstitutionEngineTest
+org.tiqian.layout.DisplayGlyphSubstitutionEngineTestSupport
+org.tiqian.test.LayoutFixtures
+org.tiqian.layout.LayoutDumpFormat
+org.tiqian.layout.LayoutDumpGoldenParityTest
+org.tiqian.layout.AttachedInlineBoundaryRelocationTest
+org.tiqian.layout.AttachedInlineBoundaryRelocationTestSupport
+org.tiqian.layout.RubyLayoutTest
+org.tiqian.layout.RubyLayoutTestSupport
+org.tiqian.layout.ParagraphShapingStageCoverageTest
+org.tiqian.layout.ParagraphShapingStageCoverageTestSupport
+org.tiqian.layout.AnnotationGeometryStageCoverageTest
+org.tiqian.layout.AnnotationGeometryStageCoverageTestSupport
+org.tiqian.layout.LineBreakPlanningStageCoverageTest
+org.tiqian.layout.LineBreakPlanningStageCoverageTestSupport
+org.tiqian.layout.LineBreakPlanningStageCoverage2Test
+org.tiqian.layout.LineBreakPlanningStageCoverage2TestSupport
+org.tiqian.layout.LineAdjustmentStageCoverageTest
+org.tiqian.layout.LineAdjustmentStageCoverageTestSupport
+org.tiqian.clreq.BopomofoParserTest
+org.tiqian.clreq.ClreqPolicyTailCoverageTest
+org.tiqian.clreq.ClreqProfileCoverageTest
+org.tiqian.clreq.ClreqPunctuationGlyphSubstitutorTest
+org.tiqian.clreq.KinsokuLevelTest
+org.tiqian.clreq.NumberSymbolCohesionTest
+org.tiqian.clreq.PunctuationGluePlacementTest
+org.tiqian.font.CjkDashCapabilityPolicyTest
+org.tiqian.font.CjkFontRoleClassifierTest
+org.tiqian.font.CjkFontRoleClassifierTestSupport
+org.tiqian.font.FontPolicyCoverageTest
+org.tiqian.font.FontPolicyCoverageTestSupport
+org.tiqian.font.FontRoleTailCoverageTest
+org.tiqian.font.InlineShapingStylePolicyTest
+org.tiqian.font.InlineShapingStylePolicyTestSupport
+org.tiqian.font.ScriptAwareFontMetricsNormalizerTest
+org.tiqian.font.ScriptAwareFontMetricsNormalizerTestSupport
+org.tiqian.font.UsesLatinFaceTest
+org.tiqian.layout.DecideHyphenBreakTest
+org.tiqian.layout.PreparedParagraphInlineEdgesTest
+org.tiqian.layout.PreparedParagraphJfTest
+org.tiqian.layout.PreparedParagraphJfTestSupport
+org.tiqian.layout.ProgressiveBreakDecisionsCoverageTest
+org.tiqian.layout.ProgressiveBreakDecisionsTailTest
+org.tiqian.layout.QuotePairAnalyzerCoverageTest
+org.tiqian.layout.QuotePairAnalyzerSurrogateAdjacencyTest
+org.tiqian.layout.QuotePairAnalyzerTest
+org.tiqian.linebreak.EnglishHyphenationTest
+org.tiqian.linebreak.LiangHyphenatorTest
+org.tiqian.linebreak.LineBreakCoverageTest
+org.tiqian.linebreak.MandatoryBreakTest
+org.tiqian.linebreak.UnicodePunctuationLineBreakCoverageTest
+org.tiqian.linebreak.UnicodePunctuationLineBreakTest
+org.tiqian.shaping.ExplainableStubTextShaperTest
+org.tiqian.shaping.ExplainableStubTextShaperTestSupport
+org.tiqian.shaping.TextShaperCoverageTest
+org.tiqian.shaping.TextShaperCoverageTestSupport
+org.tiqian.layout.PushInLineWideCapacityTest
+org.tiqian.layout.PushInLineWideCapacityTestSupport
+org.tiqian.layout.PunctuationGeometryEngineTest
+org.tiqian.layout.PunctuationGeometryEngineTestSupport
+org.tiqian.layout.SpacingAndLineGeometryEngineTest
+org.tiqian.layout.SpacingAndLineGeometryEngineTestSupport
+org.tiqian.test.ShapingEvidence
+org.tiqian.test.ShapingEvidenceJson
+org.tiqian.layout.RecordedEvidenceGoldenParityTest
+org.tiqian.layout.QuoteClassificationEngineTest
+org.tiqian.layout.QuoteClassificationEngineTestSupport
+org.tiqian.layout.ParagraphLayoutEngineValidationCoverageTest
+org.tiqian.layout.ParagraphLayoutEngineValidationCoverageSupport
+org.tiqian.layout.ExplainableStubParagraphLayoutEngineTest
+org.tiqian.layout.ExplainableStubParagraphLayoutEngineTestSupport
+org.tiqian.layout.JustifierEngineTest
+org.tiqian.layout.JustifierEngineTestSupport
+org.tiqian.layout.WidthIndependentAnnotationCacheCoverageTest
+org.tiqian.layout.WidthIndependentAnnotationCacheCoverageTestSupport
+org.tiqian.layout.InlineObjectLayoutTest
+org.tiqian.layout.InlineObjectLayoutTestSupport
+org.tiqian.layout.PreparedParagraphRenderEvidenceTest

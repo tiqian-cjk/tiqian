@@ -1,5 +1,7 @@
 package org.tiqian.layout
 
+import org.tiqian.core.TiqianIllegalArgumentException
+
 import kotlin.test.Test
 import org.tiqian.test.trace.assertEquals
 import org.tiqian.test.trace.assertFailsWith
@@ -47,12 +49,12 @@ class QuotePairAnalyzerSurrogateAdjacencyTest {
         // A lone low surrogate at the string start reaches the same in-range
         // failure with index < 2, returning the lone half; the word-character
         // lookup rejects a non-scalar and the helper throws.
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             surrogateText(0xDC00, 0x2019, 'x'.code).isNonCjkInWordApostrophe(1)
         }
         // A lone low surrogate with a plain char before it: the high check
         // fails, the low half returns alone, and the lookup throws again.
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             surrogateText('a'.code, 'b'.code, 0xDC00, 0x2019, 'x'.code).isNonCjkInWordApostrophe(3)
         }
         // A private-use char above the low-surrogate range fails the range
@@ -65,7 +67,7 @@ class QuotePairAnalyzerSurrogateAdjacencyTest {
         // the rewritten helper walks both flanks before the word-character
         // lookup, so a string-end apostrophe returns false at the null flank
         // without ever reaching the throwing lookup.
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             surrogateText('x'.code, 0xDC00, 0xDC00, 0x2019, 'x'.code).isNonCjkInWordApostrophe(3)
         }
     }
@@ -79,7 +81,7 @@ class QuotePairAnalyzerSurrogateAdjacencyTest {
         // The right neighbour is a high surrogate with no low half after it:
         // the low check fails, the high half returns alone, and the
         // word-character lookup rejects the non-scalar with the same throw.
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             surrogateText('a'.code, 0x2019, 0xD83D, 'b'.code).isNonCjkInWordApostrophe(1)
         }
     }
@@ -98,18 +100,18 @@ class QuotePairAnalyzerSurrogateAdjacencyTest {
         assertFalse("a’".isNonCjkInWordApostrophe(1))
         // A lone low surrogate right after the apostrophe fails the
         // high-surrogate range test and returns as-is; the lookup throws.
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             surrogateText('a'.code, 0x2019, 0xDC00).isNonCjkInWordApostrophe(1)
         }
         // A high surrogate at the very end passes the range test but has no
         // room for its low half; the lone half returns and the lookup throws.
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             surrogateText('a'.code, 0x2019, 0xD83D).isNonCjkInWordApostrophe(1)
         }
         // A high surrogate followed by a private-use char above the
         // low-surrogate range: the low check fails on its upper comparison,
         // the high half returns alone, and the lookup throws.
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             surrogateText('a'.code, 0x2019, 0xD83D, 0xE000).isNonCjkInWordApostrophe(1)
         }
     }
