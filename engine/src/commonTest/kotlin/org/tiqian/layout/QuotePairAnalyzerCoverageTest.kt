@@ -1,5 +1,7 @@
 package org.tiqian.layout
 
+import org.tiqian.core.TiqianIllegalArgumentException
+
 import org.tiqian.core.TextRange
 import org.tiqian.font.CjkFontRoleClassifier
 import org.tiqian.font.FontRole
@@ -152,7 +154,7 @@ class QuotePairAnalyzerCoverageTest {
         testTrace.section("codePointBeforeWithLowSurrogateAtStart")
         // Lone low surrogate before quote at index 1 → index < 2 branch
         val text = surrogateText(0xDC00, 0x2019)
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             analyzer.classifyQuoteRoles(text, emptyList())
         }
     }
@@ -162,7 +164,7 @@ class QuotePairAnalyzerCoverageTest {
         testTrace.section("codePointBeforeWithLowSurrogateAfterNonHighSurrogate")
         // 'a' at 0, low surrogate at 1, quote at 2 → high not a high surrogate
         val text = surrogateText('a'.code, 0xDC00, 0x2019)
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             analyzer.classifyQuoteRoles(text, emptyList())
         }
     }
@@ -214,7 +216,7 @@ class QuotePairAnalyzerCoverageTest {
     fun codePointBeforeLowInRangeIndexGe2HighNotInRange() {
         testTrace.section("codePointBeforeLowInRangeIndexGe2HighNotInRange")
         val text = surrogateText('a'.code, 0xDC00, 0x2019)
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             analyzer.classifyQuoteRoles(text, emptyList())
         }
     }
@@ -232,7 +234,7 @@ class QuotePairAnalyzerCoverageTest {
     fun codePointAtOrNullLoneHighSurrogateAfterQuote() {
         testTrace.section("codePointAtOrNullLoneHighSurrogateAfterQuote")
         val text = surrogateText('a'.code, 0x2019, 0xD800, 'a'.code)
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             analyzer.classifyQuoteRoles(text, emptyList())
         }
     }
@@ -241,7 +243,7 @@ class QuotePairAnalyzerCoverageTest {
     fun codePointAtOrNullHighSurrogateAtStringEnd() {
         testTrace.section("codePointAtOrNullHighSurrogateAtStringEnd")
         val text = surrogateText('a'.code, 0x2019, 0xD800)
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             analyzer.classifyQuoteRoles(text, emptyList())
         }
     }

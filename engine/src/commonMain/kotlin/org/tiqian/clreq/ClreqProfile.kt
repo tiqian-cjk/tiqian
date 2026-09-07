@@ -598,6 +598,9 @@ class ClreqPunctuationGlyphSubstitutor(
         )
     }
 
+    override fun toString(): String =
+        "ClreqPunctuationGlyphSubstitutor(policy=$policy)"
+
     private fun String.toClreqRecommendedDisplayText(): String =
         when {
             all { it == '…' } -> "⋯".repeat(length)

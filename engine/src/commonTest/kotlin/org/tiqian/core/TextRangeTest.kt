@@ -18,7 +18,7 @@ class TextRangeTest {
     @Test
     fun rejectsNegativeStart() {
         testTrace.section("rejectsNegativeStart")
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             TextRange(-1, 1)
         }
     }

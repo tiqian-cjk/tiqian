@@ -1,0 +1,21 @@
+# TextRange-only Kotlin generation entry for the swap verification
+# (central verification step: replace the hand-written TextRange class in
+# engine Geometry.kt with boring-generated Kotlin and run :engine tests).
+# Run from the worktree root:
+#   nix develop -c bash -c 'haxe engine-haxe/textrange-kotlin.hxml'
+-lib reflaxe
+-lib boring
+-cp .haxelib/boring/git/packages/compiler/reflaxe/kotlin/std-shadow
+-cp .haxelib/boring/git/packages/compiler/reflaxe/kotlin
+-cp .haxelib/boring/git/samples
+-cp engine-haxe/src
+--macro Intercept.run(['engine-haxe/src'])
+--macro kotlincompiler.Compiler.use()
+-D kotlin-output=engine-haxe/out/textrange-gen
+-D kotlin-test-output=engine-haxe/out/textrange-gen-tests
+-D runtime-import=org.tiqian.boring.runtime
+-D runtime-emit=runtime
+-D float-precision=f32
+org.tiqian.core.TextRange
+org.tiqian.core.TextRangeError
+org.tiqian.core.TiqianIllegalArgumentException

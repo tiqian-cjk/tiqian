@@ -39,6 +39,11 @@ demo/web-history/*.tsbuildinfo
 /porting/
 .haxelib
 
+# Haxe engine module: generated outputs and local baselines, never committed
+/engine-haxe/out/
+/engine-haxe/baseline-goldens
+/engine-haxe/smoke/
+
 # Locally generated trace goldens (Haxe port contract); regenerate with
 # TIQIAN_UPDATE_GOLDEN=1 ./gradlew :engine:jvmTest
 engine/src/jvmTest/resources/golden/test-traces/
@@ -46,3 +51,6 @@ engine/src/jvmTest/resources/golden/process-traces/
 
 # Regenerated into the source tree by porting/instrument_tests.py
 engine/src/commonTest/kotlin/org/tiqian/test/trace/TracedTestManifest.kt
+
+# Central deviation ledger (agent working artifact; kept on disk, never committed)
+/DEVIATION-LEDGER.md

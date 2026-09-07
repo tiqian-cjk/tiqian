@@ -1,23 +1,23 @@
-# 真实文本压力测试 1：`real-paragraph-1`
+# 接近正文长度的中文压力测试 1：`real-paragraph-1`
 
-第一次让排版引擎跑一段接近正文长度的真实中文（含 Latin 词、混合标点、引号、破折号、省略号、列表式短语），观察现有模型在真实输入上的表现，并把可观察到的问题按优先级整理。这不是一次性 bug 列表，而是后续 ADR / Slice 计划的输入。
+第一次让排版引擎跑一段接近正文长度的实际中文（含 Latin 词、混合标点、引号、破折号、省略号、列表式短语），观察现有模型在实际输入上的表现，并把可观察到的问题按优先级整理。这里列出的是后续 ADR / Slice 计划的输入。这不是一次性 bug 列表。
 
 ## Fixture
 
 ```text
 id:      real-paragraph-1
 text:    提椠（Tiqian）是一个面向中文正文的 CJK 段落排版引擎。第一阶段的目标
-         不是复刻浏览器级文本系统，而是在 shaping 之后、绘制之前的薄薄一层
-         里——字体 fallback、CJK 度量、标点 atom、避头尾修复、两端对齐——
-         做出一个可观察、可调试、可扩展的物理模型。换句话说，「功能可以窄，
-         模型必须真」。第一阶段并不试图同时覆盖竖排、JLREQ、ruby、纵中横、
-         编辑器、IME……这些不是被遗忘，而是被故意推后到模型稳定之后。
+         是在 shaping 之后、绘制之前的薄薄一层里（字体 fallback、CJK 度量、
+         标点 atom、避头尾修复、两端对齐）做出一个可观察、可调试、可扩展的
+         物理模型。补充说明：「功能可以窄，模型必须真」。第一阶段并不试图同时
+         覆盖竖排、JLREQ、ruby、纵中横、编辑器、IME……这些是被故意推后到
+         模型稳定之后，并没有被遗忘。
 maxWidth: 320 px (16 px font ≈ 20em)
 textAlign: Justify
 length:   ≈220 codepoints, 14 spaces, 13 Latin runs
 ```
 
-跑出来 12 行。Greedy 出 2 次 `CarryPrevious`，5 次 justification；lookahead 出 0 次 repair、8 次 justification——lookahead 在长真实文本上明显赚。
+跑出来 12 行。Greedy 出 2 次 `CarryPrevious`，5 次 justification；lookahead 出 0 次 repair、8 次 justification。lookahead 在长接近正文长度的文本上明显赚。
 
 ## 决策 dump 摘要
 
@@ -55,8 +55,8 @@ spacing decisions (整段共 2 处):
 实测效果（real-paragraph-1）：
 
 - visual-sum 3656 → 3620（-36px，14 个空格中位于边界的部分被吸收）
-- size.height 268.8 → 249.6（line-height 收紧 1.6px × 12 行 = 19.2px；不再被 Unknown role 的 ascent=14.4 撑高）
-- greedy justifications 5 → 8 / lookahead 8 → 10（Latin run 不再虚胖，更多行需要少量填充，分配更均匀）
+- size.height 268.8 → 249.6（line-height 缩小 1.6px × 12 行 = 19.2px；不再被 Unknown role 的 ascent=14.4 撑高）
+- greedy justifications 5 → 8 / lookahead 8 → 10（Latin run 宽度回归正常，更多行需要少量填充，分配更均匀）
 - CarryPrevious overflow 已由 [ADR 0012](../adr/0012-carry-previous-overflow-validation.md) 修掉：原 greedy `line[6] adjusted=336` 现在退回 `LeaveRagged adjusted=320`，并在 candidate 中记录 `carry-overflows`。
 
 下面是改前的诊断笔记，留作上下文。
@@ -65,17 +65,17 @@ spacing decisions (整段共 2 处):
 整段 14 个 ASCII 空格（每个中西交界点都有一个）当前在 [`CjkFontRoleClassifier`](../../font/src/commonMain/kotlin/org/tiqian/font/FontPolicy.kt) 里依次：
 不是 CJK 码点；不是 `isAmbiguousAsciiPunctuation`（只有 `- / ~`）；不是 curly quote；不是 CJK 标点；不是 `isLatinCodePoint`（只覆盖字母数字）；不是 `isAsciiLatinPunctuation`（刚加的括号集）；不是 emoji；`isSymbolCodePoint` 不命中（SPACE_SEPARATOR 不在 math/currency/modifier/other_symbol）。最终 → `FontRole.Unknown` → `PreferCjkForAmbiguousPunctuationResolver` 给出 `symbol-fallback`。
 
-当时的 layout report 里之所以**看起来正常**，是因为
+当时的 layout report 里之所以视觉表现正常，是因为
 [`renderGlyphBox`](../../layout/src/jvmTest/kotlin/org/tiqian/layout/tooling/LayoutReportMain.kt)
-的 `else` 分支默认按 `cjk-text` 上色——纯粹是 viz bug 掩盖了 model bug。
+的 `else` 分支默认按 `cjk-text` 上色，实际只是 viz bug 遮挡了 model bug。
 
 潜在后果：
 
-- 真实 shaping adapter 接上后，符号 fallback 字体绘制 ASCII 空格的宽度行为完全不可预测。
-- cluster aggregation 在 ` CJK ` 这种序列里会切成 `[space|CJK|space]` 三块，不与左右 Latin 合并，也不与左右 CJK 合并；后续做 `CjkLatinSpace` justification 时空格 cluster 自己被独立处理，结果就是「空格 + glue 双账」。
+- 实际 shaping adapter 接上后，符号 fallback 字体绘制 ASCII 空格的宽度行为完全不可预测。
+- cluster aggregation 在 ` CJK ` 这种序列里会切成 `[space|CJK|space]` 三块，不与左右 Latin 合并，也不与左右 CJK 合并；后续做 `CjkLatinSpace` justification 时空格 cluster 自己被独立处理，结果就是「空格 + glue 两套计数并行」。
 - 空格本身归属决定了 CJK ↔ Latin 之间到底该被 justifier 视作「有 1em 空格」还是「需要再插入 CjkLatinSpace」。当前两者都发生，等于双层间距。
 
-修复方向：空格属于「结构性分隔符」类，不是字形也不是 CJK 标点。应该新增 `FontRole.Space`（或扩 `LatinText` 的范围），并在 cluster 聚合阶段让它跟相邻 Latin run 合并。Justifier 在 CJK-Latin 边界遇到已经有空格 cluster 时不再额外加 `CjkLatinSpace`。
+修复方向：空格属于「结构性分隔符」类，应归入 `FontRole.Space`，它既不是字形也不是 CJK 标点。应该新增 `FontRole.Space`（或扩 `LatinText` 的范围），并在 cluster 聚合阶段让它跟相邻 Latin run 合并。Justifier 在 CJK-Latin 边界遇到已经有空格 cluster 时不再额外加 `CjkLatinSpace`。
 
 #### 2. ~~`CarryPrevious` 后行宽溢出 `maxWidth`~~ — **已修（[ADR 0012](../adr/0012-carry-previous-overflow-validation.md)）**
 
@@ -85,42 +85,42 @@ real-paragraph-1 实测变化：
 
 - greedy `line[6] adjusted=336 repair=CarryPrevious` → `line[6] adjusted=320 repair=LeaveRagged`。
 - HTML metadata 可见：`candidate CarryPrevious rejected:carry-overflows carried 82`。
-- greedy repairs 2 → 3：其中新增的不是更“好看”的排版，而是把原来伪装成成功的 over-budget CarryPrevious 显式暴露为 LeaveRagged。
+- greedy repairs 2 → 3：其中新增的是把原来伪装成成功的 over-budget CarryPrevious 显式暴露为 LeaveRagged，排版结果并没有更“好看”。
 
 下面是改前的诊断笔记，留作上下文。
 
 `line[6]` greedy：`adjusted=336, maxWidth=320`。原因：[`applyKinsokuRepairs`](../../layout/src/commonMain/kotlin/org/tiqian/layout/LineBreaker.kt) 把 prev 行末尾 cluster carry 到 curr 行头时，只重算 prev/curr 两侧的 `naturalWidth/adjustedWidth`，不再检查 curr 是否超 `maxWidth`。
 
-`line[8]` 同问题：carry 完之后 `adjustedWidth=284`，但加上 justifier 的 `+36`，`visualWidth=320` 刚好打住——这次是 justifier 把溢出吞了，但**模型上仍然依赖 justifier 强行拉伸**，没有真正修复。
+`line[8]` 同问题：carry 完之后 `adjustedWidth=284`，但加上 justifier 的 `+36`，`visualWidth=320` 刚好打住。这次是 justifier 把溢出隐藏了，但**模型上仍然依赖 justifier 强行拉伸**，并没有确实修复。
 
 修复方向：CarryPrevious 应至少标记 `LineCandidate.repair` 为 `LeaveRagged + over-budget-after-carry`，或者在 `applyKinsokuRepairs` 里 carry 之后再次评估 PushIn 的可行性。最差也应该 emit 一条 `RepairCandidate.rejectionReason = "carry-overflows"` 进 debug。
 
 #### 3. ~~行尾标点半宽 (`LineEndHalfWidthPunctuation`) 未实现~~ — **已修（[ADR 0010](../adr/0010-line-edge-glue-trim.md)）**
 
-ADR 0010 把 ADR 0004 加法模型的「edge glue 在 line 边缘被消耗」语义补上，作为 `ParagraphLayoutEngine` 在 lineBreak 之后、justifier 之前的 `LineEdgeGlueTrim` 步骤。ADR 0011 进一步把 SpacingCompressor、PushIn、LineEdgeGlueTrim 和 justification 都收进 `PunctuationGeometryLedger`：标点 render advance 由 `body + remaining leading glue + remaining trailing glue + justification delta` 解析，而不是每一步各自改 `Cluster.advance`。
+ADR 0010 把 ADR 0004 加法模型的「edge glue 在 line 边缘被消耗」语义补上，作为 `ParagraphLayoutEngine` 在 lineBreak 之后、justifier 之前的 `LineEdgeGlueTrim` 步骤。ADR 0011 进一步把 SpacingCompressor、PushIn、LineEdgeGlueTrim 和 justification 都移入 `PunctuationGeometryLedger` 统一处理：标点 render advance 由 `body + remaining leading glue + remaining trailing glue + justification delta` 解析，每一步不再各自直接改 `Cluster.advance`。
 
 real-paragraph-1 实测变化：
 
-- visual-sum 3620 → 3616（greedy）/ 3624 → 3620（lookahead）：last line 直接收紧 4px；其它以标点结尾的非末行省下的 4px 被 justifier 复用，visualWidth 维持 maxWidth 但分配更松。
+- visual-sum 3620 → 3616（greedy）/ 3624 → 3620（lookahead）：last line 直接缩小 4px；其它以标点结尾的非末行省下的 4px 被 justifier 复用，visualWidth 维持 maxWidth 但分配更松。
 - line[11]（last line，`稳定之后。` 结尾）从 128 → 124 px。
 - `appliesAdjacentPunctuationCompressionToDrawableGeometry` 测试更新：`你好，。` line.adjustedWidth 60 → 56，stop.advance 12 → 8（spacing 已吃 leading 4，trim 再吃 trailing 4）。
 - `kinsokuCarriesPreviousClusterWhenLineWouldStartWithForbiddenPunctuation`：line 1 `文。` 末尾再 trim 4，adjustedWidth 32 → 28。
-- PushIn 测试 `kinsokuPushesLineStartPunctuationIntoPreviousLineWhenTrailingGlueCanShrink` 不变：PushIn 已吃满 trailing，trim 拿 0。GlueBudget 自动避免双账。
+- PushIn 测试 `kinsokuPushesLineStartPunctuationIntoPreviousLineWhenTrailingGlueCanShrink` 不变：PushIn 已用尽 trailing，trim 拿 0。GlueBudget 自动避免两套计数并行。
 
 下面是改前的诊断笔记，留作上下文。
 
 
-`line[11]` 结尾 `。`：`adjusted=128`，`。` 仍占 16f 完整 advance。但 [ADR 0004](../adr/0004-punctuation-additive-glue-model.md) 的 follow-up 与 [research/kongque-notes.md](kongque-notes.md) 明确写过「行尾标点自然半宽」是核心目标，[`PunctuationAtomBuilder`](../../layout/src/commonMain/kotlin/org/tiqian/layout/PunctuationModel.kt) 也给标点设了 `trailingGlue.natural = sideGlue`——但 `LineBreaker` 在 commit 行的时候从不消耗这条 glue。
+`line[11]` 结尾 `。`：`adjusted=128`，`。` 仍占 16f 完整 advance。但 [ADR 0004](../adr/0004-punctuation-additive-glue-model.md) 的 follow-up 与 [research/kongque-notes.md](kongque-notes.md) 明确写过「行尾标点自然半宽」是核心目标，[`PunctuationAtomBuilder`](../../layout/src/commonMain/kotlin/org/tiqian/layout/PunctuationModel.kt) 也给标点设了 `trailingGlue.natural = sideGlue`。`LineBreaker` 在 commit 行的时候从不消耗这条 glue。
 
-孔雀计划文章直接指出：判断是否悬挂之前**必须**先把「行尾半宽」做出来，否则悬挂只是把不齐换成更不齐。
+孔雀计划文章直接指出：判断是否悬挂之前**必须**先把「行尾半宽」做出来，否则悬挂仅是把不齐换成更不齐。
 
 修复方向：在 `LineCandidate` 收尾时，如果 last cluster 是 `PauseOrStop` 或 `Closing` 类，自动把 `trailingGlue.natural` 算作 0（半宽语义）。这是 ADR 0006 推荐默认开启的「严格行尾半角」，跟 Hang 没关系。
 
 ### Medium：架构债，越晚改越贵
 
-#### 4. CjkInterChar 是 justification 的唯一兜底，单线吃饱
+#### 4. CjkInterChar 是 justification 的唯一最终手段，单线承担全部填充
 
-`line[2]` greedy 的 `+56` 是把 15 个 CJK-CJK 间隙各拉到接近 0.25em 上限。`line[8]` 也是 PunctuationTrailing 给 4f 之后 CjkInterChar 兜了 32f。在 maxWidth=320 这种「窄到中等」的栏宽下，纯 CJK 行的最大可填充量 = 字数 × 4px ≈ 64-80f，**还不足一个 em**——再短的 maxWidth（比如 240px ≈ 15em）一定会有「填不满」的行。
+`line[2]` greedy 的 `+56` 是把 15 个 CJK-CJK 间隙各拉到接近 0.25em 上限。`line[8]` 也是 PunctuationTrailing 给 4f 之后 CjkInterChar 承担了 32f 的填充。在 maxWidth=320 这种「窄到中等」的栏宽下，纯 CJK 行的最大可填充量 = 字数 × 4px ≈ 64-80f，**还不足一个 em**。再短的 maxWidth（比如 240px ≈ 15em）一定会有「填不满」的行。
 
 不是 bug，是 ceiling。但说明现在的优先链只有四级，且 PunctuationGlue + CjkLatinSpace 在纯 CJK 长段落里实际容量趋近零。
 
@@ -136,30 +136,30 @@ real-paragraph-1 实测变化：
 
 - `中文，中文` 里 `，` 的 trailing glue 在「下一字不是标点」时应该可以被压缩腾给行调整（视觉上「逗号靠近后字」）。
 - `中。」` 这种三连接的尾段没被处理（compressor 只看 zipWithNext）。
-- 真实文本里 1em 标点造成的「空洞」不是出现在 atom-atom，而是出现在「全宽标点 + 普通汉字」的边界。当前模型对这块完全沉默。
+- 接近正文长度的文本里 1em 标点造成的「空洞」出现在「全宽标点 + 普通汉字」的边界，并不出现在 atom-atom。当前模型对这块完全沉默。
 
 修复方向：把 `PunctuationSpacingCompressor` 扩展为「标点 + 字符」的 trailing glue 削减，由 profile 控制最大削减量（保持密排但允许略微吸气）。
 
 #### 6. Latin cluster 是 nominal-em 虚构宽度
 
-`Tiqian` 在引擎里是 96px，`shaping` 是 112px，`fallback` 是 128px——每个字符都按 1em。真实 Latin shaping 大约会得到 50/55/60 px 左右。所有 `CjkLatinSpace` 注入 / `CjkInterChar` 兜底 / lookahead 评估都在这种「假宽 Latin」上做的，本身的视觉合理性**没有任何参考**。
+`Tiqian` 在引擎里是 96px，`shaping` 是 112px，`fallback` 是 128px，每个字符都按 1em。实际 Latin shaping 大约会得到 50/55/60 px 左右。所有 `CjkLatinSpace` 注入 / `CjkInterChar` 最终承担填充 / lookahead 评估都在这种「假宽 Latin」上做的，本身的视觉合理性**没有任何参考**。
 
 不算 bug，因为我们明知是 stub。但意味着：
 
-- 现在所有「这行看起来太挤 / 太松」的视觉判断都不可信。
-- 接 Slice 6b shaping adapter 时所有 Latin advance 会同时变窄，每一行的 deficit、断行位置、justification 分配都会变——前面所有 fixture 的 baseline 都要重算。
+- 现在所有「这行太挤 / 太松」的视觉判断都不可信。
+- 接 Slice 6b shaping adapter 时所有 Latin advance 会同时变窄，每一行的 deficit、断行位置、justification 分配都会变，前面所有 fixture 的 baseline 都要重算。
 
 不需要现在修。需要写进 Slice 6b 的「预期变化」清单。
 
 #### 7. 弯引号 + ASCII 空格组合无测试
 
-`「功能可以窄，模型必须真」` 在文本里的左右都是中文标点；按 `QuotePairAnalyzer` 默认 fallback 到 `CjkPunctuation`，正常。但真实写作里 `他说："Hello, world."` 这种「弯引号 + 空格 + Latin 内容」组合还没在 fixture 出现过。当 #1 修好后，应专门加 fixture 覆盖。
+`「功能可以窄，模型必须真」` 在文本里的左右都是中文标点；按 `QuotePairAnalyzer` 默认 fallback 到 `CjkPunctuation`，正常。另外，实际写作里 `他说："Hello, world."` 这种「弯引号 + 空格 + Latin 内容」组合还没在 fixture 出现过。当 #1 修好后，应专门加 fixture 覆盖。
 
 ### Low：观察 / 未来工作
 
-#### 8. lookahead 在真实长文本上明显赚
+#### 8. lookahead 在接近正文长度的长文本上明显赚
 
-greedy 出 2 repair + 1 个 line overflow；lookahead 出 0 repair + 0 overflow + justification 分布更均匀。证明 [`LookaheadLineBreaker`](../../layout/src/commonMain/kotlin/org/tiqian/layout/LineBreaker.kt) 默认 `window=1, futureLineHorizon=2` 这个组合在 ~200 字段落上撑得住。是积极发现，不是问题。
+greedy 出 2 repair + 1 个 line overflow；lookahead 出 0 repair + 0 overflow + justification 分布更均匀。证明 [`LookaheadLineBreaker`](../../layout/src/commonMain/kotlin/org/tiqian/layout/LineBreaker.kt) 默认 `window=1, futureLineHorizon=2` 这个组合在 ~200 字段落上撑得住。这是积极发现，不存在问题。
 
 #### 9. `」。` 压缩工作正常
 
@@ -167,7 +167,7 @@ greedy 出 2 repair + 1 个 line overflow；lookahead 出 0 repair + 0 overflow 
 
 #### 10. 没有 fixture 之前的工作 100% 都用满了
 
-打完 fixture 我才发现：lookahead 评分、kinsoku CarryPrevious、PushIn、Justification、QuotePair、spacing compression、bracket / Latin punctuation 分类**全部**在这一个真实段落里被同时触发并产生结果。说明前 5 个 slice 的覆盖面是真的；问题不在「功能没做」，而在「功能没经过真实文本」。
+打完 fixture 我才发现：lookahead 评分、kinsoku CarryPrevious、PushIn、Justification、QuotePair、spacing compression、bracket / Latin punctuation 分类**全部**在这一个接近正文长度的段落里被同时触发并产生结果。前 5 个 slice 的覆盖面没有问题；问题在于「功能没经过接近正文长度的文本」。
 
 ## 优先级与下一步
 
@@ -182,6 +182,6 @@ greedy 出 2 repair + 1 个 line overflow；lookahead 出 0 repair + 0 overflow 
 | 5 | flex anchor / 双向 glue justifier | 2–3 天 | 需要先做 #3、#4 |
 | 6 | Latin 真宽度 | 跟 Slice 6b 一起 | 平台 shaping adapter |
 
-**建议立刻动手的三件：#1（空格）→ #2（CarryPrevious overflow 记账）→ #3（行尾半宽）**。这三件做完后，应该重新跑同一个 fixture 拍 snapshot，对比前后视觉差别，再决定是否继续 #4 / #5 还是先做 Slice 6b。
+**建议立刻动手的三件：#1（空格）→ #2（CarryPrevious overflow 记录）→ #3（行尾半宽）**。这三件做完后，应该重新跑同一个 fixture 拍 snapshot，对比前后视觉差别，再决定是否继续 #4 / #5 还是先做 Slice 6b。
 
 每修一项都对照 [research/kongque-notes.md](kongque-notes.md) 的「字格优先 / 加法标点 / 可解释断行」三原则确认没有偏离。

@@ -1,5 +1,7 @@
 package org.tiqian.core
 
+import org.tiqian.core.TiqianIllegalArgumentException
+
 import kotlin.test.Test
 import org.tiqian.test.trace.assertFailsWith
 import org.tiqian.test.trace.assertFalse
@@ -19,9 +21,9 @@ class UnicodeNumberTest {
         for (codePoint in listOf('a'.code, '中'.code, 0x2019)) {
             assertFalse(UnicodeNumber.contains(codePoint), "U+${codePoint.toString(16)}")
         }
-        assertFailsWith<IllegalArgumentException> { UnicodeNumber.contains(0xDC00) }
-        assertFailsWith<IllegalArgumentException> { UnicodeNumber.contains(-1) }
-        assertFailsWith<IllegalArgumentException> { UnicodeNumber.contains(0x110000) }
+        assertFailsWith<TiqianIllegalArgumentException> { UnicodeNumber.contains(0xDC00) }
+        assertFailsWith<TiqianIllegalArgumentException> { UnicodeNumber.contains(-1) }
+        assertFailsWith<TiqianIllegalArgumentException> { UnicodeNumber.contains(0x110000) }
     }
 
     @AfterTest

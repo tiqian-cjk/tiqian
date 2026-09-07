@@ -1,5 +1,7 @@
 package org.tiqian.core
 
+import org.tiqian.core.TiqianIllegalArgumentException
+
 import kotlin.test.Test
 import org.tiqian.test.trace.assertEquals
 import org.tiqian.test.trace.assertFailsWith
@@ -26,16 +28,16 @@ class EastAsianSpacingCoverageTest {
         assertTrue(UnicodeWordCharacter.DATA_SOURCE.isNotEmpty())
         assertTrue(UnicodeWordCharacter.DATA_SHA256.isNotEmpty())
 
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             UnicodeWordCharacter.contains(-1)
         }
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             UnicodeWordCharacter.contains(0x110000)
         }
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             UnicodeWordCharacter.contains(0xD800)
         }
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             UnicodeWordCharacter.contains(0xDFFF)
         }
 

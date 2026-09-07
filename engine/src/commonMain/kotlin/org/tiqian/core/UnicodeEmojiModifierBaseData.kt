@@ -1,69 +1,35 @@
 package org.tiqian.core
 
-/*
- * GENERATED from Unicode 17.0.0 emoji-data.txt by
- * tools/unicode-emoji/generate_emoji_presentation_data.py.
- * Source: https://www.unicode.org/Public/17.0.0/ucd/emoji/emoji-data.txt
- * SHA-256: 2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b
- * Copyright © 2025 Unicode, Inc.
- * Terms of Use: https://www.unicode.org/terms_of_use.html
- */
 internal object UnicodeEmojiModifierBaseData {
+    val RANGES = intArrayOf(
+        0x261d, 0x261d, 0x26f9, 0x26f9, 0x270a, 0x270d, 0x1f385, 0x1f385,
+        0x1f3c2, 0x1f3c4, 0x1f3c7, 0x1f3c7, 0x1f3ca, 0x1f3cc, 0x1f442, 0x1f443,
+        0x1f446, 0x1f450, 0x1f466, 0x1f478, 0x1f47c, 0x1f47c, 0x1f481, 0x1f483,
+        0x1f485, 0x1f487, 0x1f48f, 0x1f48f, 0x1f491, 0x1f491, 0x1f4aa, 0x1f4aa,
+        0x1f574, 0x1f575, 0x1f57a, 0x1f57a, 0x1f590, 0x1f590, 0x1f595, 0x1f596,
+        0x1f645, 0x1f647, 0x1f64b, 0x1f64f, 0x1f6a3, 0x1f6a3, 0x1f6b4, 0x1f6b6,
+        0x1f6c0, 0x1f6c0, 0x1f6cc, 0x1f6cc, 0x1f90c, 0x1f90c, 0x1f90f, 0x1f90f,
+        0x1f918, 0x1f91f, 0x1f926, 0x1f926, 0x1f930, 0x1f939, 0x1f93c, 0x1f93e,
+        0x1f977, 0x1f977, 0x1f9b5, 0x1f9b6, 0x1f9b8, 0x1f9b9, 0x1f9bb, 0x1f9bb,
+        0x1f9cd, 0x1f9cf, 0x1f9d1, 0x1f9dd, 0x1fac3, 0x1fac5, 0x1faf0, 0x1faf8
+    )
+
     fun contains(codePoint: Int): Boolean {
         var low = 0
-        var high = RANGES.size / 2 - 1
-        while (low <= high) {
-            val middle = (low + high).ushr(1)
+        var high = (UnicodeEmojiModifierBaseData.RANGES.size / 2) - 1
+        while ((low <= high)) {
+            val middle = ((low + high) shr (1))
             val base = middle * 2
-            when {
-                codePoint < RANGES[base] -> high = middle - 1
-                codePoint > RANGES[base + 1] -> low = middle + 1
-                else -> return true
+            if ((codePoint < UnicodeEmojiModifierBaseData.RANGES[base])) {
+                high = middle - 1
+            } else {
+                if ((codePoint > UnicodeEmojiModifierBaseData.RANGES[base + 1])) {
+                    low = middle + 1
+                } else {
+                    return true
+                }
             }
         }
         return false
     }
-
-    private val RANGES = intArrayOf(
-        0x261D, 0x261D,
-        0x26F9, 0x26F9,
-        0x270A, 0x270D,
-        0x1F385, 0x1F385,
-        0x1F3C2, 0x1F3C4,
-        0x1F3C7, 0x1F3C7,
-        0x1F3CA, 0x1F3CC,
-        0x1F442, 0x1F443,
-        0x1F446, 0x1F450,
-        0x1F466, 0x1F478,
-        0x1F47C, 0x1F47C,
-        0x1F481, 0x1F483,
-        0x1F485, 0x1F487,
-        0x1F48F, 0x1F48F,
-        0x1F491, 0x1F491,
-        0x1F4AA, 0x1F4AA,
-        0x1F574, 0x1F575,
-        0x1F57A, 0x1F57A,
-        0x1F590, 0x1F590,
-        0x1F595, 0x1F596,
-        0x1F645, 0x1F647,
-        0x1F64B, 0x1F64F,
-        0x1F6A3, 0x1F6A3,
-        0x1F6B4, 0x1F6B6,
-        0x1F6C0, 0x1F6C0,
-        0x1F6CC, 0x1F6CC,
-        0x1F90C, 0x1F90C,
-        0x1F90F, 0x1F90F,
-        0x1F918, 0x1F91F,
-        0x1F926, 0x1F926,
-        0x1F930, 0x1F939,
-        0x1F93C, 0x1F93E,
-        0x1F977, 0x1F977,
-        0x1F9B5, 0x1F9B6,
-        0x1F9B8, 0x1F9B9,
-        0x1F9BB, 0x1F9BB,
-        0x1F9CD, 0x1F9CF,
-        0x1F9D1, 0x1F9DD,
-        0x1FAC3, 0x1FAC5,
-        0x1FAF0, 0x1FAF8,
-    )
 }

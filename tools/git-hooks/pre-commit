@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# tiqian pre-commit hook: staged Markdown files must pass the Chinese
+# documentation style self-check (tools/doc-style/check.py). Any hit
+# rejects the commit; rewrite the wording or ask for an allowlist entry.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "pre-commit: python3 not found; run git inside 'nix develop' or install python3" >&2
+  exit 1
+fi
+
+# Staged content to be committed: added/copied/modified/renamed .md
+# files. Deletions carry no text to check. NUL-delimited to survive
+# spaces in paths; the *.md pathspec matches at any depth.
+mapfile -d '' staged < <(git diff --cached --name-only -z --diff-filter=ACMR -- '*.md')
+
+if [ "${#staged[@]}" -eq 0 ]; then
+  exit 0
+fi
+
+echo "pre-commit: doc-style check on ${#staged[@]} staged markdown file(s)"
+python3 tools/doc-style/check.py "${staged[@]}"

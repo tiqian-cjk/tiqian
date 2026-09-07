@@ -1,5 +1,7 @@
 package org.tiqian.core
 
+import org.tiqian.core.TiqianIllegalArgumentException
+
 import kotlin.test.Test
 import org.tiqian.test.trace.assertEquals
 import org.tiqian.test.trace.assertFailsWith
@@ -60,7 +62,7 @@ class CoreUnitsGeometryTest {
     @Test
     fun textRangeRejectsStartGreaterThanEnd() {
         testTrace.section("textRangeRejectsStartGreaterThanEnd")
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             TextRange(5, 2)
         }
     }
@@ -68,7 +70,7 @@ class CoreUnitsGeometryTest {
     @Test
     fun textRangeRejectsNegativeStart() {
         testTrace.section("textRangeRejectsNegativeStart")
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             TextRange(-1, 1)
         }
     }
@@ -76,7 +78,7 @@ class CoreUnitsGeometryTest {
     @Test
     fun layoutConstraintsRejectsNonPositiveMaxWidth() {
         testTrace.section("layoutConstraintsRejectsNonPositiveMaxWidth")
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             LayoutConstraints(maxWidth = -1.0f)
         }
     }
@@ -84,7 +86,7 @@ class CoreUnitsGeometryTest {
     @Test
     fun layoutConstraintsRejectsNonPositiveMaxHeight() {
         testTrace.section("layoutConstraintsRejectsNonPositiveMaxHeight")
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             LayoutConstraints(maxWidth = 100.0f, maxHeight = -1.0f)
         }
     }
@@ -92,7 +94,7 @@ class CoreUnitsGeometryTest {
     @Test
     fun layoutConstraintsRejectsNonPositiveMaxLines() {
         testTrace.section("layoutConstraintsRejectsNonPositiveMaxLines")
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<TiqianIllegalArgumentException> {
             LayoutConstraints(maxWidth = 100.0f, maxHeight = 100.0f, maxLines = 0)
         }
     }

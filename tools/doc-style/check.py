@@ -26,10 +26,16 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # verb or noun; swapping one metaphor for a near-synonym metaphor is not a
 # fix (收窄 was such a failed replacement for 瘦身 and is banned as well).
 WORDS = [
+    # aviation shorthand for running/dispatched work (2026-09-05 correction)
+    "在飞",
     # gate and doorway metaphors
     "门面", "扇门", "门控", "门禁", "缓存门", "字体门",
     # gate / threshold 直译（CI gate、graduation gate）
     "门槛", "毕业门", "硬门", "CI 门",
+    # gate-sense 门 compounds (2026-09-06 correction): 门清 borrows the
+    # mahjong term for "rerun until clean"; write the action out instead.
+    # 门表 compresses "blocking-status table"; name the table by content.
+    "门清", "门表", "验证门", "准入门",
     # bookkeeping and finance metaphors
     "闭环", "台账", "账", "账目", "兑现", "零钱", "流失",
     # coined self-reference for the coordinating session (2026-08-29 correction)
@@ -52,18 +58,21 @@ WORDS = [
     # internet jargon verbs
     "链路", "打通", "拉齐", "沉淀", "反哺", "赋能", "抓手", "打磨", "深耕",
     "复盘", "一把梭", "弃坑", "跑通", "回流", "通路", "真·", "波次",
+    # alignment-dimension metaphor (2026-09-05 correction): 轴 as in 对齐轴
+    "轴",
+    # gate metaphor for the verification suite (2026-09-05 correction)
+    "四门",
+    # coined compressions (2026-09-05 corrections)
+    "降级链", "终态", "横比",
     # misattributed or vague causal wording
     "根因", "归因", "掩盖", "口径", "挡住", "契约", "缺口", "夹具", "刀次",
     "包袱", "载体", "收束", "下沉", "节拍",
     # measurement metaphors and coined measurement words
-    "车道", "lane", "wall", "墙钟", "仪表", "亚毫", "膨胀", "显形", "重录",
+    "车道", "lane", "wall", "墙钟", "仪表", "亚毫", "膨胀", "显形", "重录", "族",
     "冷构建", "热构建", "冷热", "全冷", "多重集", "构建链", "排空", "惰性",
-    "互不推导", "三面", "三段式", "会话级", "进程级", "字节级", "内容级",
+    "互不推导", "三面", "三段式",
     "全 0",
     "零漂移", "零差异", "零改动", "零引擎", "归零",
-    "引擎级", "段落级", "浏览器级", "段级", "帧级", "符号级", "字段级",
-    "子串级", "微秒级", "版面级", "站级", "篇级", "元素级", "更末级",
-    "document 级", "audit 级", "glyph 级",
     "导出面", "消费面", "使用面", "调用面", "语义面", "运行时面", "改动面",
     "构造面", "不稳定面", "引擎面",
     "证据带", "整数带", "带表", "带条目",
@@ -71,6 +80,10 @@ WORDS = [
     "首绘", "真身", "含射", "发射", "烘焙", "单一事实源", "语义负担", "全链",
     "表路", "读侧", "走表", "填表人", "子片", "进表", "补造", "切片", "打桩",
     "进解", "对赛", "互串", "错层", "加建", "过桥", "反连接", "换带", "收紧",
+    # band-switching coinages (2026-09-06 corrections): 换带 was rewritten as
+    # the near-synonym 切带 and mistranslated as 频带; write 切换格数区间 in
+    # full and never reach for a frequency-domain word for width intervals.
+    "切带", "频带",
     # coined technical-sounding words replaced by plain statements
     "失配", "真源", "转出口", "合批", "同批", "执行位", "线格式", "零违例", "违例",
     "伪差异", "偶合", "已真", "换嗓", 
@@ -81,6 +94,7 @@ WORDS = [
     # colloquial shorthand
     "毛躁", "全绿", "全红", "锁相", "塞进", "收进", "测试绿", "测试红",
     "糊", "照跑", "拍平", "散落", "堆放", "接线", "免费拿到",
+    "撞名", "钉到", "混树", "语法层五码",
     # decorative adjectives and vague quantifiers: judge each line by context
     "恒", "恰好", "巨大的", "完整的", "真实", "合法", "归一", "缝隙", "大概率",
     "当日",
@@ -115,15 +129,55 @@ PATTERNS = [
     (r"算不上", "putdown"),
     (r"根本不是", "putdown"),
     (r"纯粹是", "putdown"),
+    # The X-level suffix classes, banned whole instead of enumerated:
+    # English coinages (file-level, module-level) and Chinese glue words
+    # (会话级, 帧级). "top-level" is platform vocabulary and stays the
+    # single English exemption.
+    (r"(?i)\b(?!top-levels?\b)[a-z]+-levels?\b", "coinage"),
+    # Gate-sense 门 attached to a target name or a count (ts 门, rust 门,
+    # 三门, 19 门): write the target name or the command list instead
+    # (2026-09-06 correction). 门面 and 门槛 are separate word-list
+    # entries (js 门面, 20 s 门槛), so the lookaheads keep them from
+    # being reported twice by these patterns.
+    (r"[A-Za-z0-9] ?门(?!面|槛)", "coinage"),
+    (r"[一两二三四五六七八九十每] ?门(?!面|槛)", "coinage"),
 ]
+
+# Dictionary compounds where 级 is part of a standard word, not a glued
+# granularity coinage. The suffix check skips these; everything else of
+# the shape 名词+级 reports for manual judgment.
+LEVEL_STANDARD = (
+    "优先级", "等级", "级别", "升级", "降级", "上级", "下级",
+    "一级", "二级", "三级", "四级", "五级", "星级", "阶级",
+    "量级", "分级", "层级", "同级", "两级", "平级", "评级",
+)
+
+
+def matchedLevelSuffix(line: str) -> list[str]:
+    hits = []
+    for m in re.finditer(r"[一-龥A-Za-z0-9]{1,12} ?级", line):
+        token = m.group(0)
+        if any(token.endswith(word) for word in LEVEL_STANDARD):
+            continue
+        hits.append(token)
+    return hits
 
 # Known accepted uses. A line matching this regex is skipped entirely, so
 # keep entries narrow: a line holding both an accepted use and a real
 # violation would be missed, and the skip is per line, not per match.
 # YOU ARE NOT ALLOWED TO EXPAND THIS LIST WITHOUT CLEAR PERMISSION.
-ALLOW = re.compile(
-    r"回退路径"  # contains the substring 退路 but is a standard term
-)
+# The single former entry 回退路径 was removed on 2026-09-06 by user
+# ruling: it was never an accepted fixed phrase, only an unnoticed
+# violation that had been skipping the 退路 check since the first commit.
+# With no accepted uses the pattern matches no line.
+ALLOW = re.compile(r"(?!x)x")
+
+# Governance file exempt whole-file by the 2026-09-06 user ruling: AGENTS.md
+# is the style rule text itself, so it quotes banned words to define them.
+# CLAUDE.md is a symlink to AGENTS.md; both names are exempt so edits staged
+# under either path skip the scan. Do not add other files here without a
+# user ruling.
+EXEMPT_FILE_NAMES = {"AGENTS.md", "CLAUDE.md"}
 
 
 def iter_targets(args: list[str]):
@@ -153,6 +207,8 @@ def matched_words(line: str) -> list[str]:
 def main() -> int:
     hits: list[tuple[str, int, str, str, str]] = []
     for path in iter_targets(sys.argv[1:]):
+        if path.name in EXEMPT_FILE_NAMES:
+            continue
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:
@@ -167,6 +223,8 @@ def main() -> int:
                 continue
             for word in matched_words(line):
                 hits.append((str(shown), number, "word", word, line.strip()))
+            for token in matchedLevelSuffix(line):
+                hits.append((str(shown), number, "coinage", token, line.strip()))
             for regex, tag in PATTERNS:
                 if re.search(regex, line):
                     hits.append((str(shown), number, tag, regex, line.strip()))

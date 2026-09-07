@@ -33,7 +33,7 @@ WASM 包，经 `globalThis.__TiqianFontBackend` 回调协议服务 Kotlin 的 sh
 Kotlin/Native 目标，各产出 `staticLib` 与 C 头文件。四个目标传递性地要求 `core`、`font`、
 `shaping:api`、`linebreak`、`clreq`、`layout` 补齐缺失的 native 目标。这些模块以 commonMain
 为主；断词资源的两处 expect/actual 目前 native 侧只有 appleMain 实现（ADR 0045），新目标需要把 actual
-归位到 nativeMain 或补写。其余改动限于构建配置。wire 解析提升到 `commonMain`；`jsMain`
+归入 nativeMain 或补写。其余改动限于构建配置。wire 解析提升到 `commonMain`；`jsMain`
 保留 `@JsExport`，`nativeMain` 新增 `@CName` 入口。
 
 C ABI 保持现有 wire 传输格式：`tiqian_precompute_paragraph` 接收扁平参数，经 `nativeHeap` 返回
@@ -168,7 +168,7 @@ Node 大版本稳定；`engines` 沿用 `@tiqian/prose` 的 Node 22 下限。mus
 `snapshotServerAssets` 与 `renderSnapshotServerAssets`。实现归属：Node 侧纯计算全部在 Rust
 实现，经 Neon 导出。现有导出中只有 `renderPreparedParagraph` 例外，它与浏览器运行时共享同一份
 prepared-dom 实现；浏览器无法加载 `.node`，该实现留在 JS，由主包再导出。平台加载器与类型声明
-留在 JS，它们是接线代码。README 说明推荐用法：常见站点只用 `createPrecomputer` 或
+留在 JS，它们是负责连接的代码。README 说明推荐用法：常见站点只用 `createPrecomputer` 或
 `createHtmlPreparer` 配合 bundle 渲染，其余导出供调用方灵活组合。Astro / SvelteKit 集成与新
 站点只改 import 来源。`@tiqian/astro` 与 `@tiqian/sveltekit` 新增
 `@tiqian/precompute` 依赖，与 `@tiqian/prose`、`@tiqian/precompute` 同版本发布。
@@ -194,7 +194,7 @@ breaking change，发生在 alpha 阶段，不提供兼容 re-export。浏览器
    豁免清单为引擎标识字段。
    byte-identical 按 canonical 序列化定义：字段顺序、浮点格式与 DOM 属性顺序由格式定义固定；
    浮点序列化在 Kotlin/JS 与 Kotlin/Native 间的差异是首要核对项。harness 发现差异
-   时先判断属于格式还是语义：格式差异修 canonical 层，语义差异阻塞。门槛按最终支持平台全集计算；
+   时先判断属于格式还是语义：格式差异修 canonical 层，语义差异阻塞。这一要求按最终支持平台全集计算；
    Windows 链接验证长期受阻时把 Windows 移出支持清单并记录，legacy 移除按剩余平台达标执行。
 2. 删除 `@tiqian/prose` 的 Node precompute 与 WASM 依赖；`frontend/web-precompute` 的 js
    目标降为 oracle。
@@ -217,13 +217,13 @@ js 目标删除时，`build_fonts_parity` 与 `precompute_html_parity` 无法再
 改为与固定不变的 golden dump 比对（`tests/build-fonts-golden.txt` 与
 `tests/precompute-html-golden.txt`）。golden 录自两侧输出逐字节一致的时点；重新生成用
 `TIQIAN_UPDATE_GOLDEN=1`，行为变化以 golden diff 为准。`precompute_html_parity` 的 golden
-在 `prepareHtml` 文档循环改为并行执行的当天重新生成；生成前先从 git 历史恢复 js oracle
+在 `prepareHtml` 文档循环改为并行执行的同一天重新生成；生成前先从 git 历史恢复 js oracle
 的输出，核对与 Rust 输出一致后再写入。
 
 ## Consequences
 
 - 构建工具用户获得原生 precompute，Rust 使用者获得可组合的 crate 入口，两者共享同一引擎
-  revision 与字节级输出。
+  revision 与按字节的输出。
 - CI 面扩大：macosArm64 的静态库在 macOS runner 产出，mingw 在 Windows runner 产出，两个
   Linux 目标可交叉编译；konan 产物由 CI 上传为平台 crate 与 npm 平台包的发布产物。七个
   crate 与五个 npm 包同版本发布。
@@ -237,11 +237,11 @@ js 目标删除时，`build_fonts_parity` 与 `precompute_html_parity` 无法再
   断词 actual，模块职责不变。
 - flake 开发环境引入 rust-overlay；linux 与 mingw 的 Kotlin/Native 目标为仓库首次启用。
 
-## Amendment (2026-08-20)：引擎级 ABI 取代 precompute wire，出口归引擎层
+## Amendment (2026-08-20)：引擎层 ABI 取代 precompute wire，出口归引擎层
 
 初版把 precompute wire 直接铺在 C ABI 上，`tiqian_precompute_paragraph` 用 15 个扁平参数
 加 U+001E/U+001D/U+001F 分隔符编码入参、plan JSON C 字符串出参。这让绑定层持有 precompute
-词汇，js 门面与 C ABI 门面留在 precompute 目录。本修订按当天的架构裁定重定层的边界。
+词汇，js 对外接口与 C ABI 对外接口留在 precompute 目录。本修订按同一天的架构裁定重定层的边界。
 
 ### `EngineLevelAbi`：`tiqian_layout_paragraph` 打包二进制协议
 
@@ -250,10 +250,10 @@ js 目标删除时，`build_fonts_parity` 与 `precompute_html_parity` 无法再
   `tiqian_layout_paragraph(const uint8_t* request, uintptr_t request_len,
   uint8_t** response_out, uintptr_t* response_len, const char** error_out)` 与
   `tiqian_release_buffer`。
-- 协议沿用 `tiqian_font_backend.h` 的形式：头文件 `tiqian_layout_abi.h` 是双侧单一事实源，
-  Rust 直接编译；Kotlin 侧常量镜像并以注释锚定，与 shaping 修订常量的既有形式一致。
+- 协议沿用 `tiqian_font_backend.h` 的形式：头文件 `tiqian_layout_abi.h` 是两侧唯一的定义来源，
+  Rust 直接编译；Kotlin 侧常量保持同值并以注释锚定，与 shaping 修订常量的既有形式一致。
   缓冲区带 magic 与 protocol revision，版本化演进。
-- request 携带 `LayoutInput` 的引擎级字段：正文 UTF-8 字节、textStyle、paragraphStyle、
+- request 携带 `LayoutInput` 中属于引擎层的字段：正文 UTF-8 字节、textStyle、paragraphStyle、
   constraints、text spans、source boundaries、line-break spans、inline boxes。所有文本
   索引按 UTF-16 code unit 定义，与引擎 `TextRange` 一致；Rust 侧不得按 UTF-8 重新编号。
 - response 是 plan JSON：UTF-8、NUL 结尾、nativeHeap 分配，经 `tiqian_release_buffer`
@@ -269,19 +269,19 @@ js 目标删除时，`build_fonts_parity` 与 `precompute_html_parity` 无法再
 初版把 wire 解析、入参校验与 `LayoutInput` 组装放在 Kotlin commonMain。修订后这三项移植为
 `tiqian-precompute` 的 Rust 代码：typed 请求结构、具名校验错误（错误名与 npm 测试断言
 一致）、ABI request 打包与调用。plan JSON 序列化留在 Kotlin 单点；Rust 侧只做反序列化，
-供后续 prepared DOM 下放消费，不提供发射器。分隔符 wire 解析不移植；该编码只在 js 门面
+供后续 prepared DOM 下放消费，不提供再次序列化的代码。分隔符 wire 解析不移植；该编码只在 js 对外接口
 内部继续服务浏览器路径。
 
-### `EngineFfiModules`：Kotlin FFI 门面归引擎层
+### `EngineFfiModules`：Kotlin FFI 对外接口归引擎层
 
-- `frontend/web-precompute` 的 Kotlin 全部迁出。C ABI 门面进入新模块 `ffi/native`，
+- `frontend/web-precompute` 的 Kotlin 全部迁出。C ABI 对外接口进入新模块 `ffi/native`，
   四个 Kotlin/Native 目标与 `linkReleaseStatic*` 产物随之迁移；`tiqian_install_font_backend`
-  的重导出留在该模块。js 门面（`@JsExport`、wire、`HarfBuzzBuildBackend`）进入新模块
+  的重导出留在该模块。js 对外接口（`@JsExport`、wire、`HarfBuzzBuildBackend`）进入新模块
   `ffi/js`，npm precompute-runtime 组装任务跟随。`frontend/web-precompute` 只保留
   Rust workspace 与 npm 包，不再含一行 Kotlin。
 - `RustPrecomputeStack` 中「`frontend/rust` 持有中性引擎绑定」的表述修正为：`tiqian` crate
-  是 sys 绑定，声明 `tiqian_layout_abi.h` 的符号并链接平台静态库。ABI 升级为引擎级之后，
-  「绑定不依赖 web 概念」才真实成立。sys 层允许同时承载 web-core 定义的绑定，当前修订
+  是 sys 绑定，声明 `tiqian_layout_abi.h` 的符号并链接平台静态库。ABI 改属引擎层之后，
+  「绑定不依赖 web 概念」才实际成立。sys 层允许同时承载 web-core 定义的绑定，当前修订
   未行使该许可；plan JSON 的 schema 常量在 `tiqian-precompute`。
 - precompute 域对引擎的全部访问只经 `frontend/rust` 的绑定。Kotlin 出口与 sys 同属引擎
   出口面，不留在 precompute 目录。
@@ -296,7 +296,7 @@ js 目标删除时，`build_fonts_parity` 与 `precompute_html_parity` 无法再
 
 `appendJsonNumber` 原样使用 `Float.toString`，三个 Kotlin 后端输出三套字节：Kotlin/JS 打印
 f64 加宽值（`20.34000015258789`、整数无小数点），JVM 与 Kotlin/Native 打印 f32 最短形式
-（`20.34`、整数带 `.0`）。数值本身一致，分歧只在表示。修订后 plan 数字在 commonMain 单点
+（`20.34`、整数写成 `.0` 结尾）。数值本身一致，分歧只在表示。修订后 plan 数字在 commonMain 单点
 规范化为 ECMAScript `Number::toString` 形式：位数取自 `Double.toString`，布局按 ECMA 阈值
 重排，末位从 Float 的精确十进制展开按 half-even 取整。选择 ECMAScript 形式使两个 JS 消费
 方（npm 生产路径与浏览器 worker）字节不变，只影响 JVM 与 Native 输出；dtoa 库在精确
@@ -307,16 +307,16 @@ f64 加宽值（`20.34000015258789`、整数无小数点），JVM 与 Kotlin/Nat
 
 - plan parity：同一语料经原生路径（Rust 打包 → ABI → 引擎 → Kotlin plan JSON）与 js oracle
   （`precomputeParagraph` ESM bundle）双路输出字节一致，进入 `LegacyJsOracleCutover` 的
-  比对层清单。载体为 `tiqian-precompute` 的 `plan_parity` 集成测试与
+  比对层清单。承担比对的是 `tiqian-precompute` 的 `plan_parity` 集成测试与
   `frontend/web-precompute/scripts/plan-parity-oracle.ts`；两侧语料与 fixture 字体后端
   数值一一对应，fixture 取自 `PrecomputeExportsTest` 的 canonical 数。2026-08-20 起
   九个语料（标点压缩、中西混排、缩进、span、source boundaries、断行 policy、inline box、
   ellipsis 回退、纯换行）字节一致；`plan_parity` 在无 oracle dump 时按理由跳过，
   CI 以 `TIQIAN_REQUIRE_PARITY_ORACLE=1` 强制比对。
 - `tiqian` sys crate 在 `TIQIAN_NATIVE_LIB_DIR` 指向 Gradle `linkReleaseStatic*` 产物时
-  链接真实引擎，`cargo test` 在 linux CI 的 `rust-engine-parity` job 跑通 plan parity。
+  链接实际引擎，`cargo test` 在 linux CI 的 `rust-engine-parity` job 中通过 plan parity。
   build script 对归档文件声明 `rerun-if-changed`，引擎归档重建后 cargo 侧强制重链接。
-- `EngineFfiModules` 已实现：js 门面位于 `ffi/js`（bundle 名 `Tiqian-tiqian-ffi-js`），
+- `EngineFfiModules` 已实现：js 对外接口位于 `ffi/js`（bundle 名 `Tiqian-tiqian-ffi-js`），
   `jsNodeTest`、npm runtime 组装任务与 parity oracle 的 bundle 路径同步；`ffi/native` 的
   四个 `linkReleaseStatic*` 目标成为唯一 native 产物；`frontend/web-precompute` 只剩
   Rust workspace、npm 包与 parity 脚本，不含 Kotlin。
@@ -344,14 +344,14 @@ f64 加宽值（`20.34000015258789`、整数无小数点），JVM 与 Kotlin/Nat
 
 - `:frontend:web-precompute` 四个 native 目标编译并通过 native 测试；`jsNodeTest` 行为不变。
 - `cargo test -p tiqian-precompute` 覆盖 wire 解析、face 选择与 manifest。
-- 差分 harness：最终支持平台全集 × 全语料 byte-identical，是移除 legacy 的硬门槛。
+- 差分 harness：最终支持平台全集 × 全语料 byte-identical，是移除 legacy 的硬性要求。
 - 差分 harness 记录每段落的跨 FFI 调用次数，断言与 segment 数线性相关。
 - 迁移完成后共享 golden 语料在 `cargo test` 与 npm 测试双向断言字节一致。
 - revision 常量由 `@tiqian/prose` 与 Rust 两侧声明，npm 测试断言相等。
 - CI `ldd` / `dumpbin` 审计四平台 `.node` 与示例二进制。
 - npm 测试套件经 Neon 路径全部通过；Astro / SvelteKit 集成测试改引 `@tiqian/precompute` 后
   全部通过。
-- Windows mingw 静态库链接验证最先执行，覆盖 MSVC 与 GNU 两条工具链路径。
+- Windows mingw 静态库链接验证最先执行，覆盖 MSVC 与 GNU 两条工具链的路径。
 
 ## 附录（2026-08-21）：两站生产基准与等效性审计
 
@@ -361,7 +361,7 @@ Native 为 `@tiqian/precompute`（Neon addon + harfrust 0.13.0 + 静态链接的
 Kotlin/Native 引擎，release 构建；sveltekit 站点四组实测时 linux-x64 addon 为
 8,439,088 字节，astro 站点实测时为 8,366,448 字节）。每轮清除快照缓存冷启动，
 各跑三轮；RSS 用 `/proc` 对进程组内全部进程按 50ms 采样；端到端耗时为整条
-构建命令的端到端耗时。调用计数与耗时按调用逐条追加落盘：vite 在多个 worker
+构建命令的端到端耗时。调用计数与耗时按调用逐条追加写入磁盘：vite 在多个 worker
 线程各自实例化宿主模块，单个统计文件只保留最后写入线程的视图，逐条追加覆盖
 全部调用。十二次构建的退出码均为 0。线程数由 `TIQIAN_PRECOMPUTE_THREADS`
 固定；未设置时取 available_parallelism（本机为 16）。批处理入口按线程分摊，
@@ -392,7 +392,7 @@ vite build 阶段取构建日志两行 `built in` 中的长值。原实现一轮
 | 4 | 18,732 | 18,851 | 2.21× |
 | 8 | 16,554 | 16,664 | 2.51× |
 
-vite build 阶段约等于 33 s 构建基线加批处理耗时（1/2/4 线程的残差为 34.5 /
+vite build 阶段约等于 33 s 构建基线加批处理耗时（1/2/4 线程的剩余耗时为 34.5 /
 33.1 / 32.8 s）。批次大小中位 4 段、p90 47 段、最大 248 段；89 个单段批次
 直接内联执行，2 线程以上收益随之收敛。对照实验：宿主改走单一段落入口后，
 1 与 4 线程共四轮端到端 83.5–89.3 s，线程变量不产生影响。四线程相对原实现
@@ -414,7 +414,7 @@ astro 站点（pnpm + astro static + pagefind；每轮 326 段落 + 18 项字体
 ### 等效性审计
 
 按层给出结论。请求层逐字节一致；plan 层只差浮点尾数；产物层差异全部来自
-Kotlin `Float` 精度与 HarfBuzz 版本两个来源；断行与行结构在两站语料上零差异。
+Kotlin `Float` 精度与 HarfBuzz 版本两个来源；断行与行结构在两站语料上没有差异。
 
 - **请求层。** sveltekit 站点抽样页 70 条记录的 `prepareParagraph` / `prepareFontContract`
   全部入参（text、maxWidthPx、sourceBoundaries、textSpans、inlineBoxes、
@@ -525,13 +525,13 @@ astro 站点第二轮（每个线程数三轮，每轮从空缓存开始；第�
 源文件计入哈希，本轮宿主有源码改动，其余字段全部相同。批量与逐条调用对同一
 输入产出相同的缓存条目。astro 站点第二轮 1/2/4 线程的 `prepared-paragraphs.json`
 两两字节一致，dist 的 742 个文件把版本标识替换后 742/742 一致；两者并分别与
-第一轮 native 构建的缓存（327 条、plan 零差异、共享字段全部相同）与 dist
+第一轮 native 构建的缓存（327 条、plan 没有差异、共享字段全部相同）与 dist
 （742/742）一致。
 
 ## 附录（2026-08-21 第三轮）：宿主缓存下相对 JS 基线的构建对比
 
 本轮测量引擎接入宿主持久缓存后的端到端构建耗时，对照沿用宿主 JSON 缓存的
-JS 引擎基线。语料为两个参考站点（sveltekit 站点与 astro 站点），测量维度为墙钟时间，
+JS 引擎基线。语料为两个参考站点（sveltekit 站点与 astro 站点），测量维度为总耗时，
 未采样内存。空缓存指引擎缓存从零开始的构建，缓存命中指宿主缓存可命中状态下
 的构建。
 
@@ -627,30 +627,30 @@ profile 外目录的依赖，首次装载完成修补并加载成功；移除该
 `ldconfig -p` 已列出缺失库的机器上，诊断给出 profile lib 目录，修补后加载
 成功，再次装载命中缓存副本。
 
-## Amendment（2026-08-25）：JS lane 环境全局消费判定为缺陷
+## Amendment（2026-08-25）：JS 引擎路径环境全局消费判定为缺陷
 
-本 ADR 的字体回调协议描述（Context 与 `PackedFfiCalls`）同时覆盖两条 lane。
-native lane 经 `tiqian_install_font_backend` 安装式 vtable 消费，契约有声明与
-版本号校验。JS lane 的引擎侧消费（engine jsMain 的 `HarfBuzzSessionBackend.kt`，
-21 处内联读 `globalThis.__TiqianFontBackend`）与返回侧的 plan JSON 裸 C 字符串
+本 ADR 的字体回调协议描述（Context 与 `PackedFfiCalls`）同时覆盖两条引擎路径。
+native 引擎路径经 `tiqian_install_font_backend` 安装式 vtable 消费，接口有声明与
+版本号校验。JS 引擎路径在引擎内部的消费（engine jsMain 的 `HarfBuzzSessionBackend.kt`，
+21 处内联读 `globalThis.__TiqianFontBackend`）与返回侧的 plan JSON 原始 C 字符串
 （`plan.rs` 按字段名读取并忽略未知字段）于同日判定为缺陷，裁定原文、跨界载荷
 审计与处置记录见 ADR 0053 的 ffi 边界复审记录（2026-08-25）。历史正文不改写。
 
 ## Amendment（2026-08-25 corrective-2）：生产返回类型化，dump 保留
 
-生产跨界返回由 plan JSON 裸 C 字符串改为打包契约（`tiqian_plan_abi.h`，`PlanPackedWriter` 为
+生产跨界返回由 plan JSON 原始 C 字符串改为打包接口（`tiqian_plan_abi.h`，`PlanPackedWriter` 为
 唯一写者，小端/u32 版本独立/字符串区 u32 偏移/f64 按列分区，`tiqian_layout_paragraph`
 返回打包缓冲 + `tiqian_release_buffer` 配对释放）；`tiqian_layout_paragraph_json` 作为带调试命名
 的 dump 入口保留，仅供 parity oracle 与 golden，输出与既往基线逐字节相同。Rust 解码填入
 `plan.rs` 既有 `Plan` 结构体（字段不动），JSON 解析保留给 dump 路径。
 
-## Amendment（2026-08-26 corrective-5）：字体族列表类型化跨 vtable 传递
+## Amendment（2026-08-26 corrective-5）：字体 family 列表类型化跨 vtable 传递
 
-`session_shape` 与 `session_metrics` 的字体族参数从连接字符串改为
+`session_shape` 与 `session_metrics` 的字体 family 参数从连接字符串改为
 `const char* const* families` 加 `uint32_t family_count`（Kotlin 侧
 `withFamilyArray()` 在 memScoped 内构造指针数组），`TIQIAN_FONT_BACKEND_
 PROTOCOL_REVISION` 由 1 递增到 2，C 头文件、`font_backend.rs` 与
-`NativeFontBackendVtable` 三处同值。replay key 内部仍以 U+001F 连接字体族，
+`NativeFontBackendVtable` 三处同值。replay key 内部仍以 U+001F 连接字体 family，
 键的字符串形态不变，既有缓存不失效。裁定原文与终则见 ADR 0053 ffi 边界
 复审记录。
 
@@ -658,7 +658,7 @@ PROTOCOL_REVISION` 由 1 递增到 2，C 头文件、`font_backend.rs` 与
 
 按 2026-08-20 的 JS workspace 重组裁定执行物理迁移，模块边界、ABI 与 crate
 职责不变。`frontend/web-precompute/rust` 迁至 `platforms/web/server/precompute`，
-workspace 根随迁，两个 crate 目录取 `engine`（`tiqian-precompute`）与
+workspace 根一同迁移，两个 crate 目录取 `engine`（`tiqian-precompute`）与
 `binding`（`tiqian-precompute-neon`）命名，crate 名与发布名保持连续；engine 对
 `ffi/rust/tiqian` 的路径依赖改为五级上溯。`frontend/web-precompute/npm` 迁至
 `platforms/web/server/core`。构建期脚本按服务对象分置：`generate-unicode-tables.ts`
