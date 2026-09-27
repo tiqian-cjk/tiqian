@@ -1,0 +1,15 @@
+# Smoke test: generate Kotlin from one boring sample module through the
+# worktree-local haxelib install (boring d2a2911 from GitHub, reflaxe v3.0.0).
+# Run from the worktree root: nix develop -c bash -c 'haxe engine-haxe/smoke-kotlin.hxml'
+-lib reflaxe
+-lib boring
+-cp .haxelib/boring/git/packages/compiler/reflaxe/kotlin/std-shadow
+-cp .haxelib/boring/git/packages/compiler/reflaxe/kotlin
+-cp .haxelib/boring/git/samples
+--macro Intercept.run(['samples'])
+--macro kotlincompiler.Compiler.use()
+-D kotlin-output=engine-haxe/smoke/gen
+-D kotlin-test-output=engine-haxe/smoke/gen-tests
+-D runtime-import=boring.runtime
+-D runtime-emit=runtime
+boring.Fp16

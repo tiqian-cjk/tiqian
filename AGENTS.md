@@ -1,30 +1,97 @@
 # AGENTS.md
 
-提椠（Tiqian）是面向中文正文的 CJK 段落布局引擎。当前已经完成简体中文横排，
-并通过 Compose、Android 与 Web 前端持续在真实应用中验证。`ExplainableStubParagraphLayoutEngine`
-保留了历史名称，但运行路径已经接入真实 shaping、字体度量、标点几何、断行、行调整与绘制。
+提椠（Tiqian）是面向中文正文的 CJK 段落布局引擎。项目完成简体中文横排，并通过 Compose、Android 与 Web 前端持续在实际生产环境中验证。`ExplainableStubParagraphLayoutEngine` 保留历史名称，运行路径接入 HarfBuzz 塑造管道、字体度量、标点几何、断行、行调整与绘制。
+
+## 沟通规范
+
+本节约束发往用户的全部文字，包括对话回复、交付报告、任务书与记录文档。
+
+### 结论优先与事实依据
+
+1. 针对「为什么不能做某项操作」的问题，第一句直接陈述能或者不能，随后展开技术原因。
+2. 陈述「无法支持」或「不能实现」之前，必须具备本地复现实验的命令与输出，或者文档原文与出处。两者皆无时，只陈述「尚未验证」并提供验证步骤。
+3. 评估技术方案时，工程量、维护成本与排期不得作为拒绝理由；陈述成本时必须拆解具体难点并提供最小示例。
+4. 评估编译器或代码生成机制时，内部签名偏离原始声明、编译器合成类型名、改写生成调用代码，均不得作为反对理由。
+5. 针对用户提出的设计或质疑，首先列出改动涉及的文件清单、仓库已有同类先例及实现要点；列出清单之前不表达取舍意见。存在直接实现与保留现状两种路径时，先写直接实现规格，将沿用现状列为选项。
+6. 使用规模与目标场景必须向用户确认或从规格推导，禁止假定规模。
+7. 用户确定结论的事项不再争论，发现新事实时仅陈述事实本身。
+
+### 实体指称与词汇规范
+
+8. 叙述宾语必须使用具体的类名、函数名、文件名伴随行号、包名或目录名，避免无明确指代的代词。API 名称使用代码格式书写，同一段说明中出现一次。
+9. 两个代码库或多份代码检出同时存在时，每句话指明具体目标并注明目录路径。
+10. 专业术语在首次出现时使用完整句子定义；无法给出定义的词汇不得使用。代码中已有的标识符使用原名并说明含义，不进行中文直译。
+11. 禁止将 API 名称或其直译作为动作谓语（例如将 emit 直译为动作）。谓语动词必须描述具体的程序行为。
+12. 禁止自造缩略词与比喻修辞。禁止使用下列词汇及「化」字后缀词：台账、收口、换装、判死、载体、闭环、抓手、赋能、链路。
+13. 禁止使用拟人与「不是 X 而是 Y」对比句式，直接陈述事实。不将理解分歧归结为读者的背景知识。
+
+### 句子结构与陈述顺序
+
+14. 所有语句必须具备主语、谓语、宾语与限定条件，段落标题必须为完整陈述句。
+15. 解释技术机制时，先用日常语言完整说明数据存储位置、传输内容与读取行为，再对应到具体文件。推理依赖特定前提时，先陈述前提再进行推导。
+16. 解释编译器或宏的行为时，先提供最小源码示例与编译后形态，再解释推论；说明顺序固定为名词指代、行为、最小示例、最终影响。
+17. 涉及多项内容的问题，先提供三句以内的总括答复，再按条目展开；条目超过五项时合并次要项。
+18. 陈述模块分层与代码规则时，每个结论后紧随可验证的事实。后续改动计划逐项列出具体文件、删除区间、保留区间与新增内容。
+
+### 交付报告与发现陈述
+
+19. 交付总结首句陈述交付内容与功能；首段说明使用方法（命令、参数、输入位置、输出位置）及运行时损耗（生成代码运行、数据读写、编译期耗时）。
+20. 报告代码发现时，首句说明相关文件、测试或函数的作用。报告数值差异时，注明对比双方的输入、输出与物理含义；检查操作陈述为「检查并要求等于」。
+21. 引用示例数据时说明名称来源，标明哪些名称为临时构造，哪些字段取自具体文件的行号。引用仓库事实时，依次标明规格文件与实现文件。
+22. 涉及前文已描述的对象时，先声明本轮内容与前文的关系为补充、合并或修正。
+23. 结尾直接给出结论与建议，使用完整陈述句结束，不使用等待发话的推诿语句。需要用户决策时提问一次，并说明各选项的具体后果。
+
+### 执行与任务书规范
+
+24. 声称记录、修改或验证的动作，必须在同一轮次中执行对应的工具调用；文字清单不视为执行。动手修改文件之前，先用一句话说明对具体文件执行的操作。撤销改动前说明恢复目标。
+25. 派发给外部代理或子代理的任务书必须自成一体，仅假定接收方拥有任务书与工作区代码；任务书明确说明环境要求（如 nix develop 环境与工具路径）。
+26. 任务交付不符合要求时，重新审查任务书：核对接收方仅凭任务书能否启动、目标代码是否具备完整示例、所有事实断言是否通过本地验证。
+27. 修正类任务书必须包含错误对照：列出工作区现有代码文件与行号、正确规范出处、完整修改示例。
+28. 重新派发任务前，注明本轮任务书相对于上一轮的新增内容与消除的缺陷。
+
+### 发送前自查
+
+提交回复前逐项核对：否定答复具备事实证据；首句直接回答问题；专业术语已给出定义；宾语具体到文件与代码符号；未包含缩略词、比喻词与对比句式；句子与标题结构完整；交付报告具备必要结构；声称执行的工具调用已完成；结尾为明确结论。
+
+## 外部任务派发纪律
+
+外部模型的调用渠道与并发配额由本地配置文件 [.agent-policy.md](.agent-policy.md) 规定，该文件由本地独立维护，不纳入版本控制。执行派发前先读取该文件，如果这个文件不存在则忽略此小节。
+
+- **空闲席位补位**：任何配置渠道出现空闲席位且存在待处理任务时，立即生成任务书并派发任务，不因准备工作延迟占用席位。
+- **任务结束即补**：并发任务完成或终止释放席位后，验收结果的同时检查待派发任务并填补空缺席位。
+- **超时限制**：席位空闲超过 5 分钟未派发视为执行超时；通过持续监控计数保障派发流程。
+- **外部异常处理**：遇到服务商通道 503 报错、周期调用配额耗尽或单并发限制时，保存证据记录后允许暂时空置，服务恢复后立即占用；间歇异常保持轮询探测。
 
 ## 事实来源
 
-开始非平凡改动前，按任务范围阅读：
+进行实质代码修改前，阅读对应范围的文档：
 
 - [README.md](README.md)：项目定位、当前能力与使用入口。
-- [docs/roadmap.md](docs/roadmap.md)：当前工作、候选切片与已完成范围。
-- [docs/architecture.md](docs/architecture.md)：当前 pipeline、模块边界与平台接入方式。
-- [docs/adr/README.md](docs/adr/README.md)：ADR 索引。改变既有取舍前先读相关 ADR。
-- [docs/clreq-gap-audit.md](docs/clreq-gap-audit.md) 与
-  [docs/clreq-punctuation-audit.md](docs/clreq-punctuation-audit.md)：简体横排规则审计。
+- [docs/roadmap.md](docs/roadmap.md)：当前工作、候选任务与已完成范围。
+- [docs/architecture.md](docs/architecture.md)：排版管道流程、模块边界与平台接入方式。
+- [docs/adr/README.md](docs/adr/README.md)：架构决策记录索引。修改既有设计前阅读相关 ADR。
+- [docs/clreq-gap-audit.md](docs/clreq-gap-audit.md) 与 [docs/clreq-punctuation-audit.md](docs/clreq-punctuation-audit.md)：简体中文排版规则审计。
 
-`docs/research/` 与 `docs/cjk-layout-engine-design.md` 是带日期的研究或初始设计记录，
-用于解释背景，不代表当前实现状态。人类贡献流程见 [docs/contributing.md](docs/contributing.md)。
+`docs/research/` 与 `docs/cjk-layout-engine-design.md` 属于特定时期的研究与初始设计记录，用于说明背景，不代表当前代码状态。人类贡献流程见 [docs/contributing.md](docs/contributing.md)。
 
-不要根据个人偏好覆盖已记录的取舍。新决策或有意改变既有模型时更新 ADR；普通 bug 修复、
-测试和文档修正不需要为了形式创建 Slice。只有持续跟踪的新工作才更新 roadmap 状态。
+遵循既有决策记录。产生新决策或修改既有模型时更新 ADR；普通缺陷修复、测试和文档修正不需要额外创建跟踪条目。仅持续跟踪的工作更新 roadmap 状态。
 
-## Build 与验证
+## 调试取证
 
-项目使用 Gradle Kotlin Multiplatform，JVM toolchain 为 25；同时包含 Android 与
-`:ffi:js` 的 Kotlin/JS target。
+Boring 编译器的全部调试工作先取证、后调试。取证对象是**代码生成调用栈**，四步缺一即视为未取证：
+
+1. 被编译的 Haxe 源结构：文件、构造与类型。
+2. 渲染它的发射端：boring 检出中的函数与行号。
+3. 生成出来的目标文本：生成文件与行。
+4. 目标编译器或运行时给出的失败点：原始错误或断言输出。
+
+症状「像」某个已知缺陷只是假设，不得据此动手；只有在调用栈指出发射端之后才开始改。取不到调用栈时，报告写明缺哪一步、卡在哪里，不得用经验判断代替取证。
+
+生成物读数必须写明**生成器修订**（boring 检出路径与 commit）。tiqian 各检出的 `.haxelib/boring/git` 指向的修订不同，用错修订得到的读数与结论无效。
+
+## 构建与验证
+
+项目使用 Gradle Kotlin Multiplatform，JVM 工具链版本为 25；包含 Android 目标平台与 `:ffi:js` 的 Kotlin/JS 目标平台。
 
 ```shell
 ./gradlew build
@@ -46,103 +113,62 @@ npm install --no-audit --no-fund
 (cd ffi/js/npm && npm test)
 ```
 
-根 `npm install` 装 workspace 全体成员；precompute 的平台二进制
-optional dependencies 不在 registry 上，lock 无法携带它们的 resolved
-条目，`npm ci` 在 npm 11 及以上拒绝这种 lock，所以统一用
-`npm install`。
+根目录 `npm install` 安装所有 workspace 依赖；预编译平台二进制的 optional dependencies 未发布到 npm 仓库，lock 文件不包含其解析条目，npm 11 以上版本执行 `npm ci` 会报错，因此统一使用 `npm install`。
 
-Layout report 位于
-`engine/build/reports/tiqian-layout-report/index.html`。
+排版布局报告输出至 `engine/build/reports/tiqian-layout-report/index.html`。
 
-任何会改变断行、字体选择、标点空间、行高或行内几何的改动都应：
+涉及断行、字体选择、标点空间、行高或行内几何的修改应执行：
 
-1. 同步 fixture 与结构化 decision。
-2. 运行相关模块测试和 `LayoutDumpGoldenTest`。
-3. 行为变化需要更新 golden 时，使用
-   `TIQIAN_UPDATE_GOLDEN=1 ./gradlew :engine:jvmTest --tests 'org.tiqian.layout.LayoutDumpGoldenTest'`，
-   然后逐项检查 golden diff。
-4. 生成 layout report，并按涉及平台做浏览器、桌面或 Android 真机检查。
+1. 同步测试用例与结构化决策数据。
+2. 运行相关模块测试与 `LayoutDumpGoldenTest`。
+3. 行为变更需要更新黄金数据时，执行 `TIQIAN_UPDATE_GOLDEN=1 ./gradlew :engine:jvmTest --tests 'org.tiqian.layout.LayoutDumpGoldenTest'` 并检查测试输出差异。
+4. 生成排版报告，在对应目标平台执行浏览器、桌面或 Android 设备检查。
 
-项目没有独立 lint 工具链；仅文档变化至少运行 `git diff --check` 与
-`python3 tools/doc-style/check.py <改动的中文文档>`（中文措辞自查：比喻词、互联网
-黑话、对比句式、em-dash）。命中先逐条人工判定：违规的改写，固定搭配与既有文档
-标题的引用加入脚本白名单；每次措辞被纠正后，把新词与新句式补进脚本词表。脚本
-只是自动化检查列表，不替代交稿前通读。文档中的命令和 API 示例发生变化时，应
-实际验证对应内容。
+文档修改需执行 `git diff --check` 与 `python3 tools/doc-style/check.py <改动文档>` 检查措辞（排查比喻词、缩略词、对比句式与破折号）。命中项经人工核对后改写。文档中的命令与 API 示例发生变更时，应实际运行验证对应内容。
 
 ## 模块边界
 
-- **排版核心**：`engine`（单一发布模块，合并了原 `core`、`font`、`linebreak`、
-  `clreq`、`layout`、`shaping/api`）定义数据、字体策略、断行、中文规则、shaping 接口定义与
-  最终 `LayoutResult`；内部按 `org.tiqian.{core,font,linebreak,clreq,layout,shaping}` 包分簇。
-- **平台 shaping**：shaping 接口定义在 `engine`；`platforms/jvm/{shaping,skia}`、
-  `platforms/android/{shaping,native-font}`、
-  `platforms/apple/shaping` 提供各平台实现。
-- **前端**：`platforms/compose/{compose,material3}`、`platforms/web/client`、
-  `platforms/android/view`、`platforms/apple/frontend` 只消费布局结果并呈现。
-- **FFI**：`ffi/js`、`ffi/native` 把 `engine` 暴露为 JS / packed C ABI；`ffi/rust` 持有
-  precompute 的 Rust 绑定。`platforms/web/server` 由 Losses 维护。
-- **Demo 与工具**：`demo` 共享 Desktop / Android 示例界面，
-  `demo/android` 是薄 Android 启动壳；layout report 提供诊断和文档样张生成，
-  测试共享语料（fixtures、shaping evidence、trace 格式化）位于
-  `engine` 的 `commonTest`。
+- **排版核心**：`engine`（单一发布模块，整合原 `core`、`font`、`linebreak`、`clreq`、`layout`、`shaping/api`）定义数据结构、字体策略、断行规则、中文排版规则、塑造接口定义与最终 `LayoutResult`；代码按 `org.tiqian.{core,font,linebreak,clreq,layout,shaping}` 包组织。
+- **平台字形塑造**：塑造接口定义于 `engine`；`platforms/jvm/{shaping,skia}`、`platforms/android/{shaping,native-font}`、`platforms/apple/shaping` 提供各平台实现。
+- **前端适配**：`platforms/compose/{compose,material3}`、`platforms/web/client`、`platforms/android/view`、`platforms/apple/frontend` 接收排版结果并执行界面呈现。
+- **外部语言接口**：`ffi/js` 与 `ffi/native` 将 `engine` 导出为 JavaScript 与 C 接口；`ffi/rust` 包含预编译 Rust 绑定。`platforms/web/server` 由项目维护者管理。
+- **示例与工具**：`demo` 包含跨平台 Desktop 与 Android 示例界面，`demo/android` 提供 Android 运行壳；`engine` 模块的 `commonTest` 包含测试用例数据与排版报告生成工具。
 
-平台层可以负责字体加载、shaping、glyph metrics、绘制和宿主样式读取，但不得自行决定
-字体 fallback、标点 glue、避头尾、行调整或两端对齐。需要平台证据的规则应把证据送回
-核心 decision，而不是在 renderer 中补视觉偏移。
+平台适配层负责字体加载、字形塑造、字形度量、绘制与宿主样式读取，不自行计算字体回退、标点间距、避头尾、行调整或两端对齐。依赖平台度量数据的规则将数据返回排版核心决策流程，不在呈现层补充视觉偏移。
 
 ## 实现约束
 
-1. **走真实 pipeline。** 功能可以窄，但必须经过
-   `source → fallback → shaping → metrics → punctuation/glue → line break/repair → adjustment → LayoutResult → render`。
-2. **每个 heuristic 必须命名。** 名称应说明它解决什么问题、属于哪个 policy、是否可关闭、
-   由什么 fixture 验证。不要留下无名字符判断或魔法偏移。
-3. **`LayoutResult` 必须可解释。** 新决策同时进入结构化 debug info 与 dump；renderer 不得
-   拥有布局真值的另一份副本。
-4. **source text 不可改写。** display cluster 可以按 profile 选择码点或字形，但 source range、
-   复制、搜索和无障碍语义必须保留输入。
-5. **测量与绘制同源。** 平台 adapter 产出的字体、glyph、advance 与 placement 应能被前端重放；
-   无法同源时明确报告 capability issue 或回退，不能静默猜测。
-6. **不要假装支持竖排或 JLREQ。** 新 API 需要考虑 writing mode 扩展点，但当前不承诺尚未实现的能力。
+1. **按完整处理流程执行**：功能实现必须经过输入文本、字体回退、字形塑造、度量计算、标点间距、断行计算、行调整、产生 `LayoutResult` 与最终绘制的全过程。
+2. **所有启发式规则必须明确命名**：命名标明解决的问题、所属策略、开关配置与对应测试用例，不保留未命名的字符判断或固定数值偏移。
+3. **`LayoutResult` 具备完整解释信息**：新的决策数据必须同步记录至调试信息与转储输出；呈现层不维护独立的排版数据副本。
+4. **原始输入文本保持不可变**：显示单元可根据配置选择码点或字形，但原始文本范围、文本复制、搜索与无障碍语义必须保留原始输入。
+5. **测量与绘制同源**：平台适配器输出的字体、字形、前进量与排布坐标必须支持在前端重放；无法保证同源时明确抛出能力不支持错误或回退，不执行隐式推测。
+6. **不声明未实现的能力**：新 API 保留书写模式扩展接口，但不对未实现的竖排或日文排版规范作能力承诺。
 
 ## 代码组织
 
-以下是约定而非 lint 强制（不要为此引入 ktlint 之类的工具），适用于 tiqian、tiqian-math、
-tiqian-markdown 三个仓库：
+以下约定适用于代码库组织结构：
 
-- 单个源文件尽量保持在 1000 行以下。新代码按功能簇分文件；既有文件超标时拆分，
-  优先纯移动，单 object/单类拆不动时允许「成员函数原样搬出为同包 internal 扩展函数」
-  与「巨型测试类按主题拆多类」两种机械等价手段，且必须以模块测试全部通过
-  （layout 还要 golden 零 diff）作为行为不变的证据。
-- 主入口文件（如 `TiqianMarkdown.kt`、`WebEnhancer.kt` 的入口 object）只做入口与接线，
-  不堆放实现；实现放到按功能簇命名的文件里。
+- 单个源码文件行数控制在 1000 行以内。新代码按功能拆分文件；既有文件超标时优先通过移动代码解耦，类文件拆分可通过定义同包 internal 扩展函数或按测试主题拆分子类实现，修改后必须保证模块测试全部通过且黄金数据无变动。
+- 入口文件仅负责接口暴露与组件装配，不存放具体业务逻辑实现；具体实现存放于按功能命名的源码文件中。
 
-命名规则（2026-08-25 G2 裁定）：
+命名规范：
 
-- 名字写明管辖范围，不起模棱两可的名字。一个对象只用一个名字；给既有对象
-  换名时写明它替换的旧名，旧名不再并存。
-- 全页构造一次的对象定位为 globalManager，实例集中放进名为 globalServices 的
-  容器统一暴露，不分散放在各模块顶层。
-- 每个被增强元素一份的对象名为 EnhancedElementContext；由
-  createEnhanceContext($element) 构造并返回，由调用者持有；update() 刷新状态，
-  destroy() 销毁。
-- 用标准工程词汇，不自造名词；既有自造名随重构改为标准名（如 Custody 并入
-  EnhancedElementContext 后按职能命名内部记录与函数）。
+- 标识符明确管辖范围，避免歧义名称。单一实体使用唯一名称；重命名时注明替换的原标识符，废弃旧名称。
+- 单页面生命周期唯一的全局对象定位为 globalManager，集中通过 globalServices 容器对外暴露，不放置在模块顶层。
+- 增强元素绑定的上下文对象命名为 EnhancedElementContext，由对应工厂函数创建，由调用方持有，提供刷新与销毁方法。
+- 使用标准计算机工程术语，不使用自造名词。
 
-全页构造一次的运行时单例集中放在 core/services/ 目录，文件头注释
-写明为什么必须全页一份、为什么不能参数传递；目录之外散置的全局
-单例违反模块边界（ADR 0053 `ServiceDirectoryRule`）。
+单页面生命周期唯一的运行时单例存放于 `core/services/` 目录，文件头部注释说明全局单例的原因与避免参数传递的依据。
 
-## 工作区与提交
+## 工作区与提交规范
 
-工作区可能同时存在其他任务的改动。不要还原、格式化或提交无关文件；同一文件已有并行改动时，
-先理解并在其上继续。提交前检查 `git status`、目标 diff 与近期 history。
+工作区可能存在并行任务的改动。不还原、不格式化、不提交与当前任务无关的文件；遇到并行修改时，在理解既有修改的基础上继续操作。提交前核对代码变更与提交历史。
 
-提交标题沿用仓库格式：
+提交标题遵循 Conventional Commits 格式：
 
 ```text
 type(scope): subject
 ```
 
-提交只写单行标题，不写 body，不加 `Co-Authored-By` 或其他 trailer。大型改动按模块或可独立
-回退的文档边界分批提交，不把 README、生成物和无关实现塞进同一个提交。
+提交仅编写单行标题，不包含提交说明正文，不添加协作者签名与自定义尾注。规模较大的修改按功能模块或文档边界分批提交，不将说明文档、构建产物与业务代码混合在单一提交中。

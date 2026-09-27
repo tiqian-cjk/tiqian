@@ -3,32 +3,32 @@
 - Status: Accepted
 - Date: 2026-06-17
 - Amendment 2026-06-21：`ColorSpan(start, end, argb)` 移入 `core`（与 `DecorationSpan`
-  并列的 render-only span），不再住 `shaping/skia`——前端公开签名遂不泄漏 Skia 类型。
+  并列的 render-only span），不再住 `shaping/skia`，前端公开签名遂不泄漏 Skia 类型。
 - Amendment 2026-07-07：`TextStyle.baselineShift` 成为 B 档 layout-affecting span
   样式，用于 Compose `SpanStyle.baselineShift` / 参考文献角标等显式上标/下标位移。
 - Amendment 2026-08-11：行内参考角标以 `InlineAttachment.Previous` 明确附着前文；
   判断边界间距时暂时忽略角标，以角标两侧正文原本是否存在间距为准，结果由角标尾侧承载；
   若正文直接相邻时没有间距，角标也不会凭空生成间距，落在行末时不保留空白。
-- Amendment 2026-08-17：CJK 斜体的 **synthetic-oblique（合成倾斜）由「否决」改为「务实退路」**
+- Amendment 2026-08-17：CJK 斜体的 **synthetic-oblique（合成倾斜）由「否决」改为「务实的备用方案」**
   （放宽正文第 48–49、114 行的「CJK 不合成倾斜」）。理想是转**楷体**，但除桌面外无可靠楷体；
-  **着重号语义为「强调」，与斜体的「弱化/换嗓」（整段斜体作引文、旁白）语义相反，不能替代**
-  ——故 CJK 斜体退合成倾斜。oblique 是 **advance-preserving 切变**（不改水平步进）：measure
+  **着重号语义为「强调」，与斜体的「弱化/换语气」（整段斜体作引文、旁白）语义相反，不能替代**
+  因此 CJK 斜体退合成倾斜。oblique 是 **advance-preserving 切变**（不改水平步进）：measure
   按正体、draw 叠加切变，`measure==draw` 不破，原正文（改墨不改 advance）的顾虑不适用于纯
   切变的一档。角度 `tan⁻¹(0.105) ≈ 6°`
   （取得意黑 / Smiley Sans 的设计斜度），仅在**自绘平台统一**：Android `textSkewX` /
   Apple CoreText `OBLIQUE_SHEAR` / Skia `Font.skewX`。**web 经浏览器 DOM 渲染（非自绘），
   角度不可控**：Chrome 对 CJK 纯合成 oblique 忽略请求角度，`font-style: oblique 6deg` 退成
-  与 `italic` 相同的固定 ~14°（CJK 系统字体也无 `slnt` 变量轴）；唯一能拿到真 6° 的
+  与 `italic` 相同的固定 ~14°（CJK 系统字体也无 `slnt` 可变参数）；唯一能拿到真 6° 的
   `transform: skewX(-6deg)` 需要 `display: inline-block`，而 `DomParagraphRenderer`（2026-08-23
   起 run 叶子由 prepared-dom.js 降层，同一约束不变）刻意让 run
   叶子保持 `display: inline`（避免原子选区岛 + 引擎自持零行高下的零高盒伪影，保选区/复制保真），
   二者冲突、无无副作用的第三条路。故 **web CJK 斜体保持浏览器默认 `italic`（~14°），暂不与自绘
-  平台的 6° 统一**，留待系统字体普及 `slnt` 轴或 renderer 重构。着重号仍只承载「强调」。
+  平台的 6° 统一**，留待系统字体普及 `slnt` 可变参数或 renderer 重构。着重号仍只承载「强调」。
 
 ## Context
 
 `TiqianTextContent.spans: List<TextSpan(range, TextStyle)>` 早就在 core 模型里，但引擎
-完全没读它——`fontSize`/`fontFamilies`/`locale` 全取自单一 `input.textStyle`，一个
+完全没读它，`fontSize`/`fontFamilies`/`locale` 全取自单一 `input.textStyle`，一个
 `fontSize` 驱动 shaping、度量、标点 glue、中西间距、缩进、整数行长、justify 上限。
 要支持富文本（颜色、加粗、斜体、字号、字体）就得让这些**按 span 走**。
 
@@ -39,15 +39,15 @@ Compose 侧作者面用 `AnnotatedString`（ADR 0030 的 `CjkParagraph(Annotated
 
 按「改不改 advance / 度量」把 span 样式分两档：
 
-**A. Render-only（不改版面）——先做。**
+**A. Render-only（不改版面），先做。**
 - **颜色**：只改 paint，不动 advance/度量/glue。引擎布局**一字不变**，renderer 按 span
   逐 cluster 上色。从 `AnnotatedString.spanStyles` 抽 `SpanStyle.color` →
   `drawTiqianGlyphs` 的 per-cluster 颜色查表（color→Paint 缓存）。
 - 不走「合成加粗/斜体」：synthetic bold/oblique 会改墨宽却不改 advance，导致版面与绘制
-  对不上——加粗/斜体一律归 B 档走真字体。
+  对不上，加粗/斜体一律归 B 档走真字体。
 
-**B. Layout-affecting（改 advance/度量）——混排 em 规则已定（2026-06-17）；字号已落地（2026-06-19）。**
-- **字号**（✅ 已落地）：sized span 内每个 cluster 按 span 字号真正 shape（advance 真）+
+**B. Layout-affecting（改 advance/度量），混排 em 规则已定（2026-06-17）；字号已实现（2026-06-19）。**
+- **字号**（✅ 已实现）：sized span 内每个 cluster 按 span 字号实际 shape（advance 真）+
   取真度量。实现：`TiqianTextContent.spans` 进引擎，span 边界强制切 cluster
   （`clusterRanges` 不再吞掉 Latin 词 / 合并标点内的尺寸变化），`shapeSegment` 用
   per-segment style、`FontMetricsRequest` 用 per-cluster 字号；renderer 按 `FontSizeSpan`
@@ -57,36 +57,36 @@ Compose 侧作者面用 `AnnotatedString`（ADR 0030 的 `CjkParagraph(Annotated
     行高是后续；② 边界 em 决策（中西间距、标点 glue）仍按**段落基准**，per-owner 细化是
     后续；③ 因此 sized span **内含标点**时该标点 body/glue 仍是基准尺寸（少见，已知毛边）；
     ④ 混排**基线对齐**沿用共享基线（ideographic/alphabetic），CLREQ 基线规则单独定。
-- **字重、斜体**（✅ 已落地 2026-06-19）：`TextStyle` 加 `fontWeight`/`italic`，shaper 按
+- **字重、斜体**（✅ 已实现 2026-06-19）：`TextStyle` 加 `fontWeight`/`italic`，shaper 按
   `FontStyle(weight, slant)` 选**真**粗体/斜体 typeface → SHAPED advance 是真的（粗体更宽、
   非合成）；renderer 同样按 per-cluster `FontStyle` 取 styled typeface 绘制。**度量不变**：
-  同一字族粗/斜共用纵向度量，行高不随字重/斜体变（正确）。CJK 多无斜体，`matchFamilyStyle`
-  退最近的正立体（不合成倾斜）——与「斜体只对西文有意义」一致。span 样式在 Compose 侧
-  **拍平**成无重叠、整解析的 `TextSpan`（base + 覆盖），故字号/字重/斜体/颜色可任意叠加。
-  默认 `(400, upright)` == `FontStyle.NORMAL` → 无 span 时 typeface 不变（golden 零漂移）。
-- **字体（family）**（✅ 已落地 2026-06-19）：`SpanStyle.fontFamily`（`GenericFontFamily`
+  同一字体 family 粗/斜共用纵向度量，行高不随字重/斜体变（正确）。CJK 多无斜体，`matchFamilyStyle`
+  退最近的正立体（不合成倾斜），与「斜体只对西文有意义」一致。span 样式在 Compose 侧
+  **归并**成无重叠、整解析的 `TextSpan`（base + 覆盖），故字号/字重/斜体/颜色可任意叠加。
+  默认 `(400, upright)` == `FontStyle.NORMAL` → 无 span 时 typeface 不变（golden 没有漂移）。
+- **字体（family）**（✅ 已实现 2026-06-19）：`SpanStyle.fontFamily`（`GenericFontFamily`
   Serif/SansSerif/Monospace）→ token 名进 `TextStyle.fontFamilies`。`SkiaSystemTypefaces.typeface
   (isLatin, family, style)` 一个**共享**解析器：generic 按 role 映射候选（衬线 CJK→宋/明体、
-  Latin→Times；等宽 Latin→Menlo…；CJK 多全宽退回 sans）；具名族先试再退回系统默认。shaper
+  Latin→Times；等宽 Latin→Menlo…；CJK 多全宽退回 sans）；具名字体 family 先试再退回系统默认。shaper
   （advance）与 renderer（glyph）走同一解析器 → 不漂。**限制**：自定义 `FontListFontFamily`
-  （加载字体文件，无可移植族名）暂不接；per-cluster **度量**仍用默认字（行高基本不随族变），
+  （加载字体文件，无可移植 family 名）暂不接；per-cluster **度量**仍用默认字（行高基本不随 family 变），
   与字重/斜体同一档的取舍。
-- **显式 baseline shift**（✅ 已落地 2026-07-07，`ExplicitBaselineShiftSpan`）：`TextStyle`
+- **显式 baseline shift**（✅ 已实现 2026-07-07，`ExplicitBaselineShiftSpan`）：`TextStyle`
   增加 `baselineShift`（px，+down），Compose `SpanStyle.baselineShift` 的 multiplier
   按 span 最终字号解析并翻转成 Tiqian 坐标。它不改变字体 fallback、标点 glue、禁则或
   Roman/CJK baseline 分类，只在最终 cluster baseline 上**叠加**作者样式位移；因此参考文献
   `[1]` 这类西文/数字角标仍保持共享 Roman baseline，只是被显式上移。
-- **行内附着关系**（✅ 已落地 2026-08-11，`AttachedInlineVirtualAdjacency`）：
+- **行内附着关系**（✅ 已实现 2026-08-11，`AttachedInlineVirtualAdjacency`）：
   `InlineAttachment.Previous` 表示一段行内文字在语义和间距上属于前文，而不等同于“凡是
   上标都附着前文”。Compose 以专用 annotation 把范围送入 `TextSpan`；引擎仅在判断自动
   中西间距、标点压缩与末档字间距时，把角标视为透明，按角标两侧正文直接相邻时的规则
   重新求值，再让角标尾侧承载结果。例如 `中文[1]后文` 不生成空隙，`中文[1]Latin` 生成一处
-  中西间距，`。”[1]，后文` 按 `”，` 的相邻标点规则压缩，而不是把 `”` 后的固定半字搬过
+  中西间距，`。”[1]，后文` 按 `”，` 的相邻标点规则压缩，不把 `”` 后的固定半字搬过
   去。范围位于段末，或尾侧边界成为实际行末时，不保留边界空白。源码、shaping、字框与
   角标墨迹均不移动。附着范围内的 cluster 全部列入避头集合，并把前一正文 cluster 与整个
   附着范围作为不可断组交给断行器；因此角标可以随前文留在行尾，但不能单独出现在下一行行首。
 - **混排 em 决策的字号基准 = 该空白的「归属 cluster」的字号**（加性 glue 模型每条空白都有
-  归属者）。CLREQ 已为关键决策指定了归属，不是「小的/前一个/段落」的全局选择：
+  归属者）。CLREQ 已为关键决策指定了归属，不采用「小的/前一个/段落」的全局选择：
   - **中西间距** = 1/4 **汉字宽**（CLREQ 原文）→ 归属那个**汉字**的字号（西文字号不进式子）；
   - **标点 body（半字）+ glue** = **标点自己**的字号；
   - **着重号几何** = 被注**那个字自己**的字号；
@@ -97,17 +97,17 @@ Compose 侧作者面用 `AnnotatedString`（ADR 0030 的 `CjkParagraph(Annotated
     的结构档（grid/缩进）；都各对一半，本规则把两半按归属统一了。
 - **行高** = 行内各 cluster 度量的 `max`（已是 maxOf，喂入 per-cluster 度量即可）；混排字号的
   **基线对齐**规则（CLREQ §文本的间距调整）单独定。
-- **双语强调**（✅ 已落地 2026-06-19，`BilingualEmphasisWesternItalic`）：`Emphasis`(着重号)
+- **双语强调**（✅ 已实现 2026-06-19，`BilingualEmphasisWesternItalic`）：`Emphasis`(着重号)
   span 内，汉字加点（既有），**西文 run 自动斜体、不加点**。引擎按 role(Latin)∩Emphasis 在
   shaping 时 `italic=true`（advance 真）；renderer 用**同一份** role(`debug.fontDecisions`)+
   decorations 数据取斜体 typeface，二者一致。着重号点几何本就跳过非汉字（`no-dot-on-non-han`）。
-  当前**恒开**（无 flag）——要可关需把 policy 透到 renderer，后续。
-- **列表**（✅ 已落地 2026-06-19，CLREQ §6.2.1.1 凸排）：`CjkBlock.List(items, marker, indent?, start)`
+  当前**总是开启**（无 flag）。要可关需把 policy 透到 renderer，后续。
+- **列表**（✅ 已实现 2026-06-19，CLREQ §6.2.1.1 凸排）：`CjkBlock.List(items, marker, indent?, start)`
   + `ListMarker`（`Decimal` `1.` / `CjkNumber` `一、` / `Circled` `①` / `Bullet` `•`）。
-  标记**左对齐顶格**于固定宽「标记列」(gutter)，正文整列缩进、续行同列对齐——Compose 侧
-  双列（gutter `Box` + 正文 `Row.weight`），**引擎零改动**，正文/标记都走 `CjkParagraph`。
+  标记**左对齐顶格**于固定宽「标记列」(gutter)，正文整列缩进、续行同列对齐，Compose 侧
+  双列（gutter `Box` + 正文 `Row.weight`），**引擎没有改动**，正文/标记都走 `CjkParagraph`。
   列宽默认 **1 字**，自动按列表中**最宽标记**升到放得下它的最小整字数（如出现 `10.` → 2 字），
-  标记宽**实测**（`autoListGutterEm`，关 grid + 零缩进取裸宽，不靠数位数）；`indent` 非空则覆盖。
+  标记宽**实测**（`autoListGutterEm`，关 grid + 零缩进取原始宽度，不靠数位数）；`indent` 非空则覆盖。
   marker/正文都**零段首缩进**（gutter 是唯一缩进）。嵌套/富文本项是后续。
   Web 于 2026-07-14 接入同一模型：简单顶层 `ol/ul` 保留原生容器与 `li`，整组 marker 用当前
   Web shaper 实测，最宽值向上取整到整数 `ic`；gutter 位于正文版心内部，item 可用行长为
@@ -118,12 +118,12 @@ Compose 侧作者面用 `AnnotatedString`（ADR 0030 的 `CjkParagraph(Annotated
 
 ## Consequences
 
-- 颜色立即可用，且**零引擎风险**（布局不变、golden 不动）。
-- B 档是真正的大头：per-cluster style 贯穿 fallback→shaping→metrics，且每条 em 决策都要
-  指明「用谁的字号」。分档让 A 先落地、B 带着混排 em 规则单独推进。
+- 颜色立即可用，且**没有引擎风险**（布局不变、golden 不动）。
+- B 档才是大头：per-cluster style 贯穿 fallback→shaping→metrics，且每条 em 决策都要
+  指明「用谁的字号」。分档让 A 先实现、B 带着混排 em 规则单独推进。
 - 源文本不改写：`AnnotatedString.text` 即源；span 只附着样式。
 
 ## Alternatives considered
 
-- **一步到位做全部样式**：否决——layout-affecting 的混排 em 歧义没定就动 shaping，必然返工。
-- **render-only 合成加粗/斜体**：否决——改墨不改 advance，版面与绘制错位，且质量差。
+- **一步到位做全部样式**：否决。layout-affecting 的混排 em 歧义没定就动 shaping，必然返工。
+- **render-only 合成加粗/斜体**：否决。改墨不改 advance，版面与绘制错位，且质量差。

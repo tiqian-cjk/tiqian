@@ -1,0 +1,13 @@
+# Swift-specific configuration shared by the f32 and f64 generation entries.
+# Included by swift-f32.hxml and swift-f64.hxml.
+engine-haxe/targets/common.hxml
+engine-haxe/targets/classes.hxml
+-cp .haxelib/boring/git/packages/compiler/reflaxe/swift/std-shadow
+-cp .haxelib/boring/git/packages/compiler/reflaxe/swift
+--macro Intercept.run(['engine-haxe/src'])
+--macro swiftcompiler.Compiler.use()
+-D swift-test-runner=native
+-D swift-test-import=TiqianEngine
+-D runtime-import=@tiqian/runtime
+-D runtime-emit=.
+-D package-shell=none

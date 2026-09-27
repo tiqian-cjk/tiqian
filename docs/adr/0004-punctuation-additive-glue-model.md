@@ -4,16 +4,16 @@
 - Date: 2026-06-06
 
 > [!NOTE]
-> 文末 Slice 3 的 placeholder / follow-up 描述保留为历史。真实 shaping 与 ink-bounds
+> 文末 Slice 3 的 placeholder / follow-up 描述保留为历史。实际 shaping 与 ink-bounds
 > 标点几何已经由 [ADR 0013–0016](README.md#平台-shaping-与绘制) 和
-> [ADR 0014](0014-ink-bounds-calibrated-punctuation-geometry.md) 落地；当前实现状态见
+> [ADR 0014](0014-ink-bounds-calibrated-punctuation-geometry.md) 实现；当前实现状态见
 > [architecture.md](../architecture.md)。
 
 ## Context
 
-中文标点传统实现常用「减法模型」：把全角标点视为 1em 的 glyph，行尾再削掉一半、连续标点之间再削掉重叠。结果是规则散落、连续标点之间会出现 1em 空洞、justification 难以参与、调试无法解释。
+中文标点传统实现常用「减法模型」：把全角标点视为 1em 的 glyph，行尾再削掉一半、连续标点之间再削掉重叠。结果是规则分散在各处、连续标点之间会出现 1em 空洞、justification 难以参与、调试无法解释。
 
-更根本的问题：标点不是一个固定宽度的字符，而是 `ink + 周围空间`。空间是可调整的资源，应该被显式建模。
+更根本的问题：标点并非固定宽度的字符；它是 `ink + 周围空间`。空间是可调整的资源，应该被显式建模。
 
 ## Decision
 
@@ -23,7 +23,7 @@
 PunctuationAtom
   glyph
   advance          // 当前实际宽度
-  inkBounds        // 真实墨迹
+  inkBounds        // 实际墨迹
   bodyWidth        // 不可压缩的部分
   leadingGlue      // 前置可调空间 (natural / min / max)
   trailingGlue     // 后置可调空间 (natural / min / max)
@@ -47,7 +47,7 @@ PunctuationGlue -> CjkLatinSpace -> WordSpace -> CjkInterChar
 
 初版 Justifier 把 `PunctuationGlue` 实现为「把 `PunctuationSpacingCompressor`
 压掉的量还回去」。这是错的：相邻标点收缩（`」。` `，「` → body 贴紧）是 CLREQ
-的**硬规则**，不是弹性资源——两端对齐的行里 `」。` 被重新拉开，视觉上立即穿帮。
+的**硬规则**，不属于弹性资源，两端对齐的行里 `」。` 被重新拉开，视觉上立即暴露错误。
 
 修正后的语义（`GlueSideAwareJustification`）：
 
@@ -63,7 +63,7 @@ PunctuationGlue -> CjkLatinSpace -> WordSpace -> CjkInterChar
 
 ### Amendment (2026-06-11): 拉伸档对齐 CLREQ，标点空隙退出优先序
 
-CLREQ 拉伸顺序（西文词距 → 中西间距 → 平均拉大字距）**不含**标点空隙档——
+CLREQ 拉伸顺序（西文词距 → 中西间距 → 平均拉大字距）**不含**标点空隙档，
 标点调整空间只参与挤压。上一条 amendment 引入的 tier-1
 `PunctuationGlueFirstJustification`（标点 glue 侧优先扩 0.125em）随之删除：
 
@@ -78,29 +78,29 @@ CLREQ 拉伸顺序（西文词距 → 中西间距 → 平均拉大字距）**�
 Review 发现两处与 CLREQ 的残余出入：
 
 - **`CjkOnlyInterCharBoundary`**：CjkInterChar 准入原为「任一侧 CJK 且非
-  汉字↔西文」，导致中文标点↔西文边界（`：The`、`dog（`）也按份额拉开——
+  汉字↔西文」，导致中文标点↔西文边界（`：The`、`dog（`）也按份额拉开，
   违反「中文标点与西文之间不加间距」（autospace 一侧遵守、justify 一侧
   违反的自相矛盾）。改为**两侧都必须是 CJK**（汉字或中文标点），该条件
   自然覆盖原来的 ideograph↔alpha 排除。
 - **末档无上限**：CLREQ 的「平均拉大字距」是无上界的最后手段；原实现
   每边界 cap 0.25em，全部饱和后 deficit 剩余、两端对齐的行停在右边距
-  之前——视觉上与「行尾空格未削」无法区分。改为均匀无 cap 兜底，对齐
+  之前，视觉上与「行尾空格未削」无法区分。改为均匀、无 cap 的最后手段，对齐
   行必然填满。cap 以下行为不变（等容量比例分摊本就等于均摊）。
 - **末档是均匀 tracking，不做 glue 侧/折叠排除**（同日复审第二轮，
   用户拍板「除西文字母间距外所有都要参与」）：平均拉大字距对**每一个**
-  CJK↔CJK 边界同份额加空——标点实心侧（`“|好`、`喝|。`、括号内侧）与
+  CJK↔CJK 边界同份额加空，标点实心侧（`“|好`、`喝|。`、括号内侧）与
   已折叠的相邻标点对（`。”`）一并参与。被削减/折叠的空白依旧**不优先
-  补齐**（consumed 不回退），拿到的只是和大家相同的均匀份额——即此前
-  缺口 3 讨论的原意「加空白也是跟其他一样尽量均匀地加」。
-  `GlueSideAwareJustification` 的拉伸侧禁令随之退役（它本是配合已删除
+  补齐**（consumed 不回退），拿到的只是和大家相同的均匀份额，即此前
+  Gap 3 讨论的原意「加空白也是跟其他一样尽量均匀地加」。
+  `GlueSideAwareJustification` 的拉伸侧禁令随之取消（它本是配合已删除
   的标点优先档的非对称扩张设计）；压缩侧的 glue 模型不受影响。
 
 ### Amendment (2026-06-25): 原子长标号边界不参与 CjkInterChar
 
-知乎正文 dogfood 暴露出另一条边界：破折号 `——` 已按 CLREQ display
+知乎正文 dogfood 暴露出另一条边界：破折号（两个连用的 U+2014）已按 CLREQ display
 substitution 合成 `⸺`，但 justify 末档仍把其右侧边界当普通
-`CjkInterChar`，视觉上变成 `—— 不`。这不是 source 空格，也不是字体缺字
-回滚，而是两端对齐阶段制造的假空隙。
+`CjkInterChar`，视觉上破折号与「不」字之间出现空隙。这不是 source 空格，也不是字体缺字
+回滚；它是两端对齐阶段制造的假空隙。
 
 决议：
 
@@ -156,7 +156,7 @@ Mi 10s 文献语料中的 `化学教育(中英文)` 暴露出 Unicode 属性分�
 `CjkInterChar`。本行的剩余宽度只能集中落在少数汉字边界，产生不均匀的大空洞。
 
 新增具名准入 `WesternBracketCjkInterChar`：非 CJK 的 `OP` / `CL` / `CP` 括号直接接触
-`CjkText` 时，其边界参加第③档统一加字距，与本行其他合法位置同份额、无优先级。
+`CjkText` 时，其边界参加第③档统一加字距，与本行其他符合准入条件的位置同份额、无优先级。
 它不添加中西自动间距，不改变括号字体或 advance，也不开放纯西文括号内部的 tracking。
 连接号、分隔号、原子长标号与符号分离禁则的既有关闭边界仍优先。
 
@@ -166,10 +166,10 @@ justification allocation 以 `WesternBracketCjkInterChar` 记录本次准入来�
 
 ## Consequences
 
-- 行尾标点「自然半宽」不是硬编码 `-= 0.5em`，而是 `lineEndPolicy + trailingGlue.min`。
+- 行尾标点「自然半宽」并非硬编码 `-= 0.5em`；它取 `lineEndPolicy + trailingGlue.min`。
 - 连续标点之间不再出现 1em 空洞：相邻 atom 的 trailing/leading glue 通过 compression 合并。
 - justification 参与时，glue 是天然资源，不需要拉开汉字间距即可吸收宽度差。
-- 行首悬挂、连续标点挤压、引号上下文这类策略都可以拆成具名 heuristic，而不是 if-chain。
+- 行首悬挂、连续标点挤压、引号上下文这类策略都可以拆成具名 heuristic，不用 if-chain。
 
 ## Alternatives considered
 
@@ -179,9 +179,9 @@ justification allocation 以 `WesternBracketCjkInterChar` 记录本次准入来�
 
 ## Follow-up (Slice 3 收尾)
 
-- `inkBounds` 当前来自占位实现；接入真实 shaping 后用 glyph ink box 校正。
+- `inkBounds` 当前来自占位实现；接入实际 shaping 后用 glyph ink box 校正。
 - `pairRules` 当前仅 `QuotePairAnalyzer` 覆盖共用码点的弯引号（U+2018–201D）。ASCII `(` `)` `[` `]` `{` `}` 不属于共用码点（中文有独立的 fullwidth `（）「」『』`），直接在 `CjkFontRoleClassifier.isAsciiLatinPunctuation` 里分类为 Latin 即可，不需要 pair 推断。
-- `anchor = line-end / line-start` 在引擎实现 Slice 4 (kinsoku) 后才真正被使用；当前 dump 已暴露，先做记账。
+- `anchor = line-end / line-start` 在引擎实现 Slice 4 (kinsoku) 后才实际被使用；当前 dump 已暴露，先把这件事记录下来。
 - 引号在嵌套场景（`他说：“你好‘世界’。”`) 的 pair 优先级需要 fixture。
 
 ## 跨 ADR

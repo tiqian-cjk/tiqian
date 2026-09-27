@@ -31,7 +31,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses > /dev/null
       - name: Install Android platform pieces
@@ -68,7 +68,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses > /dev/null
       - name: Install Android platform pieces
@@ -104,7 +104,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses > /dev/null
       - name: Install Android platform pieces
@@ -137,7 +137,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses > /dev/null
       - name: Install Android platform pieces
@@ -216,7 +216,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses > /dev/null
       - name: Install Android platform pieces

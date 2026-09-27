@@ -1,0 +1,67 @@
+// tiqian's bundle project (boring feature spec 59). The driver derives every
+// output directory (<outRoot>/<id>/gen and <outRoot>/<id>/gen-tests) and every
+// results path (<resultsDir>/<id>.jsonl) from this file; none is named here.
+//
+//   each bundle's run.env carries the per-test budget the repository records
+//   (600000 ms): the boring runtime falls back to a 6 s budget when
+//   BORING_TEST_TIMEOUT_MS is unset, and eleven cases of this suite run longer
+//   than that on this machine, so they would be reported as timeouts.
+// The generator revision is the checkout at tiqian/.haxelib/boring/git: the
+// driver only decides which defines and which toolchain commands run, and the
+// code it emits is whatever that revision contains.
+{
+  "outRoot": "engine-haxe/out",
+  "resultsDir": "engine-haxe/out/test-results",
+  "baseline": "kotlin-f32",
+  "sourceRoots": ["engine-haxe/src", "engine-haxe/macros"],
+  "bundles": [
+    {
+      "id": "kotlin-f32",
+      "target": "kotlin",
+      "rootsFile": "engine-haxe/targets/kotlin-f32.hxml",
+      "run": {
+        "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
+      }
+    },
+    {
+      "id": "kotlin-f64",
+      "target": "kotlin",
+      "rootsFile": "engine-haxe/targets/kotlin-f64.hxml",
+      "run": {
+        "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
+      }
+    },
+    {
+      "id": "ts",
+      "target": "ts",
+      "rootsFile": "engine-haxe/targets/ts.hxml",
+      "run": {
+        "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
+      }
+    },
+    {
+      "id": "swift-f32",
+      "target": "swift",
+      "rootsFile": "engine-haxe/targets/swift-f32.hxml",
+      "run": {
+        "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
+      }
+    },
+    {
+      "id": "swift-f64",
+      "target": "swift",
+      "rootsFile": "engine-haxe/targets/swift-f64.hxml",
+      "run": {
+        "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
+      }
+    },
+    {
+      "id": "dart",
+      "target": "dart",
+      "rootsFile": "engine-haxe/targets/dart.hxml",
+      "run": {
+        "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
+      }
+    }
+  ]
+}

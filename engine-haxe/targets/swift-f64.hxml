@@ -1,0 +1,6 @@
+# Stage A Swift f64 generation entry (no float-precision define; full Float
+# precision). Run from the worktree root:
+#   nix develop -c bash -c 'haxe engine-haxe/targets/swift-f64.hxml'
+engine-haxe/targets/swift-common.hxml
+-D swift-output=engine-haxe/out/swift-gen-f64
+-D swift-test-output=engine-haxe/out/swift-gen-f64-tests

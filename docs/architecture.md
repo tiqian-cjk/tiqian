@@ -26,7 +26,7 @@
   -> TiqianTextContent + style + annotations + inline geometry
   -> 字体角色与 fallback
   -> 平台或 replayable-font shaping adapter
-  -> 字体度量归一化
+  -> 字体度量标准化
   -> 标点 atom / glue / inline geometry ledger
   -> break candidates + mandatory breaks + unbreakable ranges
   -> line breaking + kinsoku repair
@@ -35,8 +35,8 @@
   -> Compose / DOM / Android / Core Text renderer
 ```
 
-`ExplainableStubParagraphLayoutEngine` 保留了早期名称，但当前实现已经走完整真实 pipeline。
-stub 只作为没有平台字体系统时的确定性测试 adapter 存在，不是默认布局模型。
+`ExplainableStubParagraphLayoutEngine` 保留了早期名称，但当前实现已经走完整个实际 pipeline。
+stub 只作为没有平台字体系统时的确定性测试 adapter 存在，不作为默认布局模型。
 
 ## 输入与输出
 
@@ -63,8 +63,8 @@ stub 只作为没有平台字体系统时的确定性测试 adapter 存在，不
 中西自动间距不复用字体角色。`core` 固定 Unicode Proposed Draft UTR #59
 `East_Asian_Spacing` 的官方数据修订，按 source grapheme 边界把 shaping cluster 的首尾解析为
 Wide / Narrow / Other（Conditional 在中文语言上下文解析为 Narrow）；`layout` 只在 W↔N
-边界应用 profile 的 gap、换行成本与拉伸账目。字体 fallback、shaping face 与间距分类因此不会因
-Greek、Cyrillic 等非 Latin 字母互相绑死。该 UTR 仍是 work in progress，升级数据必须显式更新
+边界应用 profile 的 gap、换行成本与拉伸量记录。字体 fallback、shaping face 与间距分类因此不会因
+Greek、Cyrillic 等非 Latin 字母互相绑定为一组。该 UTR 仍是 work in progress，升级数据必须显式更新
 修订、校验和、fixture 与 golden，不能静默跟随网络最新版。
 
 断行也不复用字体角色充当规则真值。`linebreak` 固定 Unicode 17.0.0 `LineBreak.txt` 中布局实际
@@ -74,13 +74,13 @@ Strict tailoring。当前只承诺 ADR 0026 amendment 列出的标点子集、ma
 不把 `SimpleCharacterLineBreakAnalyzer` 冒充完整 Unicode Line Breaking Algorithm。
 
 Compose 的 `CjkInlineObject` 是 `InlineObjectSpan` 的呈现边界：宿主先提供对象的 advance、
-ascent 与 descent，核心据此断行并形成真实行盒，Compose 前端再把 composable 放到
+ascent 与 descent，核心据此断行并形成实际行盒，Compose 前端再把 composable 放到
 `LayoutResult` 的最终 baseline 上。`PlaceholderVerticalAlign` 不参与这条路径，也不能成为
 公式或其他基线敏感对象的布局真值。对象边界默认固定。提供方可以报告边界的实测自然空白
 和绝对目标宽度，开放有上限的优先拉伸；公式把三类空白都先补到 0.5em，依次处理标点后、
 关系符两侧、二元运算符两侧，再与已开放的词距、
 中西间距和普通字间距一起参加最终统一拉伸。这个公式次序是对象提供方仿照 CLREQ 分档模型
-给出的具名策略，不是前端猜测的视觉偏移，也不是 CLREQ 对数学公式的直接规定。
+给出的具名策略，不属于前端猜测的视觉偏移，也不属于 CLREQ 对数学公式的直接规定。
 
 边界是否参加调宽与是否允许断行相互独立：只为移动后续公式片段而暴露的边界必须明确关闭
 断行，公式原本的主基线断点才交给 line breaker。断点命中时，运算符留在上一行，但它后侧
@@ -91,7 +91,7 @@ ascent 与 descent，核心据此断行并形成真实行盒，Compose 前端再
 若 Markdown 在公式与该点号之间保留了源码空格，核心只把空格的布局宽度折叠为零，复制、搜索
 与无障碍仍保留原文；避头尾跨过这段零宽分隔应用，并关闭公式到点号之间的全部拉伸边界。
 
-行内对象的 ascent / descent 是相对正文 baseline 的可见边界，不是要求对象必须塞进本行各自的
+行内对象的 ascent / descent 是相对正文 baseline 的可见边界，不要求对象必须放进本行各自的
 上下半 leading。`InlineObjectInterlineCollision` 先让对象使用相邻两行基文字面之间已有的行间空间，
 但必须保留 `ParagraphStyle.inlineObjectMinimumClearanceEm` 指定的可见内容净空（默认 0.1em，可显式
 关闭）。能够容纳时只在安全范围内移动两行 `LineBox` 的共享边界，baseline 距离不变。只有“前一行
@@ -101,7 +101,7 @@ ascent 与 descent，核心据此断行并形成真实行盒，Compose 前端再
 ## 字体与 shaping
 
 `font` 先根据文字角色、locale、宿主字体偏好与标点策略决定候选字体。
-`engine` 的 shaping 契约的平台实现随后只负责把已确定的 source/display text 与字体请求变成
+`engine` 的 shaping 约定的平台实现随后只负责把已确定的 source/display text 与字体请求变成
 cluster、glyph、advance 和 ink bounds。可重放后端还用稳定 `FontFaceId` 把这些几何绑定到
 同一份字体字节，供 renderer 取回 outline；`LayoutResult` 仍是唯一几何真值。
 
@@ -112,8 +112,8 @@ cluster、glyph、advance 和 ink bounds。可重放后端还用稳定 `FontFace
 - `platforms/android/native-font`：宿主可显式选择的 Android API 23+ HarfBuzz / FreeType
   受控字体后端，从同一字体字节完成
   shaping、metrics、ink 与 outline replay；文件字体按内容身份只读映射一次，`ByteArray` / asset
-  转为一份共享 direct buffer，TTC index 与可变轴组合只创建轻量 face 实例，不复制整份字体。
-  字体身份包含源内容、TTC index 与有效轴坐标；每个 role 使用有序 family fallback，组内先匹配
+  转为一份共享 direct buffer，TTC index 与可变参数取值组合只创建轻量 face 实例，不复制整份字体。
+  字体身份包含源内容、TTC index 与有效的可变参数取值；每个 role 使用有序 family fallback，组内先匹配
   regular / bold / italic。catalog revision 变化会让 Compose 同时重建 shaping、metrics 和 layout
   cache，旧 face 只为旧 `LayoutResult` 保留；
 - `platforms/android/shaping`：Compose 默认的 Android 公开平台后端。API 31+ 保留
@@ -124,7 +124,7 @@ cluster、glyph、advance 和 ink bounds。可重放后端还用稳定 `FontFace
   只把请求原样写进 `GlyphRun`。
 
 平台 adapter 不决定 CLREQ 码点替换、标点宽度、避头尾或两端对齐。它无法提供某项证据时，
-必须输出具名降级原因，而不是在 renderer 中猜补偿值。
+必须输出具名降级原因，不用在 renderer 中猜补偿值。
 标点压缩的目标宽度属于 CLREQ policy，但左右削边来自 adapter 提供的逐 glyph `halt`
 placement 或 ink bounds：layout 选择能保留原墨迹及框内安全边距的左、居中或右拟合框；
 只有缺少字体几何时才使用具名 profile fallback。renderer 不再为标点另行移动 glyph。
@@ -147,12 +147,12 @@ cluster，只有最终判为 `CjkPunctuation` 的 run 才能进入 CLREQ display
 1. `ScriptAwareFontMetricsNormalizer` 把平台 raw metrics 转成用于 CJK 与 Latin 混排的
    layout metrics。
 2. `PunctuationAtom` 把标点表达为 `ink/body + leadingGlue + trailingGlue`，避免把所有
-   标点先假定成 1em 再散落减法补丁。
+   标点先假定成 1em 再打分散的减法补丁。
 3. `linebreak` 提供固定 Unicode 数据、已实现的 UAX #14 标点子集、强制换行、西文按词断行与
    连字符断词候选。
 4. line breaker 按 `ClreqProfile` 选择断点，并通过 PushIn、Hang、CarryPrevious、
    CarryNext 等具名 repair 处理行首行尾禁则。
-5. 行调整在合法断行基础上分配可压缩和可拉伸空间，非末行以中文正文两端对齐为基线。
+5. 行调整在符合规则的断行基础上分配可压缩和可拉伸空间，非末行以中文正文两端对齐为基线。
 6. annotation、decoration、inline object 与 rich text geometry 在同一份最终行几何上解析。
 
 每一步都把原因写入 `LayoutResult.debug` 和 layout dump。视觉结果与 decision 不一致时，
@@ -180,7 +180,7 @@ Android API 23+ 默认使用公开平台 run 接口。API 31+ 让平台 shape �
 无法读回物理 face，因此把每个 cluster 作为 `LegacyPlatformRunReplay`，由同一
 `TextPaint`、typeface、locale、OpenType feature 与上下文文本完成测量和
 `drawTextRun`。该路径跟随 Android 当前的 OEM 字体与 fallback 选择，不伪造平台
-未公开的 glyph 级身份。`platforms/android/native-font` 仍可由宿主单独依赖，
+未公开的逐 glyph 身份。`platforms/android/native-font` 仍可由宿主单独依赖，
 为明确字体字节提供受控的 HarfBuzz / FreeType 与 outline replay，但不再传递进
 Compose artifact。capability report 不会把正文路由回 Compose Text。
 可选的
@@ -202,7 +202,7 @@ source boundary 才让受影响节点重绘。连续滚动宿主把同一个 `Sc
 几何刷新 endpoint；同一位置通知让系统菜单锚点和非拖动手柄跟随祖先裁剪后的可见视口，长按不动
 不会自行扩选。source `AnnotatedString`（含 link/URL/TTS annotation）
 原样进入 Compose semantics，非空选区再暴露 set-selection/copy action。Compose Android 只有拿到
-真实 `TextLayoutResult` 才会提供逐字符屏幕框与行/页遍历，前端不为此伪造第二份排版；编辑器、IME、
+实际 `TextLayoutResult` 才会提供逐字符屏幕框与行/页遍历，前端不为此伪造第二份排版；编辑器、IME、
 TalkBack character-location 能力不属于当前静态正文路径。
 
 ### Web
@@ -227,7 +227,7 @@ Web 列表保留原生 marker 与语义，只把列表正文交给 Tiqian 排版
 构建期 precompute 由 `platforms/web/server/precompute` 的 Rust 编排承担：从站点明确发布的字体文件建立
 HarfBuzz session，并调用同一个 `layout` 生成宽度无关的字体回放证据，以及可选的最大版心预排结果。
 引擎的 Kotlin/JS 出口在 `ffi/js` 编译，服务浏览器 exact-font 回退 worker；
-Kotlin/Native 出口在 `ffi/native`，以引擎级 C ABI 供 Rust 编排调用（ADR 0050）。纯文本与受控语义 inline
+Kotlin/Native 出口在 `ffi/native`，以引擎层面的 C ABI 供 Rust 编排调用（ADR 0050）。纯文本与受控语义 inline
 共用 source / semantic artifact / typography / font / width 证据；prepared DOM 留在正文之外的 inert
 template，SSR 正文始终是可响应的 native semantic backing。浏览器只有在 live width、字体与 artifact
 证据全部匹配时才整批采用快照；窄屏等 snapshot miss 使用构建期捕获的字号无关 shaping / metrics
@@ -235,7 +235,7 @@ template，SSR 正文始终是可响应的 native semantic backing。浏览器�
 再回到 Canvas host-font pipeline。完整规格见
 [ADR 0040](adr/0040-build-time-web-font-snapshots.md)。
 
-引擎插入的视觉软换行不进入复制或无障碍语义；真实 mandatory break 保留。跨段复制同时提供
+引擎插入的视觉软换行不进入复制或无障碍语义；源文本自带的 mandatory break 保留。跨段复制同时提供
 block-aware `text/plain` 与去除引擎几何后的宿主语义 `text/html`。
 
 ### Android View
@@ -293,7 +293,7 @@ caret/selection 几何；平台 tokenizer 不参与 shaping、断行或字位计
 ## 模块职责
 
 - `engine`：单一发布模块，合并了原 `core` / `font` / `linebreak` / `clreq` / `layout` /
-  `shaping-api`，按 `org.tiqian.{core,font,linebreak,clreq,layout,shaping}` 包分簇——平台无关的
+  `shaping-api`，按 `org.tiqian.{core,font,linebreak,clreq,layout,shaping}` 包分簇；平台无关的
   数据结构与 layout contract、字体角色 / fallback / 度量策略、平台无关的 shaping / replayable
   font contract、断行机会与西文断词、中文 profile / 标点分类 / 禁则 / 空间策略、段落布局 / 修复 /
   行调整与结构化 decision。
@@ -308,8 +308,8 @@ caret/selection 几何；平台 tokenizer 不参与 shaping、断行或字位计
 - `platforms/apple/frontend/coretext-render`：Apple 内部 Core Text renderer 与 paragraph backend。
 - `platforms/apple/frontend`：生产 Swift facade、静态 XCFramework、`AttributedString` authoring 与 Apple
   原生 view package；不拥有示例内容或排版规则。
-- `ffi/native`：引擎级 packed C ABI 的 Kotlin/Native 门面；不拥有排版规则。
-- `ffi/js`：引擎的 Kotlin/JS 门面（`@JsExport` wire 与 HarfBuzz session 后端）；不拥有排版规则。
+- `ffi/native`：引擎层面 packed C ABI 的 Kotlin/Native 对外接口；不拥有排版规则。
+- `ffi/js`：引擎的 Kotlin/JS 对外接口（`@JsExport` wire 与 HarfBuzz session 后端）；不拥有排版规则。
 - `platforms/web/server`：Rust workspace（`tiqian-precompute`、`tiqian-precompute-neon`）与
   `@tiqian/precompute` npm 包；Node exact-font session 与构建期编排；不拥有排版规则。
 - `platforms/web/client/astro`、`platforms/web/client/sveltekit`：框架 SSR / build / navigation transport；消费 `@tiqian/prose` 的公共
@@ -323,7 +323,7 @@ caret/selection 几何；平台 tokenizer 不参与 shaping、断行或字位计
   以及 fixtures / shaping evidence / trace 格式化等测试语料。
 
 首次公开发布的套件统一使用 Maven group `org.tiqian`。提椠 artifact 保留 `tiqian-*`
-产品族前缀，其中 Compose 基础前端与 Material 3 适配层分别是 `tiqian-compose` 和
+产品 family 前缀，其中 Compose 基础前端与 Material 3 适配层分别是 `tiqian-compose` 和
 `tiqian-compose-material3`；数学与 Markdown 分别使用 `math-*` 与 `markdown-*`。Markdown 的中立文档模型位于
 `org.tiqian.markdown`，Compose renderer 位于 `org.tiqian.markdown.compose`；Android native
 字体后端位于 `org.tiqian.shaping.android.nativefont`。完整命名边界见

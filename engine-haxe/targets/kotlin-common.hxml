@@ -1,0 +1,15 @@
+# Kotlin-specific configuration shared by the f32 and f64 generation entries.
+# Included by kotlin-f32.hxml and kotlin-f64.hxml.
+engine-haxe/targets/common.hxml
+engine-haxe/targets/classes.hxml
+-cp .haxelib/boring/git/packages/compiler/reflaxe/kotlin/std-shadow
+-cp .haxelib/boring/git/packages/compiler/reflaxe/kotlin
+# The Haxe reference runner's root joins the class path and the guarded
+# roots, so the generation triple matches the test bundle's own entry
+# (tests/compile.hxml) and the conventional class test entries of feature
+# spec 19 resolve from the same source set.
+-cp engine-haxe/tests
+--macro Intercept.run(['engine-haxe/src', 'engine-haxe/tests'])
+--macro kotlincompiler.Compiler.use()
+-D runtime-import=org.tiqian.boring.runtime
+-D runtime-emit=runtime

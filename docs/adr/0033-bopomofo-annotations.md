@@ -1,6 +1,6 @@
 # ADR 0033: 注音 ruby（行间注 第二刀，右侧竖排 ㄅㄆㄇ + 调号）
 
-- Status: Accepted（注音几何 + 绘制已落地；完整纵横对齐 deferred）
+- Status: Accepted（注音几何 + 绘制已实现；完整纵横对齐 deferred）
 - Date: 2026-06-20
 - Builds on [ADR 0032](0032-ruby-annotations.md)（拼音 ruby，上方）
 
@@ -8,15 +8,15 @@
 
 输入侧（`RubyKind.Bopomofo`、`BopomofoParser`、`bopomofo`）+ 几何（`computeBopomofoDecisions`：30 份
 表映到字身框；**已标注基字**右侧 0.5em 注音区预留）+ 绘制（符号填字身框；调号 CJK 字体 +
-与符号共用 0.3em 字号，不按 glyph ink 二次缩放）已落地。`BopomofoDecisionInfo` 入 dump。
+与符号共用 0.3em 字号，不按 glyph ink 二次缩放）已实现。`BopomofoDecisionInfo` 入 dump。
 `BopomofoLayoutTest` / `BopomofoParserTest` 守。完整纵横对齐（段内每字统一预留）不在当前
 slice 宣称完成，留给后续 profile / 竖排相关能力。
 
 ## Context
 
 注音（ㄅㄆㄇ）与拼音几何完全不同：横排时注文在基字**右侧**、竖排 ㄅㄆㄇ + 调号，且采
-完整形态要求**纵横对齐**——每字右侧预留半字、注文落在其中。CLREQ §注音符号标音的排版
-给了**逐情况配图**，绘制极严。本 ADR 先钉死注音区内部几何与已标注基字的预留模型；全段
+完整形态要求**纵横对齐**：每字右侧预留半字、注文落在其中。CLREQ §注音符号标音的排版
+给了**逐情况配图**，绘制极严。本 ADR 先固定注音区内部几何与已标注基字的预留模型；全段
 每字预留另行推进。
 
 ## 输入模型 & 解析
@@ -81,11 +81,11 @@ advance。完整纵横对齐要求段内**每字**（含未标注的标点 / 西
 
 ## Decision / Mechanism
 
-- 度量（账已结 2026-06-20）：30 份参考系 = **字身框**，按 edge **优先 BASE `ideo`(框底)/
+- 度量（已核对完毕 2026-06-20）：30 份参考系 = **字身框**，按 edge **优先 BASE `ideo`(框底)/
   `idtp`(框顶)，缺则回退 OS/2 sTypo**（`SkiaFontMetricsResolver.baseIdeoIdtp`）。实测 Source Han:
-  `ideo`=−0.120(=sTypoDesc)、`idtp` 缺失(→sTypoAsc 0.880),故与旧值一致、零漂移。该字身框
+  `ideo`=−0.120(=sTypoDesc)、`idtp` 缺失(→sTypoAsc 0.880),故与旧值一致、输出不变。该字身框
   同时供**行高 + 拼音 + 注音**(三者都读 `typoAscent/typoDescent`,改度量来源即全跟上)。
-  名分厘清:`icfb/icft` 才是内缩的真字面、`ideo/idtp` 是 1em em 框——本项目取后者作「字身框」基准。
+  名分厘清:`icfb/icft` 才是内缩的真字面、`ideo/idtp` 是 1em em 框,本项目取后者作「字身框」基准。
 - advance：`RubySpan.kind == Bopomofo` ⇒ 该 base range 的末 cluster 右侧结构性预留 0.5em
   注音区（复用 ADR 0032 的 `rubySpreadByCluster` 思路）。完整纵横对齐的每字统一预留不在
   当前实现内。
@@ -103,13 +103,13 @@ advance。完整纵横对齐要求段内**每字**（含未标注的标点 / 西
 现改为普通调号与注音符号共用稳定的 0.3em 字号，5×5 格只定义调号墨迹的中心位置；
 `LayoutResult` 记录最终 `fontSize`、`drawX` 与 `baselineY`。这里的 `drawX`/`baselineY` 是
 横排基线原点：Skia / Android / Web 直接按它重放竖排字形（ㄅㄆㄇ 按 advance 居中、坐在字身框
-基线）。Core Text 画的是真正的竖排 run，其笔位在字身框顶端居中，所以 `CoreTextLayoutRenderer`
+基线）。Core Text 画的是实际的竖排 run，其笔位在字身框顶端居中，所以 `CoreTextLayoutRenderer`
 只对 ㄅㄆㄇ 从字身框自行推导原点；由各平台 ink 算出的调号/轻声则照记录的 `drawX`/`baselineY`
 重放。Ink bounds 只参与平移居中，不参与普通调号的缩放。
 
 ## Consequences
 
-- 动 advance（已标注基字 +0.5em）——比拼音影响大；无注音时零漂移。完整纵横对齐仍需后续
+- 动 advance（已标注基字 +0.5em），比拼音影响大；无注音时输出不变。完整纵横对齐仍需后续
   profile / 排版模式承接。
 - 注文字体必须含 ㄅㄆㄇ（ADR 0032 的 per-span 字体能力正为此铺）。
-- 竖排雏形：ㄅㄆㄇ 竖直堆叠 + 调号摆位是竖排前哨。
+- 竖排雏形：ㄅㄆㄇ 竖直堆叠 + 调号摆位是竖排的第一步。

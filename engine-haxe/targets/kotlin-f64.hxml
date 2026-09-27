@@ -1,0 +1,6 @@
+# Stage A Kotlin f64 generation entry (no float-precision define; full Float
+# precision). Run from the worktree root:
+#   nix develop -c bash -c 'haxe engine-haxe/targets/kotlin-f64.hxml'
+engine-haxe/targets/kotlin-common.hxml
+-D kotlin-output=engine-haxe/out/kotlin-gen-f64
+-D kotlin-test-output=engine-haxe/out/kotlin-gen-f64-tests

@@ -1,0 +1,24 @@
+# Stage A Haxe test runner for the translated core slice, full double precision.
+#
+# This is tests/compile.hxml with the \`-D float-precision=f32\` line removed.
+# The define is the only place the Haxe bundle can leave binary64: the JS
+# target has no binary32 representation, but engine-haxe/src/org/tiqian/core/
+# AccurateSum.hx branches on \`#if float_precision\` and picks a different
+# accumulation shape when the define is present. Layer 3 compares two
+# double-precision targets, so the reference bundle must run the f64 branch.
+# Output goes to its own file so the f32 bundle stays runnable beside it.
+#
+#   haxe engine-haxe/tests/compile-js-f64.hxml
+#   bun engine-haxe/out/haxe-tests-f64.js
+-lib boring
+-cp .haxelib/boring/git/samples
+-cp engine-haxe/src
+-cp engine-haxe/macros
+-cp engine-haxe/tests
+-main Main
+-js engine-haxe/out/haxe-tests-f64.js
+-D analyzer-optimize
+-D boring_oracle
+--macro Intercept.run(['engine-haxe/src'])
+--macro GoldenDataMacros.init()
+--macro haxe.macro.Compiler.addGlobalMetadata('org.tiqian', '@:build(std.RecordMember.build())')

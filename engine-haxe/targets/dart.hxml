@@ -1,0 +1,14 @@
+# Stage A Dart generation entry (no float-precision define; full Float
+# precision). Run from the worktree root:
+#   nix develop -c bash -c 'haxe engine-haxe/targets/dart.hxml'
+engine-haxe/targets/common.hxml
+engine-haxe/targets/classes.hxml
+-cp .haxelib/boring/git/packages/compiler/reflaxe/dart/std-shadow
+-cp .haxelib/boring/git/packages/compiler/reflaxe/dart
+--macro Intercept.run(['engine-haxe/src'])
+--macro dartcompiler.Compiler.use()
+-D dart-output=engine-haxe/out/dart-gen
+-D dart-test-output=engine-haxe/out/dart-gen-tests
+-D dart-test-runner=native
+-D runtime-import=@tiqian/runtime
+-D runtime-emit=.

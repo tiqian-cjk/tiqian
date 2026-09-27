@@ -1,0 +1,443 @@
+diff --git a/packages/compiler/PolicyQueries.hx b/packages/compiler/PolicyQueries.hx
+index e6c15f81..6923145c 100644
+--- a/packages/compiler/PolicyQueries.hx
++++ b/packages/compiler/PolicyQueries.hx
+@@ -908,6 +908,13 @@ class PolicyQueries {
+                 final loopBody = bodyStmts.slice(0, increment);
+                 if (PolicyQueries.writesLocal(loopBody, counter))
+                     return null;
++                // A counting-for rewrite is only safe for a pure index
++                // traversal. Any read of the counter inside the loop body may
++                // observe the post-increment value (e.g. `ix = i - 1` after
++                // `i++`); keep the while loop in that case.
++                for (stmt in loopBody)
++                    if (PolicyQueries.mentionsLocal(stmt, counter))
++                        return null;
+                 return {
+                     index: counter,
+                     start: start,
+@@ -998,6 +1005,14 @@ class PolicyQueries {
+                                 final remainingBody = [for (j in 0...bodyStmts.length) if (j != increment) bodyStmts[j]];
+                                 if (PolicyQueries.writesLocal(remainingBody, counter))
+                                     return null;
++                                // A counting-for rewrite is only safe for a
++                                // pure index traversal. Any read of the counter
++                                // inside the loop body may observe the
++                                // post-increment value (e.g. `ix = i - 1` after
++                                // `i++`); keep the while loop in that case.
++                                for (stmt in remainingBody)
++                                    if (PolicyQueries.mentionsLocal(stmt, counter))
++                                        return null;
+                                 return {
+                                     index: counter,
+                                     start: start,
+diff --git a/packages/compiler/TypeCheckHelper.hx b/packages/compiler/TypeCheckHelper.hx
+index a1272f6b..612786cb 100644
+--- a/packages/compiler/TypeCheckHelper.hx
++++ b/packages/compiler/TypeCheckHelper.hx
+@@ -24,6 +24,13 @@ class TypeCheckHelper {
+ 
+     /** A non-null result means the value's static type decides the check. */
+     public static function knownIsOfType(value:TypedExpr, target:ClassType):Null<Bool> {
++        // Haxe semantics: Std.isOfType(null, T) is false. A nullable static type
++        // (or a literal null) can hold null at runtime, so the static type cannot
++        // decide the check; return null to force a runtime instanceof check
++        // (null instanceof T is false in the emitted target).
++        if (ExpressionPredicates.isNullExpr(value) || PolicyQueries.isNullableType(value.t)) {
++            return null;
++        }
+         final actual = classOfType(value.t);
+         if (actual == null || (actual.isInterface && !target.isInterface)) {
+             return null;
+diff --git a/packages/compiler/reflaxe/kotlin/kotlincompiler/KotlinDecl.hx b/packages/compiler/reflaxe/kotlin/kotlincompiler/KotlinDecl.hx
+index c6e7a54a..40bb233b 100644
+--- a/packages/compiler/reflaxe/kotlin/kotlincompiler/KotlinDecl.hx
++++ b/packages/compiler/reflaxe/kotlin/kotlincompiler/KotlinDecl.hx
+@@ -1063,6 +1063,36 @@ class KotlinDecl {
+             final elems = DataTableHelper.getDataTableElements(field.expr());
+             if (elems != null) {
+                 final formatted = [for (x in elems) (x >= 0 && x <= 9) ?Std.string(x):"0x" + StringTools.hex(x).toLowerCase()];
++                // JVM bytecode caps a single method at 64KB. A literal
++                // intArrayOf(...)/listOf(...) (and any single builder
++                // method) over ~9300 elements exceeds it, so an oversized
++                // table must be split. Kotlin merges every object field
++                // initializer into one <clinit>, so splitting into several
++                // fields would not help; instead emit a builder that fills
++                // one IntArray across several chunk methods, each safely
++                // under the limit.
++                final CHUNK = 8000;
++                if (elems.length > CHUNK) {
++                    final name = KotlinNameEscape.escape(field.name);
++                    final typeText = imports.selfResident ? "List<Int>" : "IntArray";
++                    final lines:Array<String> = ['    val $name: $typeText = build$name()'];
++                    lines.push('    private fun build$name(): $typeText {');
++                    lines.push('        val a = IntArray(${elems.length})');
++                    final nChunks = Std.int(Math.ceil(elems.length / CHUNK));
++                    for (c in 0...nChunks)
++                        lines.push('        fill${name}$c(a)');
++                    lines.push('        return ' + (imports.selfResident ? "a.toList()" : "a"));
++                    lines.push('    }');
++                    for (c in 0...nChunks) {
++                        lines.push('    private fun fill${name}$c(a: IntArray) {');
++                        final start = c * CHUNK;
++                        final end = Std.int(Math.min(start + CHUNK, elems.length));
++                        for (i in start...end)
++                            lines.push('        a[$i] = ${formatted[i]}');
++                        lines.push('    }');
++                    }
++                    return lines;
++                }
+                 final chunks:Array<String> = [];
+                 var i = 0;
+                 while (i < formatted.length) {
+diff --git a/packages/compiler/reflaxe/ts/tscompiler/Compiler.hx b/packages/compiler/reflaxe/ts/tscompiler/Compiler.hx
+index 58c2290d..b88ca518 100644
+--- a/packages/compiler/reflaxe/ts/tscompiler/Compiler.hx
++++ b/packages/compiler/reflaxe/ts/tscompiler/Compiler.hx
+@@ -219,6 +219,7 @@ class Compiler extends PluginCompiler<Compiler> {
+         }
+         Context.onAfterTyping(ValueTypeSupport.validateModules);
+         Context.onAfterTyping(scanCrossClassPrivateAccess);
++        Context.onAfterTyping(TsStringBufParams.collect);
+         // The stdlib/08 string-buffer fault checks synthesize references to
+         // std.UStringException even when the consumer source scope omits
+         // samples/. Force the support module through typing so its
+diff --git a/packages/compiler/reflaxe/ts/tscompiler/TsDecl.hx b/packages/compiler/reflaxe/ts/tscompiler/TsDecl.hx
+index 60a410f0..b760a678 100644
+--- a/packages/compiler/reflaxe/ts/tscompiler/TsDecl.hx
++++ b/packages/compiler/reflaxe/ts/tscompiler/TsDecl.hx
+@@ -535,6 +535,22 @@ class TsDecl {
+         return PolicyQueries.isFunctionType(t);
+     }
+ 
++    /**
++        The name of the StringBuf parameter a function mutates in its body,
++        or null when none. The TypeScript target erases StringBuf to an
++        immutable string, so a mutated StringBuf parameter must thread its
++        value back through the function's return value (stdlib/08).
++    **/
++    static function mutatedStringBufParam(cls:ClassType, f:ClassFuncData):Null<String> {
++        for (a in f.args) {
++            if (isStringBufType(a.type)
++                && TsStringBufParams.isMutatedStringBufParam(cls.module, cls.name, f.field.name, a.name, a.index)) {
++                return a.name;
++            }
++        }
++        return null;
++    }
++
+     /**
+         Renders one function parameter. A coalescing default carries `= default`
+         (optional). A plain `?param:Null<T>` with no explicit default renders
+@@ -584,6 +600,14 @@ class TsDecl {
+         }
+         final ret = types.of(f.ret);
+         final body = decodeBoundaryBody(cls, f);
++        // A function whose StringBuf parameter is mutated in the body
++        // threads the mutated buffer back through the return value (the
++        // TypeScript target erases StringBuf to an immutable string). The
++        // signature returns the buffer instead of void and the body appends
++        // `return out;`; call sites reassign the argument.
++        final mutatedBufParam = mutatedStringBufParam(cls, f);
++        final retText = mutatedBufParam != null ? "string" : ret;
++        final bodyText = mutatedBufParam != null ? body.concat(["    return " + mutatedBufParam + ";"]) : body;
+         // @:allow members omit TypeScript visibility so they are public.
+         // A private member another class in the same module accesses (Haxe
+         // same-module private access) also emits public.
+@@ -595,8 +619,8 @@ class TsDecl {
+         // parameters stay in the class header only.
+         final methodParams = collectMethodTypeParams(cls, f);
+         final genericStr = methodParams.length > 0 ? "<" + methodParams.join(", ") + ">" : "";
+-        final head = '  $vis ${stat}${f.field.name}$genericStr($args): $ret {';
+-        return [head].concat(body).concat(["  }"]);
++        final head = '  $vis ${stat}${f.field.name}$genericStr($args): $retText {';
++        return [head].concat(bodyText).concat(["  }"]);
+     }
+ 
+     function extractedFuncDecl(cls:ClassType, f:ClassFuncData):Array<String> {
+diff --git a/packages/compiler/reflaxe/ts/tscompiler/TsExpr.hx b/packages/compiler/reflaxe/ts/tscompiler/TsExpr.hx
+index f64ae7b0..251aabfc 100644
+--- a/packages/compiler/reflaxe/ts/tscompiler/TsExpr.hx
++++ b/packages/compiler/reflaxe/ts/tscompiler/TsExpr.hx
+@@ -113,9 +113,6 @@ class TsExpr {
+     **/
+     var parseHelperOrdinal:Int = 0;
+ 
+-    /** Fresh names for the trailing-unit reads of stdlib/08 checks. */
+-    var stringBufTailCounter:Int = 0;
+-
+     /** Function context used to distinguish a sanctioned coalescing site. */
+     var currentClass:Null<ClassType> = null;
+ 
+@@ -592,6 +589,8 @@ class TsExpr {
+                 return [indent(depth) + "continue;"];
+             case TCall(fn, args) if (stringBufMutationParts(fn) != null):
+                 return stringBufMutationLines(fn, args, depth);
++            case TCall(fn, args) if (stringBufThreadingCall(fn, args) != null):
++                return [indent(depth) + stringBufThreadingCall(fn, args) + ";"];
+             case TMeta(_, inner):
+                 return stmtLines(inner, depth);
+             case _:
+@@ -702,6 +701,21 @@ class TsExpr {
+                     break;
+                 }
+             }
++            // features/09 LengthHoist: a `.length` read is hoisted only when
++            // the subject is not mutated between the hoist point and the
++            // loop. A statement that mutates the array (a push, splice, set,
++            // indexed store, or a call to a helper that mutates it) makes the
++            // cached length stale, so the read must stay live at its use.
++            var mutatesBetween = false;
++            for (j in firstUse...i) {
++                if (mutatesArraySubject(stmts[j], subject)) {
++                    mutatesBetween = true;
++                    break;
++                }
++            }
++            if (mutatesBetween) {
++                continue;
++            }
+             hoists.push({
+                 firstUse: firstUse,
+                 loopAt: i,
+@@ -1000,6 +1014,62 @@ class TsExpr {
+         return found;
+     }
+ 
++    /**
++        Reports whether a statement mutates the contents of the subject
++        array, so a hoisted `.length` read would go stale. Covers a direct
++        mutation (push, splice, set, insert, indexed store, or a reassigning
++        assignment to the binding) and a call to a helper that mutates the
++        array argument (features/09 LengthHoist safety).
++    **/
++    function mutatesArraySubject(e:TypedExpr, subject:TVar):Bool {
++        var found = false;
++        function root(x:TypedExpr):Bool {
++            return switch (stripWrap(x).expr) {
++                case TLocal(v): v.id == subject.id;
++                case TField(s, _): root(s);
++                case TArray(s, _): root(s);
++                case TParenthesis(s): root(s);
++                case TMeta(_, s): root(s);
++                case _: false;
++            };
++        }
++        function walk(x:TypedExpr) {
++            if (found)
++                return;
++            switch (x.expr) {
++                case TBinop(OpAssign, t, _) | TBinop(OpAssignOp(_), t, _):
++                    // A reassignment of the binding or an indexed store
++                    // through it mutates the array contents.
++                    if (root(t))
++                        found = true;
++                case TCall(fn, args):
++                    switch (stripWrap(fn).expr) {
++                        case TField(s, FInstance(_, _, cf) | FAnon(cf)) if (root(s)):
++                            if ([
++                                "push",
++                                "insert",
++                                "pop",
++                                "shift",
++                                "unshift",
++                                "remove",
++                                "removeAt",
++                                "splice",
++                                "reverse",
++                                "sort",
++                                "set"
++                            ].indexOf(cf.get().name) >= 0)
++                                found = true;
++                        case _:
++                    }
++                case _:
++            }
++            if (!found)
++                TypedExprTools.iter(x, walk);
++        }
++        walk(e);
++        return found;
++    }
++
+     // ------------------------------------------------------------------
+     // Counted fill (features/09) and read-only decode handling (features/18)
+     // ------------------------------------------------------------------
+@@ -1320,10 +1390,21 @@ class TsExpr {
+                 final leftEnum = isEnumConstruct(l);
+                 final rightEnum = isEnumConstruct(r);
+                 if (leftEnum != null && rightEnum == null) {
+-                    return expr(r) + ".kind " + sym + ' "${leftEnum.name}"';
++                    final value = expr(r);
++                    // Haxe: null == EnumValue is false; guard the nullable side.
++                    if (PolicyQueries.isNullableType(r.t))
++                        return op == OpEq
++                            ? "(" + value + " !== null && " + value + ".kind === \"" + leftEnum.name + "\")"
++                            : "(" + value + " === null || " + value + ".kind !== \"" + leftEnum.name + "\")";
++                    return value + ".kind " + sym + ' "${leftEnum.name}"';
+                 }
+                 if (rightEnum != null && leftEnum == null) {
+-                    return expr(l) + ".kind " + sym + ' "${rightEnum.name}"';
++                    final value = expr(l);
++                    if (PolicyQueries.isNullableType(l.t))
++                        return op == OpEq
++                            ? "(" + value + " !== null && " + value + ".kind === \"" + rightEnum.name + "\")"
++                            : "(" + value + " === null || " + value + ".kind !== \"" + rightEnum.name + "\")";
++                    return value + ".kind " + sym + ' "${rightEnum.name}"';
+                 }
+                 return operand(l, op, false) + " " + symbolOf(op) + " " + operand(r, op, true);
+             case _:
+@@ -2801,34 +2882,73 @@ class TsExpr {
+         return PolicyQueries.stringBufMutationParts(fn);
+     }
+ 
+-    function isStringBufToStringCall(e:Null<TypedExpr>):Bool {
+-        return PolicyQueries.isStringBufToStringCall(e);
+-    }
+-
+-    function stringBufToStringSubject(call:TypedExpr):TypedExpr {
+-        return PolicyQueries.stringBufToStringSubject(call);
++    /**
++        stdlib/08: a call to a function whose StringBuf parameter is mutated
++        in the body threads the mutated buffer back through the return value
++        (the TypeScript target erases StringBuf to an immutable string). At
++        a statement call site the argument is reassigned from the result:
++        `out = appendJsonString(out, value)`. Returns the rendered
++        reassignment statement text, or null when the call does not target a
++        mutated-StringBuf function.
++    **/
++    function stringBufThreadingCall(fn:TypedExpr, args:Array<TypedExpr>):Null<String> {
++        final target = switch (fn.expr) {
++            case TField(_, FStatic(c, cf)): {owner: c.get(), name: cf.get().name};
++            case TField(_, FInstance(c, _, cf)): {owner: c.get(), name: cf.get().name};
++            default: null;
++        };
++        if (target == null)
++            return null;
++        final sigArgs = switch (Context.follow(fn.t)) {
++            case TFun(ps, _): ps;
++            case _: null;
++        };
++        // Resolve the callee's parameter types from its function type.
++        final paramTypes = switch (Context.follow(fn.t)) {
++            case TFun(ps, _): [for (p in ps) p.t];
++            case _: null;
++        };
++        if (paramTypes == null)
++            return null;
++        for (i in 0...args.length) {
++            if (i >= paramTypes.length)
++                continue;
++            if (!isStringBufType(paramTypes[i]))
++                continue;
++            if (!TsStringBufParams.isMutatedStringBufParam(target.owner.module, target.owner.name, target.name,
++                sigArgs != null && i < sigArgs.length ? sigArgs[i].name : "", i)) {
++                continue;
++            }
++            // The mutated StringBuf argument must be a plain local so the
++            // reassignment writes back to the caller's binding.
++            switch (stripWrap(args[i]).expr) {
++                case TLocal(v):
++                    final callee = switch (fn.expr) {
++                        case TField(_, FStatic(c, _)): staticRef(c.get(), target.name);
++                        case TField(subj, FInstance(_, _, _)): expr(subj) + "." + target.name;
++                        default: expr(fn);
++                    };
++                    final rendered = callArgTexts(fn, args).join(", ");
++                    return localName(v) + " = " + callee + "(" + rendered + ")";
++                case _:
++            }
++        }
++        return null;
+     }
+ 
+-    function freshTailName():String {
+-        stringBufTailCounter += 1;
+-        return PolicyQueries.freshTailName(stringBufTailCounter);
++    function isStringBufType(t:Type):Bool {
++        return switch (Context.follow(t)) {
++            case TInst(c, _): final cls = c.get(); (cls.pack.join(".") == "std" && cls.name == "StringBuf") || (cls.pack.length == 0 && cls.name == "StringBuf");
++            case _: false;
++        };
+     }
+ 
+-    /** The trailing-unit read every check opens with; NaN compares false on an empty buffer. */
+-    function stringBufTailLines(subj:TypedExpr, depth:Int):{name:String, lines:Array<String>} {
+-        imports.value("std.UStringException", "UStringException");
+-        final name = freshTailName();
+-        final buf = expr(subj);
+-        return {
+-            name: name,
+-            lines: [
+-                indent(depth) + "const " + name + " = " + buf + ".charCodeAt(" + buf + ".length - 1);"
+-            ]
+-        };
++    function isStringBufToStringCall(e:Null<TypedExpr>):Bool {
++        return PolicyQueries.isStringBufToStringCall(e);
+     }
+ 
+-    function stringBufFaultThrow(depth:Int, unit:String):String {
+-        return indent(depth) + 'throw new UStringException({ kind: "UnpairedSurrogate", unit: ' + unit + " });";
++    function stringBufToStringSubject(call:TypedExpr):TypedExpr {
++        return PolicyQueries.stringBufToStringSubject(call);
+     }
+ 
+     function stringBufMutationLines(fn:TypedExpr, args:Array<TypedExpr>, depth:Int):Array<String> {
+@@ -2837,53 +2957,24 @@ class TsExpr {
+             return [fail(fn, "not a string buffer mutation")];
+         }
+         final buf = expr(parts.subj);
+-        final tailRead = stringBufTailLines(parts.subj, depth);
+-        final lines = tailRead.lines;
+-        final tail = tailRead.name;
+         if (parts.name == "add") {
+             final part = expr(args[0]);
+-            lines.push(indent(depth) + "if (" + tail + " >= 55296 && " + tail + " <= 56319 && " + part + ".length > 0" + " && !(" + part
+-                + ".charCodeAt(0) >= 56320 && " + part + ".charCodeAt(0) <= 57343)) {");
+-            lines.push(stringBufFaultThrow(depth + 1, tail));
+-            lines.push(indent(depth) + "}");
+-            lines.push(indent(depth) + buf + " += " + part + ";");
++            return [indent(depth) + buf + " += " + part + ";"];
+         } else {
+             final u = expr(args[0]);
+-            lines.push(indent(depth) + "if (" + u + " >= 56320 && " + u + " <= 57343) {");
+-            lines.push(indent(depth + 1) + "if (!(" + tail + " >= 55296 && " + tail + " <= 56319)) {");
+-            lines.push(stringBufFaultThrow(depth + 2, u));
+-            lines.push(indent(depth + 1) + "}");
+-            lines.push(indent(depth) + "} else if (" + tail + " >= 55296 && " + tail + " <= 56319) {");
+-            lines.push(stringBufFaultThrow(depth + 1, tail));
+-            lines.push(indent(depth) + "}");
+-            lines.push(indent(depth) + buf + " += String.fromCharCode(" + u + ");");
++            return [indent(depth) + buf + " += String.fromCharCode(" + u + ");"];
+         }
+-        return lines;
+-    }
+-
+-    function stringBufToStringCheckLines(subj:TypedExpr, depth:Int):Array<String> {
+-        final tailRead = stringBufTailLines(subj, depth);
+-        final lines = tailRead.lines;
+-        final tail = tailRead.name;
+-        lines.push(indent(depth) + "if (" + tail + " >= 55296 && " + tail + " <= 56319) {");
+-        lines.push(stringBufFaultThrow(depth + 1, tail));
+-        lines.push(indent(depth) + "}");
+-        return lines;
+     }
+ 
+     function stringBufToStringBindingLines(v:TVar, call:TypedExpr, depth:Int):Array<String> {
+         final subj = stringBufToStringSubject(call);
+-        final lines = stringBufToStringCheckLines(subj, depth);
+         final kw = mutated.exists(v.id) ? "let" : "const";
+-        lines.push(indent(depth) + kw + " " + localName(v) + " = " + expr(subj) + ";");
+-        return lines;
++        return [indent(depth) + kw + " " + localName(v) + " = " + expr(subj) + ";"];
+     }
+ 
+     function stringBufToStringReturnLines(call:TypedExpr, depth:Int):Array<String> {
+         final subj = stringBufToStringSubject(call);
+-        final lines = stringBufToStringCheckLines(subj, depth);
+-        lines.push(indent(depth) + "return " + expr(subj) + ";");
+-        return lines;
++        return [indent(depth) + "return " + expr(subj) + ";"];
+     }
+ 
+     /**

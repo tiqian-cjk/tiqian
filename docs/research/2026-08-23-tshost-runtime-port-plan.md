@@ -35,7 +35,7 @@
 - **共享样式就绪校验**：[WebEnhancer.kt:134-150](frontend/web/src/jsMain/kotlin/org/tiqian/web/WebEnhancer.kt#L134-L150)（`rejectMissingSharedRuntimeStyles`，上报 `MissingSharedRuntimeStyles`）。
 - **事件派发辅助**：[WebEnhancerSupport.kt:433-464](frontend/web/src/jsMain/kotlin/org/tiqian/web/WebEnhancerSupport.kt#L433-L464)（`dispatchTiqianReady`, `dispatchTiqianRelayoutReady`, `dispatchTiqianProgressiveError`）。
 
-### 1.5 ProgressiveRelayoutSession 与渐进状态机接线
+### 1.5 ProgressiveRelayoutSession 与渐进状态机接入
 - **重排会话实现**：[WebEnhancer.kt:407-477](frontend/web/src/jsMain/kotlin/org/tiqian/web/WebEnhancer.kt#L407-L477)（`ProgressiveRelayoutSession`），在分片执行期间收集 `CustodyLiveSnapshotJs`、记录成功度量与未支持 issue，支持在发生异常时调用 `custodyBridge().rollback()` 回滚全部节点。
 - **渐进作业构造与事件衔接**：[WebEnhancerProgressiveJob.kt:16-118](frontend/web/src/jsMain/kotlin/org/tiqian/web/WebEnhancerProgressiveJob.kt#L16-L118)（`startProgressiveJob`, `finishProgressiveJob`, `failProgressiveJob`, `dispatchProgressiveSummary`）。
 
@@ -59,11 +59,11 @@
 为保证重构过程中的可验证性与持续可运行状态，将剩余的 Kotlin 主线程运行时拆分为 7 个串行推进的分片（Slice）。
 
 协调器（`frontend/web/npm/element.js`）与测试宿主通过 `face.js` 的 `engineApi()`（由 `runtime-loader.js` 提供）调用引擎。在分片推进期间：
-- 初期切片在 TypeScript 侧构建数据结构、选项解析、序列化与管线执行函数，并在 `npm/` 下添加对应单元测试。
-- 中期切片组合出 TypeScript 宿主引擎对象，在 `face.js` 中直接接入（或通过 `setEngineOverride` 在测试中优先验证）。
-- 最终切片切换生产导出并移除 Kotlin/JS 产物通道与源文件。
+- 初期 Slice 在 TypeScript 侧构建数据结构、选项解析、序列化与管线执行函数，并在 `npm/` 下添加对应单元测试。
+- 中期 Slice 组合出 TypeScript 宿主引擎对象，在 `face.js` 中直接接入（或通过 `setEngineOverride` 在测试中优先验证）。
+- 最终 Slice 切换生产导出并移除 Kotlin/JS 产物通道与源文件。
 
-Kotlin 删除时机的一般规则：剩余各文件（管线、`WebEnhancer.kt`、引擎导出）的消费者存活到 Slice 6 的 TS 入口接线，为它们搭中间桥只产出 Slice 4..6 内会再删除的脚手架。因此 Slice 1..5 各自只让 TS 实现就位并由测试覆盖；Kotlin 实现随其消费者所在文件的删除刀次统一消失：Slice 4 删管线文件与解码层，Slice 5 删会话与作业文件，Slice 6 删 `WebEnhancer.kt`、lifecycle 实现、reconcile 壳与引擎导出。各切片范围中「删除对应 Kotlin 实现」的表述按此规则理解。
+Kotlin 删除时机的一般规则：剩余各文件（管线、`WebEnhancer.kt`、引擎导出）的消费者存活到 Slice 6 的 TS 入口接入，为它们搭中间桥只产出 Slice 4..6 内会再删除的脚手架。因此 Slice 1..5 各自只让 TS 实现就位并由测试覆盖；Kotlin 实现随其消费者所在文件的删除时机统一消失：Slice 4 删管线文件与解码层，Slice 5 删会话与作业文件，Slice 6 删 `WebEnhancer.kt`、lifecycle 实现、reconcile 壳与引擎导出。各 Slice 范围中「删除对应 Kotlin 实现」的表述按此规则理解。
 
 ```
 Slice 1: LoweredParagraph 数据模型与谓词的 TS 侧就位
@@ -85,7 +85,7 @@ Slice 7: jsMain 源码清除、桥生成器移除与构建配置收敛
 - **范围**：
   - 在 `npm-core/core/engine/` 新增 `lowered-paragraph.js` 模块，以 JSDoc 类型定义 `LoweredParagraph` 及各子结构（`TextStyle`, `TextSpan`, `DecorationSpan`, `InlineBoxSpan`, `InlineObjectSpan`, `DomInlineObject`, `DomSourceSpan`, `DomInlineBoxStyle`, `LineBreakSpan`），字段名与 `markdown-lowering.js` 的输出对象逐字符一致。
   - 实现谓词 `isCanonicalPlainParagraph(lowered)` 与 `isRuntimeExactPreparedDomEligible(lowered)`，语义与 `MarkdownParagraphLowering.kt` 的 Kotlin 扩展逐条一致，配单元测试。
-  - Kotlin 侧解码层（`decodeLowered`, `decodeTextStyle` 等）本切片不删：`WebEnhancerSupport.kt` 的元数据 JSON 构建与 `WebEnhancerParagraphPipeline.kt` 的 LayoutInput 组装仍消费强类型模型，分别待 Slice 3 与 Slice 4 删除其消费者后随之删除。
+  - Kotlin 侧解码层（`decodeLowered`, `decodeTextStyle` 等）本 Slice 不删：`WebEnhancerSupport.kt` 的元数据 JSON 构建与 `WebEnhancerParagraphPipeline.kt` 的 LayoutInput 组装仍消费强类型模型，分别待 Slice 3 与 Slice 4 删除其消费者后随之删除。
 - **依赖顺序**：无前置依赖，作为基础数据结构层首个实施。
 - **验收**：
   - 运行 `npm test`，确保 `npm/markdown-lowering.test.mjs` 与 `npm/markdown-lowering-bridge.test.mjs` 全部通过，新增谓词测试通过。
@@ -94,10 +94,10 @@ Slice 7: jsMain 源码清除、桥生成器移除与构建配置收敛
 
 ### Slice 2：EnhanceOptions 选项解析、尺寸稳定化与 Issue 管理
 - **范围**：
-  - 在 TypeScript 侧实现 `EnhanceOptions` 解析（`optionsFromJs`、字号、行高、缩进、着重号间隙、字体族回退解析及 `conformingExactFontSessionId` 等方法）。
+  - 在 TypeScript 侧实现 `EnhanceOptions` 解析（`optionsFromJs`、字号、行高、缩进、着重号间隙、字体 family 回退解析及 `conformingExactFontSessionId` 等方法）。
   - 在 TypeScript 侧实现宿主字体应用与尺寸稳定化（`applyConfiguredHostFontSize`, `captureSourceInlineSize`, `stabilizeContentSizedItemInlineSize`, `responsiveSourceMeasure`）。
   - 在 TypeScript 侧实现 `CapabilityIssue` 管理与 DOM 属性标注（`reportIssue`, `clearIssue`, `restoreAttribute`）。
-  - `WebEnhancerParagraphLifecycle.kt` 的 Kotlin 实现本切片不删（消费者存活到 Slice 4 与 Slice 6，见删除时机规则），随消费者所在文件删除。
+  - `WebEnhancerParagraphLifecycle.kt` 的 Kotlin 实现本 Slice 不删（消费者存活到 Slice 4 与 Slice 6，见删除时机规则），随消费者所在文件删除。
 - **依赖顺序**：依赖 Slice 1。
 - **验收**：
   - 运行 `npm test`，验证 `npm/eligibility.test.mjs` 与 `npm/responsive-measure.test.mjs`。
@@ -108,14 +108,14 @@ Slice 7: jsMain 源码清除、桥生成器移除与构建配置收敛
 - **范围**：
   - 在 TypeScript 侧实现 `workerLayoutRequest` 与 `workerLayoutRequestJson`。
   - 在 TypeScript 侧实现富文本渲染元数据生成函数（`preparedSemanticReplayJson`, `preparedInlineObjectMetaJson`, `preparedCjkStrongSemanticsJson`）。
-  - `WebEnhancerSupport.kt` 中请求字符串拼接与元数据生成的 Kotlin 代码（[WebEnhancerSupport.kt:21-135](frontend/web/src/jsMain/kotlin/org/tiqian/web/WebEnhancerSupport.kt#L21-L135) 与 [378-426](frontend/web/src/jsMain/kotlin/org/tiqian/web/WebEnhancerSupport.kt#L378-L426)）本切片不删（消费者为管线与引擎导出，见删除时机规则）。
+  - `WebEnhancerSupport.kt` 中请求字符串拼接与元数据生成的 Kotlin 代码（[WebEnhancerSupport.kt:21-135](frontend/web/src/jsMain/kotlin/org/tiqian/web/WebEnhancerSupport.kt#L21-L135) 与 [378-426](frontend/web/src/jsMain/kotlin/org/tiqian/web/WebEnhancerSupport.kt#L378-L426)）本 Slice 不删（消费者为管线与引擎导出，见删除时机规则）。
 - **依赖顺序**：依赖 Slice 1 与 Slice 2。
 - **验收**：
   - 运行 `npm test`，验证 `npm/exact-session.test.mjs` 中的 Worker 请求断言。
-  - 与 `ffi/js` 的线格式解析进行往返比对测试。
+  - 与 `ffi/js` 的传输格式解析进行往返比对测试。
 - **风险**：分隔符（`\u001e`, `\u001d`, `\u001f`）及转义字符处理必须与 `ParagraphWireFace` 完全一致。
 
-执行时本切片拆成三个子片（2026-08-23 记录）：
+执行时本 Slice 拆成三个子部分（2026-08-23 记录）：
 
 1. **3a 元数据构建器**：`preparedSemanticReplayJson` 等三个函数进
    `lowered-paragraph.js`（ES module，消费者是宿主安装的 prepared 渲染桥，终点形态
@@ -125,8 +125,8 @@ Slice 7: jsMain 源码清除、桥生成器移除与构建配置收敛
    `core/engine/worker-request.js`（普通脚本安装 `globalThis.__TiqianWorkerRequest`，
    与 lifecycle.js 同风格：Slice 4 的管线模块由 Kotlin 侧驱动到 Slice 6，嵌入约束
    要求自包含）。第一重载 `(root, paragraph, options)` 不随本片移植：其 `lower()`
-   调用向降级引擎注入 Kotlin 分类器回调，随 Slice 4 的管线接线移植。
-3. **3c/3d ffi 导出面预备**：Slice 4 的 TS 管线需要两类引擎侧能力经 `@tiqian/ffi`
+   调用向降级引擎注入 Kotlin 分类器回调，随 Slice 4 的管线接入移植。
+3. **3c/3d ffi 导出接口预备**：Slice 4 的 TS 管线需要两类引擎侧能力经 `@tiqian/ffi`
    进入 TS。3c 导出降级辅助回调（`classifyFontRole`、
    `unsupportedInlineShapingProperties`、`firstDivergentInlineShapingProperty`），
    字体模块保持唯一实现。3d 为 `precomputeParagraphWithDiagnostics`：同一组入参加
@@ -141,7 +141,7 @@ Slice 7: jsMain 源码清除、桥生成器移除与构建配置收敛
 
 ### Slice 4：Paragraph Pipeline 布局准备与提交管线
 
-Slice 4 按依赖拆四个子片（2026-08-23 决定）：
+Slice 4 按依赖拆四个子部分（2026-08-23 决定）：
 
 1. **4a ffi 浏览器度量后端模式**：ADR 0053 的「TS 采集器提供基于 canvas 的
    度量回调」尚未实现（ffi 现有导出全部按 HarfBuzz 会话取后端）。新增导出
@@ -185,7 +185,7 @@ Slice 4 按依赖拆四个子片（2026-08-23 决定）：
   - 在 TypeScript 侧实现 `RootState` 状态维护与弱引用管理（`states = new WeakMap()`）。
   - 在 TypeScript 侧实现 `ProgressiveRelayoutSession`：记录快照、执行 processItem、完成时更新 state、发生异常时调用 `custody.rollback` 回滚。
   - 在 TypeScript 侧实现 `relayout` 与 `enhanceProgressively` 的作业调度包装，对接 `npm-core/core/engine/progressive-job.js`。
-  - `WebEnhancer.kt` 中的 `ProgressiveRelayoutSession`（[WebEnhancer.kt:407-477](frontend/web/src/jsMain/kotlin/org/tiqian/web/WebEnhancer.kt#L407-L477)）与 `WebEnhancerProgressiveJob.kt` 本切片不删（驱动方是 Kotlin 引擎入口，Slice 6 接线，见删除时机规则）。
+  - `WebEnhancer.kt` 中的 `ProgressiveRelayoutSession`（[WebEnhancer.kt:407-477](frontend/web/src/jsMain/kotlin/org/tiqian/web/WebEnhancer.kt#L407-L477)）与 `WebEnhancerProgressiveJob.kt` 本 Slice 不删（驱动方是 Kotlin 引擎入口，Slice 6 接入，见删除时机规则）。
 - **依赖顺序**：依赖 Slice 4。
 - **验收**：
   - 运行 `npm test`，验证 `npm/progressive.test.mjs` 与 `npm/custody.test.mjs`。
@@ -243,13 +243,13 @@ Slice 4 按依赖拆四个子片（2026-08-23 决定）：
 | **engine-api** | `TiqianWebEnhancerTest.kt` (3) | 8 | `npm/engine-api.test.mjs` | 已由 TS 测试全量覆盖（C1 批次完成），待 Slice 6 完成后删除 Kotlin 测试。 |
 
 ### 3.1 测试文件删除顺序
-依据切片完成与验证通过的节奏，Kotlin 测试文件按如下顺序依次删除：
+依据 Slice 完成与验证通过的节奏，Kotlin 测试文件按如下顺序依次删除：
 1. **Slice 1 完成后**：验证 `markdown-lowering.test.mjs` 通过。
 2. **Slice 2 完成后**：验证 `eligibility.test.mjs` 与 `responsive-measure.test.mjs` 通过。
 3. **Slice 4 完成后**：验证 `exact-session.test.mjs`、`source-fidelity.test.mjs` 与 `renderer-output.test.mjs` 通过，删除 `TiqianWebExactSessionTest.kt`（20 个测试，743 行）。
 4. **Slice 5 完成后**：验证 `custody.test.mjs` 与 `progressive.test.mjs` 通过，删除 `TiqianWebProgressiveRelayoutTest.kt`（25 个测试，968 行）。
 5. **Slice 6 完成后**：验证 `npm/element.test.mjs`、`npm/engine-api.test.mjs` 与 `npm/content-reconcile.test.mjs` 通过，删除 `TiqianWebEnhancerTest.kt`（30 个测试，833 行）与 `TiqianWebSourceFidelityTest.kt`（27 个测试，835 行）。
-6. **Slice 7 收尾时**：删除剩余的测试辅助文件 `TiqianWebEnhancerTestSupport.kt`（1209 行）与 `TiqianWebEnhancerTestFixtures.kt`（46 行），使 `jsTest` 目录下行数完全归零。
+6. **Slice 7 收尾时**：删除剩余的测试辅助文件 `TiqianWebEnhancerTestSupport.kt`（1209 行）与 `TiqianWebEnhancerTestFixtures.kt`（46 行），使 `jsTest` 目录下行数完全降为 0。
 
 ---
 
@@ -259,7 +259,7 @@ Slice 4 按依赖拆四个子片（2026-08-23 决定）：
 - `frontend/web/src/jsMain/kotlin/org/tiqian/web/Main.kt`（170 行）包含 `fun main()` 入口函数，负责在页面挂载一个包含滑块与基准测试按钮的简易交互界面（[Main.kt:35-136](frontend/web/src/jsMain/kotlin/org/tiqian/web/Main.kt#L35-L136)）。
 - 在 `frontend/web/build.gradle.kts:124` 中，配置了 `binaries.executable()`，Webpack 打包将 `Main.kt` 编译进 `tiqian-web.js` 执行体。
 - 现代的 Web 示例与交互测试位于 `demo/web/` 目录，其入口为 `demo/web/index.html` 与 `demo/web/main.js`。`demo/web/main.js:1-2` 直接引入 `@tiqian/prose/element` 与 `@tiqian/prose` 的公开 `enhance` 函数，并通过 Parcel 完成模块打包。
-- `Main.kt` 中的代码不被 `demo/web` 消费，也不被 `@tiqian/prose` npm 包的生产导出面引用。
+- `Main.kt` 中的代码不被 `demo/web` 消费，也不被 `@tiqian/prose` npm 包的生产导出路径引用。
 
 ### 4.2 处置结论
 - `Main.kt` 是早期基于纯 Kotlin/JS bundle 的过渡演示外壳，当前已完全由 `demo/web` 替代。
@@ -267,9 +267,9 @@ Slice 4 按依赖拆四个子片（2026-08-23 决定）：
 
 ---
 
-## 5. kotlin-js-store 归位与构建系统收敛
+## 5. kotlin-js-store 清除与构建系统收敛
 
-在 `frontend/web/src/jsMain` 行数归零后，Gradle 与 npm 构建系统需进行收敛处理，彻底解除 Kotlin/JS 编译器对主前端工程的侵入。
+在 `frontend/web/src/jsMain` 行数降为 0 后，Gradle 与 npm 构建系统需进行收敛处理，彻底解除 Kotlin/JS 编译器对主前端工程的侵入。
 
 ### 5.1 frontend/web/build.gradle.kts 的改造
 1. **移除 Kotlin/JS 编译目标**：
@@ -283,9 +283,9 @@ Slice 4 按依赖拆四个子片（2026-08-23 决定）：
 4. **模块定位收敛**：
    - 若 `frontend/web` 不再包含任何 Kotlin 源码，则可将其从根目录 `settings.gradle.kts` 的多平台项目中解除关联，或仅保留极简的任务用于 npm 构建钩子触发。
 
-### 5.2 产物通道与 kotlin-js-store 归位
+### 5.2 产物通道与 kotlin-js-store 清除
 - **产物文件清理**：`frontend/web/npm-core/runtime/tiqian-web.js` 与 `build/kotlin-webpack` 不再生成，`runtime/` 目录从发布包配置（`package.json` 的 `files` 字段）中移除。
-- **kotlin-js-store 归位**：此前由 Kotlin/JS Gradle 插件在 `frontend/web` 引入的 Yarn/npm 依赖解析与 `kotlin-js-store` 存储完全消除；Kotlin/JS 编译仅局限在 `:ffi:js` 模块（供 Node.js 排版 Worker 独立使用），Web 前端完全转入 Bun/npm 原生工具链管理。
+- **kotlin-js-store 清除**：此前由 Kotlin/JS Gradle 插件在 `frontend/web` 引入的 Yarn/npm 依赖解析与 `kotlin-js-store` 存储完全消除；Kotlin/JS 编译仅局限在 `:ffi:js` 模块（供 Node.js 排版 Worker 独立使用），Web 前端完全转入 Bun/npm 原生工具链管理。
 - **发布与 CI 检查**：
   - `tools/package-topology/check.mjs` 继续确保 `web-component → core → ffi` 单向依赖。
   - `tools/ts-discipline` 对新增的 TypeScript 实现执行静态类型检查，确保无 `any`、无双重断言、无未受限宽类型。

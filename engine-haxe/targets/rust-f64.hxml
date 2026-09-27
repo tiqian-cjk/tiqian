@@ -1,0 +1,5 @@
+# Stage A Rust f64 generation entry (no float-precision define; full Float
+# precision). Run from the worktree root:
+#   nix develop -c bash -c 'haxe engine-haxe/targets/rust-f64.hxml'
+engine-haxe/targets/rust-common.hxml
+-D rust-output=engine-haxe/out/rust-gen-f64/src

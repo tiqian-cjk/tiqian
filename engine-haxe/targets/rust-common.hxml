@@ -1,0 +1,15 @@
+# Rust-specific configuration shared by the f32 and f64 generation entries.
+# Included by rust-f32.hxml and rust-f64.hxml.
+engine-haxe/targets/common.hxml
+engine-haxe/targets/classes.hxml
+-cp .haxelib/boring/git/packages/compiler/reflaxe/rust/std-shadow
+-cp .haxelib/boring/git/packages/compiler/reflaxe/rust
+# std.UStringException (samples/std) must sit inside the source scope so the
+# rust target registers its payload enum for stdlib/08 string buffer checks.
+--macro Intercept.run(['engine-haxe/src', '.haxelib/boring/git/samples/std'])
+--macro rustcompiler.Compiler.use()
+-D runtime-import=crate::runtime
+-D runtime-emit=runtime
+-D package-name=tiqian-engine-gen
+-D package-license=MIT
+std.UStringException

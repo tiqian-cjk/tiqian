@@ -20,6 +20,8 @@ interface KinsokuRule {
 class ClreqKinsokuRule(
     private val level: KinsokuLevel = KinsokuLevel.Basic,
 ) : KinsokuRule {
+    override fun toString(): String = "ClreqKinsokuRule(level=$level)"
+
     override fun forbiddenAtLineStart(cluster: Cluster): Boolean {
         val char = cluster.displayText.firstOrNull() ?: return false
         return ClreqPunctuationPolicies.forbiddenAtLineStart(char, level)

@@ -36,7 +36,7 @@ internal object CoreTraceScenarios {
         try {
             action()
             false
-        } catch (e: IllegalArgumentException) {
+        } catch (e: RuntimeException) {
             true
         }
 

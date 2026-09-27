@@ -11,11 +11,11 @@ ADR 0016 的 API 31+ 平台默认路径靠 `AndroidPlatformFontOracle` 让平台
 不变量：**一个 shaping 段只落在单一物理 face 上**，oracle 用 `check(instances.size == 1)` 强制它。
 
 该不变量对 oracle 早期的单码点探针（`中`/`A`/`。`）以及按脚本切好的 CJK / Latin 正文成立，
-但对真实 UGC 不成立。`com.github.zly2006.zhplus.lite`（知乎++）在正文里出现泰文 `กิ`（Thai 基字 +
-组合元音）时，平台把这段合法地拆到 `NotoSansThai` 与 `NotoSansDevanagari` 两个 face，`check` 抛出
-`IllegalStateException: PlatformSelectionSpansMultipleFaces`，未捕获地冲垮 Compose measure 线程。
+但对实际 UGC 不成立。`com.github.zly2006.zhplus.lite`（知乎++）在正文里出现泰文 `กิ`（Thai 基字 +
+组合元音）时，平台按自身规则把这段拆到 `NotoSansThai` 与 `NotoSansDevanagari` 两个 face，`check` 抛出
+`IllegalStateException: PlatformSelectionSpansMultipleFaces` 未被捕获，Compose measure 线程因此崩溃。
 
-这是一整类问题，不是泰文特例。`clusterRoleRanges` 的 `GraphemeExtendStaysWithBaseCluster` 会**无条件**
+这是一整类问题；泰文只是其中一例。`clusterRoleRanges` 的 `GraphemeExtendStaysWithBaseCluster` 会**无条件**
 把组合附标并入基字所在段（附标单独 shape 会得到会被 web 校验误判的零 advance），因此段可以是多码点、
 甚至跨脚本的 grapheme。任何被平台拆到 ≥2 face 的段都会触发：
 
@@ -24,7 +24,7 @@ ADR 0016 的 API 31+ 平台默认路径靠 `AndroidPlatformFontOracle` 让平台
 - **Unknown**：泰文、阿拉伯文、天城文等非 CJK 脚本段。
 
 「挑一个 face 重放整段」不是解：被选中 face 不覆盖触发拆分的那个字符，HarfBuzz 会给 `.notdef`，
-把崩溃换成正好落在元凶字符上的 tofu——自洽但画错。
+把崩溃换成正好落在触发字符上的 tofu；方案内部自洽，但渲染结果错误。
 
 ## Decision
 
@@ -33,9 +33,9 @@ ADR 0016 的 API 31+ 平台默认路径靠 `AndroidPlatformFontOracle` 让平台
 - **oracle**（`AndroidPlatformFontOracle.select`）：删除 `check(instances.size == 1)`，保留基字（首个）
   instance 供度量，记 `spansMultipleFaces` 标志，并用 `Paint.getRunAdvance` 量出平台实测 run advance。
 - **catalog**（`ResolvedNativeFontFace`）：新增 `replayable` / `degradedRunAdvance`。多 face 段以
-  `replayable = false` 返回基字 face（line height 仍取该 face 的真实 metrics）；此时「主 face 不覆盖
+  `replayable = false` 返回基字 face（line height 仍取该 face 的实际 metrics）；此时「主 face 不覆盖
   整段」是有意的降级，绕过 `coversSelectionText → null` 的拒绝（该拒绝只在 `replayable` 时生效）。
-- **native 后端**（`AndroidNativeTextShaper`）：`!replayable` 时产出一个**不可回放**的结果——单个
+- **native 后端**（`AndroidNativeTextShaper`）：`!replayable` 时产出一个**不可回放**的结果：单个
   `renderFontKey = null` 的 glyph，携带平台实测 advance，具名 decision
   `reason = PlatformMultiFaceStringDrawDegrade`、`capabilityIssue =`
   [`PLATFORM_MULTI_FACE_STRING_DRAW_ISSUE`]。
@@ -47,8 +47,8 @@ ADR 0016 的 API 31+ 平台默认路径靠 `AndroidPlatformFontOracle` 让平台
 `UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE_ISSUE` 并列。
 
 这是对 ADR 0016「一段一 face、一律 outline 回放」模型的有意分层：**能干净观察（单字、单脚本正文）
-就回放；平台合法拆 face（组合附标、非 CJK 脚本、跨 face 的拉丁词）就复用平台绘制。** 它把 0016 北极星
-「尽量复用平台已有能力」在无法逐字观察的边界上贯彻，而不是在该边界上放弃。
+就回放；平台按自身规则拆 face（组合附标、非 CJK 脚本、跨 face 的拉丁词）就复用平台绘制。** 它把 0016 的指导原则
+「尽量复用平台已有能力」贯彻到无法逐字观察的边界上；在这个边界上也不放弃。
 
 ## Consequences
 
@@ -59,21 +59,21 @@ ADR 0016 的 API 31+ 平台默认路径靠 `AndroidPlatformFontOracle` 让平台
 - **代价（诚实记录）**：多 face 段丢逐字墨迹（skip-ink、标点 `halt` 削边精修），换「永不崩 + 平台正确绘制」。
   advance 取平台 `getRunAdvance`；line height 取基字 face metrics。
 - **bundled-catalog 路径不受影响。** 受控字节路径不经 oracle：其缺字仍由 HarfBuzz 报 `missingGlyphs`
-  并触发 substitution rollback，不是多 face 崩溃。
+  并触发 substitution rollback，与多 face 崩溃无关。
 - oracle 单码点探针与既有 API 31 对照测试行为不变（单 face → `instances.first()` 等价于旧的 `single()`）。
 
 ## Alternatives considered
 
-- **挑主 face 回放整段。** 否决：被选中 face 不覆盖触发字符 → 元凶字符 tofu。自洽但渲染错误。
+- **挑主 face 回放整段。** 否决：被选中 face 不覆盖触发字符 → 该字符显示为 tofu。自洽但渲染错误。
 - **按 face 把段切成子 run，各自回放（完整解）。** 暂缓：需要把「一段 N face」贯穿 `ShapingResult` /
-  `GlyphRun` / replay index 与 halt 测量，跨平台改动面大。降级路径先消除崩溃、保正确；子 run 回放
-  作为未来在这类段上恢复逐字墨迹的独立切片。
-- **保留 `check`。** 否决：真实 UGC 稳定复现崩溃。
+  `GlyphRun` / replay index 与 halt 测量，多个平台都要随之修改。降级路径先消除崩溃、保正确；子 run 回放
+  作为未来在这类段上恢复逐字墨迹的独立 Slice。
+- **保留 `check`。** 否决：实际 UGC 稳定复现崩溃。
 
 ## Verification
 
 - 复现测试 `AndroidNativeFontBackendTest.multiFaceSegmentsDegradeToPlatformStringDrawInsteadOfCrashing`：
-  仅在设备确实拆 face 时断言——非回放、源文本保真、advance > 0、具名 capability。
+  仅在设备确实拆 face 时断言：非回放、源文本保真、advance > 0、具名 capability。
 - 真机 Pixel 9 Pro XL（komodo，与崩溃日志同机，SDK 37）`connectedDebugAndroidTest` 全 15 项通过；
-  日志 `multiFaceCasesExercised=1`：崩溃元凶 `กิ` 命中降级路径、断言全过、不再抛异常。
+  日志 `multiFaceCasesExercised=1`：触发崩溃的 `กิ` 命中降级路径、断言全过、不再抛异常。
 - `LayoutDumpGoldenTest` 不变（golden 走 stub，本决策为 Android 运行时专属 + 一个 additive 常量）。

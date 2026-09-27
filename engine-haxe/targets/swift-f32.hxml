@@ -1,0 +1,7 @@
+# Stage A Swift f32 generation entry (float-precision=f32). Run from the
+# worktree root:
+#   nix develop -c bash -c 'haxe engine-haxe/targets/swift-f32.hxml'
+engine-haxe/targets/swift-common.hxml
+-D swift-output=engine-haxe/out/swift-gen-f32
+-D swift-test-output=engine-haxe/out/swift-gen-f32-tests
+-D float-precision=f32

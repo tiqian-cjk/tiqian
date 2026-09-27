@@ -1,0 +1,15 @@
+# Stage A TypeScript generation entry (no float-precision define; full Float
+# precision). Run from the worktree root:
+#   nix develop -c bash -c 'haxe engine-haxe/targets/ts.hxml'
+engine-haxe/targets/common.hxml
+engine-haxe/targets/classes.hxml
+-cp .haxelib/boring/git/packages/compiler/reflaxe/ts/std-shadow
+-cp .haxelib/boring/git/packages/compiler/reflaxe/ts
+--macro Intercept.run(['engine-haxe/src'])
+--macro tscompiler.Compiler.use()
+-D ts-output=engine-haxe/out/ts-gen
+-D ts-test-output=engine-haxe/out/ts-gen-tests
+-D ts-test-runner=bun
+-D runtime-import=@tiqian/runtime
+-D runtime-emit=.
+-D package-shell=none

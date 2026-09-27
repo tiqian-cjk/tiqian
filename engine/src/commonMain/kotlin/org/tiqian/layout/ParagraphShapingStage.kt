@@ -744,11 +744,30 @@ internal fun ExplainableStubParagraphLayoutEngine.shapeParagraph(
         hyphenOffsets = hyphenOffsets.toSet(),
         hyphenAdvance = hyphenAdvance,
         hyphenGlyphs = hyphenGlyphs,
-        substitutionRollbacks = substitutionRollbacks.toMap(),
+        // Map-typed fields render key-ascending (key-order rule: Int natural
+        // order; TextRange by (start, end); RubySpan by (baseRange.start,
+        // baseRange.end, text); other key types by their fields in declaration
+        // order). The value lookups above are unchanged; only the rendered
+        // iteration order is pinned. buildMap yields a LinkedHashMap in
+        // insertion order; TreeMap and toSortedMap are JVM-only in the
+        // Kotlin 2.3 stdlib, so commonMain cannot use them.
+        substitutionRollbacks = buildMap {
+            for (key in substitutionRollbacks.keys.sortedWith(compareBy({ it.start }, { it.end }))) {
+                put(key, substitutionRollbacks.getValue(key))
+            }
+        },
         breakOpportunityDecisions = breakOpportunityDecisions.toList(),
         emergencyTrackingEligibilityDecisions = emergencyTrackingEligibilityDecisions.toList(),
-        progressiveBreakOffsets = progressiveBreakOffsets.toMap(),
-        segmentShapingCache = segmentShapingCache.toMap(),
+        progressiveBreakOffsets = buildMap {
+            for (key in progressiveBreakOffsets.keys.sorted()) {
+                put(key, progressiveBreakOffsets.getValue(key))
+            }
+        },
+        segmentShapingCache = buildMap {
+            for (key in segmentShapingCache.keys.sortedWith(compareBy({ it.start }, { it.end }))) {
+                put(key, segmentShapingCache.getValue(key))
+            }
+        },
     )
 }
 

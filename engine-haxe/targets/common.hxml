@@ -1,0 +1,12 @@
+# Shared compiler configuration for every engine-haxe generation entry.
+# Included by the per-target entries in this directory; run those, not this
+# file. Relative paths resolve against the worktree root, so keep invoking
+# haxe from the repository root of the tiqian worktree:
+#   nix develop -c bash -c 'haxe engine-haxe/targets/swift-f64.hxml'
+-lib reflaxe
+-lib boring
+-cp .haxelib/boring/git/samples
+-cp engine-haxe/src
+-cp engine-haxe/macros
+--macro GoldenDataMacros.init()
+--macro haxe.macro.Compiler.addGlobalMetadata('org.tiqian', '@:build(std.RecordMember.build())')

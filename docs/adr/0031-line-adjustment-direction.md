@@ -1,4 +1,4 @@
-# ADR 0031: 行调整方向——偏差最小化下的「推入/推出」取舍
+# ADR 0031: 行调整方向：偏差最小化下的「推入/推出」取舍
 
 - Status: Accepted
 - Date: 2026-06-19
@@ -7,14 +7,14 @@
 ## Context
 
 当前 `Justifier` 只有**拉伸**方向：每个非末行算 `deficit = 行长 − adjustedWidth`，按
-§6.2.2.4 档序加空白。压缩只出现在避头尾 PushIn 修复里。普通断行按自然宽判定——
+§6.2.2.4 档序加空白。压缩只出现在避头尾 PushIn 修复里。普通断行按自然宽判定：
 cluster 放不下就整体下行（推出），本行随后被拉伸。
 
 实际使用观察（用户）：**几乎总在拉大字距，即便挤一挤还放得下。** 因为越界字一律推出、
 从不推入，本行只能靠拉伸补足。这违背 CLREQ §6.2.2「先挤进、后推出」与「先挤压、后拉伸」。
 
 [ADR 0022] 曾把 cluster 准入一般化为「自然宽 − 行内可压容量 ≤ 行宽」（floor 填行），
-**被否决**：「普通两端对齐不应以挤压为常规填充手段」——它让**每一行**都尽量多塞、
+**被否决**：「普通两端对齐不应以挤压为常规填充手段」。它让**每一行**都尽量放入更多的字、
 行末削半与行内压缩成为**常态**，版面系统性偏紧。本 ADR 必须避开同一个坑。
 
 ## Decision
@@ -26,18 +26,18 @@ cluster 放不下就整体下行（推出），本行随后被拉伸。
 badness(行) = 拉伸量 × Ws + 压缩量 × Wc ，  Ws/Wc = compressBias（默认 2）
 ```
 
-越界字 `i`：收进来压 `O = N(≤i) − 行长`、代价 `Wc·O`；断开拉 `U = 行长 − N(≤i-1)`、
-代价 `Ws·U`。取小者，收进来还须**可行**（`O ≤ 本行可压容量`）。
+越界字 `i`：拉入本行压 `O = N(≤i) − 行长`、代价 `Wc·O`；断开拉 `U = 行长 − N(≤i-1)`、
+代价 `Ws·U`。取小者，拉入本行还须**可行**（`O ≤ 本行可压容量`）。
 
 **与被否决的 0022 的本质区别**（这才是它可被接受的原因）：
 
-- 0022 是「**能压尽压**」——把压缩当一等填充手段，每行都最大化塞字 → 全行偏紧。
+- 0022 是「**能压尽压**」：把压缩当一等填充手段，每行都最大化塞字 → 全行偏紧。
 - 本 ADR 压缩只是**越界处的方向二选一**，且按偏差加权：
   - **自然宽本就贴行长的行 → 偏差≈0，不动**（绝不会被无故压）；
   - 只有**越界那一字**的归属按「谁偏差小（压缩打折后）」翻一下；
-  - `compressBias` 有限（默认 2，非 ∞）→ 压到一定程度就让位给推出，不会塌成紧排。
-- 即：压缩出现在「**确实是更小偏差**」的地方，而非「**每一行都尽量塞**」。0022 的否决理由
-  （压缩不该是常规填充）在此成立——本模型下绝大多数行仍是自然或拉伸态。
+  - `compressBias` 有限（默认 2，非 ∞）→ 压到一定程度就让位给推出，不会变成紧排。
+- 即：压缩出现在「**确实是更小偏差**」的地方，不落在「**每一行都尽量塞**」的行。0022 的否决理由
+  （压缩不该是常规填充）在此成立：本模型下绝大多数行仍是自然或拉伸态。
 
 ### 四种策略（`LineAdjustmentStrategy`，profile 可选）
 
@@ -45,23 +45,23 @@ badness(行) = 拉伸量 × Ws + 压缩量 × Wc ，  Ws/Wc = compressBias（默
 §6.2.2.3/§6.2.2.4 tier 顺序（与方向无关）：
 
 - **Auto**（默认）：偏差最小化 + 压缩优先，`bias = lineAdjustmentCompressBias`（默认 2）。
-- **PushInFirst**（先推入）：`bias → 大`——压得动就压（CLREQ「先挤进」字面顺序），压不动才推出。
-- **PushOutFirst**（先推出）：`bias < 1`——能断就断、拉伸，只有推出明显更差时才回头推入。
-- **PushOutOnly**（仅推出）：不生成推入候选——一律断、拉（**= 0022 否决后的现状**，旧 golden 行为）。
+- **PushInFirst**（先推入）：`bias → 大`：压得动就压（CLREQ「先挤进」字面顺序），压不动才推出。
+- **PushOutFirst**（先推出）：`bias < 1`：能断就断、拉伸，只有推出明显更差时才回头推入。
+- **PushOutOnly**（仅推出）：不生成推入候选，一律断、拉（**= 0022 否决后的现状**，旧 golden 行为）。
 
 ## Mechanism（实现 2026-06-19）
 
-落地为一个**填充推入 pass**（`applyFillPushIn`），是避头尾 PushIn 的兄弟——在
+实现为一个**填充推入 pass**（`applyFillPushIn`），是避头尾 PushIn 的兄弟，在
 greedy/lookahead + 避头尾修复**之后**跑，复用现成的 `tryPushIn`/`distributePushInShrink`，
-因此 line-end 削半 / glue 池 / 容量与避头尾 PushIn **完全同一套**对账（低风险，不另造几何路径）：
+因此 line-end 削半 / glue 池 / 容量与避头尾 PushIn **完全同一套**核算（低风险，不另造几何路径）：
 
 1. 每个非末行：留着 = 拉 `deficit`（`Ws·deficit`）；把下一行首 cluster 拉上来 = 压
    `overflow = curr0.advance − deficit`（`Wc·overflow`）。**压得动**（`tryPushIn` 容量够）
    且 `overflow < deficit × bias`（`bias = Ws/Wc`）就推入。
 2. **守则**（避免重蹈 0022 / 不破坏既有不变量）：① 跳过已带 repair 的行（避头尾
    PushIn/Hang/CarryNext），不重复消耗 glue；② 不拆 `unbreakableRanges`（数字符号粘连、
-   示亡号）——只拉 curr0 会把整组拆散；③ 不把 forbidden-at-line-end（开引号/括号）拖到
-   行尾——若下一行以这类 cluster 开头，fill group 继续扩展到能合法收尾的最小组；也不让
+   示亡号），只拉 curr0 会把整组拆散；③ 不把 forbidden-at-line-end（开引号/括号）拖到
+   行尾，若下一行以这类 cluster 开头，fill group 继续扩展到能按规则收尾的最小组；也不让
    curr 新行首落在 forbidden-at-line-start。
 3. `LineAdjustmentStrategy` → `(是否推入, bias)`：`PushOutOnly`→(false,–)；`Auto`→(true,
    `compressBias`=2)；`PushInFirst`→(true,1e6)；`PushOutFirst`→(true,0.5)。
@@ -69,9 +69,9 @@ greedy/lookahead + 避头尾修复**之后**跑，复用现成的 `tryPushIn`/`d
    走**现有** PushIn 应用路径；不足行照常 `justify`。`Justifier.compress`（步骤 ①）作为
    与 `justify` 对称的公共压缩分配器保留并单测，当前 fill pass 复用 breaker 内的等价分配器。
 
-> 验证（golden review）：`real-paragraph-1` 20 行里 4 行推入压缩、4 行仍拉伸、其余自然——
+> 验证（golden review）：`real-paragraph-1` 20 行里 4 行推入压缩、4 行仍拉伸、其余自然。
 > **选择性、非全行压缩**，正是 0022 否决要避免的反面。dump 用 `LineAdjustmentPushIn` vs
-> `ForbiddenAtLineStart` 区分两类 PushIn。`LineAdjustmentPushInTest` 钉死「Auto 推入>0、
+> `ForbiddenAtLineStart` 区分两类 PushIn。`LineAdjustmentPushInTest` 检查并要求「Auto 推入>0、
 > PushOutOnly=0、不是每行都推入」。
 
 ## Consequences
@@ -83,16 +83,16 @@ greedy/lookahead + 避头尾修复**之后**跑，复用现成的 `tryPushIn`/`d
 
 ## Alternatives considered
 
-- **floor 填行（能压尽压）**：即 [ADR 0022]，已否决——压缩成常态、版面偏紧。
+- **floor 填行（能压尽压）**：即 [ADR 0022]，已否决，压缩成常态、版面偏紧。
 - **纯对称偏差（bias=1）**：可作 `compressBias=1`，但用户要「先挤压」优先，默认 2。
 
 ## Amendment (2026-07): 删除 Auto,默认 PushInFirst
 
 外部的字体排印评审意见指出主要问题在**行长调整的顺序**;用户复核同意:
-「偏差最小化」(`Auto`)的实际效果差——bias 折中让推入/推出的选择在相近代价处摇摆,
+「偏差最小化」(`Auto`)的实际效果差：bias 折中让推入/推出的选择在相近代价处摇摆,
 版面观感不稳定,不如 CLREQ §6.2.2 字面的固定顺序。
 
-决定(预发布,不留包袱):
+决定(预发布,不留下负担):
 
 - **删除 `LineAdjustmentStrategy.Auto`** 与只服务它的 `lineAdjustmentCompressBias`;
 - **默认 = `PushInFirst`**(先挤进、后推出:压得动就压,压不动才断行拉伸);

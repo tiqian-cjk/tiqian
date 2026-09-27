@@ -15,7 +15,7 @@
   改为可中断的渐进证明）；2026-08-11（相邻引文列举项的上下文不再泄漏前一项内容）；
   2026-08-20 native precompute migration pointer, see ADR 0050；2026-08-30（非 CJK 词内成对弯引号
   规则，以及数字和全角外层边界的排除）
-- Amends: [ADR 0039 Web 渲染路径与真实站点接入](0039-web-rendering-path.md)
+- Amends: [ADR 0039 Web 渲染路径与实际站点接入](0039-web-rendering-path.md)
 
 ## Context
 
@@ -26,11 +26,11 @@ pipeline 断行并生成可选择的 DOM。这个路径在任意宿主 CSS、任
 
 构建期不能为此启动 Headless Chromium。浏览器的系统字体、fallback、CSSOM 与运行机器相关，
 产出的结果无法证明来自站点实际发布的字体字节；同时它会把前端 renderer 变成另一份布局事实来源。
-服务端需要的不是截图，而是可重复的字体证据与 `LayoutResult` 派生物。
+服务端需要可重复的字体证据与 `LayoutResult` 派生物，不需要截图。
 
 另一个边界必须明确：HarfBuzz 能执行 `liga`、`calt`、`locl` 等 GSUB/GPOS lookup，但当前 core
-在 shaping 前仍会把普通 CJK 按码点分段，Latin 的候选断词也可能重新分段 shaping。因此本切片
-只能复现**当前 segment 语义**，不能借构建期 HarfBuzz 宣称已经具备完整的跨 run 上下文 shaping。
+在 shaping 前仍会把普通 CJK 按码点分段，Latin 的候选断词也可能重新分段 shaping。因此本 Slice
+只能复现**当前 segment 语义**，不能借构建期 HarfBuzz 宣称已经具备整套的跨 run 上下文 shaping。
 
 ## Decision
 
@@ -46,10 +46,10 @@ runtime 共享 `prepared-dom.js` 的单文件不变量由 0050 的常驻双向 g
 
 构建 session 对本 root 实际发生的每个 `ShapingInput` 与 `FontMetricsRequest` 同时记录输入签名和
 HarfBuzz / OpenType 结果。glyph advance、placement、ink bounds 与纵向 metrics 除以请求字号后进入
-`ServerShapingReplayTable`；`opsz` 等非线性轴本来就不在能力域内，因此同一 weight/style 实例可在
+`ServerShapingReplayTable`；`opsz` 等非线性的可变参数本来就不在能力域内，因此同一 weight/style 实例可在
 响应式字号下线性重放。多个段落的相同记录在 snapshot manifest 中去重；传输层再把重复的 family、
-segment、feature 与 metrics key 收进一张共享字符串表，浏览器在校验索引边界后展开为同一 canonical
-replay model，不让 exact evidence 随文章段落数重复膨胀。不同字号除回 em 后产生的 IEEE-754 尾差先
+segment、feature 与 metrics key 存入一张共享字符串表，浏览器在校验索引边界后展开为同一 canonical
+replay model，不让 exact evidence 随文章段落数重复增长。不同字号除回 em 后产生的 IEEE-754 尾差先
 按固定精度 canonicalize；同一 replay key 的结果随后必须完全一致，否则构建以
 `SnapshotFontReplay*Conflict` 失败，不能把浏览器必然拒绝的重复 key 发出去。
 
@@ -83,7 +83,7 @@ font metrics 尚未建模，同样不能把默认实例的静态 table 值当成
 `lining-nums`。这个基准 feature 由段落继承，不进入逐 run 的 prepared DOM feature boundary；弯引号
 等 role feature 仍只携带自己的 `pwid,palt`。其余 numeric variant 和任意未建模 feature 继续 fail closed。
 
-### `FontInstanceMetricsKey`：度量缓存必须包含真实实例
+### `FontInstanceMetricsKey`：度量缓存必须包含实际实例
 
 `FontMetricsRequest` 的 identity 至少包含 family stack、font size、weight 与 italic。构建端额外以
 `sfntSha256 + faceIndex + sorted axes` 作为 `FontInstanceId`。同 family 的 unicode-range 子集只有在
@@ -121,7 +121,7 @@ JVM 与 JavaScript 运行时各自的 Unicode 表令希腊文、西里尔文等�
 相邻组合另设分支。以 Western 空白明确隔开的纯西文引文仍形成独立 run，例如
 `（如 ‘O’, ‘Q’）`；结构化编号前缀不作为正文语言证据。
 
-未配对的弯引号使用左右两侧完整的强脚本证据，冲突时同样回到段落 locale。U+2019 两侧属于
+未配对的弯引号使用左右两侧齐全的强脚本证据，冲突时同样回到段落 locale。U+2019 两侧属于
 非 CJK 词字符时由 `NonCjkInWordApostrophe` 保持在 Western run，并且不消耗外层单引号对。
 这些规则只增加结构化 role decision，不补写缺失引号，也不修改 source range。
 
@@ -180,7 +180,7 @@ JVM 与 JavaScript 运行时各自的 Unicode 表令希腊文、西里尔文等�
 
 prepared layout wire 为 segment 显式携带 OpenType feature signature；canonical DOM 先以
 `font-feature-settings: "halt" 0, "chws" 0, "palt" 0` 锁住普通 CJK 标点的全宽 shaping。这里显式关闭
-`palt` 是因为 Firefox 在 IBM Plex Sans SC 真正加载后会让 `font-kerning: normal` 带出比例标点定位；
+`palt` 是因为 Firefox 在 IBM Plex Sans SC 加载后会让 `font-kerning: normal` 带出比例标点定位；
 标点压缩仍只来自 `LayoutResult`。西文弯引号再只接受已知的 `pwid,palt` 映射，以
 `font-variant-east-asian: proportional-width` 与同时保留上述关闭项的 `"palt" 1` 重放西文弯引号。
 字体 advance probe、snapshot adoption 和 runtime geometry gate 都把该 signature 与普通标点 feature lock 纳入
@@ -213,7 +213,7 @@ class、declaration table 与实际 template artifact 都受 render revision / d
 manifest table。每段只保存 typography ref，以及本段实际使用的 face ref、coverage 与 advance probe；
 浏览器解析后再展开为既有 canonical validation shape。这样不改变每段证据，也不再把完整
 unicode-range、字体 hash、local names 和 typography 重复写入每个 entry。table reference 越界、
-版本冲突或 digest 失配全部 fail closed。
+版本冲突或 digest 不匹配全部 fail closed。
 
 canonical plain flow 使用 `line-height: 0` 消除宿主 root strut，让 `LineMetricStrut` 独占每行的
 ascent / descent / baseline；否则即使两端 HarfBuzz 结果相同，浏览器仍会用自身字体垂直度量把
@@ -227,7 +227,7 @@ digest、typography contract、exact font evidence、最大 layout width 与由 
 line/run render plan。快照接收纯文本、source-faithful mandatory break，以及可安全序列化的受控
 semantic inline；链接、强调等以 source range、标签和行为属性进入 artifact，跨软换行仍只生成一个
 语义元素。行内代码只有在宿主显式发布 exact 等宽 font face，并把完整字体 span 与 padding box
-contract 同时送入真实 layout input 时才可命中；仅有 `monospace` fallback、缺少任一盒边证据或由
+contract 同时送入实际 layout input 时才可命中；仅有 `monospace` fallback、缺少任一盒边证据或由
 集成层私自补字体时，整段具名退出，保留 native HTML/CSS。事件属性、`javascript:` URL、引擎私有
 属性、crossing range、ruby / 注音、
 opaque inline object、未知伪元素盒、未知 emoji fallback 与破折号 exact-face 特例仍具名退出快照。
@@ -237,20 +237,20 @@ ASCII / U+00C0–024F Latin 及 Common；Bopomofo、Inherited combining mark 和
 
 默认 transport 始终让原 SSR `<p>` / `<li>` 作为 no-JS、SEO、Pagefind、复制与恢复的事实来源；prepared
 HTML 放在正文之外的 inert `<template data-pagefind-ignore>` 中。初始 HTTP、整页 HTML 导航与 page-data
-导航都不得只凭站点配置的 maximum measure 直接把 prepared children 塞进正文，因为服务端无法知道
+导航都不得只凭站点配置的 maximum measure 直接把 prepared children 放进正文，因为服务端无法知道
 浏览器是否命中了本地字体，也不知道首帧实际 content width。客户端在 live width、source、typography、
 宿主 font face 与 prepared geometry 全部验证后，才逐段采用 keyed candidate set。
 
 `renderSnapshotBundle()` 注入 engine-owned geometry CSS、prepared `inertTemplate` 与 compact
 `clientTemplate`；不生成字体 preload，字体 CSS、资源优先级和缓存策略继续由宿主负责。同 root 的
 unkeyed candidate 保留 native source，由 runtime 按视口优先逐段原子补齐。任一 keyed candidate miss
-都不触碰正文，runtime 从完整 native source 开始接管。不得把数百 KB prepared DOM 塞进 page-data
+都不触碰正文，runtime 从完整 native source 开始接管。不得把数百 KB prepared DOM 放进 page-data
 payload，再让浏览器做一次整篇 takeover。
 回到最大版心可重新采用仍在 document 中的 inert artifact，并再次只补齐 unkeyed candidate，不必重新下载或在 page data
 复制 prepared DOM。若 resize 在补齐过程中取消 captured job、但 maximum-measure snapshot 仍然有效，
 协调层必须恢复并重启 unkeyed candidate；keyed snapshot 的存在本身不代表混合根节点已经完成。
 
-### `HostCompatibleFontOwnership`：提椠不改写宿主字体族
+### `HostCompatibleFontOwnership`：提椠不改写宿主字体 family
 
 普通集成只提供一份现有字体样式表的本地构建路径与浏览器 URL。Node precompute 解析其中全部
 `@font-face`，把相对资源 URL 分别解析到本地字体文件与宿主原公开 URL，并按 CSS source order、
@@ -287,10 +287,10 @@ runtime 使用服务器 replay 计算布局，snapshot 与 runtime 都由同一�
 outline / ink 的小差异，采用前后
 还必须满足：`font-optical-sizing: none`、face descriptor 与 advance probe；每个原子 segment 的 live
 advance、每个预期 `drawX` 前缀位置以及每行 end sentinel 的 pen position 都在固定 CSS-px 容差内。
-容差不随整行长度按比例放大；任一 segment、前缀或行末失配都原子恢复 SSR 并进入 browser pipeline。
+容差不随整行长度按比例放大；任一 segment、前缀或行末不匹配都原子恢复 SSR 并进入 browser pipeline。
 
-该策略证明的是预断行所需的水平 advance / placement 兼容，而不是 glyph outline、GSUB 结果或
-vertical metrics 的字节等价。相同 advance 下仍可能存在小的 ink 差异，这是本 ADR 接受的兼容性
+该策略证明的是预断行所需的水平 advance / placement 兼容；glyph outline、GSUB 结果或
+vertical metrics 的字节等价不在证明范围内。相同 advance 下仍可能存在小的 ink 差异，这是本 ADR 接受的兼容性
 取舍；需要 exact glyph identity 与 immutable asset identity 的站点需要另行选择显式 exact-URL policy，
 不能把本默认策略的 advance 兼容误称为 byte-exact。
 采用结果在 root 上暴露 `data-tiqian-snapshot-font-policy="compatible-local|url-only"`；这个标记描述
@@ -304,7 +304,7 @@ vertical metrics 的字节等价。相同 advance 下仍可能存在小的 ink �
 source / manifest 做无副作用
 preflight，再登记 provisional owner；随后每段 commit 后立即完成该段 geometry proof，才进入下一段，
 避免一次替换整篇后触发 full-tree layout flush。新导航、resize 或新一代 adoption 只能回滚仍属于该
-作业的 provisional owner；取消不会暴露不完整的 DOM owner 或计数。
+作业的 provisional owner；取消不会暴露未完成的 DOM owner 或计数。
 
 可观察计数必须反映这两个 owner：采用成功后立即写入 `data-tiqian-snapshot-count`；
 `data-tiqian-enhanced-count` 在纯快照路径等于该值，在混合路径的每个 progressive slice 都等于
@@ -343,7 +343,7 @@ paragraph 优先从 manifest 建立上述 shared exact-font session 并重跑相
 loader 在字体异步准备前后都重新校验 live source、typography 与 CSS face contract；命令式调用若
 覆盖 font family、font size、line height 或非零首行缩进，也不得复用 snapshot exact session。
 runtime canonical DOM 生成后再走与 snapshot adoption 相同的 segment、line pen、baseline 与 paragraph
-height gate；只有这一步失配，才清除 canonical 标记并在同次调用内回到 ADR 0039 的 browser adapter。
+height gate；只有这一步不匹配，才清除 canonical 标记并在同次调用内回到 ADR 0039 的 browser adapter。
 session 证据失效或内容超出能力域时同样走该 adapter。最大宽度且所有 eligible 正文段落都在
 candidate set 时仍只安装轻量 copy / restore / observer 逻辑；存在列表或具名 capability miss 时加载
 Kotlin/JS runtime，从完整 native source 开始按 viewport 距离逐段原子接管。
@@ -394,7 +394,7 @@ animation frame 的 leading edge；不能在 observer callback（包括其 micro
   capability 路径都不再 import 或执行它们。
 - snapshot HTML 使用共享 manifest tables 与 root-scoped dynamic-value stylesheet；这只是 transport
   去重，不改变 `PreparedParagraphV1`、原子 segment 边界或几何 gate。
-- 本切片不改变 core cluster 边界，因此不会改善现有跨 segment 的 `calt` / `liga` / `locl`；相关
+- 本 Slice 不改变 core cluster 边界，因此不会改善现有跨 segment 的 `calt` / `liga` / `locl`；相关
   full-run shaping 必须单独设计并逐平台验证 measure/draw 同源。
 
 ## Alternatives considered
@@ -402,7 +402,7 @@ animation frame 的 leading edge；不能在 observer callback（包括其 micro
 - **构建时启动 Headless Chromium**：依赖浏览器与构建机字体状态，无法以 exact font bytes 作为
   可复现证据，且把 DOM renderer 变成布局事实来源。否。
 - **只缓存每字 advance、客户端继续断行**：仍需加载整个 layout runtime，也无法复用最大版心的
-  推入推出与 justify 结果。可作为以后 `WidthIndependentAnnotationCache` 的数据来源，不是本切片。
+  推入推出与 justify 结果。可作为以后 `WidthIndependentAnnotationCache` 的数据来源；本 Slice 不包含这一项。
 - **仅凭站点 maximum measure 把预断行 HTML 当 SSR 正文**：首个 response 不知道实际 viewport，窄屏
   会先 paint 固定宽度 DOM；服务端也不知道客户端是否命中不同版本的 `local()`。否。默认响应式 SSR
   必须保留 native source，浏览器完成 width/font proof 后再采用 inert artifact。

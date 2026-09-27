@@ -63,6 +63,14 @@
                 git
                 rustToolchain
                 haxe
+                # Toolchains the engine-haxe bundles compile and run with,
+                # so the driver finds them on PATH from this shell. Swift is
+                # the exception: its wrapper enters an FHS root through
+                # bubblewrap, which the sandbox refuses to nest, so a swift
+                # bundle is built through a swiftc shim placed on PATH (see
+                # engine-haxe/README.md).
+                dart
+                kotlin
               ]
               ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
                 chromium

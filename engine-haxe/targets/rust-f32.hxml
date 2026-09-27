@@ -1,0 +1,6 @@
+# Stage A Rust f32 generation entry (float-precision=f32). Run from the
+# worktree root:
+#   nix develop -c bash -c 'haxe engine-haxe/targets/rust-f32.hxml'
+engine-haxe/targets/rust-common.hxml
+-D rust-output=engine-haxe/out/rust-gen-f32/src
+-D float-precision=f32

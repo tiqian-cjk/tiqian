@@ -1,0 +1,7 @@
+# Stage A Kotlin f32 generation entry (float-precision=f32). Run from the
+# worktree root:
+#   nix develop -c bash -c 'haxe engine-haxe/targets/kotlin-f32.hxml'
+engine-haxe/targets/kotlin-common.hxml
+-D kotlin-output=engine-haxe/out/kotlin-gen-f32
+-D kotlin-test-output=engine-haxe/out/kotlin-gen-f32-tests
+-D float-precision=f32

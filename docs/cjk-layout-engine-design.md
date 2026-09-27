@@ -11,7 +11,7 @@
 
 ## 目标
 
-提椠的第一阶段目标不是实现一个完整浏览器级文本系统，而是实现一个面向中文正文的 CJK paragraph layout engine。
+提椠的第一阶段目标是实现一个面向中文正文的 CJK paragraph layout engine；浏览器具备的完整文本系统不在这一阶段的目标内。
 
 第一版重点支持：
 
@@ -31,7 +31,7 @@
 - 编辑器、IME、复杂 selection。
 - 完整 CSS Text 兼容。
 
-项目的价值不应该只是“多几个中文断行规则”，而是建立一套可观察、可调试、可扩展的 CJK 排版物理模型。
+“多几个中文断行规则”不足以说明项目的价值；项目要建立一套可观察、可调试、可扩展的 CJK 排版物理模型。
 
 ## 核心取舍
 
@@ -44,9 +44,9 @@
 - 标点墨迹与标点空间。
 - CLREQ 断行和避头尾修复。
 - 行内空间调整和两端对齐。
-- 段落级审美优化。
+- 以整段为单位的审美优化。
 
-换句话说：
+这些层串成一条流程：
 
 ```text
 Text + Style + Locale + LayoutProfile
@@ -70,7 +70,7 @@ Text + Style + Locale + LayoutProfile
 - 标点宽度、灰度、baseline 与中文正文不一致。
 - 连续标点空间失控。
 
-注意：中文省略号的合理行为是垂直居中。提椠不应把省略号人为压低；这里要解决的是 fallback 与字体形态选择错误，而不是把中文省略号从中部移到底部。
+注意：中文省略号的合理行为是垂直居中。提椠不应把省略号人为压低；这里要解决的是 fallback 与字体形态选择错误；把中文省略号从中部移到底部不属于要解决的问题。
 
 因此 fallback resolver 需要脚本、语言和标点角色感知。
 
@@ -84,7 +84,7 @@ Latin word                -> Latin 字体优先
 Emoji / symbol            -> 专门 fallback
 ```
 
-这意味着 fallback 不能简单委托给平台。平台可以提供实际 glyph 与 shaping 能力，但提椠应该决定候选字体顺序。
+因此 fallback 不能简单委托给平台。平台可以提供实际 glyph 与 shaping 能力，但提椠应该决定候选字体顺序。
 
 需要保留调试能力：
 
@@ -141,7 +141,7 @@ Latin text
   -> MetricBox.RawFontBox
 ```
 
-这意味着，即使一个 CJK 字体 raw metrics 因兼容附加符号而提供过高 ascent，提椠也应先把它视为 raw input，再通过 normalized layout metrics 生成 line box。最终 layout result 必须能解释：
+因此，即使一个 CJK 字体 raw metrics 因兼容附加符号而提供过高 ascent，提椠也应先把它视为 raw input，再通过 normalized layout metrics 生成 line box。最终 layout result 必须能解释：
 
 ```text
 raw ascent/descent/source
@@ -180,9 +180,9 @@ CenteredCjkVisual + IdeographicBox
 
 ## 标点空间模型
 
-标点处理应采用“加法模型”，而不是传统的“全角标点先占 1em，然后到处削空”的减法模型。
+标点处理应采用“加法模型”，不采用传统的“全角标点先占 1em，然后到处削空”的减法模型。
 
-也就是说，标点不应该被简单视为一个 1em 字符，而应建模为：
+标点不应该被简单视为一个 1em 字符，而应建模为：
 
 ```text
 punctuation = ink + leadingGlue + trailingGlue
@@ -227,7 +227,7 @@ palt         比例替代宽度
 
 ```text
 source "……"  -> display "⋯⋯"  // U+22EF U+22EF
-source "——"  -> display "⸺"    // U+2E3A
+source "U+2014 U+2014"  -> display "⸺"    // U+2E3A
 ```
 
 同时仍然要求这些 display glyph 使用中文标点字体优先显示，并保持中文排版语义：
@@ -250,7 +250,7 @@ source "——"  -> display "⸺"    // U+2E3A
 
 ## 断行、避头尾与修复
 
-标点避头尾不是单纯的 line break rule，而是：
+标点避头尾并非单纯的 line break rule；它是：
 
 ```text
 line break
@@ -274,7 +274,7 @@ LeaveRagged
   保持参差，避免过度修复。
 ```
 
-每个断点都应生成候选方案，而不是用硬编码规则直接决定。
+每个断点都应生成候选方案；不采用硬编码规则直接决定。
 
 建议的数据结构：
 
@@ -322,7 +322,7 @@ LineOptimizationStrategy.ParagraphDynamicProgramming
 
 ## 两端对齐
 
-两端对齐应基于 glue 系统，而不是平均拉开所有汉字。
+两端对齐应基于 glue 系统，不应平均拉开所有汉字。
 
 统一的调整机会可以是：
 
@@ -345,14 +345,14 @@ WordSpace（西文词距）
 ```
 
 标点空隙不单列拉伸档（CLREQ 的标点调整空间只参与挤压）：已削减/折叠的标点
-空白不可逆。但 CjkInterChar（剩余字符间距）末档对普通标点两侧一视同仁——
+空白不可逆。但 CjkInterChar（剩余字符间距）末档对普通标点两侧一视同仁：
 glue 侧与**实心侧（括号内侧、点号前）都按与其他位置完全相同的均匀份额参与**。
 CLREQ「剩余所有字符间距同时同等量拉伸」只排除几类：不可断标点规定的字间距、
 连接号/分隔号及其前后字符，以及项目模型中的原子长标号边界（破折号、省略号）。
 后者虽然属于标点，但作为两字宽不可拆 cluster 处理；在其前后做均匀 tracking 会
-制造 `—— 不` / `…… 了` 式的假空格，破坏 source-preserving display cluster 模型。
+制造 `U+2014 U+2014 不` / `…… 了` 式的假空格，破坏 source-preserving display cluster 模型。
 早期「优先利用标点 glue」的取舍已被 ADR 0004 amendment 废止。挤压（PushIn 等）
-另有独立的优先顺序，见 clreq-gap-audit.md 缺口 4。
+另有独立的优先顺序，见 clreq-gap-audit.md 缺失项 4。
 
 ## 模块结构
 
@@ -484,11 +484,11 @@ val result = paragraphEngine.layout(
 - 平台默认 fallback。
 - Skia Paragraph 的完整 layout 决策。
 
-原因是提椠的核心价值恰恰在平台默认行为之外：CJK fallback、中文视觉度量、标点 glue、避头尾修复和段落级优化。
+原因是提椠的核心价值正是在平台默认行为之外：CJK fallback、中文视觉度量、标点 glue、避头尾修复和以整段为单位的优化。
 
 ## 调试实验台
 
-项目早期应优先建立 playground，而不是先做正式 UI 组件。
+项目早期应优先建立 playground；正式 UI 组件放在其后。
 
 playground 至少应支持：
 
@@ -514,7 +514,7 @@ playground 至少应支持：
 ```text
 中文，中文。
 中文……中文。
-中文——中文。
+中文 U+2014 U+2014 中文。
 他说：“你好，世界。”
 中文 English 中文。
 （开头括号）和结尾标点。

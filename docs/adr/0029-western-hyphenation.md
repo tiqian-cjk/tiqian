@@ -7,13 +7,13 @@
 
 中文正文里混排西文非常常见。此前长西文词是单 cluster（`LatinWordSegmentation`
 只按空格切），放不下时整词突出版心。CLREQ §换行与断词连字「横排中混排的西文
-单词……**在可使用连字符处之外，不得分隔为两行**」——「可使用连字符处」即西文
+单词……**在可使用连字符处之外，不得分隔为两行**」，「可使用连字符处」即西文
 体例的**音节连字点**，故通用规则**允许**西文在音节点加连字符换行（只禁止在别处
 硬拆）。
 
 注意区分：§纵横对齐「行尾**强制**断行（不依音节、不加连字符）」是繁体取向的覆盖
 （该节自注「简体中文较为少见」），**不是**简体默认。我们做的是前者（音节连字），
-不是后者。详见 clreq-gap-audit「缺口 2」与「已知偏离」。
+不是后者。详见 clreq-gap-audit「缺失项 2」与「已知偏离」。
 
 连字本身是平台/数据能力，不该在排版层凭印象自造。但目标平台不一：Android 有原生
 断词器，JVM 桌面（测试/playground 平台）的 JDK 没有。
@@ -23,40 +23,40 @@
 **数据：内置 TeX 连字模式。** `linebreak` 定 `Hyphenator` 接口
 （`hyphenate(word): List<Int>` 给音节断点），`NoHyphenator` 为无数据默认；
 `LiangHyphenator` 实现 Frank Liang 算法（TeX/浏览器同款）。JVM/Android 内置标准
-`hyph-en-us`（Kuiken/hyph-utf8，宽松许可、文件头声明原样保留——**非公有领域**），
+`hyph-en-us`（Kuiken/hyph-utf8，宽松许可、文件头声明原样保留，**非公有领域**），
 `EnglishHyphenation.enUs` 加载之，左 2 右 3。
 
-**接入：`LineEndHangingHyphen`。** 引擎注入 `hyphenator`。**默认启用**——
+**接入：`LineEndHangingHyphen`。** 引擎注入 `hyphenator`。**默认启用**，
 中西混排常见、短行尤其受益，故引擎默认取平台连字器（`defaultHyphenator()`，
 `expect/actual`：JVM/Android = bundled en-US，无内置断词器的平台退化为不连字）；显式传
 `NoHyphenator` 关闭。shaping 后把每个**全字母**西文词按连字点拆成音节
-子 cluster（逐音节重排，真实宽度），断行器照常在 cluster 边界断（无需改断行器）。
+子 cluster（逐音节重排，实际宽度），断行器照常在 cluster 边界断（无需改断行器）。
 连字符以**占版心宽**为常态：内容只填到 `measure − 连字符宽`，连字符落在版心内；
 若内容已经放不下，才退为行尾悬挂。`LineBox.hyphenAdvance` 记该行行尾连字符宽度；
 引擎在某行的**下一行**起始于某连字断点（音节续接）时给该行置 `hyphenAdvance`。
 
-## Amendment (2026-06-14): LatinForcedHyphenBreak（硬断兜底）
+## Amendment (2026-06-14): LatinForcedHyphenBreak（硬断的最终手段）
 
-音节连字救不了的情况——没注入 hyphenator，或某个音节/无连字点的长 token 本身
-就比版心宽——需要兜底。此时**直接补连字符然后硬断**：对任何**仍宽于版心**的
+音节连字救不了的情况，没注入 hyphenator，或某个音节/无连字点的长 token 本身
+就比版心宽，此时需要最终手段。**直接补连字符然后硬断**：对任何**仍宽于版心**的
 片段，在字符边界加断点（同样补显示层连字符，优先占版心宽、放不下才悬挂）。
 断点**尽量满足前二后三**（`HYPHEN_MIN_LEFT=2` / `HYPHEN_MIN_RIGHT=3`，
-与 en-US 连字同）——把片段首
+与 en-US 连字同），把片段首
 2 字、尾 3 字保留整块、中间逐字可断；片段短到连前二后三都满足不了时，才退化为
 任意字符断（满足不了就算了）。
 
-这步在 split pass 里与音节拆分合一：cut 点 = 音节点 ∪（超宽片段的字符兜底点），
+这步在 split pass 里与音节拆分合一：cut 点 = 音节点 ∪（超宽片段的字符断点），
 两者都进 `hyphenOffsets`、都走同一套行尾连字符几何。需要版心宽度判断片段是否
-超宽，故 grid 量化（measure）上移到 shaping 之前。**默认 NoHyphenator 下也生效**——长西文词
+超宽，故 grid 量化（measure）上移到 shaping 之前。在默认 NoHyphenator 设置下也生效，长西文词
 （无音节点）照样硬断补连字符，不再突出版心。
 
 注意与 §纵横对齐 的区别：那条是「**不加连字符**」的繁体硬切；我们这条**加**连字符
-（更易读），是 CLREQ 字面之外的实用兜底（一个词放不下时总得断在某处），不是
+（更易读），是 CLREQ 字面之外的实用最终手段（一个词放不下时总得断在某处），它不同于
 纵横对齐那套。`latin-hard-break` fixture（`中Network`@64）印证：`中 Ne-`/`tw-`/`ork`。
 
 ## Amendment (2026-06-14): 连字是最后一档（按行松紧触发）
 
-最初的接法是 eager——断行器在任何音节 cluster 边界即时断，能塞就塞。这不对：
+最初的接法是 eager，断行器在任何音节 cluster 边界即时断，只要放得下就继续放入。这不对：
 连字应当是**最后手段**，排在拉伸之后。改为：断行器**优先整词换行**，只有当
 （a）词本身超宽放不下（mandatory），或（b）整词换行会把这行的**汉字间距**拉得
 超过 `HYPHEN_LAST_RESORT_CJK_STRETCH_EM`（**0.5em/间距**）时，才回退到音节断
@@ -66,14 +66,14 @@
 溢出后，先退到最近的**整词边界**；若该词从行首就放不下 ⇒ 必断；否则量一下整词行
 的松紧（`deficit / CJK↔CJK 间距数`），超阈才在音节点断。引擎把
 `hyphenBreakClusters`（哪些 cluster 前是音节/硬断续接）、`cjkInterCharBoundaries`
-（可拉伸的汉字间距）、阈值喂给断行器。**不动 justifier**——「必然填满」（ADR
+（可拉伸的汉字间距）、阈值喂给断行器。**不动 justifier**，「必然填满」（ADR
 0004）保留：断行器在「会太松」时改用连字把行填满，justifier 只需拉 ≤0.5em；连字
-救不了（没有可连词、或词太短）时，再走原来的无上限拉伸兜底。所以连字符恰好插在
-「带上限的汉字间距拉伸」与「无上限兜底拉伸」之间。
+救不了（没有可连词、或词太短）时，再走原来的无上限拉伸的最终手段。所以连字符正好插在
+「带上限的汉字间距拉伸」与「无上限最终手段拉伸」之间。
 
 松紧度量：按 CLREQ 拉伸顺序，**先扣中西间距能吸收的**（每个 CJK↔Latin 间距
 0.25em 余量 = cap 0.5 − 自然 0.25；词距是二分空、已在 0.5em cap，不吸收），
-剩下的才是真正落到汉字间距的增量 `cjkDeficit / 汉字间距数`，与 0.5em 比。
+剩下的就是落到汉字间距的增量 `cjkDeficit / 汉字间距数`，与 0.5em 比。
 `decideHyphenBreak` 收 `sinoWesternBoundaries` + 每档容量；
 `DecideHyphenBreakTest` 锁定「扣掉中西间距后由松转不连字」。
 `hyphenationIsSkippedWhenStretchingCjkStaysTight` 锁定「够紧就不连字」，
@@ -82,7 +82,7 @@
 ## Amendment (2026-07-07): AvoidConsecutiveSyntheticHyphenBreaks
 
 连续多行都在西文词中补连字符，会显得段落被切碎；但在窄栏/长词里，断词本身仍是
-合法且必要的最后手段。因此不做硬禁，只在 lookahead 评分里加入软惩罚：
+被规则允许且必要的最后手段。因此不做硬禁，只在 lookahead 评分里加入软惩罚：
 
 - 第一处 synthetic hyphen 不罚。
 - 第二处连续 synthetic hyphen 加 `consecutiveSyntheticHyphenPenalty`。
@@ -95,19 +95,19 @@
 ## Amendment (2026-06-14): 连字符占版心宽、放不下才悬挂
 
 最初连字符**默认悬挂**（突出版心、不计入测量）。改为：连字符像行末标点一样
-**占版心内的实宽**——连字行的内容只 justify 到 `measure − 连字符宽`，连字符落
+**占版心内的实宽**，连字行的内容只 justify 到 `measure − 连字符宽`，连字符落
 在版心边缘内（content + 连字符 = 版心），不再默认突出。只有当内容宽于
-`measure − 连字符`（超宽词、或行太窄塞不进）时，连字符才落到版心外（**悬挂**）
-——「真的放不下了再悬挂」自然成立（justify 只拉不压，内容压不下去就让连字符
+`measure − 连字符`（超宽词、或行太窄塞不进）时，连字符才落到版心外（**悬挂**），
+「真的放不下再悬挂」自然成立（justify 只拉不压，内容压不下去就让连字符
 出界）。`western-hyphenation` golden：连字行 visual 由 160 变 144（=160−16），
 汉字间距也少拉了（连字符填掉了那 16）。
 
 标点挤压（CLREQ）：内容宽于 `measure − 连字符` 时，先**挤压本行可压的标点/词距/
 中西间距 glue**（复用 PushIn 那套 `shrinkOpportunities`，按 CLREQ 挤压 tier 顺序、
-扣掉 PushIn 已用的）把连字符收回版心，只有挤不动的残差才悬挂。落在 geometry 前、
+扣掉 PushIn 已用的）把连字符收回版心，只有挤不动的剩余量才悬挂。落在 geometry 前、
 并入 PushIn 的 consume map。`reservedHyphenSqueezesPunctuationGlueToPullItIn` 单测
 锁定（逗号 trailing glue 被压）；行内无可压 glue（如 `中Network` 只有 autospace
-间距、不在 shrinkOpportunities）时照旧悬挂——「真的放不下」。
+间距、不在 shrinkOpportunities）时照旧悬挂，「真的放不下」。
 
 ## Amendment (2026-06-14): CY/T 154-2017 §9 对齐 + 已有连字符处断词（§9.3）
 
@@ -127,17 +127,17 @@
   `all { isLetter() }` 排除；不留单字母由前二后三（硬断）/ ≥2 两侧（已有连字符/
   驼峰）保证；**全大写缩写**（`NASA`/`HTML`，≥2 全大写）`isAbbreviation` →
   **不断词**。**单个人名**（首字母大写+小写）靠纯大小写不可靠（与句首词无法区分，
-  误伤合法长大写词），故**不**当人名特判，仍按普通词处理。
+  误伤正常的长大写词），故**不**当人名特判，仍按普通词处理。
 
 附带新增 **`CamelCaseBreak`**（产品名驼峰常见）：内部含大写的全字母 token
-（`isCamelCase`，非缩写）在**驼峰处**断——lowercase→Upper，或缩写边界
-Upper→Upper-then-lower（`XML|Http`）——**不补连字符**（大写字母本身标示断点），
+（`isCamelCase`，非缩写）在**驼峰处**断，lowercase→Upper，或缩写边界
+Upper→Upper-then-lower（`XML|Http`），**不补连字符**（大写字母本身标示断点），
 ≥2 字母两侧（§9.4）。clean 断点（不进 hyphenOffsets、优先于音节），故驼峰词不再
 走音节连字。`latin-camelcase` fixture 印证 `用Power`/`Point做`。
 
 附带修掉一个潜伏 bug：`punctuationAtoms` 此前对**所有** cluster 建标点 atom，
 导致含 ASCII `-`/`/` 的 **LatinText cluster**（英文连字符，非 CJK 连接号）被
-误当 短横线 forcedHalfWidth、占宽塌成 0.5em。改为**跳过 LatinText cluster**
+误当 短横线 forcedHalfWidth、占宽被压到 0.5em。改为**跳过 LatinText cluster**
 （标点 atom 是 CJK 文本的事）。`latin-existing-hyphen` fixture 印证
 `out-of-/the-way`。
 
@@ -179,11 +179,11 @@ CLREQ 明确记录了西文较多的中文横排使用 U+002C COMMA `,` 作逗�
 非典型体例，又一般规定点号不得居行首。直接码点证据是 U+002C；提椠将同一断行
 语义保守推广到方向明确的 `, . : ; ! ?`，不声称 CLREQ 已按码点逐个列举后五者。
 
-这里保留两条独立的轴：
+这里保留两条独立的维度：
 
-- 字体/测量轴：它们仍是 `LatinText`，保留平台 shaping 得到的比例 advance，不建
+- 字体/测量方面：它们仍是 `LatinText`，保留平台 shaping 得到的比例 advance，不建
   `PunctuationAtom`，不获得 CJK glue、行尾半宽或相邻标点压缩。
-- 断行轴：非 `None` 禁则档下，点号直接紧随非空白可见 cluster 时，
+- 断行方面：非 `None` 禁则档下，点号直接紧随非空白可见 cluster 时，
   `AttachedAsciiPointMarkKinsoku` 把它加入行首禁则，并与前一 cluster 形成 no-break
   边界。段首、空白或源文强制换行之后不跨边界推断。
 
@@ -195,19 +195,19 @@ U+0022 / U+0027 直引号无法仅凭码点判定开闭，`AttachedAsciiPointMar
 但 ADR 0026 的独立 UAX 边界层会按 LB19 保护两侧。
 
 若“前一 cluster + 连续点号 run”连它所在行的可用宽度都无法容纳（包括段首缩进后的
-首行），单纯 no-break 没有合法解。这个判定必须使用 breaker 实际消费的
+首行），单纯 no-break 没有被规则允许的解。这个判定必须使用 breaker 实际消费的
 `baseGeometry.resolveClusters()` advance，包括 ruby/注音 structural spread，不得回看 shaping 阶段的
 natural advance。
 
 该 run 此时获得具名 `AttachedAsciiPointMarkImpossibleMeasureHang` 的候选资格，但 repair 顺序
-仍是 PushIn 在先、Hang 在后。只有最终真正 Hang 的 cluster 才在
-`contextualKinsokuDecisions.impossibleMeasureFallback` 中记录该名称；若 PushIn 已合法收进版心，
+仍是 PushIn 在先、Hang 在后。只有最终 Hang 的 cluster 才在
+`contextualKinsokuDecisions.impossibleMeasureFallback` 中记录该名称；若 PushIn 已将内容收回版心，
 decision 不冒充“已悬挂”。run 因样式/shaping 边界分成多个 cluster 时，这些候选 cluster 可
 连续延伸同一次 Hang；不放宽 profile 的普通“行尾只挂一个点号”。
 
 最终悬挂的 cluster 仍保留原 source range 与 glyph 几何。`LineBox.hangingPunctuationAdvance`
 累计整个悬挂 run 的 advance；Compose `TextOverflow.Clip` 只在该字段非零时把行的最终
-`visualWidth` 视为合法绘制边界。因此 justify 把前置内容拉宽，或极窄版心下前一 cluster
+`visualWidth` 视为被规则允许的绘制边界。因此 justify 把前置内容拉宽，或极窄版心下前一 cluster
 自身已超宽，点号也不会被 clip 误裁。前端没有 ASCII 码点特判。
 
 ### 2026-08-11 边界分层补充
@@ -220,8 +220,8 @@ ADR 0026 amendment 已把 UAX #14 的 `EX` / `IS` 基础 no-break 边界用于�
 
 ### 2026-08-11 BibliographicNumericLocatorBreak
 
-文献定位串 `44(10):21-38.` 是“卷（期）：页码范围”的结构化西文内容，不是一个英文词，
-也不是一个不可拆的阿拉伯数字。旧 `LatinOpaqueTokenBreak` 只有在非 URL token 自身宽于
+文献定位串 `44(10):21-38.` 是“卷（期）：页码范围”的结构化西文内容。该串不属于英文词，
+也不属于不可拆的阿拉伯数字。旧 `LatinOpaqueTokenBreak` 只有在非 URL token 自身宽于
 版心（或达到长 token 阈值）时才暴露分隔符；该串能独占一行时就保持单 cluster，导致前行
 只能用少量汉字间距吸收大额 deficit。
 
@@ -242,9 +242,9 @@ ADR 0026 amendment 已把 UAX #14 的 `EX` / `IS` 基础 no-break 边界用于�
 - **源文本不动**：连字符只在显示层（行尾画 `-`），source range / 复制 / 搜索保持
   输入（与码点替换同一原则）。
 - 默认启用（JVM/Android=en-US）。golden/单测等确定性测试**显式 pin**
-  `NoHyphenator`（同 repair fixture pin `Fixed` kinsoku 的先例）——故既有 golden
-  零漂移；连字 fixture（`western-hyphenation`，`LayoutFixture.useEnglishHyphenation`）
-  显式注入 `enUs`。`HyphenationLayoutTest` 锁定「默认引擎即连字」「拆分点恰等于
+  `NoHyphenator`（同 repair fixture pin `Fixed` kinsoku 的先例），故既有 golden
+  输出逐项一致；连字 fixture（`western-hyphenation`，`LayoutFixture.useEnglishHyphenation`）
+  显式注入 `enUs`。`HyphenationLayoutTest` 锁定「默认引擎即连字」「拆分点正好等于
   hyphenator 输出」「连字符默认计入版心，放不下才悬挂」。
 - 渲染：共享 skia cluster-walk（`drawTiqianGlyphs`，compose + playground 共用）与
   playground AWT 在内容末尾画 `-`；dump（golden + playground）的行尾加 `hyphen=` 标记。
@@ -256,7 +256,7 @@ ADR 0026 amendment 已把 UAX #14 的 `EX` / `IS` 基础 no-break 边界用于�
 ## Amendment (2026-08-14): ProgressiveTechnicalBreak
 
 链接与行内代码由前端降为同一个 `LineBreakSpan(ProgressiveTechnical)`，核心对其西文 token
-先保留 source 中已有的真实空白边界，再使用三级 clean 断点：第一档为结构符号之后与 CamelCase
+先保留 source 中已有的实际空白边界，再使用三级 clean 断点：第一档为结构符号之后与 CamelCase
 hump；第二档复用当前语言 hyphenator 的音节 offset，但不进入 `hyphenOffsets`、不绘制连字符；
 第三档才是 source-grapheme 安全边界的
 硬断。整个 token 能否放进另一条完整行，不参与当前行的断点判定。首次 shaping 保留未断开文本的
@@ -270,7 +270,7 @@ kerning，并先暴露结构与音节断点；若 `WholeToken` 换行会使当�
 fill PushIn 不得把已经选择的高档断点无条件改写成低档断点。
 `ProgressiveTechnicalTierPromotionRequiresFullLine` 只允许 clean-tier promotion 在拉入后已经填满
 （或需要压缩）时发生；若拉入后仍有正余量，必须保留 breaker 选中的更靠右硬断。
-若上游避头尾改变了下一行起点，refill 的首个 grapheme 恰好落在 cleaner tier 但仍填不满，
+若上游避头尾改变了下一行起点，refill 的首个 grapheme 正好落在 cleaner tier 但仍填不满，
 `ProgressiveTechnicalFillRefillSkipsIntermediateCleanerTier` 跨过这个中间边界，继续拉到下一个与原
 断点同 tier 的边界；不能让旧行尾停在原地，也不能以 cleaner 标签为由制造新的大余量。
 lookahead 与 paragraph-DP 可以比较 span 之前的 whole-token wrap，但一旦决定在 span 内断开，
@@ -278,7 +278,7 @@ lookahead 与 paragraph-DP 可以比较 span 之前的 whole-token wrap，但一
 平滑后续行而改选同一 tier 中更早、当前行 tracking 更大的候选。
 
 技术 span 不封闭 span 内或正文中的普通伸缩机会，所有非末行仍走同一条 Justifier。为了不把小额
-余量先推给 span 外的正文，技术文本中 source 真实存在的空格提供一个额外、有上限的
+余量先推给 span 外的正文，技术文本中 source 实际存在的空格提供一个额外、有上限的
 `ProgressiveTechnicalWhitespaceStretch`；不足的余量继续使用既有词空格、中西间距与中文正文机会。
 结构符号、CamelCase、音节与硬断边界本身只是可断点，不直接成为 glue。
 正文数字与单位适用的 `NumberSymbolCohesion` 不得覆盖显式 `ProgressiveTechnical` span；URL、hash
@@ -291,8 +291,8 @@ lookahead 与 paragraph-DP 可以比较 span 之前的 whole-token wrap，但一
 尚未失败的下一档仍按 Structural → Syllable → Emergency 参与；只有最终采用 Emergency 时，才为
 行末技术 span 开放 source-grapheme tracking。它在有界空格与 inline-object 资源之后、中文正文字距
 之前吸收余量；行中技术 span、后续正文和无关行不进入这一提前档。若该行末 span 没有可用 grapheme
-边界，普通正文机会仍可兜底，因此这不是冻结正文或封闭 range。被拒绝 tier、候选 source offset、
-最终采用的 tier、真实空格补偿与 `TerminalTechnicalEmergencyTracking` allocation 都进入结构化
+边界，普通正文机会仍在其他路径都不能用时作为最终手段，因此这不是冻结正文或封闭 range。被拒绝 tier、候选 source offset、
+最终采用的 tier、实际空格补偿与 `TerminalTechnicalEmergencyTracking` allocation 都进入结构化
 debug 和 dump。
 
 反向调整时，技术 span 与普通正文的西文词距统一遵守最小 `1/4em`，不能因 code/link 语义获得
@@ -302,8 +302,8 @@ debug 和 dump。
 实际若前行的等档硬断可前移并消除 overflow，可以不消费空格容量；否则所有 compression allocation
 仍遵守原有 CLREQ 顺序、下限并进入 repair debug。
 
-`ProgressiveTechnicalWhitespaceBreakPricing` 让断点层级的松度估算先扣除候选行内真实源码空格
-已经拥有的有界技术伸缩量；恰好落在行尾并将被折叠的空格不计入。该容量直接取自同一个
+`ProgressiveTechnicalWhitespaceBreakPricing` 让断点层级的松度估算先扣除候选行内实际存在的源码空格
+已经拥有的有界技术伸缩量；正好落在行尾并将被折叠的空格不计入。该容量直接取自同一个
 `Justifier` 配置，不能在 breaker 另写常量。paragraph-DP 提交可压缩 edge 时，promotion 也必须
 比较该行未经压缩时实际选中的技术断点与最终断点；同档 Structural → Structural 或
 Syllable → Syllable 仍是普通 `LineAdjustmentPushIn`，不得因更早存在低档候选而伪报升级。
@@ -317,7 +317,7 @@ Syllable → Syllable 仍是普通 `LineAdjustmentPushIn`，不得因更早存�
 技术 span 的 Syllable 枚举改为逐 Structural piece 进行。命中具名强 non-lexical 证据的 piece
 不交给语言 hyphenator，避免 hex/hash 被英文模式解释出无语义的“音节”断点。当前证据只包括：
 `LongRepeatedLetterRun`、`LongHexIdentityRun` 与 `LongMixedAlphaNumericIdentifier`；
-每项都有最小长度门槛并进入
+每项都有最小长度要求并进入
 `emergencyTrackingEligibilityDecisions`。这不是“ordinary Western”分类器：默认结果是无资格，
 不能因为某段文字用了 Latin 字体、没有空格、全大写或 hyphenator 没返回结果，就反推它是
 技术 token。
