@@ -32,6 +32,24 @@ class CjkSelectionDocument(fragments: List<CjkSelectionDocumentFragment>) {
     }
 }
 
+/**
+ * A half-open UTF-16 source range in a [CjkSelectionDocumentFragment]. [fragmentText] is the
+ * fragment's original annotated source, independent of its copy projection. A range may be empty
+ * when the selection touches a fragment boundary or crosses an empty fragment.
+ */
+@Immutable
+data class CjkSelectionDocumentRange(
+    val fragmentKey: Any,
+    val start: Int,
+    val end: Int,
+    val fragmentText: AnnotatedString,
+)
+
+internal data class CjkSelectionProjection(
+    val text: AnnotatedString? = null,
+    val ranges: List<CjkSelectionDocumentRange>? = null,
+)
+
 internal data class CjkSelectionScopeInfo(
     val ownerKey: Any,
     val retentionKey: Any,

@@ -11,6 +11,7 @@ import androidx.compose.foundation.text.LocalTextContextMenu
 import androidx.compose.foundation.text.TextContextMenu
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -28,18 +29,22 @@ import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextRange as ComposeTextRange
 import androidx.compose.ui.text.UrlAnnotation
 import androidx.compose.ui.text.VerbatimTtsAnnotation
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
@@ -78,12 +83,437 @@ class CjkSelectionTest {
             }
         }.use { scene ->
             scene.render()
+            assertEquals(null, state!!.selectedRanges)
             assertTrue(state!!.selectAll())
+            val expectedRanges = listOf(
+                CjkSelectionDocumentRange("first", 0, 3, document.fragments[0].text),
+                CjkSelectionDocumentRange("second", 0, 3, document.fragments[1].text),
+            )
             assertEquals("第一段\n第二段", state!!.selectedText?.text)
+            assertEquals(expectedRanges, state!!.selectedRanges)
+            (state!!.selectedRanges as MutableList<CjkSelectionDocumentRange>).clear()
+            assertEquals(expectedRanges, state!!.selectedRanges)
             showFirst = false
             scene.render()
             assertEquals("第一段\n第二段", state!!.selectedText?.text)
+            assertEquals(expectedRanges, state!!.selectedRanges)
             assertTrue(state!!.hasSelection)
+            state!!.clearSelection()
+            assertEquals(null, state!!.selectedText)
+            assertEquals(null, state!!.selectedRanges)
+            assertTrue(state!!.selectAll())
+        }
+        assertEquals(null, state!!.selectedText)
+        assertEquals(null, state!!.selectedRanges)
+    }
+
+    @Test
+    fun documentRangesIdentifyRepeatedTextAndUseSourceSafeUtf16Offsets() {
+        val clipboard = RecordingClipboardManager()
+        val source = "甲😀乙"
+        val styledSource = buildAnnotatedString {
+            append("甲")
+            withStyle(SpanStyle(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)) { append("😀") }
+            append("乙")
+        }
+        val document = CjkSelectionDocument(
+            listOf(
+                CjkSelectionDocumentFragment("first", AnnotatedString(source)),
+                CjkSelectionDocumentFragment("second", styledSource),
+            ),
+        )
+        var state: CjkSelectionState? = null
+
+        ImageComposeScene(width = 320, height = 180) {
+            val selectionState = rememberCjkSelectionState()
+            state = selectionState
+            CompositionLocalProvider(LocalClipboardManager provides clipboard) {
+                CjkSelectionContainer(state = selectionState, document = document) {
+                    Column {
+                        CjkSelectionScope("first") { CjkText(source, modifier = Modifier.testTag("first")) }
+                        CjkSelectionScope("second") { CjkText(styledSource, modifier = Modifier.testTag("second")) }
+                    }
+                }
+            }
+        }.use { scene ->
+            scene.render()
+            val selectionState = state ?: error("selection state missing")
+            fun setSelection(tag: String, start: Int, end: Int): Boolean {
+                val node = scene.semanticsOwners.flatMap {
+                    it.getAllSemanticsNodes(mergingEnabled = false)
+                }.single { node ->
+                    node.config.getOrNull(SemanticsProperties.TestTag) == tag &&
+                        SemanticsActions.SetSelection in node.config
+                }
+                val action = node.config[SemanticsActions.SetSelection].action
+                    ?: error("set-selection semantics action missing")
+                return action(start, end, true)
+            }
+
+            assertTrue(setSelection("first", 2, 4))
+            assertEquals("😀乙", selectionState.selectedText?.text)
+            assertEquals(listOf(CjkSelectionDocumentRange("first", 1, 4, document.fragments[0].text)), selectionState.selectedRanges)
+            assertTrue(setSelection("second", 2, 4))
+            assertEquals("😀乙", selectionState.selectedText?.text)
+            assertEquals(listOf(CjkSelectionDocumentRange("second", 1, 4, document.fragments[1].text)), selectionState.selectedRanges)
+            assertTrue(selectionState.selectedRanges!!.single().fragmentText === styledSource)
+            assertEquals(styledSource.spanStyles, selectionState.selectedRanges!!.single().fragmentText.spanStyles)
+            assertTrue(selectionState.copySelection())
+            assertEquals("😀乙", clipboard.recordedText?.text)
+
+            assertTrue(setSelection("second", 4, 1))
+            assertEquals("😀乙", selectionState.selectedText?.text)
+            assertEquals(listOf(CjkSelectionDocumentRange("second", 1, 4, document.fragments[1].text)), selectionState.selectedRanges)
+            assertTrue(setSelection("second", -10, 100))
+            assertEquals(source, selectionState.selectedText?.text)
+            assertEquals(listOf(CjkSelectionDocumentRange("second", 0, 4, document.fragments[1].text)), selectionState.selectedRanges)
+            assertTrue(setSelection("second", 1, 1))
+            assertEquals(null, selectionState.selectedText)
+            assertEquals(null, selectionState.selectedRanges)
+        }
+    }
+
+    @Test
+    fun backwardDocumentDragIncludesUncomposedFragmentsInReadingOrder() {
+        val clipboard = RecordingClipboardManager()
+        val document = CjkSelectionDocument(
+            listOf(
+                CjkSelectionDocumentFragment("first", AnnotatedString("甲乙丙")),
+                CjkSelectionDocumentFragment(
+                    "middle", AnnotatedString("重复"), textForCopy = AnnotatedString("副本"),
+                ),
+                CjkSelectionDocumentFragment("last", AnnotatedString("丁戊己")),
+            ),
+        )
+        var state: CjkSelectionState? = null
+        var first: LayoutResult? = null
+        var last: LayoutResult? = null
+
+        ImageComposeScene(width = 360, height = 220) {
+            val selectionState = rememberCjkSelectionState()
+            state = selectionState
+            CompositionLocalProvider(LocalClipboardManager provides clipboard) {
+                CjkSelectionContainer(state = selectionState, document = document) {
+                    Column {
+                        CjkSelectionScope("first") {
+                            CjkText(
+                                "甲乙丙", modifier = Modifier.width(340.dp),
+                                style = TextStyle(fontSize = 24.sp, fontFamily = FontFamily.Serif),
+                                onTextLayout = { first = it },
+                            )
+                        }
+                        CjkSelectionScope("last") {
+                            CjkText(
+                                "丁戊己", modifier = Modifier.width(340.dp),
+                                style = TextStyle(fontSize = 24.sp, fontFamily = FontFamily.Serif),
+                                onTextLayout = { last = it },
+                            )
+                        }
+                    }
+                }
+            }
+        }.use { scene ->
+            scene.render()
+            val firstResult = first ?: error("first layout missing")
+            val lastResult = last ?: error("last layout missing")
+            assertTrue(
+                (0 until 3).all { cursor(firstResult, it).x < cursor(firstResult, it + 1).x },
+                "first fragment must have distinct caret positions: ${firstResult.debug.shapingDecisions}",
+            )
+            assertTrue(
+                (0 until 3).all { cursor(lastResult, it).x < cursor(lastResult, it + 1).x },
+                "last fragment must have distinct caret positions: ${lastResult.debug.shapingDecisions}",
+            )
+            val lastPosition = cursor(lastResult, 2)
+            drag(
+                scene,
+                Offset(lastPosition.x, firstResult.size.height + lastPosition.y),
+                cursor(firstResult, 1),
+                startTime = 3_000L,
+            )
+            val selectionState = state ?: error("selection state missing")
+            assertEquals("乙丙\n重复\n丁戊", selectionState.selectedText?.text)
+            assertEquals(
+                listOf(
+                    CjkSelectionDocumentRange("first", 1, 3, document.fragments[0].text),
+                    CjkSelectionDocumentRange("middle", 0, 2, document.fragments[1].text),
+                    CjkSelectionDocumentRange("last", 0, 2, document.fragments[2].text),
+                ),
+                selectionState.selectedRanges,
+            )
+            assertTrue(selectionState.handlesCrossed)
+            assertTrue(selectionState.copySelection())
+            assertEquals("乙丙\n副本\n丁戊", clipboard.recordedText?.text)
+        }
+    }
+
+    @Test
+    fun backwardDragAcrossEmptySeparatorRetainsZeroLengthEndpoint() {
+        val document = CjkSelectionDocument(
+            listOf(
+                CjkSelectionDocumentFragment("first", AnnotatedString("甲乙丙"), separatorAfter = ""),
+                CjkSelectionDocumentFragment("second", AnnotatedString("丁戊己")),
+            ),
+        )
+        var state: CjkSelectionState? = null
+        var first: LayoutResult? = null
+        var second: LayoutResult? = null
+
+        ImageComposeScene(width = 360, height = 220) {
+            val selectionState = rememberCjkSelectionState()
+            state = selectionState
+            CjkSelectionContainer(state = selectionState, document = document) {
+                Column {
+                    CjkSelectionScope("first") {
+                        CjkText(
+                            "甲乙丙", modifier = Modifier.width(340.dp),
+                                style = TextStyle(fontSize = 24.sp, fontFamily = FontFamily.Serif),
+                            onTextLayout = { first = it },
+                        )
+                    }
+                    CjkSelectionScope("second") {
+                        CjkText(
+                            "丁戊己", modifier = Modifier.width(340.dp),
+                                style = TextStyle(fontSize = 24.sp, fontFamily = FontFamily.Serif),
+                            onTextLayout = { second = it },
+                        )
+                    }
+                }
+            }
+        }.use { scene ->
+            scene.render()
+            val firstResult = first ?: error("first layout missing")
+            val secondResult = second ?: error("second layout missing")
+            assertTrue(
+                (0 until 3).all { cursor(firstResult, it).x < cursor(firstResult, it + 1).x },
+                "first fragment must have distinct caret positions: ${firstResult.debug.shapingDecisions}",
+            )
+            assertTrue(
+                (0 until 3).all { cursor(secondResult, it).x < cursor(secondResult, it + 1).x },
+                "second fragment must have distinct caret positions: ${secondResult.debug.shapingDecisions}",
+            )
+            val local = cursor(secondResult, 2)
+            drag(
+                scene,
+                Offset(local.x, firstResult.size.height + local.y),
+                cursor(firstResult, 3),
+                startTime = 4_000L,
+            )
+            val selectionState = state ?: error("selection state missing")
+            assertEquals("丁戊", selectionState.selectedText?.text)
+            assertEquals(
+                listOf(
+                    CjkSelectionDocumentRange("first", 3, 3, document.fragments[0].text),
+                    CjkSelectionDocumentRange("second", 0, 2, document.fragments[1].text),
+                ),
+                selectionState.selectedRanges,
+            )
+            assertTrue(selectionState.handlesCrossed)
+        }
+    }
+
+    @Test
+    fun documentRangesRetainEmptyFragmentsWithoutTreatingSeparatorsAsSource() {
+        val document = CjkSelectionDocument(
+            listOf(
+                CjkSelectionDocumentFragment("empty-first", AnnotatedString(""), separatorAfter = "|"),
+                CjkSelectionDocumentFragment("middle", AnnotatedString("甲"), separatorAfter = "|"),
+                CjkSelectionDocumentFragment("empty-last", AnnotatedString("")),
+            ),
+        )
+        var state: CjkSelectionState? = null
+        ImageComposeScene(width = 320, height = 160) {
+            val selectionState = rememberCjkSelectionState()
+            state = selectionState
+            CjkSelectionContainer(state = selectionState, document = document) {}
+        }.use { scene ->
+            scene.render()
+            val selectionState = state ?: error("selection state missing")
+            assertTrue(selectionState.selectAll())
+            assertEquals("|甲|", selectionState.selectedText?.text)
+            assertEquals(
+                listOf(
+                    CjkSelectionDocumentRange("empty-first", 0, 0, document.fragments[0].text),
+                    CjkSelectionDocumentRange("middle", 0, 1, document.fragments[1].text),
+                    CjkSelectionDocumentRange("empty-last", 0, 0, document.fragments[2].text),
+                ),
+                selectionState.selectedRanges,
+            )
+        }
+    }
+
+    @Test
+    fun separatorOnlySelectionRetainsBothEmptyFragmentRanges() {
+        val document = CjkSelectionDocument(
+            listOf(
+                CjkSelectionDocumentFragment("first", AnnotatedString(""), separatorAfter = "|"),
+                CjkSelectionDocumentFragment("second", AnnotatedString("")),
+            ),
+        )
+        var state: CjkSelectionState? = null
+        ImageComposeScene(width = 320, height = 160) {
+            val selectionState = rememberCjkSelectionState()
+            state = selectionState
+            CjkSelectionContainer(state = selectionState, document = document) {}
+        }.use { scene ->
+            scene.render()
+            val selectionState = state ?: error("selection state missing")
+            assertTrue(selectionState.selectAll())
+            assertEquals("|", selectionState.selectedText?.text)
+            assertEquals(
+                listOf(
+                    CjkSelectionDocumentRange("first", 0, 0, document.fragments[0].text),
+                    CjkSelectionDocumentRange("second", 0, 0, document.fragments[1].text),
+                ),
+                selectionState.selectedRanges,
+            )
+        }
+    }
+
+    @Test
+    fun textAndRangesAreObservedTogetherWithoutRepeatedRecomposition() {
+        val document = CjkSelectionDocument(
+            listOf(CjkSelectionDocumentFragment("body", AnnotatedString("正文"))),
+        )
+        val observations = mutableListOf<Pair<String?, List<CjkSelectionDocumentRange>?>>()
+        var state: CjkSelectionState? = null
+        ImageComposeScene(width = 320, height = 160) {
+            val selectionState = rememberCjkSelectionState()
+            state = selectionState
+            CjkSelectionContainer(state = selectionState, document = document) {
+                val text = selectionState.selectedText?.text
+                val ranges = selectionState.selectedRanges
+                SideEffect { observations += text to ranges }
+                CjkSelectionScope("body") { CjkText("正文") }
+            }
+        }.use { scene ->
+            scene.render()
+            val selectionState = state ?: error("selection state missing")
+            assertTrue(selectionState.selectAll())
+            repeat(3) { scene.render() }
+            assertEquals("正文" to listOf(CjkSelectionDocumentRange("body", 0, 2, document.fragments[0].text)), observations.last())
+            val stableCount = observations.size
+            repeat(3) { scene.render() }
+            assertEquals(stableCount, observations.size)
+            selectionState.clearSelection()
+            scene.render()
+            assertEquals(null to null, observations.last())
+            assertTrue(observations.all { (text, ranges) ->
+                (text == null && ranges == null) ||
+                    (text == "正文" && ranges == listOf(CjkSelectionDocumentRange("body", 0, 2, document.fragments[0].text)))
+            })
+        }
+    }
+
+    @Test
+    fun selectionChangingKeysWithSameTextPublishesTheNewRange() {
+        val document = CjkSelectionDocument(
+            listOf(
+                CjkSelectionDocumentFragment("first", AnnotatedString("重复")),
+                CjkSelectionDocumentFragment("second", AnnotatedString("重复")),
+            ),
+        )
+        val observations = mutableListOf<Pair<String?, List<CjkSelectionDocumentRange>?>>()
+        var state: CjkSelectionState? = null
+        ImageComposeScene(width = 320, height = 160) {
+            val selectionState = rememberCjkSelectionState()
+            state = selectionState
+            CjkSelectionContainer(state = selectionState, document = document) {
+                val text = selectionState.selectedText?.text
+                val ranges = selectionState.selectedRanges
+                SideEffect { observations += text to ranges }
+                Column {
+                    CjkSelectionScope("first") { CjkText("重复", modifier = Modifier.testTag("first")) }
+                    CjkSelectionScope("second") { CjkText("重复", modifier = Modifier.testTag("second")) }
+                }
+            }
+        }.use { scene ->
+            scene.render()
+            fun select(tag: String) {
+                val node = scene.semanticsOwners.flatMap {
+                    it.getAllSemanticsNodes(mergingEnabled = false)
+                }.single { node ->
+                    node.config.getOrNull(SemanticsProperties.TestTag) == tag &&
+                        SemanticsActions.SetSelection in node.config
+                }
+                val action = node.config[SemanticsActions.SetSelection].action
+                    ?: error("set-selection semantics action missing")
+                assertTrue(action(0, 2, true))
+            }
+            select("first")
+            repeat(3) { scene.render() }
+            assertEquals(
+                "重复" to listOf(CjkSelectionDocumentRange("first", 0, 2, document.fragments[0].text)),
+                observations.last(),
+            )
+            select("second")
+            repeat(3) { scene.render() }
+            assertEquals(
+                "重复" to listOf(CjkSelectionDocumentRange("second", 0, 2, document.fragments[1].text)),
+                observations.last(),
+            )
+            assertEquals("重复", state!!.selectedText?.text)
+        }
+    }
+
+    @Test
+    fun selectionRangesClearWhenDocumentIsReplacedOrContainerIsDetached() {
+        val firstDocument = CjkSelectionDocument(
+            listOf(CjkSelectionDocumentFragment("body", AnnotatedString("正文"))),
+        )
+        val replacement = CjkSelectionDocument(
+            listOf(CjkSelectionDocumentFragment("body", AnnotatedString("正文"))),
+        )
+        var document by mutableStateOf(firstDocument)
+        var showContainer by mutableStateOf(true)
+        var state: CjkSelectionState? = null
+        ImageComposeScene(width = 320, height = 160) {
+            val selectionState = rememberCjkSelectionState()
+            state = selectionState
+            if (showContainer) {
+                CjkSelectionContainer(state = selectionState, document = document) {
+                    CjkSelectionScope("body") { CjkText("正文") }
+                }
+            }
+        }.use { scene ->
+            scene.render()
+            val selectionState = state ?: error("selection state missing")
+            assertTrue(selectionState.selectAll())
+            assertEquals(listOf(CjkSelectionDocumentRange("body", 0, 2, document.fragments[0].text)), selectionState.selectedRanges)
+            document = replacement
+            scene.render()
+            assertEquals(null, selectionState.selectedText)
+            assertEquals(null, selectionState.selectedRanges)
+            assertTrue(selectionState.selectAll())
+            showContainer = false
+            scene.render()
+            assertEquals(null, selectionState.selectedText)
+            assertEquals(null, selectionState.selectedRanges)
+        }
+    }
+
+    @Test
+    fun selectionWithoutDocumentReportsUnavailableRangesWithoutExposingScopeKeys() {
+        var state: CjkSelectionState? = null
+        ImageComposeScene(width = 320, height = 160) {
+            val selectionState = rememberCjkSelectionState()
+            state = selectionState
+            CjkSelectionContainer(state = selectionState) {
+                Column {
+                    CjkSelectionScope("shared") { CjkText("正文") }
+                    CjkSelectionScope("shared") { CjkText("正文") }
+                    CjkText("无键")
+                }
+            }
+        }.use { scene ->
+            scene.render()
+            val selectionState = state ?: error("selection state missing")
+            assertEquals(null, selectionState.selectedRanges)
+            assertTrue(selectionState.selectAll())
+            assertEquals("正文\n正文\n无键", selectionState.selectedText?.text)
+            assertEquals(null, selectionState.selectedRanges)
+            selectionState.clearSelection()
+            assertEquals(null, selectionState.selectedRanges)
         }
     }
 
@@ -133,7 +563,7 @@ class CjkSelectionTest {
                     CjkText(
                         text = source,
                         modifier = Modifier.width(300.dp),
-                        style = TextStyle(fontSize = 24.sp),
+                        style = TextStyle(fontSize = 24.sp, fontFamily = FontFamily.Serif),
                         onTextLayout = { layout = it },
                     )
                 }
@@ -244,7 +674,7 @@ class CjkSelectionTest {
                     CjkText(
                         source,
                         modifier = Modifier.width(340.dp),
-                        style = TextStyle(fontSize = 24.sp),
+                        style = TextStyle(fontSize = 24.sp, fontFamily = FontFamily.Serif),
                         onTextLayout = { layout = it },
                     )
                 }

@@ -31,8 +31,23 @@ import kotlin.math.abs
 /** Observable state for one [CjkSelectionContainer]. */
 @Stable
 class CjkSelectionState internal constructor() {
-    var selectedText: AnnotatedString? by mutableStateOf(null)
-        private set
+    private var selectionProjection by mutableStateOf(CjkSelectionProjection())
+
+    /** The source text and separators in the current selection, or null when nothing is selected. */
+    val selectedText: AnnotatedString?
+        get() = selectionProjection.text
+
+    /**
+     * A snapshot of every touched fragment in document order, including fragments not currently
+     * composed. Offsets are UTF-16 and half-open. Empty ranges preserve both touched boundaries
+     * and empty intervening fragments; separators are present only in [selectedText]. Each range
+     * includes the original fragment text. Returns null without a [CjkSelectionDocument] or when
+     * [selectedText] is null, including selections containing no source or separator characters.
+     * Reading the list copies its entries without copying fragment text, and cannot modify state.
+     */
+    val selectedRanges: List<CjkSelectionDocumentRange>?
+        get() = selectionProjection.ranges?.toList()
+
     /** Owners retained only while their pointer coroutine is actively dragging. */
     var activeGestureOwnerKeys: Set<Any> by mutableStateOf(emptySet())
         private set
@@ -92,7 +107,7 @@ class CjkSelectionState internal constructor() {
         if (ownedSelectionOrGesture) hideContextMenuToolbar()
         selection = null
         selectionRanges = emptyMap()
-        selectedText = null
+        selectionProjection = CjkSelectionProjection()
         hasSelection = false
         startHandlePosition = null
         endHandlePosition = null
@@ -460,7 +475,7 @@ class CjkSelectionState internal constructor() {
         if (changed && touch) {
             hapticFeedback?.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
-        if (changed) updateDerivedSelection()
+        if (changed) updateDerivedSelection(selectionChanged = true)
     }
 
     private fun selectionAt(
@@ -502,13 +517,17 @@ class CjkSelectionState internal constructor() {
         else -> initial
     }
 
-    private fun updateDerivedSelection() {
+    private fun updateDerivedSelection(selectionChanged: Boolean = false) {
         contextMenuPositionEpoch++
         val previousRanges = selectionRanges
         val ordered = orderedSelectables()
-        selectionRanges = buildSelectionRanges(ordered)
-        selectedText = buildSelectedText()
-        hasSelection = selectedText != null
+        val normalized = normalizedSelection()
+        selectionRanges = buildSelectionRanges(ordered, normalized)
+        // Logical document text does not change when only visible geometry changes.
+        if (selectionChanged || document == null) {
+            selectionProjection = buildSelectionProjection(normalized, ordered)
+        }
+        hasSelection = selectionProjection.text != null
         updateHandlePositions()
         if (contextMenuToolbarRequested && systemContextMenu == null) {
             showLegacyTextToolbar()
@@ -525,8 +544,9 @@ class CjkSelectionState internal constructor() {
 
     private fun buildSelectionRanges(
         ordered: List<CjkSelectable>,
+        normalized: Pair<CjkSelectionAnchor, CjkSelectionAnchor>?,
     ): Map<CjkSelectable, TextRange> {
-        val normalized = normalizedSelection() ?: return emptyMap()
+        normalized ?: return emptyMap()
         if (normalized.first == normalized.second) return emptyMap()
         val ranges = LinkedHashMap<CjkSelectable, TextRange>()
         val startIndex = orderOf(normalized.first.key)
@@ -545,13 +565,15 @@ class CjkSelectionState internal constructor() {
         return ranges
     }
 
-    private fun buildSelectedText(): AnnotatedString? {
-        val normalized = normalizedSelection() ?: return null
-        if (normalized.first == normalized.second) return null
+    private fun buildSelectionProjection(
+        normalized: Pair<CjkSelectionAnchor, CjkSelectionAnchor>?,
+        ordered: List<CjkSelectable>,
+    ): CjkSelectionProjection {
+        normalized ?: return CjkSelectionProjection()
+        if (normalized.first == normalized.second) return CjkSelectionProjection()
         val logicalDocument = document
         if (logicalDocument == null) {
-            val ordered = orderedSelectables()
-            return buildAnnotatedString {
+            val text = buildAnnotatedString {
                 var first = true
                 for (selectable in ordered) {
                     val range = selectionRanges[selectable] ?: continue
@@ -560,18 +582,24 @@ class CjkSelectionState internal constructor() {
                     append(selectable.selectionText, range.start, range.end)
                 }
             }.takeIf { it.isNotEmpty() }
+            return CjkSelectionProjection(text)
         }
         val startIndex = logicalDocument.indexByKey.getValue(normalized.first.key)
         val endIndex = logicalDocument.indexByKey.getValue(normalized.second.key)
-        return buildAnnotatedString {
+        val ranges = mutableListOf<CjkSelectionDocumentRange>()
+        val text = buildAnnotatedString {
             for (index in startIndex..endIndex) {
                 val fragment = logicalDocument.fragments[index]
-                val start = if (index == startIndex) normalized.first.offset else 0
-                val end = if (index == endIndex) normalized.second.offset else fragment.text.length
+                val start = (if (index == startIndex) normalized.first.offset else 0)
+                    .coerceIn(0, fragment.text.length)
+                val end = (if (index == endIndex) normalized.second.offset else fragment.text.length)
+                    .coerceIn(0, fragment.text.length)
+                ranges += CjkSelectionDocumentRange(fragment.key, start, end, fragment.text)
                 if (end > start) append(fragment.text, start, end)
                 if (index < endIndex) append(fragment.separatorAfter)
             }
         }.takeIf { it.isNotEmpty() }
+        return CjkSelectionProjection(text, if (text == null) null else ranges.toList())
     }
 
     private fun buildClipboardText(): AnnotatedString? {

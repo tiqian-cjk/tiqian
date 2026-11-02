@@ -65,6 +65,8 @@ CjkText(
 可以用 `cjkTextCompatibility()` 检查当前还不能保真的能力。只读正文可以用
 `CjkSelectionContainer` 包住一个或多个 `CjkText`，支持选择与复制。
 
+绑定 `CjkSelectionDocument` 后，宿主可以读取 `CjkSelectionState.selectedRanges`，获得按文档顺序排列的片段标识、原始文本和 UTF-16 半开区间。该列表包含选区触及的空片段边界，离屏片段也保留范围；没有选区或没有绑定文档时返回 `null`。
+
 整篇 Markdown 正文可以使用基于提椠的[提椠 Markdown](https://github.com/tiqian-cjk/tiqian-markdown)，
 段落排版之上，还可以统一处理代码、表格、公式、图片与脚注等。
 
