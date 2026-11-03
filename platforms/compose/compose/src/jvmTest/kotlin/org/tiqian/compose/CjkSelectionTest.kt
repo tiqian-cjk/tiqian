@@ -130,8 +130,20 @@ class CjkSelectionTest {
             CompositionLocalProvider(LocalClipboardManager provides clipboard) {
                 CjkSelectionContainer(state = selectionState, document = document) {
                     Column {
-                        CjkSelectionScope("first") { CjkText(source, modifier = Modifier.testTag("first")) }
-                        CjkSelectionScope("second") { CjkText(styledSource, modifier = Modifier.testTag("second")) }
+                        CjkSelectionScope("first") {
+                            CjkText(
+                                source,
+                                modifier = Modifier.testTag("first"),
+                                style = TextStyle(fontSize = 24.sp, fontFamily = FontFamily.Serif),
+                            )
+                        }
+                        CjkSelectionScope("second") {
+                            CjkText(
+                                styledSource,
+                                modifier = Modifier.testTag("second"),
+                                style = TextStyle(fontSize = 24.sp, fontFamily = FontFamily.Serif),
+                            )
+                        }
                     }
                 }
             }
@@ -160,6 +172,32 @@ class CjkSelectionTest {
             assertEquals(styledSource.spanStyles, selectionState.selectedRanges!!.single().fragmentText.spanStyles)
             assertTrue(selectionState.copySelection())
             assertEquals("😀乙", clipboard.recordedText?.text)
+
+            assertTrue(selectionState.selectRange("second", 2, 4))
+            scene.render()
+            assertEquals(listOf(CjkSelectionDocumentRange("second", 1, 4, styledSource)), selectionState.selectedRanges)
+            selectionState.beginHandleDrag(isStart = false)
+            assertTrue(selectionState.isSelectionGestureInProgress)
+            assertTrue(selectionState.selectRange("second", 0, 4))
+            scene.render()
+            assertFalse(selectionState.isSelectionGestureInProgress)
+            assertFalse(selectionState.isSelectionAutoScrollArmed)
+            assertTrue(selectionState.activeGestureOwnerKeys.isEmpty())
+            assertEquals(source, selectionState.selectedText?.text)
+            assertEquals(listOf(CjkSelectionDocumentRange("second", 0, 4, styledSource)), selectionState.selectedRanges)
+            assertTrue(selectionState.startHandlePosition != null)
+            assertTrue(selectionState.endHandlePosition != null)
+            assertTrue(selectionState.copySelection())
+            assertEquals(source, clipboard.recordedText?.text)
+            assertFalse(selectionState.selectRange("foreign", 0, 4))
+            assertFalse(selectionState.selectRange("second", -1, 4))
+            assertFalse(selectionState.selectRange("second", 0, 5))
+            assertFalse(selectionState.selectRange("second", 4, 1))
+            assertFalse(selectionState.selectRange("second", 1, 1))
+            assertEquals(listOf(CjkSelectionDocumentRange("second", 0, 4, styledSource)), selectionState.selectedRanges)
+            assertTrue(selectionState.selectRange("first", 0, 4))
+            assertEquals(listOf(CjkSelectionDocumentRange("first", 0, 4, document.fragments[0].text)), selectionState.selectedRanges)
+            assertFalse(CjkSelectionState().selectRange("first", 0, 1))
 
             assertTrue(setSelection("second", 4, 1))
             assertEquals("😀乙", selectionState.selectedText?.text)

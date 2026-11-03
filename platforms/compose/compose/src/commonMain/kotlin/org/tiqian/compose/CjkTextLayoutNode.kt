@@ -193,16 +193,17 @@ internal class CjkTextLayoutNode(
     private var drawClipBottom: Float = 0f
     override var selectionCoordinates: androidx.compose.ui.layout.LayoutCoordinates? = null
         private set
+    private var inlineOffsetMapping = CjkInlineObjectOffsetMapping(semanticsText)
     override val selectionText: AnnotatedString
         get() = semanticsText
 
     override fun selectionTextForCopy(range: org.tiqian.core.TextRange): String {
-        val projected = result?.getTextForCopy(range)
-            ?: semanticsText.text.substring(
-                range.start.coerceIn(0, semanticsText.length),
-                range.end.coerceIn(range.start.coerceIn(0, semanticsText.length), semanticsText.length),
-            )
-        return projected
+        val layout = result
+        return if (layout == null) {
+            semanticsText.text.substring(range.start.coerceIn(0, semanticsText.length), range.end.coerceIn(range.start.coerceIn(0, semanticsText.length), semanticsText.length))
+        } else {
+            inlineOffsetMapping.layoutRanges(range).joinToString("") { layout.getTextForCopy(it) }
+        }
     }
 
     override fun onAttach() {
@@ -293,6 +294,7 @@ internal class CjkTextLayoutNode(
         val precomputedChanged = precomputedLayout !== this.precomputedLayout
         this.text = text
         this.semanticsText = semanticsText
+        this.inlineOffsetMapping = CjkInlineObjectOffsetMapping(semanticsText)
         this.textStyle = textStyle
         this.paragraphStyle = paragraphStyle
         this.color = color
@@ -366,13 +368,13 @@ internal class CjkTextLayoutNode(
     override fun selectionOffsetAt(localPosition: Offset): Int? {
         val layout = result ?: return null
         val index = replayIndex ?: return null
-        return index.selectionOffsetForPosition(layout, localPosition.x, localPosition.y)
+        return inlineOffsetMapping.toLogical(index.selectionOffsetForPosition(layout, localPosition.x, localPosition.y))
     }
 
     override fun selectionWordRangeAt(localPosition: Offset): org.tiqian.core.TextRange? {
         val layout = result ?: return null
         val index = replayIndex ?: return null
-        return index.selectionWordRangeForPosition(layout, localPosition.x, localPosition.y)
+        return index.selectionWordRangeForPosition(layout, localPosition.x, localPosition.y)?.let(inlineOffsetMapping::toLogical)
     }
 
     override fun selectionParagraphRangeAt(localPosition: Offset): org.tiqian.core.TextRange? {
@@ -380,8 +382,7 @@ internal class CjkTextLayoutNode(
         val index = replayIndex ?: return null
         val source = semanticsText.text
         if (source.isEmpty()) return org.tiqian.core.TextRange(0, 0)
-        val rawOffset = index.selectionOffsetForPosition(layout, localPosition.x, localPosition.y)
-            .coerceIn(0, source.length)
+        val rawOffset = inlineOffsetMapping.toLogical(index.selectionOffsetForPosition(layout, localPosition.x, localPosition.y))
         var start = rawOffset
         while (start > 0 && source[start - 1] != '\n') start--
         var end = rawOffset
@@ -390,23 +391,23 @@ internal class CjkTextLayoutNode(
     }
 
     override fun coerceSelectionOffset(offset: Int, bias: SourceBoundaryBias): Int =
-        result?.coerceSelectionOffset(offset, bias) ?: offset.coerceIn(0, semanticsText.length)
+        result?.let { inlineOffsetMapping.toLogical(it.coerceSelectionOffset(inlineOffsetMapping.toLayout(offset), bias)) } ?: offset.coerceIn(0, semanticsText.length)
 
     override fun selectionCursorPosition(offset: Int): Offset? {
         val layout = result ?: return null
-        val cursor = replayIndex?.cursorRect(layout, offset) ?: return null
+        val cursor = replayIndex?.cursorRect(layout, inlineOffsetMapping.toLayout(offset)) ?: return null
         return Offset(cursor.left, cursor.bottom)
     }
 
     override fun selectionLineRange(offset: Int): org.tiqian.core.TextRange? {
         val layout = result ?: return null
-        val lineIndex = layout.getLineForOffset(offset)
-        return layout.lines.getOrNull(lineIndex)?.range
+        val lineIndex = layout.getLineForOffset(inlineOffsetMapping.toLayout(offset))
+        return layout.lines.getOrNull(lineIndex)?.range?.let(inlineOffsetMapping::toLogical)
     }
 
     override fun selectionLineLeft(offset: Int): Float {
         val layout = result ?: return -1f
-        val lineIndex = layout.getLineForOffset(offset)
+        val lineIndex = layout.getLineForOffset(inlineOffsetMapping.toLayout(offset))
         val line = layout.lines.getOrNull(lineIndex) ?: return -1f
         return replayIndex?.positionedClustersByLine?.getOrNull(lineIndex)
             ?.firstOrNull()?.left ?: line.indent
@@ -414,7 +415,7 @@ internal class CjkTextLayoutNode(
 
     override fun selectionLineRight(offset: Int): Float {
         val layout = result ?: return -1f
-        val lineIndex = layout.getLineForOffset(offset)
+        val lineIndex = layout.getLineForOffset(inlineOffsetMapping.toLayout(offset))
         val line = layout.lines.getOrNull(lineIndex) ?: return -1f
         return replayIndex?.positionedClustersByLine?.getOrNull(lineIndex)
             ?.lastOrNull()?.right ?: line.indent
@@ -422,20 +423,20 @@ internal class CjkTextLayoutNode(
 
     override fun selectionLineCenterY(offset: Int): Float {
         val layout = result ?: return -1f
-        val lineIndex = layout.getLineForOffset(offset)
+        val lineIndex = layout.getLineForOffset(inlineOffsetMapping.toLayout(offset))
         val line = layout.lines.getOrNull(lineIndex) ?: return -1f
         return (line.top + line.bottom) / 2f
     }
 
     override fun selectionLineHeight(offset: Int): Float {
         val layout = result ?: return 0f
-        val lineIndex = layout.getLineForOffset(offset)
+        val lineIndex = layout.getLineForOffset(inlineOffsetMapping.toLayout(offset))
         val line = layout.lines.getOrNull(lineIndex) ?: return 0f
         return line.bottom - line.top
     }
 
     override fun selectionBoxes(range: org.tiqian.core.TextRange): List<org.tiqian.core.Rect> =
-        result?.let { layout -> replayIndex?.selectionBoxes(layout, range) }.orEmpty()
+        result?.let { layout -> inlineOffsetMapping.layoutRanges(range).flatMap { replayIndex?.selectionBoxes(layout, it).orEmpty() } }.orEmpty()
 
     override fun invalidateSelection() {
         invalidateDraw()
@@ -544,7 +545,7 @@ internal class CjkTextLayoutNode(
             val drawCache = drawCache ?: return
             val drawScope = this
             val selectionRange = selectionState?.rangeFor(this@CjkTextLayoutNode)
-            val selectionBoxes = selectionRange?.let { replayIndex.selectionBoxes(result, it) }.orEmpty()
+            val selectionBoxes = selectionRange?.let { range -> inlineOffsetMapping.layoutRanges(range).flatMap { replayIndex.selectionBoxes(result, it) } }.orEmpty()
             val selectionColor = selectionRange?.let { selectionState?.selectionBackgroundArgb }
             if (overflow == TextOverflow.Visible) {
                 tiqianTraceSection("TiqianParagraph.paint") {

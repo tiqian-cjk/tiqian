@@ -73,3 +73,18 @@ internal interface CjkSelectable {
     fun selectionBoxes(range: TextRange): List<org.tiqian.core.Rect>
     fun invalidateSelection()
 }
+
+internal class CjkSystemContextMenu(
+    val show: () -> Unit,
+    val hide: () -> Unit,
+)
+
+internal data class CjkSelectionAnchor(
+    val key: Any,
+    val offset: Int,
+)
+
+internal data class CjkSelection(
+    val anchor: CjkSelectionAnchor,
+    val extent: CjkSelectionAnchor,
+)

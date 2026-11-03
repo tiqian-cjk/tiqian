@@ -227,7 +227,8 @@ fun CjkText(
     }
     CjkTextLayout(
         text = renderText.text,
-        semanticsText = text,
+        semanticsText = renderText.cjkInlineLogicalText(),
+        linkText = renderText,
         modifier = modifier,
         textStyle = coreStyle,
         paragraphStyle = resolvedParagraphStyle,

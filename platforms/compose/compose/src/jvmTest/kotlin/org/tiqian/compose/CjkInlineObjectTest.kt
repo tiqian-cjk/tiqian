@@ -23,6 +23,27 @@ import org.tiqian.core.LayoutResult
 @OptIn(ExperimentalComposeUiApi::class)
 class CjkInlineObjectTest {
     @Test
+    fun renderOnlyObjectsPreserveLogicalCopyAndBidirectionalOffsets() {
+        val projected = AnnotatedString.Builder("a￼b￼c￼").apply {
+            addCjkRenderOnlyInlineObject(1, 2)
+            addCjkRenderOnlyInlineObject(5, 6)
+        }.toAnnotatedString()
+        val logical = projected.cjkInlineLogicalText()
+        assertEquals("ab￼c", logical.text, "authored object characters must remain copyable")
+        val offsets = CjkInlineObjectOffsetMapping(logical)
+        for (offset in 0..logical.length) assertEquals(offset, offsets.toLogical(offsets.toLayout(offset)))
+        assertEquals(1, offsets.toLogical(1))
+        assertEquals(1, offsets.toLogical(2))
+        assertEquals(6, offsets.toLayout(logical.length))
+        assertEquals("ab￼c", offsets.layoutRanges(org.tiqian.core.TextRange(0, logical.length)).joinToString("") {
+            projected.text.substring(it.start, it.end)
+        })
+        assertEquals("b", offsets.layoutRanges(org.tiqian.core.TextRange(1, 2)).joinToString("") {
+            projected.text.substring(it.start, it.end)
+        })
+    }
+
+    @Test
     fun composeObjectUsesItsMeasuredBaselineInTheTiqianLineBox() {
         val ascent = 30
         val descent = 7

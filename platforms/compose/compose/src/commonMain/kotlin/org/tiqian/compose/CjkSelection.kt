@@ -26,6 +26,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import org.tiqian.core.SourceBoundaryBias
 import org.tiqian.core.TextRange
+import org.tiqian.core.sourceGraphemeBoundaries
 import kotlin.math.abs
 
 /** Observable state for one [CjkSelectionContainer]. */
@@ -135,6 +136,19 @@ class CjkSelectionState internal constructor() {
         val selected = buildClipboardText()?.takeIf { it.isNotEmpty() } ?: return false
         @Suppress("DEPRECATION")
         clipboardManager?.setText(selected) ?: return false
+        return true
+    }
+    /** Selects a non-empty half-open UTF-16 range in the attached logical document. Invalid input leaves selection unchanged. */
+    fun selectRange(fragmentKey: Any, start: Int, end: Int): Boolean {
+        val currentDocument = document ?: return false
+        val fragment = currentDocument.fragments[currentDocument.indexByKey[fragmentKey] ?: return false]
+        if (start < 0 || start >= end || end > fragment.text.length) return false
+        val boundaries = fragment.text.text.sourceGraphemeBoundaries(TextRange(0, fragment.text.length))
+        val range = TextRange(boundaries.last { it <= start }, boundaries.first { it >= end })
+        gestureInitialSelection = null
+        handleFixedAnchor = null
+        setSelection(CjkSelectionAnchor(fragment.key, range.start), CjkSelectionAnchor(fragment.key, range.end), touch = isTouchSelection)
+        finishSelection()
         return true
     }
 
@@ -378,6 +392,7 @@ class CjkSelectionState internal constructor() {
         activeDragIsStart = null
         currentDragPosition = Offset.Unspecified
         isSelectionAutoScrollArmed = false
+        updateHandlePositions()
         showContextMenuToolbarIfTouch()
     }
 
@@ -980,18 +995,3 @@ class CjkSelectionState internal constructor() {
     }
 
 }
-
-internal class CjkSystemContextMenu(
-    val show: () -> Unit,
-    val hide: () -> Unit,
-)
-
-private data class CjkSelectionAnchor(
-    val key: Any,
-    val offset: Int,
-)
-
-private data class CjkSelection(
-    val anchor: CjkSelectionAnchor,
-    val extent: CjkSelectionAnchor,
-)

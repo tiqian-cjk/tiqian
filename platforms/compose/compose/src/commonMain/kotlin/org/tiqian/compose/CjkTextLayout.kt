@@ -45,6 +45,7 @@ import kotlin.math.floor
 internal fun CjkTextLayout(
     text: String,
     semanticsText: AnnotatedString = AnnotatedString(text),
+    linkText: AnnotatedString = semanticsText,
     modifier: Modifier = Modifier,
     textStyle: TextStyle = TextStyle(),
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
@@ -99,7 +100,7 @@ internal fun CjkTextLayout(
     // modifier with a pointer node after an annotation-only update can otherwise leave the new
     // node without hit-test bounds until a later relayout; updating a stable node also avoids
     // changing the modifier topology when links appear or disappear.
-    val linkModifier = CjkTextLinkElement(semanticsText, latestResult, uriHandler, hoveringLink)
+    val linkModifier = CjkTextLinkElement(linkText, latestResult, uriHandler, hoveringLink)
     val selectionModifier = if (selectionState != null) {
         Modifier.foundationSelectionGestures(selectionState, selectionBridge)
     } else {
