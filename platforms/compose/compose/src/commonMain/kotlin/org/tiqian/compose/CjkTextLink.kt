@@ -156,8 +156,10 @@ private data class LinkHit(
 private fun linkHitAt(text: AnnotatedString, result: LayoutResult, position: Offset): LinkHit? {
     if (text.length == 0) return null
     val offset = result.getOffsetForPosition(position.x, position.y)
-    val queryStart = offset.coerceIn(0, text.length - 1)
-    val composeLink = text.getLinkAnnotations(queryStart, queryStart + 1)
+    // The nearest caret can be after the linked glyph; inspect both sides before checking its boxes.
+    val queryStart = (offset - 1).coerceIn(0, text.length - 1)
+    val queryEnd = (offset + 1).coerceIn(queryStart + 1, text.length)
+    val composeLink = text.getLinkAnnotations(queryStart, queryEnd)
         .firstOrNull { range ->
             result.getBoundingBoxes(range.start, range.end).any { box ->
                 position.x >= box.left && position.x <= box.right &&
@@ -166,7 +168,7 @@ private fun linkHitAt(text: AnnotatedString, result: LayoutResult, position: Off
         }
         ?.let { LinkHit(link = it.item, start = it.start, end = it.end) }
     if (composeLink != null) return composeLink
-    return text.getUrlAnnotations(queryStart, queryStart + 1)
+    return text.getUrlAnnotations(queryStart, queryEnd)
         .firstOrNull { range ->
             result.getBoundingBoxes(range.start, range.end).any { box ->
                 position.x >= box.left && position.x <= box.right &&
