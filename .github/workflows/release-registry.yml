@@ -31,18 +31,14 @@ jobs:
       - name: Allow unprivileged user namespaces
         run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
 
-      - name: Diagnose haxe generation
+      - name: Stage the pinned Unicode data
+        # reflaxe.unicode.GraphemeData reads tools/unicode-data relative to the
+        # process working directory, and tiqian keeps that directory out of git
+        # (.gitignore:63). The pinned boring checkout carries the same four
+        # files, so the release job stages them from there.
         run: |
-          nix develop -c bash -c '
-            echo "haxe: $(command -v haxe) $($(command -v haxe) --version 2>&1)"
-            echo "HAXELIB_PATH=$HAXELIB_PATH"
-            echo "haxelib: $(command -v haxelib)"
-            ls -d .haxelib .haxelib/boring .haxelib/boring/git 2>&1
-            haxelib list 2>&1 | head -10
-            echo "--- verbose generation:"
-            haxe -v -cp engine-haxe/src -cp engine-haxe/macros engine-haxe/targets/protocol-rust.hxml -D rust-output=/tmp/diag-gen 2>&1 | tail -30
-            echo "haxe exit: $?"
-          ' 2>&1 | tail -60
+          nix develop -c bash -c 'mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/'
+          ls -l tools/unicode-data
 
       - name: Build packages via boring
         # Only the bundles that declare package metadata can be packed; the five
