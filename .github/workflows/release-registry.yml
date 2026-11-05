@@ -33,7 +33,16 @@ jobs:
 
       - name: Diagnose haxe generation
         run: |
-          nix develop -c bash -c "haxe -cp engine-haxe/src -cp engine-haxe/macros engine-haxe/targets/protocol-rust.hxml -D rust-output=/tmp/diag-gen && echo HAXE_OK || echo HAXE_FAILED" 2>&1 | tail -40
+          nix develop -c bash -c '
+            echo "haxe: $(command -v haxe) $($(command -v haxe) --version 2>&1)"
+            echo "HAXELIB_PATH=$HAXELIB_PATH"
+            echo "haxelib: $(command -v haxelib)"
+            ls -d .haxelib .haxelib/boring .haxelib/boring/git 2>&1
+            haxelib list 2>&1 | head -10
+            echo "--- verbose generation:"
+            haxe -v -cp engine-haxe/src -cp engine-haxe/macros engine-haxe/targets/protocol-rust.hxml -D rust-output=/tmp/diag-gen 2>&1 | tail -30
+            echo "haxe exit: $?"
+          ' 2>&1 | tail -60
 
       - name: Build packages via boring
         # Only the bundles that declare package metadata can be packed; the five
@@ -43,7 +52,8 @@ jobs:
       - name: Collect artifacts
         run: |
           mkdir -p release-artifacts
-          find . -name "*.tgz" -o -name "*.jar" -o -name "*.crate" -o -name "*.zip" | grep -v node_modules | while read f; do cp "$f" release-artifacts/; done
+          find engine-haxe/out -name "*.tgz" -o -name "*.jar" -o -name "*.crate" -o -name "*.zip" | while read f; do cp "$f" release-artifacts/; done
+          test -n "$(ls -A release-artifacts)" || { echo "no pack artifacts were produced"; exit 1; }
           ls -la release-artifacts/
 
       - name: Create GitHub Release
