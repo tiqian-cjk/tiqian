@@ -31,14 +31,19 @@ jobs:
       - name: Allow unprivileged user namespaces
         run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
 
-      - name: Stage the pinned Unicode data
-        # reflaxe.unicode.GraphemeData reads tools/unicode-data relative to the
-        # process working directory, and tiqian keeps that directory out of git
-        # (.gitignore:63). The pinned boring checkout carries the same four
-        # files, so the release job stages them from there.
+      - name: Stage the pinned generation inputs
+        # Two inputs live outside git and are read at compile time:
+        #   tools/unicode-data/            (.gitignore:63) read by reflaxe.unicode.GraphemeData
+        #   engine-haxe/baseline-goldens/  (.gitignore:47) read by GoldenDataMacros.init()
+        # The Unicode files come from the pinned boring checkout. The golden
+        # directories are byte-identical to the tracked Kotlin recordings under
+        # engine/src/jvmTest/resources/golden, so they are copied from there.
         run: |
           nix develop -c bash -c 'mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/'
+          mkdir -p engine-haxe/baseline-goldens
+          cp -a engine/src/jvmTest/resources/golden/. engine-haxe/baseline-goldens/
           ls -l tools/unicode-data
+          ls engine-haxe/baseline-goldens
 
       - name: Build packages via boring
         # Only the bundles that declare package metadata can be packed; the five
