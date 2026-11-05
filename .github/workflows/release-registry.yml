@@ -29,7 +29,9 @@ jobs:
         run: |
           wget -q https://github.com/HaxeFoundation/haxe/releases/download/4.3.7/haxe-4.3.7-linux64.tar.gz
           tar -xzf haxe-4.3.7-linux64.tar.gz
-          find . -maxdepth 1 -type d -name "haxe_*" -exec echo "{}/haxe" >> "$GITHUB_PATH" \;
+          # The extracted directory holds the haxe binary, so the directory goes on PATH;
+          # adding the binary itself makes every later action stat "<file>/<cmd>" and fail with ENOTDIR.
+          find . -maxdepth 1 -type d -name "haxe_*" -exec echo "{}" >> "$GITHUB_PATH" \;
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v17
