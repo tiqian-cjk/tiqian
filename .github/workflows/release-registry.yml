@@ -53,7 +53,13 @@ jobs:
       - name: Collect artifacts
         run: |
           mkdir -p release-artifacts
-          find engine-haxe/out -name "*.tgz" -o -name "*.jar" -o -name "*.crate" -o -name "*.zip" | while read f; do cp "$f" release-artifacts/; done
+          # Prefix every artifact with its bundle id: engine-rust-f32 and
+          # engine-rust-f64 both emit tiqian-engine-gen-0.1.0.crate, and a plain
+          # copy would silently keep only one of them.
+          find engine-haxe/out \( -name "*.tgz" -o -name "*.jar" -o -name "*.crate" -o -name "*.zip" \) | while read -r f; do
+            bundle=$(echo "$f" | sed -E 's#^engine-haxe/out/([^/]+)/.*#\1#')
+            cp "$f" "release-artifacts/${bundle}-$(basename "$f")"
+          done
           test -n "$(ls -A release-artifacts)" || { echo "no pack artifacts were produced"; exit 1; }
           ls -la release-artifacts/
 
@@ -92,8 +98,14 @@ jobs:
           git config user.name "Release Bot"
           git config user.email "release@tiqian.dev"
           git add .
-          git commit -m "release: ${{ github.repository }} ${{ github.ref_name }}"
-          git push origin main
+          # A re-run for the same tag finds the metadata already committed;
+          # an empty commit would exit non-zero and fail the job.
+          if git diff --cached --quiet; then
+            echo "registry metadata for $VERSION is already current"
+          else
+            git commit -m "release: ${{ github.repository }} ${{ github.ref_name }}"
+            git push origin main
+          fi
       - name: Sync compiled registry tool to registry repo
         run: |
           if [ -d packages/registry/gen ]; then
