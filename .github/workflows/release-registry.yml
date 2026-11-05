@@ -48,6 +48,9 @@ jobs:
       - name: Build packages via boring
         # Only the bundles that declare package metadata can be packed; the five
         # app-facing targets still need names and versions declared in boring.json.
+        # ts is blocked by the package shell (Compiler.hx:612 requires a relative
+        # runtime import, ts.hxml names @tiqian/runtime); kotlin, swift and dart
+        # have no verified pack run yet. They join this list once each one packs.
         run: nix develop -c bash -c "boring pack protocol-rust engine-rust-f32 engine-rust-f64"
 
       - name: Collect artifacts
@@ -77,29 +80,28 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Swift zip to R2
+      - name: Write registry metadata
+        # The registry tool accepts one package per version and platform
+        # (packages/registry/src/registry/Core.hx:280), so each package owns a
+        # repository layer and the tree path is <owner>/<package>/<version>/<platform>.
         run: |
-          for zip in release-artifacts/*.zip; do
-            [ -f "$zip" ] || continue
-            curl -sf -X PUT \
-              -H "Content-Type: application/zip" \
-              --data-binary "@$zip" \
-              "https://${{ secrets.R2_ACCESS_KEY_ID }}:${{ secrets.R2_SECRET_ACCESS_KEY }}@${{ env.R2_ENDPOINT }}/${{ env.R2_BUCKET }}/swift/${{ github.ref_name }}/$(basename $zip)"
-          done
+          VERSION="${GITHUB_REF_NAME#v}"
+          python3 tools/registry-metadata.py \
+            --project boring.json \
+            --artifacts release-artifacts \
+            --version "$VERSION" \
+            --owner "${{ github.repository_owner }}" \
+            --repo "${{ github.event.repository.name }}" \
+            --asset-base "${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.ref_name }}" \
+            --out "$RUNNER_TEMP/registry-tree"
 
       - name: Commit metadata to registry repo
         run: |
           git clone https://x-access-token:${{ secrets.REGISTRY_REPO_TOKEN }}@github.com/${{ env.REGISTRY_REPO }}.git /tmp/registry
           VERSION=${GITHUB_REF_NAME#v}
-          OWNER=$(echo "${{ github.repository }}" | cut -d/ -f1)
-          REPO=$(echo "${{ github.repository }}" | cut -d/ -f2)
-          META_DIR="/tmp/registry/$OWNER/$REPO/$VERSION"
-          for platform in npm cargo swift maven pub; do
-            mkdir -p "$META_DIR/$platform"
-            cat > "$META_DIR/$platform/metadata.json" << EOF
-          {"name":"tiqian-engine","version":"$VERSION","license":"MIT","repository":"${{ github.repository }}","tag":"${{ github.ref_name }}"}
-          EOF
-          done
+          OWNER="${{ github.repository_owner }}"
+          rm -rf "/tmp/registry/$OWNER"
+          cp -a "$RUNNER_TEMP/registry-tree/$OWNER" "/tmp/registry/$OWNER"
           cd /tmp/registry
           git config user.name "Release Bot"
           git config user.email "release@tiqian.dev"
