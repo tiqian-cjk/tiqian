@@ -31,6 +31,10 @@ jobs:
       - name: Allow unprivileged user namespaces
         run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
 
+      - name: Diagnose haxe generation
+        run: |
+          nix develop -c bash -c "haxe -cp engine-haxe/src -cp engine-haxe/macros engine-haxe/targets/protocol-rust.hxml -D rust-output=/tmp/diag-gen && echo HAXE_OK || echo HAXE_FAILED" 2>&1 | tail -40
+
       - name: Build packages via boring
         # Only the bundles that declare package metadata can be packed; the five
         # app-facing targets still need names and versions declared in boring.json.
