@@ -31,6 +31,12 @@ jobs:
           tar -xzf haxe-4.3.7-linux64.tar.gz
           find . -maxdepth 1 -type d -name "haxe_*" -exec echo "{}/haxe" >> "$GITHUB_PATH" \;
 
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v17
+
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
       - name: Build packages via boring
         run: nix develop -c bash -c "boring pack ts kotlin swift rust dart 2>&1 || true"
 
