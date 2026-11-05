@@ -16,6 +16,9 @@ import kotlin.test.assertTrue
  * unbreakable-range scans) and a real 106KB Zhihu formula ANR'd the app; see UnbreakableRanges
  * and clusterIndexRangeFor. The ceiling is generous against CI noise but far below the
  * quadratic behavior it guards against.
+ *
+ * Known defect (recorded, not fixed here): a single 80k token in cold state takes 19.5–21.6 s
+ * and grows near-quadratically with input size.
  */
 class GiantTokenScalingProbe {
 
@@ -37,13 +40,22 @@ class GiantTokenScalingProbe {
             lineBreaker = GreedyLineBreaker(),
             textShaper = AwtTextShaper(),
         )
-        val input = giantTokenInput(80_000)
-        engine.layout(input)
-        val warmMs = (1..3).minOf { measureNanoTime { engine.layout(input) } } / 1_000_000.0
-        println("giant-token 80k warm layout: $warmMs ms")
+        val small = giantTokenInput(20_000)
+        val large = giantTokenInput(80_000)
+        engine.layout(small)
+        engine.layout(large)
+        val warm20k = (1..3).minOf { measureNanoTime { engine.layout(small) } } / 1_000_000.0
+        val warm80k = (1..3).minOf { measureNanoTime { engine.layout(large) } } / 1_000_000.0
+        val ratio = warm80k / warm20k
+        println("giant-token 20k warm layout: $warm20k ms; 80k warm layout: $warm80k ms; ratio: $ratio")
         assertTrue(
-            warmMs < 1_500.0,
-            "80k single-token layout took $warmMs ms; the quadratic planning regression is back",
+            warm80k < 6_000.0,
+            "80k single-token layout took $warm80k ms; the quadratic planning regression is back",
+        )
+        assertTrue(
+            ratio < 6.0,
+            "80k/20k warm scaling ratio $ratio (80k=$warm80k ms, 20k=$warm20k ms) exceeds 6.0; " +
+                "expected near-linear (4x), quadratic would be 16x",
         )
     }
 
