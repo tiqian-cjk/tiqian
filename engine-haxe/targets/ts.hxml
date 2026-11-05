@@ -11,6 +11,9 @@ engine-haxe/targets/classes.hxml
 -D ts-test-output=engine-haxe/out/ts-gen-tests
 -D ts-test-runner=bun
 -D tiqian_ts
--D runtime-import=@tiqian/runtime
+# The runtime is emitted into the package root (runtime-emit=.), so the specifier
+# stays relative: the package shell rejects a by-name import (boring
+# tscompiler/Compiler.hx:611 requires a relative specifier).
+-D runtime-import=./runtime.js
 -D runtime-emit=.
 -D package-shell=none
