@@ -61,6 +61,12 @@ jobs:
             cp "$f" "release-artifacts/${bundle}-$(basename "$f")"
           done
           test -n "$(ls -A release-artifacts)" || { echo "no pack artifacts were produced"; exit 1; }
+          # Every packed bundle must appear in the artifact set. A rename or a
+          # duplicate package name would otherwise drop one bundle without
+          # making the job fail.
+          for bundle in protocol-rust engine-rust-f32 engine-rust-f64; do
+            ls release-artifacts | grep -q "^${bundle}-" || { echo "no artifact for bundle $bundle"; exit 1; }
+          done
           ls -la release-artifacts/
 
       - name: Create GitHub Release
