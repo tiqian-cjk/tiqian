@@ -143,7 +143,10 @@ def main():
             # field, so it carries the manifest text rather than a URL.
             import zipfile
             with zipfile.ZipFile(archive) as bundle_zip:
-                metadata["packageSwift"] = bundle_zip.read("Package.swift").decode("utf-8")
+                # Members sit under <package>-<version>/ since the archive
+                # carries the single root directory SwiftPM requires.
+                manifest = next(n for n in bundle_zip.namelist() if n.endswith("/Package.swift"))
+                metadata["packageSwift"] = bundle_zip.read(manifest).decode("utf-8")
             metadata["archive"] = "swift/tiqian/" + name + "/" + options.version + ".zip"
             metadata["sha256"] = digest_of(archive, "sha256")
         else:
