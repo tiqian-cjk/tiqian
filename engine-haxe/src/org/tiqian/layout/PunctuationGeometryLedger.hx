@@ -66,11 +66,23 @@ import std.SortedMap;
     public static function from(naturalClusters:Array<Cluster>, punctuationAtoms:Array<PunctuationAtom>,
             spacingPlan:PunctuationSpacingCompressionResult):PunctuationGeometryLedger {
         final geometryBuilder = SortedMap.builder();
+        // Both arrays are ordered by source position, so one forward cursor
+        // replaces the nested scan. The nested form cost clusters x atoms,
+        // which is what made punctuation-heavy paragraphs quadratic.
+        var atomCursor = 0;
         for (i in 0...naturalClusters.length) {
+            final clusterRange = naturalClusters[i].range;
+            while (atomCursor < punctuationAtoms.length
+                && punctuationAtoms[atomCursor].range.end <= clusterRange.start)
+                atomCursor++;
             final atomsForCluster:Array<PunctuationAtom> = [];
-            for (atom in punctuationAtoms)
-                if (isInside(atom.range, naturalClusters[i].range))
-                    atomsForCluster.push(atom);
+            var atomIndex = atomCursor;
+            while (atomIndex < punctuationAtoms.length
+                && punctuationAtoms[atomIndex].range.start < clusterRange.end) {
+                if (isInside(punctuationAtoms[atomIndex].range, clusterRange))
+                    atomsForCluster.push(punctuationAtoms[atomIndex]);
+                atomIndex++;
+            }
             if (atomsForCluster.length > 0) {
                 final bodyTerms:Array<Float> = [];
                 for (atom in atomsForCluster)
