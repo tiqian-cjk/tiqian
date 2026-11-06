@@ -40,6 +40,29 @@ def digest_of(path, algo, encoding="hex"):
     return h.hexdigest()
 
 
+def parse_pubspec(text):
+    """Read the flat pubspec the Dart target writes into a JSON object."""
+    document = {}
+    section = None
+    for line in text.splitlines():
+        if not line.strip() or line.strip().startswith("#"):
+            continue
+        if not line.startswith(" "):
+            key, _, value = line.partition(":")
+            key = key.strip()
+            value = value.strip()
+            if value:
+                document[key] = value
+                section = None
+            else:
+                document[key] = {}
+                section = key
+        elif section:
+            key, _, value = line.strip().partition(":")
+            document[section][key.strip()] = value.strip()
+    return document
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--project", required=True)
@@ -126,8 +149,14 @@ def main():
         else:
             if platform == "pub":
                 # Dart identifiers allow lowercase letters, digits and
-                # underscores; the packed pubspec uses the same form.
+                # underscores; the packed pubspec uses the same form, and the
+                # hosted API serves the parsed pubspec with every version.
+                import tarfile
                 metadata["name"] = name.replace("-", "_")
+                with tarfile.open(archive) as bundle_tar:
+                    member = next(m for m in bundle_tar.getmembers() if m.name.endswith("pubspec.yaml"))
+                    pubspec_text = bundle_tar.extractfile(member).read().decode("utf-8")
+                metadata["pubspec"] = parse_pubspec(pubspec_text)
             metadata["url"] = url
             encoding = "base64" if platform == "npm" else "hex"
             metadata[PLATFORM_DIGEST[platform]] = digest_of(archive, PLATFORM_DIGEST[platform], encoding)
