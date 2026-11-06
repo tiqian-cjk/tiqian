@@ -528,6 +528,11 @@ internal class CjkTextLayoutNode(
                 textSpans = spans,
                 rubySpans = rubySpans,
             )
+            // LayoutConstraints uses identity equality; preserve it only while its scalar limits match.
+            val previousConstraints = cachedLayout?.input?.constraints
+            val engineConstraints = previousConstraints?.takeIf {
+                it.maxWidth == layoutWidth && it.maxHeight == Float.POSITIVE_INFINITY && it.maxLines == maxLines
+            } ?: LayoutConstraints(maxWidth = layoutWidth, maxLines = maxLines)
             val layoutInput = LayoutInput(
                 content = org.tiqian.core.TiqianTextContent(
                     text = text,
@@ -538,7 +543,7 @@ internal class CjkTextLayoutNode(
                 ),
                 textStyle = textStyle,
                 paragraphStyle = paragraphStyle,
-                constraints = LayoutConstraints(maxWidth = layoutWidth, maxLines = maxLines),
+                constraints = engineConstraints,
                 decorations = decorations,
                 rubySpans = rubySpans,
                 inlineBoxes = richTextSpans.layoutInlineBoxes(),

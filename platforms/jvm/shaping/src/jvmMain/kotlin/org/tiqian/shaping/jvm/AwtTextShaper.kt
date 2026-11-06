@@ -138,6 +138,8 @@ class SystemAwtFontResolver : AwtFontResolver {
             "Sarasa UI SC",
             "Heiti SC",
             "STHeiti",
+            "Noto Sans SC",
+            "Microsoft YaHei",
         )
 
         private val LATIN_CANDIDATES = listOf(
@@ -147,6 +149,8 @@ class SystemAwtFontResolver : AwtFontResolver {
             "SF Pro",
             "Roboto",
             "Helvetica Neue",
+            "Segoe UI",
+            "Arial",
         )
     }
 }
