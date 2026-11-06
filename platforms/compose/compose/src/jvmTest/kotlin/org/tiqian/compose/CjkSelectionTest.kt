@@ -519,11 +519,13 @@ class CjkSelectionTest {
             assertTrue(selectionState.selectAll())
             assertEquals(listOf(CjkSelectionDocumentRange("body", 0, 2, document.fragments[0].text)), selectionState.selectedRanges)
             document = replacement
+            androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
             scene.render()
             assertEquals(null, selectionState.selectedText)
             assertEquals(null, selectionState.selectedRanges)
             assertTrue(selectionState.selectAll())
             showContainer = false
+            androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
             scene.render()
             assertEquals(null, selectionState.selectedText)
             assertEquals(null, selectionState.selectedRanges)

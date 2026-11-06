@@ -64,12 +64,12 @@ internal interface CjkSelectable {
     fun selectionWordRangeAt(localPosition: Offset): TextRange?
     fun selectionParagraphRangeAt(localPosition: Offset): TextRange?
     fun coerceSelectionOffset(offset: Int, bias: SourceBoundaryBias): Int
-    fun selectionCursorPosition(offset: Int): Offset?
-    fun selectionLineRange(offset: Int): TextRange?
+    fun selectionCursorPosition(offset: Int, isEnd: Boolean = false): Offset?
+    fun selectionLineRange(offset: Int, isEnd: Boolean = false): TextRange?
     fun selectionLineLeft(offset: Int): Float
     fun selectionLineRight(offset: Int): Float
-    fun selectionLineCenterY(offset: Int): Float
-    fun selectionLineHeight(offset: Int): Float
+    fun selectionLineCenterY(offset: Int, isEnd: Boolean = false): Float
+    fun selectionLineHeight(offset: Int, isEnd: Boolean = false): Float
     fun selectionBoxes(range: TextRange): List<org.tiqian.core.Rect>
     fun invalidateSelection()
 }

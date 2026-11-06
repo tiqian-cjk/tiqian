@@ -28,9 +28,9 @@ class CjkInlineObjectTest {
             addCjkRenderOnlyInlineObject(1, 2)
             addCjkRenderOnlyInlineObject(5, 6)
         }.toAnnotatedString()
-        val logical = projected.cjkInlineLogicalText()
+        val offsets = CjkInlineObjectOffsetMapping(projected)
+        val logical = offsets.logicalText
         assertEquals("ab￼c", logical.text, "authored object characters must remain copyable")
-        val offsets = CjkInlineObjectOffsetMapping(logical)
         for (offset in 0..logical.length) assertEquals(offset, offsets.toLogical(offsets.toLayout(offset)))
         assertEquals(1, offsets.toLogical(1))
         assertEquals(1, offsets.toLogical(2))

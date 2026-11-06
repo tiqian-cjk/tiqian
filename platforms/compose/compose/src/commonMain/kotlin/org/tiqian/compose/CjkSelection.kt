@@ -396,9 +396,7 @@ class CjkSelectionState internal constructor() {
         showContextMenuToolbarIfTouch()
     }
 
-    internal fun rangeFor(selectable: CjkSelectable): TextRange? {
-        return selectionRanges[selectable]
-    }
+    internal fun rangeFor(selectable: CjkSelectable): TextRange? = selectionRanges[selectable]
 
     internal fun setSelectionFromSemantics(
         selectable: CjkSelectable,
@@ -406,8 +404,8 @@ class CjkSelectionState internal constructor() {
         end: Int,
     ): Boolean {
         if (!isSelectableEligible(selectable)) return false
-        val safeStart = selectable.coerceSelectionOffset(start, SourceBoundaryBias.Backward)
-        val safeEnd = selectable.coerceSelectionOffset(end, SourceBoundaryBias.Forward)
+        val safeStart = selectable.coerceSelectionOffset(start, if (start > end) { SourceBoundaryBias.Forward } else { SourceBoundaryBias.Backward })
+        val safeEnd = selectable.coerceSelectionOffset(end, if (start > end) SourceBoundaryBias.Backward else SourceBoundaryBias.Forward)
         setSelection(
             CjkSelectionAnchor(keyFor(selectable), safeStart),
             CjkSelectionAnchor(keyFor(selectable), safeEnd),
@@ -768,23 +766,23 @@ class CjkSelectionState internal constructor() {
             return
         }
         val visibleBounds = container.visibleBoundsForSelection()
-        fun position(anchor: CjkSelectionAnchor): Offset? {
+        handlesCrossed = compareAnchors(current.anchor, current.extent) > 0
+        fun position(anchor: CjkSelectionAnchor, isEnd: Boolean): Offset? {
             val selectable = selectableForKey(anchor.key) ?: return null
             val coordinates = selectable.selectionCoordinates ?: return null
-            val local = selectable.selectionCursorPosition(anchor.offset) ?: return null
+            val local = selectable.selectionCursorPosition(anchor.offset, isEnd) ?: return null
             return container.localPositionOf(coordinates, local)
         }
-        startHandlePosition = position(current.anchor)?.takeIf {
+        startHandlePosition = position(current.anchor, handlesCrossed)?.takeIf {
             activeDragIsStart == true || visibleBounds.containsInclusive(it)
         }
-        endHandlePosition = position(current.extent)?.takeIf {
+        endHandlePosition = position(current.extent, !handlesCrossed)?.takeIf {
             activeDragIsStart == false || visibleBounds.containsInclusive(it)
         }
         startHandleLineHeight = selectableForKey(current.anchor.key)
-            ?.selectionLineHeight(current.anchor.offset) ?: 0f
+            ?.selectionLineHeight(current.anchor.offset, handlesCrossed) ?: 0f
         endHandleLineHeight = selectableForKey(current.extent.key)
-            ?.selectionLineHeight(current.extent.offset) ?: 0f
-        handlesCrossed = compareAnchors(current.anchor, current.extent) > 0
+            ?.selectionLineHeight(current.extent.offset, !handlesCrossed) ?: 0f
     }
 
     /** Adaptation of Foundation's Android magnifier clamp using Tiqian line geometry. */
@@ -800,7 +798,8 @@ class CjkSelectionState internal constructor() {
         if (!container.isAttached || !selectableCoordinates.isAttached) return Offset.Unspecified
 
         val localDragPosition = selectableCoordinates.localPositionOf(container, currentDragPosition)
-        val lineRange = selectable.selectionLineRange(anchor.offset)
+        val isEnd = if (activeDragIsStart == true) handlesCrossed else !handlesCrossed
+        val lineRange = selectable.selectionLineRange(anchor.offset, isEnd)
             ?: return Offset.Unspecified
         val lineStartX = selectable.selectionLineLeft(lineRange.start)
         val lineEndX = selectable.selectionLineRight((lineRange.end - 1).coerceAtLeast(lineRange.start))
@@ -814,7 +813,7 @@ class CjkSelectionState internal constructor() {
         ) {
             return Offset.Unspecified
         }
-        val centerY = selectable.selectionLineCenterY(anchor.offset)
+        val centerY = selectable.selectionLineCenterY(anchor.offset, isEnd)
         return container.localPositionOf(
             selectableCoordinates,
             Offset(constrainedX, centerY),

@@ -46,6 +46,7 @@ internal fun CjkTextLayout(
     text: String,
     semanticsText: AnnotatedString = AnnotatedString(text),
     linkText: AnnotatedString = semanticsText,
+    inlineOffsetMapping: CjkInlineObjectOffsetMapping = remember(linkText) { CjkInlineObjectOffsetMapping(linkText) },
     modifier: Modifier = Modifier,
     textStyle: TextStyle = TextStyle(),
     paragraphStyle: ParagraphStyle = ParagraphStyle(),
@@ -130,7 +131,7 @@ internal fun CjkTextLayout(
                     decorations, colorSpans, richTextSpans, spans, rubySpans, inlineObjects,
                     softWrap, overflow, maxLines, minLines, measurer, reportLayout,
                     precomputedLayout,
-                    selectionState, selectionScope, selectionBridge, inlineObjectPlacements,
+                    selectionState, selectionScope, selectionBridge, inlineObjectPlacements, inlineOffsetMapping,
                 ),
             ),
     ) {
