@@ -75,12 +75,20 @@ def main():
         if platform is None or platform not in PLATFORM_SUFFIX:
             continue
         suffix = PLATFORM_SUFFIX[platform]
-        candidates = sorted(artifacts.glob(package["name"] + "-*" + suffix))
+        # The Dart target names its archive after the pub identifier, so the
+        # lookup has to use the same form on that platform.
+        artifact_name = package["name"].replace("-", "_") if platform == "pub" else package["name"]
+        candidates = sorted(artifacts.glob(artifact_name + "-*" + suffix))
         if not candidates:
             continue
         archive = candidates[0]
         name = package["name"]
-        repo_dir = out / options.owner / name
+        # Every platform under one version shares the directory name, and the
+        # tool rejects a version whose platforms disagree (registry/Core.hx
+        # validate: "platform disagreement"), so a platform with its own
+        # identifier form publishes under that form.
+        dir_name = name.replace("-", "_") if platform == "pub" else name
+        repo_dir = out / options.owner / dir_name
         repo_dir.mkdir(parents=True, exist_ok=True)
         readme = repo_dir / "README.md"
         if not readme.exists():
