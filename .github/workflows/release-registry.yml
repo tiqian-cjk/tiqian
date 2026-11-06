@@ -132,6 +132,19 @@ jobs:
             git commit -m "release: ${{ github.repository }} ${{ github.ref_name }}"
             git push origin main
           fi
+      - name: Deploy the registry site
+        # The Pages Git integration does not fire for every push to the
+        # registry repository (only one deployment appeared for several
+        # commits), so the deploy hook triggers the production build.
+        env:
+          PAGES_DEPLOY_HOOK: ${{ secrets.PAGES_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$PAGES_DEPLOY_HOOK" ]; then
+            echo "PAGES_DEPLOY_HOOK is not configured; skipping the deployment"
+            exit 0
+          fi
+          curl -fsS -X POST "$PAGES_DEPLOY_HOOK" | head -c 200
+
       - name: Sync compiled registry tool to registry repo
         run: |
           if [ -d packages/registry/gen ]; then
