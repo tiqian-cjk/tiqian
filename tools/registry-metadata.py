@@ -11,6 +11,7 @@ Usage:
       --asset-base https://github.com/tiqian-cjk/tiqian/releases/download/v0.1.0-alpha06 --out tree
 """
 import argparse
+import base64
 import hashlib
 import json
 import pathlib
@@ -28,11 +29,14 @@ def load_bundles(path):
     return json.loads(text)["bundles"]
 
 
-def digest_of(path, algo):
+def digest_of(path, algo, encoding="hex"):
     h = hashlib.new(algo)
     with open(path, "rb") as handle:
         for block in iter(lambda: handle.read(1 << 20), b""):
             h.update(block)
+    if encoding == "base64":
+        # npm integrity is base64; the registry prefixes it with "sha512-".
+        return base64.b64encode(h.digest()).decode("ascii")
     return h.hexdigest()
 
 
@@ -102,7 +106,8 @@ def main():
             metadata["sha256"] = digest_of(archive, "sha256")
         else:
             metadata["url"] = url
-            metadata[PLATFORM_DIGEST[platform]] = digest_of(archive, PLATFORM_DIGEST[platform])
+            encoding = "base64" if platform == "npm" else "hex"
+            metadata[PLATFORM_DIGEST[platform]] = digest_of(archive, PLATFORM_DIGEST[platform], encoding)
         (platform_dir / "metadata.json").write_text(json.dumps(metadata, sort_keys=True) + "\n")
         written.append((name, platform, archive.name))
 
