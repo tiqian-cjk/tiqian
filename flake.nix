@@ -76,6 +76,10 @@
                 # x86_64-linux in the optionals clause after this list.
                 dart
                 kotlin
+                # SwiftPM unpacks registry source archives with the host
+                # unzip binary; without it every registry fetch fails with
+                # "could not find executable for 'unzip'".
+                unzip
               ]
               ++ pkgs.lib.optionals (pkgs.stdenv.hostPlatform.isLinux && pkgs.stdenv.hostPlatform.isx86_64) [
                 boring.packages.${pkgs.stdenv.hostPlatform.system}.linux-swift
