@@ -43,14 +43,25 @@ def digest_of(path, algo, encoding="hex"):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--project", required=True)
-    parser.add_argument("--artifacts", required=True)
-    parser.add_argument("--version", required=True)
-    parser.add_argument("--owner", required=True)
-    parser.add_argument("--repo", required=True)
-    parser.add_argument("--asset-base", required=True,
+    parser.add_argument("--list-packages", action="store_true")
+    parser.add_argument("--artifacts")
+    parser.add_argument("--version")
+    parser.add_argument("--owner")
+    parser.add_argument("--repo")
+    parser.add_argument("--asset-base",
                         help="where the published archives are downloaded from; the release asset URL")
-    parser.add_argument("--out", required=True)
+    parser.add_argument("--out")
     options = parser.parse_args()
+
+    bundles = load_bundles(options.project)
+    if options.list_packages:
+        seen = []
+        for item in bundles:
+            package = item.get("package")
+            if package and package["name"] not in seen:
+                seen.append(package["name"])
+        print("\n".join(seen))
+        return
 
     artifacts = pathlib.Path(options.artifacts)
     out = pathlib.Path(options.out)
@@ -64,7 +75,7 @@ def main():
         if platform is None or platform not in PLATFORM_SUFFIX:
             continue
         suffix = PLATFORM_SUFFIX[platform]
-        candidates = sorted(artifacts.glob(bundle["id"] + "-*" + suffix))
+        candidates = sorted(artifacts.glob(package["name"] + "-*" + suffix))
         if not candidates:
             continue
         archive = candidates[0]
@@ -92,7 +103,7 @@ def main():
             metadata["groupId"] = name
             metadata["artifacts"] = [
                 {"file": entry.name, "url": "/".join([options.asset_base.rstrip("/"), entry.name])}
-                for entry in sorted(artifacts.glob(bundle["id"] + "-*"))
+                for entry in sorted(artifacts.glob(package["name"] + "-*"))
                 if entry.suffix in (".jar", ".pom")
             ]
         elif platform == "swift":

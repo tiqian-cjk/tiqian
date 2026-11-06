@@ -49,6 +49,12 @@ jobs:
           ls -l tools/unicode-data
           ls engine-haxe/baseline-goldens
 
+      - name: Align the package versions with the release
+        # The registry names every artifact <package>-<version> from the tag,
+        # so the packed manifests have to carry that version, not the 0.1.0
+        # placeholder in the project file.
+        run: python3 tools/align-package-versions.py "${GITHUB_REF_NAME#v}"
+
       - name: Build packages via boring
         # Only the bundles that declare package metadata can be packed; the five
         # app-facing targets still need names and versions declared in boring.json.
@@ -62,14 +68,14 @@ jobs:
           # copy would silently keep only one of them.
           find engine-haxe/out \( -name "*.tgz" -o -name "*.tar.gz" -o -name "*.jar" -o -name "*.crate" -o -name "*.zip" -o -name "*.pom" \) | while read -r f; do
             bundle=$(echo "$f" | sed -E 's#^engine-haxe/out/([^/]+)/.*#\1#')
-            cp "$f" "release-artifacts/${bundle}-$(basename "$f")"
+            cp "$f" "release-artifacts/$(basename "$f")"
           done
           test -n "$(ls -A release-artifacts)" || { echo "no pack artifacts were produced"; exit 1; }
           # Every packed bundle must appear in the artifact set. A rename or a
           # duplicate package name would otherwise drop one bundle without
           # making the job fail.
-          for bundle in protocol-rust protocol-ts protocol-kotlin engine-rust-f32 engine-rust-f64 ts kotlin-f32 kotlin-f64 swift-f32 swift-f64 dart; do
-            ls release-artifacts | grep -q "^${bundle}-" || { echo "no artifact for bundle $bundle"; exit 1; }
+          python3 tools/registry-metadata.py --list-packages --project boring.json | while read -r pkg; do
+            ls release-artifacts | grep -q "^${pkg}-" || { echo "no artifact for package $pkg"; exit 1; }
           done
           ls -la release-artifacts/
 
