@@ -116,6 +116,10 @@ def main():
             metadata["archive"] = "swift/tiqian/" + name + "/" + options.version + ".zip"
             metadata["sha256"] = digest_of(archive, "sha256")
         else:
+            if platform == "pub":
+                # Dart identifiers allow lowercase letters, digits and
+                # underscores; the packed pubspec uses the same form.
+                metadata["name"] = name.replace("-", "_")
             metadata["url"] = url
             encoding = "base64" if platform == "npm" else "hex"
             metadata[PLATFORM_DIGEST[platform]] = digest_of(archive, PLATFORM_DIGEST[platform], encoding)
