@@ -92,11 +92,14 @@ def main():
                 if entry.suffix in (".jar", ".pom")
             ]
         elif platform == "swift":
-            # The registry validates the archive as a registry-relative path
-            # (registry/Core.hx:513) and requires a Package.swift location that
-            # this project does not publish yet, so the Swift zip ships as a
-            # release asset without a registry entry.
-            continue
+            # The registry checks the archive path (registry/Core.hx:513) and
+            # writes swift/<scope>/<name>/<version>/Package.swift from this
+            # field, so it carries the manifest text rather than a URL.
+            import zipfile
+            with zipfile.ZipFile(archive) as bundle_zip:
+                metadata["packageSwift"] = bundle_zip.read("Package.swift").decode("utf-8")
+            metadata["archive"] = "swift/tiqian/" + name + "/" + options.version + ".zip"
+            metadata["sha256"] = digest_of(archive, "sha256")
         else:
             metadata["url"] = url
             metadata[PLATFORM_DIGEST[platform]] = digest_of(archive, PLATFORM_DIGEST[platform])

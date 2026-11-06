@@ -81,6 +81,29 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Upload the Swift archives to the registry storage
+        # The Swift index points at <archive-base>/swift/<scope>/<name>/<version>.zip,
+        # so the archive has to exist there before the metadata references it.
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          python3 -m pip install --quiet awscli
+          for zip in release-artifacts/swift-*.zip; do
+            [ -f "$zip" ] || continue
+            name=$(python3 - "$zip" <<'PY'
+import sys
+stem = sys.argv[1].split("/")[-1][:-4]
+# swift-f32-tiqian-engine-f32-0.1.0 -> tiqian-engine-f32
+print("-".join(stem.split("-")[2:-1]))
+PY
+)
+            aws s3 cp "$zip" "s3://${{ env.R2_BUCKET }}/swift/tiqian/$name/$VERSION.zip" \
+              --endpoint-url "${{ env.R2_ENDPOINT }}"
+          done
+
       - name: Write registry metadata
         # The registry tool accepts one package per version and platform
         # (packages/registry/src/registry/Core.hx:280), so each package owns a
