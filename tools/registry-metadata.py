@@ -82,12 +82,26 @@ def main():
             "license": package.get("license", "MIT"),
             "repository": options.owner + "/" + options.repo,
             "tag": "v" + options.version,
-            "url": url,
-            PLATFORM_DIGEST[platform]: digest_of(archive, PLATFORM_DIGEST[platform]),
-            "archive": archive.name,
         }
+        if platform == "maven":
+            # The registry reads a group id and one entry per published file.
+            metadata["groupId"] = name
+            metadata["artifacts"] = [
+                {"file": entry.name, "url": "/".join([options.asset_base.rstrip("/"), entry.name])}
+                for entry in sorted(artifacts.glob(bundle["id"] + "-*"))
+                if entry.suffix in (".jar", ".pom")
+            ]
+        elif platform == "swift":
+            # The registry validates the archive as a registry-relative path
+            # (registry/Core.hx:513) and requires a Package.swift location that
+            # this project does not publish yet, so the Swift zip ships as a
+            # release asset without a registry entry.
+            continue
+        else:
+            metadata["url"] = url
+            metadata[PLATFORM_DIGEST[platform]] = digest_of(archive, PLATFORM_DIGEST[platform])
         (platform_dir / "metadata.json").write_text(json.dumps(metadata, sort_keys=True) + "\n")
-        written.append((name, platform, archive.name, metadata[PLATFORM_DIGEST[platform]][:12]))
+        written.append((name, platform, archive.name))
 
     if not written:
         sys.exit("no pack artifacts matched a bundle with package metadata")
