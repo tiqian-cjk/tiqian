@@ -27,7 +27,7 @@ jobs:
 
       - name: Install the TypeScript compiler
         # The ts and protocol-ts bundles compile their package shell with tsc.
-        run: bun add -g typescript@5.9.0
+        run: bun add -g "typescript@^5.9.0"
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v17
