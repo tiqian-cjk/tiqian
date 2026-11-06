@@ -97,9 +97,13 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           python3 -m pip install --quiet awscli
-          for zip in release-artifacts/swift-*.zip; do
+          # Archives are named <package>-<version>.zip, so the package name is the
+          # file name without its version suffix. Matching a "swift-" prefix
+          # silently skipped the upload once the names changed, leaving a stale
+          # archive in the bucket whose digest no longer matched the metadata.
+          for zip in release-artifacts/*.zip; do
             [ -f "$zip" ] || continue
-            name=$(basename "$zip" | sed -E 's/^swift-[a-z0-9]+-(tiqian-.+)-[0-9]+\.[0-9]+\.[0-9]+\.zip$/\1/')
+            name=$(basename "$zip" | sed -E 's/-[0-9]+\.[0-9]+\.[0-9]+.*\.zip$//')
             aws s3 cp "$zip" "s3://${{ env.R2_BUCKET }}/swift/tiqian/$name/$VERSION.zip" \
               --endpoint-url "${{ env.R2_ENDPOINT }}"
           done
