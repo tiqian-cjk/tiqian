@@ -3,10 +3,10 @@
 
 #include <stdint.h>
 
-/* The C ABI revision constant is single-sourced in the generated header
-   (boring cutover Stage1-P4): engine-haxe/src/org/tiqian/protocol/Revision.hx
-   is written once, and the generated file is vendored next to this header. */
-#include "tiqian_protocol_constants.h"
+/* C ABI revision constant of the font backend vtable. A host built against a
+   different revision is rejected at install time by
+   NativeFontBackendVtable.kt. */
+#define TIQIAN_FONT_BACKEND_PROTOCOL_REVISION 2u
 
 #ifdef __cplusplus
 extern "C" {

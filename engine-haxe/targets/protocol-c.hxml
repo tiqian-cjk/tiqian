@@ -1,8 +1,0 @@
-# Stage A protocol C header entry (the C ABI revision constant).
-# Run from the worktree root:
-#   nix develop -c bash -c 'haxe engine-haxe/targets/protocol-c.hxml'
-# The haxe bundle target compiles through stock Haxe (no reflaxe); the
-# driver's gen step runs this hxml, and the emitted js is run with bun from
-# the worktree root to write the generated header beside itself.
--main org.tiqian.protocol.CHeader
--js engine-haxe/out/protocol-c/gen/c-header.js

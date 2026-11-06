@@ -118,22 +118,6 @@
       }
     },
     {
-      // The C header carries the C ABI constants (research 5.3: "C ABI 常量
-      // 改经生成头文件供给"). The haxe target compiles the entry through stock
-      // Haxe to js; running the emitted js writes the generated header into
-      // the driver-derived gen directory (engine-haxe/out/protocol-c/gen).
-      // No test step: the entry is a writer, not a test.
-      "id": "protocol-c",
-      "target": "haxe",
-      "test": false,
-      "afterGen": {
-        "command": "bun",
-        "args": ["engine-haxe/out/protocol-c/gen/c-header.js"]
-      },
-      "rootsFile": "engine-haxe/targets/protocol-c.hxml",
-      "package": { "name": "tiqian-protocol", "version": "0.1.0", "license": "MPL-2.0" }
-    },
-    {
       "id": "engine-rust-f32",
       "target": "rust",
       "sourceSet": "engine",

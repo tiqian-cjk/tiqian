@@ -52,7 +52,7 @@ jobs:
       - name: Build packages via boring
         # Only the bundles that declare package metadata can be packed; the five
         # app-facing targets still need names and versions declared in boring.json.
-        run: nix develop -c bash -c "boring pack protocol-rust protocol-ts protocol-kotlin protocol-c engine-rust-f32 engine-rust-f64 ts kotlin-f32 kotlin-f64 swift-f32 swift-f64 dart"
+        run: nix develop -c bash -c "boring pack protocol-rust protocol-ts protocol-kotlin engine-rust-f32 engine-rust-f64 ts kotlin-f32 kotlin-f64 swift-f32 swift-f64 dart"
 
       - name: Collect artifacts
         run: |
@@ -68,7 +68,7 @@ jobs:
           # Every packed bundle must appear in the artifact set. A rename or a
           # duplicate package name would otherwise drop one bundle without
           # making the job fail.
-          for bundle in protocol-rust protocol-ts protocol-kotlin protocol-c engine-rust-f32 engine-rust-f64 ts kotlin-f32 kotlin-f64 swift-f32 swift-f64 dart; do
+          for bundle in protocol-rust protocol-ts protocol-kotlin engine-rust-f32 engine-rust-f64 ts kotlin-f32 kotlin-f64 swift-f32 swift-f64 dart; do
             ls release-artifacts | grep -q "^${bundle}-" || { echo "no artifact for bundle $bundle"; exit 1; }
           done
           ls -la release-artifacts/
