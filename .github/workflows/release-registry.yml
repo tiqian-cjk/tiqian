@@ -60,7 +60,7 @@ jobs:
           # Prefix every artifact with its bundle id: engine-rust-f32 and
           # engine-rust-f64 both emit tiqian-engine-gen-0.1.0.crate, and a plain
           # copy would silently keep only one of them.
-          find engine-haxe/out \( -name "*.tgz" -o -name "*.jar" -o -name "*.crate" -o -name "*.zip" \) | while read -r f; do
+          find engine-haxe/out \( -name "*.tgz" -o -name "*.tar.gz" -o -name "*.jar" -o -name "*.crate" -o -name "*.zip" -o -name "*.pom" \) | while read -r f; do
             bundle=$(echo "$f" | sed -E 's#^engine-haxe/out/([^/]+)/.*#\1#')
             cp "$f" "release-artifacts/${bundle}-$(basename "$f")"
           done
