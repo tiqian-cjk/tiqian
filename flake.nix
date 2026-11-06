@@ -8,7 +8,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     boring = {
-      url = "github:Losses/boring/9fc84f627a65873ee01bc35fd75eba9f18173f15";
+      url = "github:Losses/boring/d1b6e42937234199fd049a6e8e0633bc2c246b3b";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.rust-overlay.follows = "rust-overlay";
     };
