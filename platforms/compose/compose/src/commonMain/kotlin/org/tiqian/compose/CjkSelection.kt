@@ -26,13 +26,29 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import org.tiqian.core.SourceBoundaryBias
 import org.tiqian.core.TextRange
+import org.tiqian.core.sourceGraphemeBoundaries
 import kotlin.math.abs
 
 /** Observable state for one [CjkSelectionContainer]. */
 @Stable
 class CjkSelectionState internal constructor() {
-    var selectedText: AnnotatedString? by mutableStateOf(null)
-        private set
+    private var selectionProjection by mutableStateOf(CjkSelectionProjection())
+
+    /** The source text and separators in the current selection, or null when nothing is selected. */
+    val selectedText: AnnotatedString?
+        get() = selectionProjection.text
+
+    /**
+     * A snapshot of every touched fragment in document order, including fragments not currently
+     * composed. Offsets are UTF-16 and half-open. Empty ranges preserve both touched boundaries
+     * and empty intervening fragments; separators are present only in [selectedText]. Each range
+     * includes the original fragment text. Returns null without a [CjkSelectionDocument] or when
+     * [selectedText] is null, including selections containing no source or separator characters.
+     * Reading the list copies its entries without copying fragment text, and cannot modify state.
+     */
+    val selectedRanges: List<CjkSelectionDocumentRange>?
+        get() = selectionProjection.ranges?.toList()
+
     /** Owners retained only while their pointer coroutine is actively dragging. */
     var activeGestureOwnerKeys: Set<Any> by mutableStateOf(emptySet())
         private set
@@ -92,7 +108,7 @@ class CjkSelectionState internal constructor() {
         if (ownedSelectionOrGesture) hideContextMenuToolbar()
         selection = null
         selectionRanges = emptyMap()
-        selectedText = null
+        selectionProjection = CjkSelectionProjection()
         hasSelection = false
         startHandlePosition = null
         endHandlePosition = null
@@ -120,6 +136,19 @@ class CjkSelectionState internal constructor() {
         val selected = buildClipboardText()?.takeIf { it.isNotEmpty() } ?: return false
         @Suppress("DEPRECATION")
         clipboardManager?.setText(selected) ?: return false
+        return true
+    }
+    /** Selects a non-empty half-open UTF-16 range in the attached logical document. Invalid input leaves selection unchanged. */
+    fun selectRange(fragmentKey: Any, start: Int, end: Int): Boolean {
+        val currentDocument = document ?: return false
+        val fragment = currentDocument.fragments[currentDocument.indexByKey[fragmentKey] ?: return false]
+        if (start < 0 || start >= end || end > fragment.text.length) return false
+        val boundaries = fragment.text.text.sourceGraphemeBoundaries(TextRange(0, fragment.text.length))
+        val range = TextRange(boundaries.last { it <= start }, boundaries.first { it >= end })
+        gestureInitialSelection = null
+        handleFixedAnchor = null
+        setSelection(CjkSelectionAnchor(fragment.key, range.start), CjkSelectionAnchor(fragment.key, range.end), touch = isTouchSelection)
+        finishSelection()
         return true
     }
 
@@ -363,12 +392,11 @@ class CjkSelectionState internal constructor() {
         activeDragIsStart = null
         currentDragPosition = Offset.Unspecified
         isSelectionAutoScrollArmed = false
+        updateHandlePositions()
         showContextMenuToolbarIfTouch()
     }
 
-    internal fun rangeFor(selectable: CjkSelectable): TextRange? {
-        return selectionRanges[selectable]
-    }
+    internal fun rangeFor(selectable: CjkSelectable): TextRange? = selectionRanges[selectable]
 
     internal fun setSelectionFromSemantics(
         selectable: CjkSelectable,
@@ -376,8 +404,8 @@ class CjkSelectionState internal constructor() {
         end: Int,
     ): Boolean {
         if (!isSelectableEligible(selectable)) return false
-        val safeStart = selectable.coerceSelectionOffset(start, SourceBoundaryBias.Backward)
-        val safeEnd = selectable.coerceSelectionOffset(end, SourceBoundaryBias.Forward)
+        val safeStart = selectable.coerceSelectionOffset(start, if (start > end) { SourceBoundaryBias.Forward } else { SourceBoundaryBias.Backward })
+        val safeEnd = selectable.coerceSelectionOffset(end, if (start > end) SourceBoundaryBias.Backward else SourceBoundaryBias.Forward)
         setSelection(
             CjkSelectionAnchor(keyFor(selectable), safeStart),
             CjkSelectionAnchor(keyFor(selectable), safeEnd),
@@ -460,7 +488,7 @@ class CjkSelectionState internal constructor() {
         if (changed && touch) {
             hapticFeedback?.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
-        if (changed) updateDerivedSelection()
+        if (changed) updateDerivedSelection(selectionChanged = true)
     }
 
     private fun selectionAt(
@@ -502,13 +530,17 @@ class CjkSelectionState internal constructor() {
         else -> initial
     }
 
-    private fun updateDerivedSelection() {
+    private fun updateDerivedSelection(selectionChanged: Boolean = false) {
         contextMenuPositionEpoch++
         val previousRanges = selectionRanges
         val ordered = orderedSelectables()
-        selectionRanges = buildSelectionRanges(ordered)
-        selectedText = buildSelectedText()
-        hasSelection = selectedText != null
+        val normalized = normalizedSelection()
+        selectionRanges = buildSelectionRanges(ordered, normalized)
+        // Logical document text does not change when only visible geometry changes.
+        if (selectionChanged || document == null) {
+            selectionProjection = buildSelectionProjection(normalized, ordered)
+        }
+        hasSelection = selectionProjection.text != null
         updateHandlePositions()
         if (contextMenuToolbarRequested && systemContextMenu == null) {
             showLegacyTextToolbar()
@@ -525,8 +557,9 @@ class CjkSelectionState internal constructor() {
 
     private fun buildSelectionRanges(
         ordered: List<CjkSelectable>,
+        normalized: Pair<CjkSelectionAnchor, CjkSelectionAnchor>?,
     ): Map<CjkSelectable, TextRange> {
-        val normalized = normalizedSelection() ?: return emptyMap()
+        normalized ?: return emptyMap()
         if (normalized.first == normalized.second) return emptyMap()
         val ranges = LinkedHashMap<CjkSelectable, TextRange>()
         val startIndex = orderOf(normalized.first.key)
@@ -545,13 +578,15 @@ class CjkSelectionState internal constructor() {
         return ranges
     }
 
-    private fun buildSelectedText(): AnnotatedString? {
-        val normalized = normalizedSelection() ?: return null
-        if (normalized.first == normalized.second) return null
+    private fun buildSelectionProjection(
+        normalized: Pair<CjkSelectionAnchor, CjkSelectionAnchor>?,
+        ordered: List<CjkSelectable>,
+    ): CjkSelectionProjection {
+        normalized ?: return CjkSelectionProjection()
+        if (normalized.first == normalized.second) return CjkSelectionProjection()
         val logicalDocument = document
         if (logicalDocument == null) {
-            val ordered = orderedSelectables()
-            return buildAnnotatedString {
+            val text = buildAnnotatedString {
                 var first = true
                 for (selectable in ordered) {
                     val range = selectionRanges[selectable] ?: continue
@@ -560,18 +595,24 @@ class CjkSelectionState internal constructor() {
                     append(selectable.selectionText, range.start, range.end)
                 }
             }.takeIf { it.isNotEmpty() }
+            return CjkSelectionProjection(text)
         }
         val startIndex = logicalDocument.indexByKey.getValue(normalized.first.key)
         val endIndex = logicalDocument.indexByKey.getValue(normalized.second.key)
-        return buildAnnotatedString {
+        val ranges = mutableListOf<CjkSelectionDocumentRange>()
+        val text = buildAnnotatedString {
             for (index in startIndex..endIndex) {
                 val fragment = logicalDocument.fragments[index]
-                val start = if (index == startIndex) normalized.first.offset else 0
-                val end = if (index == endIndex) normalized.second.offset else fragment.text.length
+                val start = (if (index == startIndex) normalized.first.offset else 0)
+                    .coerceIn(0, fragment.text.length)
+                val end = (if (index == endIndex) normalized.second.offset else fragment.text.length)
+                    .coerceIn(0, fragment.text.length)
+                ranges += CjkSelectionDocumentRange(fragment.key, start, end, fragment.text)
                 if (end > start) append(fragment.text, start, end)
                 if (index < endIndex) append(fragment.separatorAfter)
             }
         }.takeIf { it.isNotEmpty() }
+        return CjkSelectionProjection(text, if (text == null) null else ranges.toList())
     }
 
     private fun buildClipboardText(): AnnotatedString? {
@@ -725,23 +766,23 @@ class CjkSelectionState internal constructor() {
             return
         }
         val visibleBounds = container.visibleBoundsForSelection()
-        fun position(anchor: CjkSelectionAnchor): Offset? {
+        handlesCrossed = compareAnchors(current.anchor, current.extent) > 0
+        fun position(anchor: CjkSelectionAnchor, isEnd: Boolean): Offset? {
             val selectable = selectableForKey(anchor.key) ?: return null
             val coordinates = selectable.selectionCoordinates ?: return null
-            val local = selectable.selectionCursorPosition(anchor.offset) ?: return null
+            val local = selectable.selectionCursorPosition(anchor.offset, isEnd) ?: return null
             return container.localPositionOf(coordinates, local)
         }
-        startHandlePosition = position(current.anchor)?.takeIf {
+        startHandlePosition = position(current.anchor, handlesCrossed)?.takeIf {
             activeDragIsStart == true || visibleBounds.containsInclusive(it)
         }
-        endHandlePosition = position(current.extent)?.takeIf {
+        endHandlePosition = position(current.extent, !handlesCrossed)?.takeIf {
             activeDragIsStart == false || visibleBounds.containsInclusive(it)
         }
         startHandleLineHeight = selectableForKey(current.anchor.key)
-            ?.selectionLineHeight(current.anchor.offset) ?: 0f
+            ?.selectionLineHeight(current.anchor.offset, handlesCrossed) ?: 0f
         endHandleLineHeight = selectableForKey(current.extent.key)
-            ?.selectionLineHeight(current.extent.offset) ?: 0f
-        handlesCrossed = compareAnchors(current.anchor, current.extent) > 0
+            ?.selectionLineHeight(current.extent.offset, !handlesCrossed) ?: 0f
     }
 
     /** Adaptation of Foundation's Android magnifier clamp using Tiqian line geometry. */
@@ -757,7 +798,8 @@ class CjkSelectionState internal constructor() {
         if (!container.isAttached || !selectableCoordinates.isAttached) return Offset.Unspecified
 
         val localDragPosition = selectableCoordinates.localPositionOf(container, currentDragPosition)
-        val lineRange = selectable.selectionLineRange(anchor.offset)
+        val isEnd = if (activeDragIsStart == true) handlesCrossed else !handlesCrossed
+        val lineRange = selectable.selectionLineRange(anchor.offset, isEnd)
             ?: return Offset.Unspecified
         val lineStartX = selectable.selectionLineLeft(lineRange.start)
         val lineEndX = selectable.selectionLineRight((lineRange.end - 1).coerceAtLeast(lineRange.start))
@@ -771,7 +813,7 @@ class CjkSelectionState internal constructor() {
         ) {
             return Offset.Unspecified
         }
-        val centerY = selectable.selectionLineCenterY(anchor.offset)
+        val centerY = selectable.selectionLineCenterY(anchor.offset, isEnd)
         return container.localPositionOf(
             selectableCoordinates,
             Offset(constrainedX, centerY),
@@ -952,18 +994,3 @@ class CjkSelectionState internal constructor() {
     }
 
 }
-
-internal class CjkSystemContextMenu(
-    val show: () -> Unit,
-    val hide: () -> Unit,
-)
-
-private data class CjkSelectionAnchor(
-    val key: Any,
-    val offset: Int,
-)
-
-private data class CjkSelection(
-    val anchor: CjkSelectionAnchor,
-    val extent: CjkSelectionAnchor,
-)
