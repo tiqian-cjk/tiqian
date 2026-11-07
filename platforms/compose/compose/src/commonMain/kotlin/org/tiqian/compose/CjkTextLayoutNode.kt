@@ -430,9 +430,9 @@ internal class CjkTextLayoutNode(
         isEnd: Boolean,
     ): org.tiqian.core.Rect? {
         val logical = offset.coerceIn(0, semanticsText.length)
-        if (!inlineOffsetMapping.hasRenderOnlyObjects || semanticsText.isEmpty()) return null
+        if (!inlineOffsetMapping.hasRenderOnlyObjects || semanticsText.isEmpty() || isEnd && logical == 0) return null
         val unit =
-            if (isEnd && logical > 0) {
+            if (isEnd) {
                 org.tiqian.core.TextRange(inlineOffsetMapping.coerceLogicalOffset(logical - 1, SourceBoundaryBias.Backward), logical)
             } else {
                 org.tiqian.core.TextRange(logical, inlineOffsetMapping.coerceLogicalOffset(logical + 1, SourceBoundaryBias.Forward))
@@ -457,7 +457,7 @@ internal class CjkTextLayoutNode(
     ): Int {
         val layout = result ?: return -1
         val logical = if (inlineOffsetMapping.hasRenderOnlyObjects && isEnd && offset > 0) offset - 1 else offset
-        return layout.getLineForOffset(inlineOffsetMapping.toLayout(logical))
+        return layout.getLineForOffset(inlineOffsetMapping.toLayout(logical, after = !isEnd || offset > 0))
     }
 
     override fun selectionLineRange(
