@@ -212,34 +212,67 @@ import std.SortedMap;
     }
 
     function consumeSpacing(p:PunctuationSpacingCompressionResult):PunctuationGeometryLedger {
-        var n = cloneB(budgets);
+        // Keys are the cluster indices present in budgets, ascending. Updating
+        // the values in place and rebuilding the map once replaces the previous
+        // rebuild-per-adjustment, which cost adjustments x clusters.
+        final keys = new Array<Int>();
+        final values = new Array<GlueBudget>();
+        for (i in 0...budgets.size()) {
+            keys.push(budgets.keyAt(i));
+            values.push(budgets.valueAt(i));
+        }
         for (a in p.adjustments) {
             var idx = -1;
-            for (i in 0...naturalClusters.length)
-                if (PunctuationGeometryLedger.isInside(a.reductionTargetRange, naturalClusters[i].range)) {
-                    idx = i;
+            var low = 0;
+            var high = naturalClusters.length - 1;
+            while (low <= high) {
+                final middle = (low + high) >> 1;
+                final clusterRange = naturalClusters[middle].range;
+                if (a.reductionTargetRange.start < clusterRange.start)
+                    high = middle - 1;
+                else if (a.reductionTargetRange.start >= clusterRange.end)
+                    low = middle + 1;
+                else {
+                    if (PunctuationGeometryLedger.isInside(a.reductionTargetRange, clusterRange))
+                        idx = middle;
                     break;
                 }
-            if (idx >= 0 && n.has(idx)) {
-                final q = n.get(idx);
-                var replacement:GlueBudget;
-                if (geometries.get(idx).anchor == PunctuationAnchor.Center) {
-                    final x = Math.min(a.reduction / 2, Math.min(q.leadingRemaining, q.trailingRemaining));
-                    replacement = new GlueBudget(q.leadingNatural, q.leadingConsumed + x, q.trailingNatural, q.trailingConsumed + x);
-                } else if (q.trailingRemaining >= q.leadingRemaining)
-                    replacement = new GlueBudget(q.leadingNatural, q.leadingConsumed, q.trailingNatural,
-                        Math.min(q.trailingNatural, q.trailingConsumed + a.reduction));
-                else
-                    replacement = new GlueBudget(q.leadingNatural, Math.min(q.leadingNatural, q.leadingConsumed + a.reduction), q.trailingNatural,
-                        q.trailingConsumed);
-                final b = SortedMap.builder();
-                for (j in 0...n.size())
-                    b.put(n.keyAt(j), n.valueAt(j));
-                b.put(idx, replacement);
-                n = b.build();
             }
+            if (idx < 0)
+                continue;
+            var pos = -1;
+            var lo = 0;
+            var hi = keys.length - 1;
+            while (lo <= hi) {
+                final mid = (lo + hi) >> 1;
+                if (keys[mid] < idx)
+                    lo = mid + 1;
+                else if (keys[mid] > idx)
+                    hi = mid - 1;
+                else {
+                    pos = mid;
+                    break;
+                }
+            }
+            if (pos < 0)
+                continue;
+            final q = values[pos];
+            var replacement:GlueBudget;
+            if (geometries.get(idx).anchor == PunctuationAnchor.Center) {
+                final x = Math.min(a.reduction / 2, Math.min(q.leadingRemaining, q.trailingRemaining));
+                replacement = new GlueBudget(q.leadingNatural, q.leadingConsumed + x, q.trailingNatural, q.trailingConsumed + x);
+            } else if (q.trailingRemaining >= q.leadingRemaining)
+                replacement = new GlueBudget(q.leadingNatural, q.leadingConsumed, q.trailingNatural,
+                    Math.min(q.trailingNatural, q.trailingConsumed + a.reduction));
+            else
+                replacement = new GlueBudget(q.leadingNatural, Math.min(q.leadingNatural, q.leadingConsumed + a.reduction), q.trailingNatural,
+                    q.trailingConsumed);
+            values[pos] = replacement;
         }
-        return replace(this, null, null, null, null, null, n);
+        final b = SortedMap.builder();
+        for (i in 0...keys.length)
+            b.put(keys[i], values[i]);
+        return replace(this, null, null, null, null, null, b.build());
     }
 
     public function consumeLineEdgeGlue(lines:Array<LineCandidate>, ?force:Null<Bool>):LineEdgeTrimResult {
