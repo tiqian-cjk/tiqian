@@ -758,7 +758,6 @@ class WidthIndependentAnnotationCacheFns {
         final glyphsByClusterRangeValues = new Array<Array<Glyph>>();
         final openTypeFeatureKeys = new Array<TextRange>();
         final openTypeFeatureValues = new Array<Array<String>>();
-        var lastFeatureKeyIndex = -1;
         // Glyphs arrive in text order, so a range whose start is past the last
         // key is a new entry and a range equal to the last key extends it. Both
         // cases are constant; only an out-of-order range falls back to the scan.
@@ -813,26 +812,11 @@ class WidthIndependentAnnotationCacheFns {
                     final featCopy = new Array<String>();
                     for (fi in 0...run.openTypeFeatures.length)
                         featCopy.push(run.openTypeFeatures[fi]);
-                    // Ranges arrive in text order, so the previous entry is the
-                    // last key, and a range past it has no previous entry. The
-                    // unconditional scan cost ranges x keys.
                     var previousFeatures:Array<String> = null;
-                    var featureLookupDone = false;
-                    if (lastFeatureKeyIndex >= 0) {
-                        final lastFeatureKey = openTypeFeatureKeys[lastFeatureKeyIndex];
-                        if (lastFeatureKey.start == range.start && lastFeatureKey.end == range.end) {
-                            previousFeatures = openTypeFeatureValues[lastFeatureKeyIndex];
-                            featureLookupDone = true;
-                        } else if (range.start > lastFeatureKey.start) {
-                            featureLookupDone = true;
-                        }
-                    }
-                    if (!featureLookupDone) {
-                        for (pi in 0...openTypeFeatureKeys.length) {
-                            if (openTypeFeatureKeys[pi].start == range.start && openTypeFeatureKeys[pi].end == range.end) {
-                                previousFeatures = openTypeFeatureValues[pi];
-                                break;
-                            }
+                    for (pi in 0...openTypeFeatureKeys.length) {
+                        if (openTypeFeatureKeys[pi].start == range.start && openTypeFeatureKeys[pi].end == range.end) {
+                            previousFeatures = openTypeFeatureValues[pi];
+                            break;
                         }
                     }
                     if (previousFeatures != null) {
@@ -851,7 +835,6 @@ class WidthIndependentAnnotationCacheFns {
                     }
                     openTypeFeatureKeys.push(range);
                     openTypeFeatureValues.push(featCopy);
-                    lastFeatureKeyIndex = openTypeFeatureKeys.length - 1;
                     openTypeFeaturesByClusterRangeBuilder.put(range, featCopy);
                 }
             }
