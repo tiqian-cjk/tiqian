@@ -494,37 +494,83 @@ class ParagraphShapingStage {
             }
         }
 
+        // Segments are shaped in text order, so the entry a range needs is the
+        // one just touched, and a range past the last key is new. Both cases are
+        // constant; only an out-of-order range falls back to the scan. The
+        // unconditional scans cost segments x keys.
+        var lastSegmentKeyIndex = -1;
+        var lastRollbackKeyIndex = -1;
+
         function getCachedSegmentShaping(r:TextRange):Null<ShapingResult> {
+            if (lastSegmentKeyIndex >= 0) {
+                final lastKey = segmentShapingCacheKeys[lastSegmentKeyIndex];
+                if (lastKey.start == r.start && lastKey.end == r.end)
+                    return segmentShapingCacheValues[lastSegmentKeyIndex];
+                if (r.start > lastKey.start)
+                    return null;
+            }
             for (i in 0...segmentShapingCacheKeys.length) {
                 final k = segmentShapingCacheKeys[i];
-                if (k.start == r.start && k.end == r.end)
+                if (k.start == r.start && k.end == r.end) {
+                    lastSegmentKeyIndex = i;
                     return segmentShapingCacheValues[i];
+                }
             }
             return null;
         }
 
         function putCachedSegmentShaping(r:TextRange, v:ShapingResult):Void {
+            if (lastSegmentKeyIndex >= 0) {
+                final lastKey = segmentShapingCacheKeys[lastSegmentKeyIndex];
+                if (lastKey.start == r.start && lastKey.end == r.end) {
+                    segmentShapingCacheValues[lastSegmentKeyIndex] = v;
+                    return;
+                }
+                if (r.start > lastKey.start) {
+                    segmentShapingCacheKeys.push(r);
+                    segmentShapingCacheValues.push(v);
+                    lastSegmentKeyIndex = segmentShapingCacheKeys.length - 1;
+                    return;
+                }
+            }
             for (i in 0...segmentShapingCacheKeys.length) {
                 final k = segmentShapingCacheKeys[i];
                 if (k.start == r.start && k.end == r.end) {
                     segmentShapingCacheValues[i] = v;
+                    lastSegmentKeyIndex = i;
                     return;
                 }
             }
             segmentShapingCacheKeys.push(r);
             segmentShapingCacheValues.push(v);
+            lastSegmentKeyIndex = segmentShapingCacheKeys.length - 1;
         }
 
         function putSubstitutionRollback(r:TextRange, v:String):Void {
+            if (lastRollbackKeyIndex >= 0) {
+                final lastKey = substitutionRollbackKeys[lastRollbackKeyIndex];
+                if (lastKey.start == r.start && lastKey.end == r.end) {
+                    substitutionRollbackValues[lastRollbackKeyIndex] = v;
+                    return;
+                }
+                if (r.start > lastKey.start) {
+                    substitutionRollbackKeys.push(r);
+                    substitutionRollbackValues.push(v);
+                    lastRollbackKeyIndex = substitutionRollbackKeys.length - 1;
+                    return;
+                }
+            }
             for (i in 0...substitutionRollbackKeys.length) {
                 final k = substitutionRollbackKeys[i];
                 if (k.start == r.start && k.end == r.end) {
                     substitutionRollbackValues[i] = v;
+                    lastRollbackKeyIndex = i;
                     return;
                 }
             }
             substitutionRollbackKeys.push(r);
             substitutionRollbackValues.push(v);
+            lastRollbackKeyIndex = substitutionRollbackKeys.length - 1;
         }
 
         function dashInkCoverageDeficient(shaped:ShapingResult, displayText:String, segmentFontSize:Float):Bool {
