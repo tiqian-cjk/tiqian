@@ -758,35 +758,15 @@ class WidthIndependentAnnotationCacheFns {
         final glyphsByClusterRangeValues = new Array<Array<Glyph>>();
         final openTypeFeatureKeys = new Array<TextRange>();
         final openTypeFeatureValues = new Array<Array<String>>();
-        // Glyphs arrive in text order, so a range whose start is past the last
-        // key is a new entry and a range equal to the last key extends it. Both
-        // cases are constant; only an out-of-order range falls back to the scan.
-        // The previous unconditional scan cost glyphs x keys.
-        var lastGlyphKeyIndex = -1;
         function addGlyphToClusterRange(range:TextRange, g:Glyph):Void {
-            if (lastGlyphKeyIndex >= 0) {
-                final lastKey = glyphsByClusterRangeKeys[lastGlyphKeyIndex];
-                if (lastKey.start == range.start && lastKey.end == range.end) {
-                    glyphsByClusterRangeValues[lastGlyphKeyIndex].push(g);
-                    return;
-                }
-                if (range.start > lastKey.start) {
-                    glyphsByClusterRangeKeys.push(range);
-                    glyphsByClusterRangeValues.push([g]);
-                    lastGlyphKeyIndex = glyphsByClusterRangeKeys.length - 1;
-                    return;
-                }
-            }
             for (i in 0...glyphsByClusterRangeKeys.length) {
                 if (glyphsByClusterRangeKeys[i].start == range.start && glyphsByClusterRangeKeys[i].end == range.end) {
                     glyphsByClusterRangeValues[i].push(g);
-                    lastGlyphKeyIndex = i;
                     return;
                 }
             }
             glyphsByClusterRangeKeys.push(range);
             glyphsByClusterRangeValues.push([g]);
-            lastGlyphKeyIndex = glyphsByClusterRangeKeys.length - 1;
         }
 
         for (i in 0...shapingResults.length) {
