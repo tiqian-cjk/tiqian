@@ -212,37 +212,16 @@ import std.SortedMap;
     }
 
     function consumeSpacing(p:PunctuationSpacingCompressionResult):PunctuationGeometryLedger {
-        // Work on a dense array indexed by cluster index. Rebuilding the sorted
-        // map for every adjustment cost adjustments x clusters, which is what
-        // made punctuation-heavy paragraphs quadratic.
-        final size = naturalClusters.length;
-        final working = new Array<Null<GlueBudget>>();
-        for (i in 0...size)
-            working.push(null);
-        for (i in 0...budgets.size()) {
-            final key = budgets.keyAt(i);
-            if (key >= 0 && key < size)
-                working[key] = budgets.valueAt(i);
-        }
+        var n = cloneB(budgets);
         for (a in p.adjustments) {
             var idx = -1;
-            var low = 0;
-            var high = size - 1;
-            while (low <= high) {
-                final middle = (low + high) >> 1;
-                final clusterRange = naturalClusters[middle].range;
-                if (a.reductionTargetRange.start < clusterRange.start)
-                    high = middle - 1;
-                else if (a.reductionTargetRange.start >= clusterRange.end)
-                    low = middle + 1;
-                else {
-                    if (PunctuationGeometryLedger.isInside(a.reductionTargetRange, clusterRange))
-                        idx = middle;
+            for (i in 0...naturalClusters.length)
+                if (PunctuationGeometryLedger.isInside(a.reductionTargetRange, naturalClusters[i].range)) {
+                    idx = i;
                     break;
                 }
-            }
-            final q = idx >= 0 ? working[idx] : null;
-            if (q != null) {
+            if (idx >= 0 && n.has(idx)) {
+                final q = n.get(idx);
                 var replacement:GlueBudget;
                 if (geometries.get(idx).anchor == PunctuationAnchor.Center) {
                     final x = Math.min(a.reduction / 2, Math.min(q.leadingRemaining, q.trailingRemaining));
@@ -253,16 +232,14 @@ import std.SortedMap;
                 else
                     replacement = new GlueBudget(q.leadingNatural, Math.min(q.leadingNatural, q.leadingConsumed + a.reduction), q.trailingNatural,
                         q.trailingConsumed);
-                working[idx] = replacement;
+                final b = SortedMap.builder();
+                for (j in 0...n.size())
+                    b.put(n.keyAt(j), n.valueAt(j));
+                b.put(idx, replacement);
+                n = b.build();
             }
         }
-        final b = SortedMap.builder();
-        for (i in 0...size) {
-            final value = working[i];
-            if (value != null)
-                b.put(i, cast(value, GlueBudget));
-        }
-        return replace(this, null, null, null, null, null, b.build());
+        return replace(this, null, null, null, null, null, n);
     }
 
     public function consumeLineEdgeGlue(lines:Array<LineCandidate>, ?force:Null<Bool>):LineEdgeTrimResult {
