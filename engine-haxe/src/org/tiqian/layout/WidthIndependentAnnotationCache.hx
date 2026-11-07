@@ -758,7 +758,24 @@ class WidthIndependentAnnotationCacheFns {
         final glyphsByClusterRangeValues = new Array<Array<Glyph>>();
         final openTypeFeatureKeys = new Array<TextRange>();
         final openTypeFeatureValues = new Array<Array<String>>();
+        // Glyphs arrive in text order, so the entry a glyph needs is the last
+        // one, and a range past it is new. Both cases are constant; only an
+        // out-of-order range falls back to the scan. The unconditional scan
+        // cost glyphs x keys.
         function addGlyphToClusterRange(range:TextRange, g:Glyph):Void {
+            final keyCount = glyphsByClusterRangeKeys.length;
+            if (keyCount > 0) {
+                final lastKey = glyphsByClusterRangeKeys[keyCount - 1];
+                if (lastKey.start == range.start && lastKey.end == range.end) {
+                    glyphsByClusterRangeValues[keyCount - 1].push(g);
+                    return;
+                }
+                if (range.start > lastKey.start) {
+                    glyphsByClusterRangeKeys.push(range);
+                    glyphsByClusterRangeValues.push([g]);
+                    return;
+                }
+            }
             for (i in 0...glyphsByClusterRangeKeys.length) {
                 if (glyphsByClusterRangeKeys[i].start == range.start && glyphsByClusterRangeKeys[i].end == range.end) {
                     glyphsByClusterRangeValues[i].push(g);
@@ -792,12 +809,27 @@ class WidthIndependentAnnotationCacheFns {
                     final featCopy = new Array<String>();
                     for (fi in 0...run.openTypeFeatures.length)
                         featCopy.push(run.openTypeFeatures[fi]);
+                    // Ranges arrive in text order: the previous entry is the last
+                    // key, and a range past it has no previous entry.
                     var previousFeatures:Array<String> = null;
-                    for (pi in 0...openTypeFeatureKeys.length) {
+                    var featureLookupDone = false;
+                    final featureKeyCount = openTypeFeatureKeys.length;
+                    if (featureKeyCount > 0) {
+                        final lastFeatureKey = openTypeFeatureKeys[featureKeyCount - 1];
+                        if (lastFeatureKey.start == range.start && lastFeatureKey.end == range.end) {
+                            previousFeatures = openTypeFeatureValues[featureKeyCount - 1];
+                            featureLookupDone = true;
+                        } else if (range.start > lastFeatureKey.start) {
+                            featureLookupDone = true;
+                        }
+                    }
+                    if (!featureLookupDone) {
+                        for (pi in 0...openTypeFeatureKeys.length) {
                         if (openTypeFeatureKeys[pi].start == range.start && openTypeFeatureKeys[pi].end == range.end) {
                             previousFeatures = openTypeFeatureValues[pi];
                             break;
                         }
+                    }
                     }
                     if (previousFeatures != null) {
                         var sameFeatures = previousFeatures.length == featCopy.length;
