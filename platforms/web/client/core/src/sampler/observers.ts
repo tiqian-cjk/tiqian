@@ -319,6 +319,10 @@ export function classifyContentMutationRecords(
       paragraphSignal = true;
       continue;
     }
+    // Removed renderer subtrees can still deliver queued records. Their old
+    // inline nodes are not host structure changes; raw-DOM backups were handled above.
+    if (!recordElement || !context.belongsToRootScope(recordElement, context.root)) continue;
+
     const paragraph = recordElement?.closest?.(DEFAULT_PARAGRAPH_SELECTOR);
     if (paragraph && context.belongsToRootScope(paragraph, context.root)) {
       // TopLevelChildListTrustsIdentityProbe: engine commits append and
