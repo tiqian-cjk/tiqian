@@ -1,13 +1,13 @@
 // Mapping adapter from the test fixture shape (BinaryTableInput) to the
 // generated single-source encoder. It contains no byte-level code: the
-// TIQTBL03 contract lives in protocol-gen, produced from Haxe
+// TIQTBL03 contract lives in tiqian-protocol, produced from Haxe
 // (org.tiqian.protocol.SnapshotTableBinary); this file only converts JSON
 // values to the pre-serialized text form the generated encoder takes, per
 // the Stage1-P2 boundary ruling.
-import { SnapshotTableBinary } from "./protocol-gen/org/tiqian/protocol/SnapshotTableBinary.js";
-import { TableInput } from "./protocol-gen/org/tiqian/protocol/TableInput.js";
-import { TableMetricRow } from "./protocol-gen/org/tiqian/protocol/TableMetricRow.js";
-import { TableProbe } from "./protocol-gen/org/tiqian/protocol/TableProbe.js";
+import { SnapshotTableBinary } from "tiqian-protocol/org/tiqian/protocol/SnapshotTableBinary";
+import { TableInput } from "tiqian-protocol/org/tiqian/protocol/TableInput";
+import { TableMetricRow } from "tiqian-protocol/org/tiqian/protocol/TableMetricRow";
+import { TableProbe } from "tiqian-protocol/org/tiqian/protocol/TableProbe";
 
 export interface BinaryTableInput {
   replayStrings?: readonly string[];

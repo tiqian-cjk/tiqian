@@ -137,7 +137,9 @@
     }
   },
   "dependencies": {
-    "@tiqian/ffi": "0.1.0-alpha.1"
+    "@tiqian/ffi": "0.1.0-alpha.1",
+    "tiqian-protocol": "0.1.0-alpha08",
+    "tiqian-shared": "0.1.0-alpha08"
   },
   "devDependencies": {
     "@types/node": "22.15.29",

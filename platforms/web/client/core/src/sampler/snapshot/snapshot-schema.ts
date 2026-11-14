@@ -3,7 +3,7 @@
 // vendored here as the generated module (boring cutover Stage1-P4); the
 // re-exports below keep the module API of this file unchanged for every
 // import site.
-import { Revision } from "./protocol-gen/Revision.js";
+import { Revision } from "tiqian-protocol/org/tiqian/protocol/Revision";
 
 export const SNAPSHOT_SCHEMA = Revision.SNAPSHOT_SCHEMA;
 export const SNAPSHOT_TABLES_SCHEMA = Revision.SNAPSHOT_TABLES_SCHEMA;

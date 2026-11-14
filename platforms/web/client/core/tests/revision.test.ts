@@ -11,7 +11,7 @@ import {
   SNAPSHOT_SCHEMA,
   SNAPSHOT_TABLES_SCHEMA,
 } from "../src/sampler/snapshot/snapshot-schema.js";
-import { Revision } from "../src/sampler/snapshot/protocol-gen/Revision.js";
+import { Revision } from "tiqian-protocol/org/tiqian/protocol/Revision";
 
 // Stage1-P4 (boring cutover): the manifest schema numbers and the revision
 // constant family are single-sourced in

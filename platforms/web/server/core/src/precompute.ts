@@ -15,9 +15,9 @@ import {
   renderPreparedParagraph as sharedRenderPreparedParagraph,
   renderPreparedParagraphArtifact as sharedRenderPreparedParagraphArtifact,
 } from "@tiqian/prose/prepared-dom";
-import { Revision } from "./protocol-gen/Revision.js";
-import { SnapshotValueStyle } from "./shared-gen/org/tiqian/shared/SnapshotValueStyle.js";
-import { ValueStyleInterner } from "./shared-gen/org/tiqian/shared/ValueStyleInterner.js";
+import { Revision } from "tiqian-protocol/org/tiqian/protocol/Revision";
+import { SnapshotValueStyle } from "tiqian-shared/org/tiqian/shared/SnapshotValueStyle";
+import { ValueStyleInterner } from "tiqian-shared/org/tiqian/shared/ValueStyleInterner";
 import { sha256Hex, stableStringify } from "./stable-stringify.js";
 import { createCacheBridge } from "./cache.js";
 import type { CacheBridge } from "./cache.js";

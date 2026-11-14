@@ -10,9 +10,9 @@
 // survives the fold (a semantic paragraph stays with the host and declines the
 // snapshot). The semantic ranges are still collected because an element whose
 // range collapses to nothing in the fold does not count.
-import type { DomAttribute } from "./shared-gen/org/tiqian/shared/html/DomAttribute.js";
-import type { DomNode } from "./shared-gen/org/tiqian/shared/html/DomNode.js";
-import { SnapshotSource } from "./shared-gen/org/tiqian/shared/snapshot/SnapshotSource.js";
+import type { DomAttribute } from "tiqian-shared/org/tiqian/shared/html/DomAttribute";
+import type { DomNode } from "tiqian-shared/org/tiqian/shared/html/DomNode";
+import { SnapshotSource } from "tiqian-shared/org/tiqian/shared/snapshot/SnapshotSource";
 
 export interface RawSemanticSpan {
     readonly start: number;
@@ -30,21 +30,6 @@ export interface SourceArtifact {
 const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;
 
-/**
- * The linkedom node shape this walk reads. The shared DomNode surface does not
- * model text-node values, so the walk uses this loose structural type and casts
- * the public DomNode argument at each entry point.
- */
-interface WalkNode {
-    readonly nodeType: number;
-    readonly tagName: string;
-    // Optional: the shared DomNode surface does not declare a text-node value,
-    // so a direct DomNode -> WalkNode cast stays legal without an unknown hop.
-    readonly nodeValue?: string | null;
-    readonly attributes?: readonly (DomAttribute | undefined)[];
-    readonly childNodes: readonly (WalkNode | undefined)[];
-}
-
 interface WalkState {
     text: string;
     spans: RawSemanticSpan[];
@@ -52,21 +37,16 @@ interface WalkState {
     order: number;
 }
 
-function textOf(node: WalkNode): string {
+function textOf(node: DomNode): string {
     const value = node.nodeValue;
     return typeof value === "string" ? value : "";
 }
 
-function attributesOf(node: WalkNode): (readonly [string, string])[] {
-    const attributes = node.attributes;
-    if (attributes === undefined)
-        return [];
+function attributesOf(node: DomNode): (readonly [string, string])[] {
+    const attributes: readonly DomAttribute[] = node.attributes;
     const pairs: (readonly [string, string])[] = [];
     for (let index = 0; index < attributes.length; index += 1) {
-        const attribute = attributes[index];
-        if (attribute === undefined)
-            continue;
-        pairs.push([attribute.name, attribute.value]);
+        pairs.push([attributes[index].name, attributes[index].value]);
     }
     return pairs;
 }
@@ -76,7 +56,7 @@ function attributesOf(node: WalkNode): (readonly [string, string])[] {
  * safe semantic tag opens a range around its children, and any other element
  * declines the artifact (the caller falls back to the contract lane).
  */
-function appendDomNode(node: WalkNode, state: WalkState): boolean {
+function appendDomNode(node: DomNode, state: WalkState): boolean {
     if (node.nodeType === TEXT_NODE) {
         state.text += textOf(node);
         return true;
@@ -95,10 +75,7 @@ function appendDomNode(node: WalkNode, state: WalkState): boolean {
     const order = state.order;
     state.order += 1;
     for (let index = 0; index < node.childNodes.length; index += 1) {
-        const child = node.childNodes[index];
-        if (child === undefined)
-            continue;
-        if (!appendDomNode(child, state))
+        if (!appendDomNode(node.childNodes[index], state))
             return false;
     }
     const end = state.text.length;
@@ -114,13 +91,10 @@ function appendDomNode(node: WalkNode, state: WalkState): boolean {
  * through the fold. A null result is a declined artifact.
  */
 export function snapshotSourceArtifactFromDom(element: DomNode): SourceArtifact | null {
-    const node = element as WalkNode;
+    const node = element;
     const state: WalkState = { text: "", spans: [], hardBreaks: [], order: 0 };
     for (let index = 0; index < node.childNodes.length; index += 1) {
-        const child = node.childNodes[index];
-        if (child === undefined)
-            continue;
-        if (!appendDomNode(child, state))
+        if (!appendDomNode(node.childNodes[index], state))
             return null;
     }
     const fold = SnapshotSource.foldNormalFlow(state.text, state.hardBreaks);
@@ -149,7 +123,7 @@ export function snapshotProjection(element: DomNode): { readonly text: string } 
     return Object.freeze({ text: artifact.text });
 }
 
-function appendProjectedRaw(node: WalkNode, state: WalkState): void {
+function appendProjectedRaw(node: DomNode, state: WalkState): void {
     if (node.nodeType === TEXT_NODE) {
         state.text += textOf(node);
         return;
@@ -165,10 +139,7 @@ function appendProjectedRaw(node: WalkNode, state: WalkState): void {
     if (tagName === "script" || tagName === "style" || tagName === "template")
         return;
     for (let index = 0; index < node.childNodes.length; index += 1) {
-        const child = node.childNodes[index];
-        if (child === undefined)
-            continue;
-        appendProjectedRaw(child, state);
+        appendProjectedRaw(node.childNodes[index], state);
     }
 }
 
@@ -178,13 +149,10 @@ function appendProjectedRaw(node: WalkNode, state: WalkState): void {
  * lane used for paragraphs without a snapshot projection.
  */
 export function projectedTextOnly(element: DomNode): string {
-    const node = element as WalkNode;
+    const node = element;
     const state: WalkState = { text: "", spans: [], hardBreaks: [], order: 0 };
     for (let index = 0; index < node.childNodes.length; index += 1) {
-        const child = node.childNodes[index];
-        if (child === undefined)
-            continue;
-        appendProjectedRaw(child, state);
+        appendProjectedRaw(node.childNodes[index], state);
     }
     const hardBreaks = new Set(state.hardBreaks);
     let output = "";

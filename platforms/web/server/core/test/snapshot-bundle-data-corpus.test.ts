@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { renderPreparedParagraphArtifact } from "@tiqian/prose/prepared-dom";
 
 import { renderSnapshotBundleData } from "../lib/precompute.js";
-import { ValueStyleInterner } from "../lib/shared-gen/org/tiqian/shared/ValueStyleInterner.js";
+import { ValueStyleInterner } from "tiqian-shared/org/tiqian/shared/ValueStyleInterner";
 
 interface FixtureExpectOk {
   kind: "ok";

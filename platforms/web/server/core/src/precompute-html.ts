@@ -9,13 +9,13 @@ import { createHash } from "node:crypto";
 import { parseHTML } from "linkedom";
 import { absorbSnapshotTables, assembleFontContractBundle, assembleSnapshotBundle, closeSnapshotTables, createPrecomputer, createSnapshotTables, finalizeSnapshotTables, precomputerHandle, renderFontContractBundleData, renderSnapshotBundleData, } from "./precompute.js";
 import { projectedTextOnly, snapshotProjection } from "./precompute-html-projection.js";
-import { CompoundSelector } from "./shared-gen/org/tiqian/shared/html/CompoundSelector.js";
-import { DomParser } from "./shared-gen/org/tiqian/shared/html/DomParser.js";
-import { HtmlParseException } from "./shared-gen/org/tiqian/shared/html/HtmlParseException.js";
-import { HtmlScan } from "./shared-gen/org/tiqian/shared/html/HtmlScan.js";
+import { CompoundSelector } from "tiqian-shared/org/tiqian/shared/html/CompoundSelector";
+import { DomParser } from "tiqian-shared/org/tiqian/shared/html/DomParser";
+import { HtmlParseException } from "tiqian-shared/org/tiqian/shared/html/HtmlParseException";
+import { HtmlScan } from "tiqian-shared/org/tiqian/shared/html/HtmlScan";
 import { type BuildFontFace, type BuildFontStylesheet, type NormalizedTypography, type Precomputer, type SnapshotBundle, type SnapshotTypography } from "./precompute.js";
 import type { FontContractInput, PreparedEntry, SnapshotParagraphInput } from "./precompute.js";
-import type { DomNode } from "./shared-gen/org/tiqian/shared/html/DomNode.js";
+import type { DomNode } from "tiqian-shared/org/tiqian/shared/html/DomNode";
 
 const DEFAULT_PARAGRAPH_SELECTOR = "p, li";
 const DEFAULT_SKIPPED_ANCESTOR_SELECTOR = "[data-tiqian-skip], pre, table, .not-prose, .katex, .katex-display, .expressive-code";
