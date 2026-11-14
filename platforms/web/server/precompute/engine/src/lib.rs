@@ -24,6 +24,7 @@ pub mod metrics;
 pub mod name_language;
 pub mod name_table;
 pub mod normalize;
+mod numeric;
 pub mod paragraph;
 pub mod parallel;
 pub mod plan;

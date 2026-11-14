@@ -82,7 +82,10 @@ pub fn encode_input(value: &Json, kind: u8) -> Result<Vec<u8>, NamedError> {
     use tiqian_protocol_gen::org::tiqian::protocol::canonical::Canonical;
     use tiqian_protocol_gen::org::tiqian::protocol::encode_result::EncodeResult;
     match Canonical::canonical_encode(json_to_wire(value), kind as u32) {
-        EncodeResult::COk { bytes } => Ok(bytes),
+        EncodeResult::COk { mut bytes } => {
+            crate::numeric::append_canonical(value, &mut bytes)?;
+            Ok(bytes)
+        },
         // The generated issue is a Haxe string; the host lane reports it
         // as the UTF-8 `String` inside `NamedError`.
         EncodeResult::CErr { issue } => Err(NamedError(issue.to_utf8_lossy())),
@@ -195,6 +198,15 @@ pub fn decode_input(bytes: &[u8], kind: u8) -> Result<DecodedSubmission, NamedEr
         boundaries.push(Json::Num(reader.f64()?));
     }
     fields.push(("sourceBoundaries".to_string(), Json::Arr(boundaries)));
+    // Older inputs keep their original bytes; a numeric trailer restores the
+    // added text-span field before the cached request reaches the precomputer.
+    if reader.cursor < reader.bytes.len() {
+        if reader.take(4)? != b"TQNV" { return Err(invalid()) }
+        let variants = crate::json::parse_json(&reader.str()?).map_err(|_| invalid())?;
+        let spans = fields.iter_mut().find(|(name, _)| name == "textSpans")
+            .ok_or_else(invalid)?;
+        crate::numeric::restore_canonical(&mut spans.1, variants)?;
+    }
     reader.done()?;
     Ok(DecodedSubmission {
         value: Json::Obj(fields),

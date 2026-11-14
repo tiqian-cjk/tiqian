@@ -83,7 +83,7 @@ class PreparedDom {
      * signature has no replay rule and must not be silently painted.
      */
     public static function isPreparedOpenTypeFeatureSignature(signature:String):Bool {
-        return signature == "pwid,palt" || signature == "fwid";
+        return signature != "" && NumericFeatures.contract(signature.split(",")) != null;
     }
 
     /**
@@ -188,7 +188,7 @@ class PreparedDom {
                 Markup.setAttribute(attributes, "data-tq-punctuation-body-width", "" + punctuationBodyWidth);
             }
         }
-        final styles:Array<String> = [];
+        final styles:Array<String> = NumericFeatures.styles(input.openTypeFeatures);
         if (renderFontFamilies.length > 0) {
             Markup.setAttribute(attributes, "data-tq-render-font-projection", "true");
             styles.push("font-family:" + Markup.cssFamilyList(renderFontFamilies) + "!important");

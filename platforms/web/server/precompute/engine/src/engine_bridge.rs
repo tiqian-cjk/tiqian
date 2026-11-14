@@ -22,7 +22,6 @@ use std::rc::Rc;
 use tiqian::engine::{Engine, EngineComponents};
 use tiqian::NamedError;
 use tiqian_engine_gen::org::tiqian::core::cluster::Cluster;
-use tiqian_engine_gen::runtime::u_string::UString;
 use tiqian_engine_gen::org::tiqian::core::glyph::Glyph;
 use tiqian_engine_gen::org::tiqian::core::glyph_run::GlyphRun;
 use tiqian_engine_gen::org::tiqian::core::ic::Ic;
@@ -48,8 +47,9 @@ use tiqian_engine_gen::org::tiqian::font::font_metrics::{
 use tiqian_engine_gen::org::tiqian::font::raw_font_metrics::RawFontMetrics;
 use tiqian_engine_gen::org::tiqian::layout::prepared_paragraph::PreparedParagraphFns;
 use tiqian_engine_gen::org::tiqian::shaping::text_shaper::{
-    TextShaper, ShapingInput, ShapingResult, ShapingSource, TextShaperShapeFault,
+    ShapingInput, ShapingResult, ShapingSource, TextShaper, TextShaperShapeFault,
 };
+use tiqian_engine_gen::runtime::u_string::UString;
 
 use crate::paragraph::{InlineBoxOuterSpacingCode, ParagraphRequest};
 use crate::session::{CaptureEvidence, FontSession, MetricsInput, ShapeInput};
@@ -87,6 +87,7 @@ struct SessionBackend {
     /// policy's final boundary forbids smuggling Arc/Mutex in for a possible
     /// future threaded host (target-semantic-policy:43-56).
     fault: Rc<RefCell<Option<String>>>,
+    numeric_spans: Rc<[crate::numeric::NumericSpan]>,
 }
 
 impl SessionBackend {
@@ -98,18 +99,17 @@ impl SessionBackend {
         session: &FontSession,
         evidence: &mut CaptureEvidence,
         fault: Rc<RefCell<Option<String>>>,
+        numeric_spans: Rc<[crate::numeric::NumericSpan]>,
     ) -> Self {
         Self {
             session: std::ptr::from_ref(session),
             evidence: std::ptr::from_mut(evidence),
             fault,
+            numeric_spans,
         }
     }
 
-    fn with_access<T>(
-        &self,
-        call: impl FnOnce(&FontSession, &mut CaptureEvidence) -> T,
-    ) -> T {
+    fn with_access<T>(&self, call: impl FnOnce(&FontSession, &mut CaptureEvidence) -> T) -> T {
         // SAFETY: obligation list on `SessionBackend`: the borrows held by
         // `precompute_paragraph` cover the engine call, and the engine
         // invokes the components sequentially on its calling thread.
@@ -134,6 +134,11 @@ impl SessionBackend {
                 .collect();
             let locale = input.style.locale.to_utf8_lossy();
             let source_text = utf16_substring(&text, input.range.start, input.range.end);
+            let numeric = self
+                .numeric_spans
+                .iter()
+                .rev()
+                .find(|span| span.start <= input.range.start && input.range.end <= span.end);
             let input = ShapeInput {
                 display_text: &display_text,
                 font_families: &font_families,
@@ -145,7 +150,11 @@ impl SessionBackend {
                 source_text: Some(&source_text),
             };
             session
-                .shape_into(evidence, &input)
+                .shape_with_numeric_into(
+                    evidence,
+                    &input,
+                    numeric.map(|span| span.features.as_slice()),
+                )
                 .map(|record| (record, source_text))
         })?;
         let (record, source_text) = shaped;
@@ -208,12 +217,14 @@ impl SessionBackend {
         );
         let glyph_count = u32::try_from(run.glyphs.len()).unwrap_or(u32::MAX);
         let without_ink_bounds = u32::try_from(
-            run.glyphs.iter().filter(|glyph| glyph.bounds.is_none()).count(),
+            run.glyphs
+                .iter()
+                .filter(|glyph| glyph.bounds.is_none())
+                .count(),
         )
         .unwrap_or(u32::MAX);
-        let missing_glyphs =
-            u32::try_from(run.glyphs.iter().filter(|glyph| glyph.id == 0).count())
-                .unwrap_or(u32::MAX);
+        let missing_glyphs = u32::try_from(run.glyphs.iter().filter(|glyph| glyph.id == 0).count())
+            .unwrap_or(u32::MAX);
         let decision = ShapingDecisionInfo::new(
             input.range.clone(),
             &UString::from(source_text.as_str()),
@@ -274,6 +285,7 @@ impl TextShaper for SessionBackend {
             session: self.session,
             evidence: self.evidence,
             fault: Rc::clone(&self.fault),
+            numeric_spans: Rc::clone(&self.numeric_spans),
         })
     }
     fn shape(&mut self, input: ShapingInput) -> Result<ShapingResult, TextShaperShapeFault> {
@@ -295,6 +307,7 @@ impl FontMetricsResolver for SessionBackend {
             session: self.session,
             evidence: self.evidence,
             fault: Rc::clone(&self.fault),
+            numeric_spans: Rc::clone(&self.numeric_spans),
         })
     }
     /// The generated contract has no failure channel here: `resolve` is
@@ -399,7 +412,10 @@ fn layout_input(request: &ParagraphRequest) -> Result<LayoutInput, NamedError> {
         Some(Ic::new(request.first_line_indent_ic)),
         None,
         None,
-        Some(LineLengthGrid::new(Some(request.line_length_grid_enabled), None)),
+        Some(LineLengthGrid::new(
+            Some(request.line_length_grid_enabled),
+            None,
+        )),
         None,
         None,
         None,
@@ -442,10 +458,23 @@ pub fn precompute_paragraph(
     evidence: &mut CaptureEvidence,
     request: &ParagraphRequest,
 ) -> Result<crate::plan::Plan, String> {
+    precompute_paragraph_with_numeric_spans(session, evidence, request, &[])
+}
+
+/// Run a paragraph with validated numeric overrides on its source ranges.
+pub(crate) fn precompute_paragraph_with_numeric_spans(
+    session: &FontSession,
+    evidence: &mut CaptureEvidence,
+    request: &ParagraphRequest,
+    numeric_spans: &[crate::numeric::NumericSpan],
+) -> Result<crate::plan::Plan, String> {
     request.validate().map_err(|error| error.0)?;
     // SAFETY: `precompute_paragraph` holds both borrows across the engine
     // call; see the obligation list on `SessionBackend`.
     let fault: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+    // Both component handles share the same immutable numeric overrides.
+    let numeric_spans: Rc<[crate::numeric::NumericSpan]> = Rc::from(numeric_spans);
+
     let mut engine = Engine::new(EngineComponents {
         // Both slots are P-1 interface handles (`Rc<RefCell<dyn Trait>>`):
         // the engine owns them for this call and never leaves the calling
@@ -454,10 +483,20 @@ pub fn precompute_paragraph(
         // The two components point at the same session, capture window and
         // fault cell.
         text_shaper: Some(Rc::new(RefCell::new(unsafe {
-            SessionBackend::new(session, evidence, Rc::clone(&fault))
+            SessionBackend::new(
+                session,
+                evidence,
+                Rc::clone(&fault),
+                Rc::clone(&numeric_spans),
+            )
         }))),
         font_metrics_resolver: Some(Rc::new(RefCell::new(unsafe {
-            SessionBackend::new(session, evidence, Rc::clone(&fault))
+            SessionBackend::new(
+                session,
+                evidence,
+                Rc::clone(&fault),
+                Rc::clone(&numeric_spans),
+            )
         }))),
         ..EngineComponents::default()
     })

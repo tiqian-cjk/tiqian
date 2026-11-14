@@ -475,7 +475,7 @@ function measuredInlineBaselineShift(element: Element): number {
   }
 }
 
-function measuredOpaqueInlineObjectGeometry(element: Element): string {
+function measuredOpaqueInlineObjectGeometry(element: Element, baselineContainer?: Element): string {
   const parent = element.parentNode;
   if (!parent) return "";
   const style = getComputedStyle(element);
@@ -505,7 +505,10 @@ function measuredOpaqueInlineObjectGeometry(element: Element): string {
     "margin:0!important;padding:0!important;border:0!important;font-size:0!important;" +
     "line-height:0!important;vertical-align:baseline!important;position:static!important;";
   try {
-    parent.insertBefore(probe, element.nextSibling);
+    // A sibling probe can wrap onto the next source line at a footnote boundary.
+    // Numeric leaves expose their own baseline without changing the line break.
+    if (baselineContainer) baselineContainer.appendChild(probe);
+    else parent.insertBefore(probe, element.nextSibling);
     const baseline = probe.getBoundingClientRect().bottom;
     const advance = rect.width + number(style.marginLeft) + number(style.marginRight);
     const ascent = Math.max(0, baseline - rect.top + number(style.marginTop));
@@ -514,6 +517,22 @@ function measuredOpaqueInlineObjectGeometry(element: Element): string {
   } finally {
     probe.remove();
   }
+}
+
+// Numeric leaves are one unbroken browser-shaped run. Keep semantic links, but
+// leave nested markup, generated content and stateful elements on the normal path.
+function isNumericInlineObject(element: Element): boolean {
+  const text = element.textContent || "";
+  if (element.children.length || !/[0-9]/.test(text) || !/^[0-9.,+\-−/⁄()[\]%‰:]+$/.test(text)) return false;
+  if (element.getClientRects().length !== 1 || generatedPseudoContentIssue(element) !== null) return false;
+  if (!element.matches("a,span,sup,sub,small,b,i,strong,em")) return false;
+
+  // Ordinary numeric links are cloned just like semantic links; event handlers
+  // and editable content require the existing stateful-object fallback.
+  return !element.hasAttribute("contenteditable") &&
+    !Array.from(element.attributes).some(function (attribute) {
+      return attribute.name.toLowerCase().startsWith("on");
+    });
 }
 
 function isCloneSafeOpaqueInlineObject(element: Element): boolean {
@@ -847,7 +866,7 @@ interface LoweringBuilderMethods {
   appendChildren(element: Element, style: InlineStyleContext, depth: number): boolean;
   appendNode(node: Node, style: InlineStyleContext, depth: number): boolean;
   appendElement(element: Element, style: InlineStyleContext, depth: number): boolean;
-  appendOpaqueInlineObject(element: Element, whiteSpace: WhiteSpaceMode): boolean;
+  appendOpaqueInlineObject(element: Element, whiteSpace: WhiteSpaceMode, baselineContainer?: Element): boolean;
   appendSemantic(element: Element, style: InlineStyleContext, depth: number, cjkStrongBaseWeight: number | null): boolean;
   appendText(value: string, style: InlineStyleContext): void;
   appendTextSegment(value: string, style: TextStyle, whiteSpace: WhiteSpaceMode): void;
@@ -975,6 +994,14 @@ LoweringBuilder.prototype.appendElement = function (this: LoweringBuilder, eleme
   // shaping fallback handle Worker-ineligible rich paragraphs.
   if (this.helpers.inlineShapingDecision !== null && this.helpers.inlineShapingProperties.length > 0) {
     const elementValues = collectShapingValues(element, this.helpers.inlineShapingProperties);
+    const numericIndex = this.helpers.inlineShapingProperties.indexOf("font-variant-numeric");
+    const numericObject = numericIndex !== -1 &&
+      elementValues[numericIndex] !== this.inlineShapingParagraphValues[numericIndex] &&
+      isNumericInlineObject(element);
+
+    // Browser-shaped numeric runs retain their real advances, including tabular
+    // digits and fractions; all other shaping differences still fail closed.
+    if (numericObject) elementValues[numericIndex] = this.inlineShapingParagraphValues[numericIndex];
     const decision = this.helpers.inlineShapingDecision(
       tag.toLowerCase(),
       elementValues,
@@ -983,6 +1010,7 @@ LoweringBuilder.prototype.appendElement = function (this: LoweringBuilder, eleme
     if (decision) {
       return this.unsupported(decision.name, decision.detail);
     }
+    if (numericObject) return this.appendOpaqueInlineObject(element, style.whiteSpace, element);
   }
   const inheritedStrongWeight = style.cjkStrongBaseWeight;
   let strongBaseWeight: number | null = null;
@@ -1003,8 +1031,8 @@ LoweringBuilder.prototype.appendElement = function (this: LoweringBuilder, eleme
   return this.appendSemantic(element, elementStyle, depth, strongBaseWeight);
 };
 
-LoweringBuilder.prototype.appendOpaqueInlineObject = function (this: LoweringBuilder, element: Element, whiteSpace: WhiteSpaceMode): boolean {
-  const geometry = parseOpaqueInlineObjectGeometry(measuredOpaqueInlineObjectGeometry(element));
+LoweringBuilder.prototype.appendOpaqueInlineObject = function (this: LoweringBuilder, element: Element, whiteSpace: WhiteSpaceMode, baselineContainer?: Element): boolean {
+  const geometry = parseOpaqueInlineObjectGeometry(measuredOpaqueInlineObjectGeometry(element, baselineContainer));
   if (!geometry) {
     return this.unsupported("InvalidInlineObjectGeometry", element.tagName.toLowerCase());
   }
