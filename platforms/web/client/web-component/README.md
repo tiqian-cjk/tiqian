@@ -43,6 +43,41 @@ npm install @tiqian/web-component@alpha
 请把 `display: block` 放进网站自己的首屏 CSS。这样即使 JavaScript 还没加载或不可用，
 `<tiqian-prose>` 也不会按浏览器默认的行内元素显示。
 
+### 同步重排与打印
+
+`article.relayoutSync()` 会读取当前容器尺寸，在返回前用提椠完成全文排版，并返回成功接管的
+段落数。程序化宿主也可以调用 `context.relayoutSync()`；原有 `context.relayout()` 仍按帧调度。
+同步接口保留原有段落元素，支持已采用的 SSR 快照和混合排版，不创建额外的打印文章副本。
+
+应先等到 `tiqian:ready`，并在打开打印前加载所需字体和样式。在 `beforeprint` 中先应用打印宽度，
+再调用同步接口；关闭预览后恢复屏幕尺寸并再次调用。下面的宽度应与站点的纸张、页边距相匹配：
+
+```js
+const article = document.querySelector("tiqian-prose");
+let previousStyle;
+
+// Register after tiqian:ready and after the required print fonts have loaded.
+window.addEventListener("beforeprint", () => {
+  previousStyle = article.getAttribute("style");
+  article.style.setProperty("width", "180mm", "important");
+  article.relayoutSync({ firstLineIndentIc: 2 });
+});
+
+// Restore the host size before measuring the screen layout again.
+window.addEventListener("afterprint", () => {
+  if (previousStyle == null) article.removeAttribute("style");
+  else article.setAttribute("style", previousStyle);
+  article.relayoutSync({ firstLineIndentIc: 0 });
+});
+```
+
+该接口同步使用已加载的浏览器字体度量，不等待 Worker、字体下载或服务端 replay 字体会话。
+`firstLineIndentIc` 可覆盖段落首行缩进（列表项不缩进）；它与其他排版选项一样保留到下一次重排。
+例如打印正文可设为 `2`，返回屏幕后恢复为 `0`。对已接管的段落，应将 CSS `text-indent` 设为 `0`，
+避免浏览器在提椠已计算的首行位移上再次叠加缩进；未接管的段落仍可使用 `text-indent: 2em`。
+它会取消在途排版并重建全部段落，完成时同步发出 `tiqian:relayout-ready`；不支持的段落仍保留
+可读的原文，并通过原有诊断报告。未连接或 `disabled` 时返回 `0`，首次 ready 前调用会抛错。
+
 提椠默认让原生列表标记保留在正文外侧，并用 `2ic` 作为列表正文缩进。已有站点需要延续自己的
 列表几何时，可以在正文根节点覆盖 `--tq-list-indent`：
 

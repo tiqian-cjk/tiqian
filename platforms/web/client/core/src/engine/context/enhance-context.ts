@@ -31,7 +31,7 @@ import {
 import { paragraphWidthSignature } from "../../sampler/signatures.js";
 import { renderedRawDomParagraphs } from "../raw-dom.js";
 import { destroyRoot, detachRoot } from "../lifecycle.js";
-import { relayout } from "../progressive-drivers.js";
+import { enhance, relayout } from "../progressive-drivers.js";
 import { probeRootContentDrift, reconcileRoot } from "../content-reconcile.js";
 import { globalServices } from "../../services/global-services.js";
 import { createDiagnosisManager } from "./diagnosis-manager.js";
@@ -73,6 +73,11 @@ import { createForeignGuard } from "../enhance/lifecycle/foreign-guard.js";
 import { createProgressiveDispatch } from "../enhance/lifecycle/progressive-dispatch.js";
 import { createInitialEnhance } from "../enhance/lifecycle/initial-enhance.js";
 import { createMount } from "../enhance/lifecycle/mount.js";
+
+/** Typography overrides for one synchronous rebuild. */
+export interface SynchronousRelayoutOptions {
+  firstLineIndentIc?: number;
+}
 
 export interface RawDomParagraphRecord {
   fragment: DocumentFragment | null;  // detached original children
@@ -142,6 +147,8 @@ interface EnhancedElementContext extends ContextCoreBase {
   onReady(callback: EnhancementEventCallback): EnhancementEventUnsubscribe;
   onRelayoutReady(callback: EnhancementEventCallback): EnhancementEventUnsubscribe;
   relayout(): void;
+  /** Rebuild all paragraphs at the live size before returning; fonts must be ready. */
+  relayoutSync(options?: SynchronousRelayoutOptions): number;
   invalidate(reason: number): void;
 }
 
@@ -465,6 +472,68 @@ function createEnhanceContext(element: Element, options?: EnhancementOptions): E
         stateMachine.invalidate(InvalidationReason.ResponsiveCommit);
         stateMachine.invalidate(InvalidationReason.ResponsiveRelayout);
         responsive.scheduleResponsiveGeometryCommit();
+      },
+    },
+    relayoutSync: {
+      value: (options: SynchronousRelayoutOptions = {}) => {
+        if (!root.isConnected || optionsLedger.disabled) return 0;
+        if (!stateMachine.dispatched) throw new Error("Wait for tiqian:ready before relayoutSync");
+        if (options.firstLineIndentIc != null && !Number.isFinite(options.firstLineIndentIc)) {
+          throw new TypeError("firstLineIndentIc must be finite");
+        }
+        const startedAt = Date.now();
+        const currentOptions = contextState.runtimeOptions;
+
+        // Supersede queued work before reclaiming its source. Synchronous
+        // layout uses loaded browser fonts and never waits for a worker.
+        initialEnhance.abortEnhancePipeline();
+        stateMachine.claimEnhanceRequest();
+        globalServices().coordination.layoutJobPool.cancelJob(root);
+        scheduler.setWorkerActive(false);
+        scheduler.cancelFrame(responsive.responsiveCommitCallback());
+        responsive.clearResponsiveRetarget();
+        responsive.dropGridMetrics();
+
+        // Snapshots and mixed snapshot/runtime roots must both yield their
+        // semantic backing; the original paragraph elements stay in place.
+        destroyRoot(context, root);
+        if (isLoadedSnapshotAdopted(root)) restoreLoadedSnapshot(root, context);
+        stateMachine.snapshotAdopted = false;
+        snapshotAdoption.setSnapshotEnhancedCount(0);
+        snapshotAdoption.releaseSnapshotFontSession();
+        root.removeAttribute("data-tiqian-snapshot-render-font");
+        diagnosis.clear("tiqianSnapshotCount");
+
+        // Reset a mixed snapshot's completion-only selector to the full prose
+        // selector, preserving the host's other resolved typography options.
+        const defaults = optionsLedger.resolveEngineOptions(root, { ...optionsLedger.baseEnhanceOptions() });
+        const syncOptions = {
+          ...(currentOptions ?? defaults),
+          ...options,
+          paragraphSelector: defaults.paragraphSelector,
+          snapshotFontSession: null,
+          requireSnapshotLayoutWorker: false,
+        };
+        stateMachine.consumeObservedGeometry();
+        stateMachine.clearInvalidation(InvalidationReason.ResponsiveRelayout);
+        contextState.beginLayoutWork();
+        stateMachine.runtimeActive = true;
+        stateMachine.completionGateOpen = true;
+
+        // The one-shot driver completes every paragraph without frame or
+        // microtask yields. Completion refreshes the normal observer baselines.
+        try {
+          const count = enhance(context, root, syncOptions, true);
+          const durationMs = Date.now() - startedAt;
+          eventChannel.notify("tiqian:relayout-ready", {
+            enhancedCount: count, runtimeEnhancedCount: count, snapshotCount: 0,
+            issueCount: diagnosis.issues.length, durationMs, maxSliceMs: durationMs,
+            relayout: true, stale: false,
+          });
+          return count;
+        } finally {
+          if (stateMachine.workInFlight) contextState.finishLayoutWorkAndObserve();
+        }
       },
     },
     invalidate: {

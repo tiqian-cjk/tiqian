@@ -18,6 +18,7 @@
 // Importing this module registers nothing; explicit hosts call
 // registerTiqianProse() themselves (wc-s6 scope 8).
 import { createEnhanceContext } from "@tiqian/core/src/engine/context/enhance-context.js";
+import type { SynchronousRelayoutOptions } from "@tiqian/core/src/engine/context/enhance-context.js";
 import { OBSERVED_ATTRIBUTES } from "@tiqian/core/src/engine/enhance/options-ledger.js";
 import { INTERNAL_DISPATCH_MARKER } from "@tiqian/core/src/engine/enhance/event-channel.js";
 import type { MarkedCompletionEvent } from "@tiqian/core/src/engine/enhance/event-channel.js";
@@ -95,6 +96,11 @@ class TiqianProseElement extends HTMLElementBase {
 
   rawDomFragmentOf(paragraph: Element): DocumentFragment | null {
     return this.#context.domWriteLayer.rawDomFragmentOf(paragraph);
+  }
+
+  /** Synchronously lay out the existing prose at its current size. */
+  relayoutSync(options?: SynchronousRelayoutOptions): number {
+    return this.#context.relayoutSync(options);
   }
 
   connectedCallback() {
