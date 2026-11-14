@@ -94,36 +94,50 @@ Pages 构建。registry 工具在 boring 仓库构建并随发布资产上传
 
 ## 4. registry 目录模型
 
-registry 树按 `<owner>/<包名>/<版本>/<平台>/metadata.json` 组织。一个包一个目录，
-每个版本下每个平台一个 `metadata.json`。
+registry 树按 `<owner>/<包名>/<版本>/<平台>/metadata.json` 组织。每个版本下每个平台一个
+`metadata.json`。
 
 目录名按平台区分：
 
 - cargo、npm、pub 用包名：`tiqian-engine`、`tiqian-protocol`；pub 把连字符换成下划线，写作 `tiqian_engine`
 - maven 与 swift 用产物名：`tiqian-engine-f32`、`tiqian-engine-f64`
 
-maven 与 swift 的一个版本对应一个具体精度：boring 输出的 POM 把 `groupId` 设为包名、
-`artifactId` 设为产物名，SwiftPM 清单的包名同样是产物名，所以这两个平台按产物名建目录。
+maven 的 `metadata.json` 带 `groupId` 与 `artifacts`：`groupId` 是这一版的 Maven 组，
+`artifacts` 数组每一项为 `{file, url, artifactId}`，`file` 是发布资产的文件名，`url` 是
+该文件的下载地址，`artifactId` 是这一项所属的 Maven 坐标。`artifactId` 可以省略，省略时
+取顶层的 `name`，这一项对应旧模型里一个版本只有一个 artifactId 的形状。一个包的同一个
+版本可以带多个 artifactId，Kotlin Multiplatform 的根坐标与八个 target 各占一个：根坐标
+`tiqian-engine`，加 `tiqian-engine-jvm`、`tiqian-engine-android`、`tiqian-engine-iosarm64`、
+`tiqian-engine-iossimulatorarm64`、`tiqian-engine-macosarm64`、`tiqian-engine-linuxx64`、
+`tiqian-engine-linuxarm64` 与 `tiqian-engine-mingwx64`。SwiftPM 清单的包名是产物名，
+swift 因此按产物名建目录。
+
+站点为每个 artifactId 写一份 `maven/<groupId 的点换成斜杠>/<artifactId>/maven-metadata.xml`
+与同名的 `.sha1`，这些文档在同一个 groupId 目录下并列。`_redirects` 为每个 Maven 制品文件
+写一条规则，路径同样带 artifactId：`/maven/<groupPath>/<artifactId>/:version/<file>`。
+
 cargo 的索引路径、依赖解析结果、tarball 名与下载重定向都取包名，`tiqian-engine` 的 crate
 因此按包名建目录，文件名是 `tiqian-engine-<版本>.crate`。
 
 `boring pack` 的 registry 写出（`packages/driver/src/driver/RegistryMetadata.hx`）为每个
 bundle 选择目录名与产物文件：maven 与 swift 取 `haxeArgs` 里的 `package-artifact-stem`
 （未设置时取包名），cargo、npm 与 pub 取 `bundle.package` 的 `name`，pub 再把连字符
-换成下划线。engine-rust-f32 在 `haxeArgs` 里带 `-D package-artifact-stem=tiqian-engine-f32`，
-归档文件名与归档顶层目录因此带 f32 后缀；它打包的内容与 engine-rust-f64 相同，产物名与
-包名不同，所以它不写 cargo 条目，cargo 条目只由 engine-rust-f64 输出。
+换成下划线。Maven 的 artifacts 从 Gradle 发布目录采集，`artifactId` 取版本目录上一级的
+目录名，`groupId` 取该 artifactId 目录以上各层目录名用点连接得到的字段。engine-rust-f32
+在 `haxeArgs` 里带 `-D package-artifact-stem=tiqian-engine-f32`，归档文件名与归档顶层目录
+因此带 f32 后缀；它打包的内容与 engine-rust-f64 相同，产物名与包名不同，所以它不写 cargo
+条目，cargo 条目只由 engine-rust-f64 输出。
 
 registry 工具（`packages/registry/src/registry/Core.hx`）校验每个版本下每个平台只有一个
-`metadata.json`，并拒绝版本不一致、平台不一致、未知平台等错误。
+`metadata.json`，并拒绝版本不一致、平台不一致、未知平台与 artifactId 不是单个路径段等错误。
 
 站点生成读取树里保留的全部版本。`Core.hx` 的 `scan` 遍历
 `<owner>/<包名>/<版本>/<平台>/metadata.json`，`writeNpm`、`writePub`、`writeCargo`、
-`writeSwift` 与 `writeMaven` 分别为一个包列出扫描到的每个版本；`latest` 只决定 npm
-`dist-tags`、pub `latest` 与 maven `<latest>`、`<release>` 指向哪个版本。合并写入
-因此让站点同时列出历史版本与最新版本，registry 工具不需要修改。历史版本会增加
-`Core.hx:470-517` 生成的 `_redirects` 行数，`Core.hx:512-515` 在静态行数超过 2000 时
-让站点构建失败。
+`writeSwift` 与 `writeMaven` 分别为一个包列出扫描到的版本，`writeMaven` 按 artifactId
+分组后为每个 artifactId 列出它所属的版本；`latest` 只决定 npm `dist-tags`、pub `latest`
+与 maven `<latest>`、`<release>` 指向哪个版本。合并写入让站点同时列出历史版本与最新版本，
+registry 工具不需要修改。历史版本会增加 `Core.hx:554-565` 生成的 `_redirects` 行数，
+`Core.hx:574-577` 在静态行数超过 2000 或动态行数超过 100 时让站点构建失败。
 
 ## 5. Swift 归档
 
