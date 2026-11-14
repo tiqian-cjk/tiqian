@@ -30,6 +30,7 @@ import type {
   TypographyInvalidationSource,
 } from "../../sampler/observers.js";
 import { isLoadedSnapshotAdopted, loadedAdoptedSnapshotLiveIssue } from "../../sampler/snapshot/loaded-snapshots.js";
+import { collectFontFaces } from "../../sampler/snapshot/precomputed.js";
 import { computeCjkDashOutcome } from "../loaders/cjk-dash.js";
 import type { CjkDashShapingOutcome } from "../loaders/cjk-dash.js";
 import { InvalidationReason } from "./state.js";
@@ -128,8 +129,31 @@ function createTypographyManager(
   let typographyFrame: FrameTaskCallback | null = null;
   let initialFontRetry: InitialFontRetryController | null = null;
   let lastTypography = "";
+  let lastFontState = "";
+  let layoutFontState = "";
   let cjkDashCapability: CjkDashShapingOutcome | null = null;
   let browserFallback: BrowserFallbackDescriptor | null = null;
+
+  // Stylesheet updates can recreate equivalent FontFace objects after navigation.
+  // Compare sources and load states, rather than treating every loadingdone as new metrics.
+  function fontState(): string {
+    const documentObject = root.ownerDocument;
+    const collection = collectFontFaces(documentObject);
+    if (collection.unverifiable) return "";
+
+    // A real face arrival, failure, or source replacement still invalidates layout.
+    const states = Array.from(documentObject.fonts, (face) => [
+      face.family, face.style, face.weight, face.stretch, face.unicodeRange,
+      face.ascentOverride, face.descentOverride, face.lineGapOverride,
+      face.featureSettings, (face as FontFace & { variationSettings?: string }).variationSettings, face.status,
+    ]);
+    return JSON.stringify([collection.faces, states]);
+  }
+
+  function fontStateChanged(baseline: string): boolean {
+    const current = fontState();
+    return !current || current !== baseline;
+  }
 
   function establishRuntime(runtimeRoot: Element, resolved: ResolvedEnhanceOptions): void {
     cjkDashCapability = computeCjkDashOutcome(runtimeRoot, {
@@ -223,7 +247,7 @@ function createTypographyManager(
             return;
           }
           if (snapshotLiveIssue) diagnosis.signal("tiqianSnapshotLiveIssue", snapshotLiveIssue);
-          const relevantFaceLoaded = fontLoadingAffectsTypography(
+          const relevantFaceLoaded = fontStateChanged(lastFontState) && fontLoadingAffectsTypography(
             event as FontLoadingEventLike,
             typographyElements(root),
           );
@@ -244,6 +268,7 @@ function createTypographyManager(
   }
 
   function observeLayoutWorkInputs(): void {
+    layoutFontState = fontState();
     if (!layoutWorkTypographyInvalidation) {
       layoutWorkTypographyInvalidation = createLayoutWorkTypographyInvalidationSource(root, {
         onMutation: (records) => {
@@ -282,6 +307,7 @@ function createTypographyManager(
         onFontEvent: (event) => {
           if (
             stateMachine.workInFlight && stateMachine.work.usesCapturedMeasure &&
+            fontStateChanged(layoutFontState) &&
             fontLoadingAffectsTypography(event as FontLoadingEventLike, typographyElements(root))
           ) cancelCapturedLayoutForTypographyChange();
         },
@@ -305,6 +331,7 @@ function createTypographyManager(
   // host change still differs from it.
   function advanceTypographyBaselineAfterCancellation(): void {
     lastTypography = typographySignature(root);
+    lastFontState = fontState();
   }
 
   function cancelCapturedLayoutForTypographyChange(): void {
@@ -351,6 +378,7 @@ function createTypographyManager(
     },
     setLastTypography(value: string) {
       lastTypography = value;
+      lastFontState = fontState();
     },
     advanceTypographyBaselineAfterCancellation,
     establishRuntime,
