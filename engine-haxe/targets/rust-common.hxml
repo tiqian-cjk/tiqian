@@ -1,5 +1,5 @@
-# Rust-specific configuration shared by the f32 and f64 generation entries.
-# Included by rust-f32.hxml and rust-f64.hxml.
+# Rust-specific configuration shared by every Rust generation entry.
+# Included by rust.hxml.
 engine-haxe/targets/common.hxml
 engine-haxe/targets/classes.hxml
 -cp .haxelib/boring/git/packages/compiler/reflaxe/rust/std-shadow

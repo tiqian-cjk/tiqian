@@ -116,7 +116,7 @@ npm install --no-audit --no-fund
 (cd platforms/web/client/engine-runtime && npm test)
 ```
 
-Rust 侧的 `engine-gen` 是构建期生成物（`node scripts/generate-engine-gen.mjs`，产物在 `engine-haxe/out/engine-rust-f64/gen`），不入库；生成器需要 `nix develop` 提供的 `boring` 驱动。先跑生成器再 `cargo build -p tiqian`。JS 侧的 `engine-gen` 仍入库，缺口见 `t-mwckjk9n-orhm`。
+Rust 侧的 `engine-gen` 是构建期生成物（`node scripts/generate-engine-gen.mjs`，产物在 `engine-haxe/out/engine-rust/gen`），不入库；生成器需要 `nix develop` 提供的 `boring` 驱动。先跑生成器再 `cargo build -p tiqian`。JS 侧的 `engine-gen` 仍入库，缺口见 `t-mwckjk9n-orhm`。
 
 根目录 `npm install` 安装所有 workspace 依赖；预编译平台二进制的 optional dependencies 未发布到 npm 仓库，lock 文件不包含其解析条目，npm 11 以上版本执行 `npm ci` 会报错，因此统一使用 `npm install`。
 

@@ -1,5 +1,5 @@
 # ADR 0050: direct Rust consumption of the generated layout engine. The
-# generated crate comes from the boring engine-rust-f64 bundle and is not
+# generated crate comes from the boring engine-rust bundle and is not
 # committed; run `node scripts/generate-engine-gen.mjs --target rust` inside
 # `nix develop` before building this crate.
 [package]

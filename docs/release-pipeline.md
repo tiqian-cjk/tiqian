@@ -66,7 +66,7 @@ python3 tools/align-package-versions.py "${GITHUB_REF_NAME#v}"
 `boring pack` 在写出每个 bundle 的制品之后，把 registry 树写到 `$RUNNER_TEMP/registry-tree`：
 
 ```shell
-nix develop -c bash -c "boring pack protocol-rust protocol-ts protocol-kotlin protocol-swift protocol-dart engine-rust-f64 ts kotlin-f32 kotlin-f64 swift-f32 swift-f64 dart --registry-out "$RUNNER_TEMP/registry-tree" --owner "${{ github.repository_owner }}" --repo "${{ github.event.repository.name }}" --asset-base "${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.ref_name }}""
+nix develop -c bash -c "boring pack protocol-rust protocol-ts protocol-kotlin protocol-swift protocol-dart engine-rust ts kotlin-f32 kotlin-f64 swift-f32 swift-f64 dart --registry-out "$RUNNER_TEMP/registry-tree" --owner "${{ github.repository_owner }}" --repo "${{ github.event.repository.name }}" --asset-base "${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.ref_name }}""
 ```
 
 `--owner` 取仓库所有者，`--repo` 取仓库名，`--asset-base` 取当前标签的
@@ -123,10 +123,9 @@ cargo 的索引路径、依赖解析结果、tarball 名与下载重定向都取
 bundle 选择目录名与产物文件：maven 与 swift 取 `haxeArgs` 里的 `package-artifact-stem`
 （未设置时取包名），cargo、npm 与 pub 取 `bundle.package` 的 `name`，pub 再把连字符
 换成下划线。Maven 的 artifacts 从 Gradle 发布目录采集，`artifactId` 取版本目录上一级的
-目录名，`groupId` 取该 artifactId 目录以上各层目录名用点连接得到的字段。engine-rust-f32
-在 `haxeArgs` 里带 `-D package-artifact-stem=tiqian-engine-f32`，归档文件名与归档顶层目录
-因此带 f32 后缀；它打包的内容与 engine-rust-f64 相同，产物名与包名不同，所以它不写 cargo
-条目，cargo 条目只由 engine-rust-f64 输出。
+目录名，`groupId` 取该 artifactId 目录以上各层目录名用点连接得到的字段。engine-rust
+不设置 `package-artifact-stem`，cargo 目录名与文件名都取包名 `tiqian-engine`；精度在 Rust
+编译期由 cargo feature `f32` 选择，不再有第二个 Rust 制品。
 
 registry 工具（`packages/registry/src/registry/Core.hx`）校验每个版本下每个平台只有一个
 `metadata.json`，并拒绝版本不一致、平台不一致、未知平台与 artifactId 不是单个路径段等错误。
@@ -233,6 +232,10 @@ pub type TiqianFloat = f64;
 crate 的 `Cargo.toml` 声明 `[features] default = []` 与 `f32 = []`。cargo 从索引条目读取
 依赖的 feature 列表，索引条目必须带 `"features": {"f32": []}`，缺少时报
 `does not have that feature`。
+
+生成树的 f32 覆盖由 `scripts/test-engine-rust.sh` 提供：它对同一份生成树依次运行
+`cargo test` 与 `cargo test --features f32`，`.github/workflows/ci-native-precompute.yml`
+的 rust job 调用该脚本。改动生成入口或 bundle 时，这一轮不依赖第二个 bundle。
 
 以下 cargo 输出在本地 sparse registry 上实测（cargo 1.97.1，crate 由 boring 064eed863 打包）。
 

@@ -118,6 +118,10 @@ jobs:
         run: |
           cargo build --manifest-path platforms/web/server/precompute/Cargo.toml
           cargo test --manifest-path platforms/web/server/precompute/Cargo.toml
+      - name: Test the generated engine with the f32 cargo feature
+        # One generated tree serves both precisions: the second round selects
+        # f32 through the cargo feature, so no second generation is needed.
+        run: bash scripts/test-engine-rust.sh platforms/web/server/precompute/engine-gen
 
   # ADR 0053 F4 (DualLoweringStance): the shared golden corpus binds both
   # prepared-dom implementations to the same bytes. The rust lane runs inside

@@ -69,13 +69,7 @@ ECOSYSTEM_STATE = {
 # bundle that is neither published by its ecosystem nor listed here fails the
 # check, so an unclaimed bundle cannot drop out of the release without a
 # recorded decision.
-EXCLUDED_BUNDLES = {
-    "engine-rust-f32": (
-        "the f32 companion of tiqian-engine: it writes the same crate payload "
-        "under a different file-name stem, and the tiqian-engine cargo entry "
-        "carries the f32 feature"
-    ),
-}
+EXCLUDED_BUNDLES = {}
 
 # The install artifact each target writes beside its output tree
 # (boring packages/compiler/PackageArtifacts.hx). Maven writes a repository

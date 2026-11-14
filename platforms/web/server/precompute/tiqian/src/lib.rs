@@ -2,7 +2,7 @@
 //! Stage1 cutover to the boring engine-rust target).
 //!
 //! The engine lives in the generated crate `tiqian-engine-gen` (bundle
-//! `engine-rust-f64`, sources under engine-haxe/out/engine-rust-f64/gen).
+//! `engine-rust`, sources under engine-haxe/out/engine-rust/gen).
 //! The `engine` module adapts it into this crate's error surface and keeps
 //! the dependency-injection construction of the engine. The former C ABI
 //! layer (packed `LayoutRequest` bytes, `FontBackendVtable`, packed shape

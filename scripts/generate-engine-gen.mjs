@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Generates the engine trees that used to be committed:
-//   platforms/web/server/precompute/engine-gen    (bundle engine-rust-f64)
+//   platforms/web/server/precompute/engine-gen    (bundle engine-rust)
 //   platforms/web/client/engine-runtime/engine-gen (bundles ts + protocol-ts)
 //
 // Both directories are build products and are gitignored. Run the script
@@ -59,8 +59,8 @@ if (target === "ts") {
   }
   console.log(`generate-engine-gen: wrote ${engineGen}`);
 } else if (target === "rust") {
-  runDriver("engine-rust-f64");
-  const generated = join(outRoot, "engine-rust-f64", "gen");
+  runDriver("engine-rust");
+  const generated = join(outRoot, "engine-rust", "gen");
   if (!existsSync(generated)) {
     throw new Error(`generate-engine-gen: expected driver output at ${generated}`);
   }
@@ -68,7 +68,7 @@ if (target === "ts") {
   rmSync(rustGen, { recursive: true, force: true });
   mkdirSync(rustGen, { recursive: true });
   cpSync(generated, rustGen, { recursive: true });
-  const tests = join(outRoot, "engine-rust-f64", "gen-tests");
+  const tests = join(outRoot, "engine-rust", "gen-tests");
   if (existsSync(tests)) {
     cpSync(tests, rustGen, { recursive: true });
   }

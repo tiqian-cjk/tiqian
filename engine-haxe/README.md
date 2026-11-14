@@ -23,7 +23,7 @@
   `common.hxml` 提供引擎配置共用的
   类路径与宏，`kotlin-common.hxml` 等文件补充各目标的编译器与运行时
   参数，精度入口沿用这些设置。`protocol-*.hxml` 单列协议根类；
-  `rust-f32.hxml` 和 `rust-f64.hxml` 是 `boring.json` 正在使用的配置。
+  `rust.hxml` 是 `boring.json` 正在使用的 Rust 入口。
 - `boring.json`：生成与测试配置驱动器（boring feature spec 59）的项目文件，声明本目录
   的目标、精度及命名源码范围。`engine` 范围从六个包发现 `*Test.hx`，加上两个
   runtime 根类型；八个引擎配置共用它。生成与测试以此文件为准。
