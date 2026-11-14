@@ -21,6 +21,7 @@ import type {
   SnapshotParagraphInput,
 } from "./precompute.js";
 import type { CacheBridge, CacheRecord, SubmissionItem } from "./cache.js";
+import { backfillRenderFields } from "./precompute.js";
 import { packRecords, submissionItem, unpackRecords } from "./cache.js";
 import { KIND_CONTRACT, KIND_SNAPSHOT, type CanonicalKind } from "./canonical.js";
 
@@ -173,7 +174,9 @@ function artifactSha(artifact: Uint8Array): Buffer {
 }
 
 function parseEntry(artifact: Uint8Array): PreparedEntry {
-  return JSON.parse(Buffer.from(artifact).toString("utf8")) as PreparedEntry;
+  const entry = JSON.parse(Buffer.from(artifact).toString("utf8")) as PreparedEntry;
+  // Native cache bytes retain their digest; snapshot render fields belong to the TS adapter.
+  return backfillRenderFields(entry);
 }
 
 /** One store blob holds exactly one record. */

@@ -439,10 +439,9 @@ function computeRenderArtifact(
 /**
  * Overwrites the render fields of a prepared entry with the Node-computed
  * values, then freezes the entry. Unsupported entries pass through untouched;
- * the font-contract lanes keep their own freezeEntry call and never reach this
- * helper.
+ * font-contract entries carry renderable capture plans and use the same fields.
  */
-function backfillRenderFields(entry: PreparedEntry): PreparedEntry {
+export function backfillRenderFields(entry: PreparedEntry): PreparedEntry {
   if (entry.status !== "prepared") {
     return freezeEntry(entry);
   }
@@ -480,7 +479,7 @@ export async function createPrecomputer(options: CreatePrecomputerOptions): Prom
       ).map(backfillRenderFields);
     },
     async prepareFontContract(input: FontContractInput): Promise<PreparedEntry> {
-      return freezeEntry(
+      return backfillRenderFields(
         parse<PreparedEntry>(addon.prepareFontContract(handle, JSON.stringify(input ?? {}))),
       );
     },
@@ -489,7 +488,7 @@ export async function createPrecomputer(options: CreatePrecomputerOptions): Prom
     ): Promise<PreparedEntry[]> {
       return parse<PreparedEntry[]>(
         addon.prepareFontContracts(handle, JSON.stringify(Array.from(inputs ?? []))),
-      ).map(freezeEntry);
+      ).map(backfillRenderFields);
     },
     close(): void {
       addon.closePrecomputer(handle);
