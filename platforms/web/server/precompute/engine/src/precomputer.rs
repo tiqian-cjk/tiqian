@@ -421,11 +421,18 @@ fn capture(
     // is total; Equal covers a NaN that cannot occur.
     boundaries.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
 
+    // Match browser lowering: prose link labels use word shaping rather than
+    // the character fallback intended for URLs and inline code.
+    let source_units: Vec<u16> = text.encode_utf16().collect();
     let line_break_spans: Vec<LineBreakSpanInput> = semantics
         .iter()
         .filter(|span| {
             let tag = span.tag_name.to_lowercase();
-            tag == "a" || tag == "code"
+            tag == "code"
+                || (tag == "a"
+                    && !source_units[span.start as usize..span.end as usize]
+                        .iter()
+                        .any(|unit| matches!(unit, 9 | 10 | 12 | 13 | 32)))
         })
         .map(|span| {
             // Offsets were validated against the text length; the error arm
