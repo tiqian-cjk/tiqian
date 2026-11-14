@@ -2761,10 +2761,11 @@ export async function tryAdoptPrecomputedSnapshot(
         while (clone.firstChild) paragraph.appendChild(clone.firstChild);
       }
       const width = contentBoxWidth(paragraph);
-      if (
-        !snapshotEntryWidthMatches(width, entry) ||
-        !computedTypographyMatches(paragraph, entry.typography, true, manifest.renderFontFamilies)
-      ) throw new Error("RenderedSnapshotHostContractMismatch");
+      const typographyIssue = computedTypographyIssue(paragraph, entry.typography, true, manifest.renderFontFamilies);
+      if (!snapshotEntryWidthMatches(width, entry)) {
+        throw new Error("RenderedSnapshotHostContractMismatch:width");
+      }
+      if (typographyIssue) throw new Error(`RenderedSnapshotHostContractMismatch:${typographyIssue}`);
       const issue = renderedPreparedParagraphIssue(paragraph, width);
       if (issue) throw new Error(issue.replace("RenderedPreparedParagraph", "RenderedSnapshot"));
       if (anchors) anchors.compensate(commitAnchor);
