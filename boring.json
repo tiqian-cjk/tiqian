@@ -105,6 +105,16 @@
       }
     },
     {
+      "id": "shared-ts",
+      "compare": false,
+      "target": "ts",
+      "rootsFile": "engine-haxe/targets/shared-ts.hxml",
+      "package": { "name": "tiqian-shared", "version": "0.1.0", "license": "MPL-2.0" },
+      "run": {
+        "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
+      }
+    },
+    {
       "id": "protocol-rust",
       "compare": false,
       "target": "rust",

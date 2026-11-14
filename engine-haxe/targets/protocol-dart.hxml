@@ -6,11 +6,10 @@
 -cp .haxelib/boring/git/samples
 -cp engine-haxe/src
 -cp engine-haxe/macros
--cp shared-haxe/src
 --macro haxe.macro.Compiler.addGlobalMetadata('org.tiqian', '@:build(std.RecordMember.build())')
 -cp .haxelib/boring/git/packages/compiler/reflaxe/dart/std-shadow
 -cp .haxelib/boring/git/packages/compiler/reflaxe/dart
---macro Intercept.run(['engine-haxe/src', '.haxelib/boring/git/samples', 'shared-haxe/src/org/tiqian/shared/prepared_dom'])
+--macro Intercept.run(['engine-haxe/src', '.haxelib/boring/git/samples'])
 --macro dartcompiler.Compiler.use()
 -D dart-output=engine-haxe/out/protocol-dart-gen
 -D dart-test-output=engine-haxe/out/protocol-dart-gen-tests
