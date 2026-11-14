@@ -1,4 +1,5 @@
 import { createServerReplayFontSession } from "./browser-font-replay.js";
+import { loadBrowserFontFaces } from "./font-face-loader.js";
 import type {
   ReplayFontSessionFace,
   ServerReplayFontReplay,
@@ -864,7 +865,7 @@ export function createBrowserFontSessionLoader(options: BrowserFontSessionLoader
     const { state } = token;
     const fontSet = root?.ownerDocument?.fonts;
     if (typeof fontSet?.load !== "function") fail("RenderFontFaceSetUnavailable");
-    state.renderFontsPromise ??= Promise.all(state.renderFontFaces.map((face) => fontSet.load(
+    state.renderFontsPromise ??= Promise.all(state.renderFontFaces.map((face) => loadBrowserFontFaces(fontSet,
       `${face.style} ${face.weight} 16px ${JSON.stringify(face.family)}`,
       face.text,
     ))).then((results) => {

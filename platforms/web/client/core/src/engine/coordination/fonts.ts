@@ -19,6 +19,7 @@
 import { FONT_REPLAY_REVISION } from "../../sampler/snapshot/snapshot-schema.js";
 import type { SnapshotFontFallbackLoader } from "../loaders/font-loader.js";
 import type { BrowserFontSessionLoader } from "../../measurement/browser-fonts.js";
+import type { BrowserFontFaceLoader } from "../../measurement/font-face-loader.js";
 import type { ReplayRegistry } from "../../measurement/browser-font-replay.js";
 import type {
   DeclaredFaceEntry,
@@ -26,6 +27,7 @@ import type {
 } from "../../sampler/snapshot/declared-faces.js";
 
 export interface FontCoordinationState {
+  fontFaceLoader?: BrowserFontFaceLoader;
   snapshotFontFallbackPromise: Promise<SnapshotFontFallbackLoader> | undefined;
   declaredFacesEntries: Map<string, DeclaredFaceEntry>;
   declaredFacesChangeListeners: Set<DeclaredFaceVoidCallbackFn>;

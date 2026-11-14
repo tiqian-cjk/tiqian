@@ -1,3 +1,4 @@
+import { loadBrowserFontFaces } from "../../measurement/font-face-loader.js";
 type SchedulerPostTaskCallback = () => void;
 type SchedulerPostTaskOptions = { priority: string };
 type SchedulerPostTask = (cb: SchedulerPostTaskCallback, opts: SchedulerPostTaskOptions) => Promise<void>;
@@ -1730,7 +1731,7 @@ async function validateFontEvidenceGroups(
   }
 
   const loaded = await Promise.all(Array.from(loadRequests.values(), async (request) =>
-    documentObject.fonts?.load?.(
+    loadBrowserFontFaces(documentObject.fonts,
       request.descriptor,
       Array.from(request.coverage).join(""),
     )));
