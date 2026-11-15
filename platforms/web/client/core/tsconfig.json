@@ -9,6 +9,13 @@
     "declaration": true,
     "composite": true,
     "verbatimModuleSyntax": true,
+    // @tiqian/protocol and @tiqian/shared are TypeScript source trees whose
+    // internal imports end in ".ts" (the boring TypeScript emitter appends
+    // the suffix: TsImports.hx:321). This project emits JavaScript, so
+    // allowImportingTsExtensions is unavailable (TS5096 requires noEmit or
+    // emitDeclarationOnly); rewriteRelativeImportExtensions is the
+    // emit-compatible switch and rewrites those specifiers to ".js".
+    "rewriteRelativeImportExtensions": true,
     "skipLibCheck": true,
     "types": ["node"]
   },
