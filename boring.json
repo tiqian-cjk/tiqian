@@ -58,7 +58,7 @@
       "target": "ts",
       "sourceSet": "engine",
       "rootsFile": "engine-haxe/targets/ts.hxml",
-      "package": { "name": "tiqian-engine", "version": "0.1.0", "license": "MPL-2.0" },
+      "package": { "name": "tiqian-engine", "npmName": "@tiqian/engine", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -100,7 +100,7 @@
       "compare": false,
       "target": "ts",
       "rootsFile": "engine-haxe/targets/protocol-ts.hxml",
-      "package": { "name": "tiqian-protocol", "version": "0.1.0", "license": "MPL-2.0" },
+      "package": { "name": "tiqian-protocol", "npmName": "@tiqian/protocol", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -110,7 +110,7 @@
       "compare": false,
       "target": "ts",
       "rootsFile": "engine-haxe/targets/shared-ts.hxml",
-      "package": { "name": "tiqian-shared", "version": "0.1.0", "license": "MPL-2.0" },
+      "package": { "name": "tiqian-shared", "npmName": "@tiqian/shared", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }

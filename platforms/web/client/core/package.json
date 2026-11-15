@@ -138,8 +138,8 @@
   },
   "dependencies": {
     "@tiqian/ffi": "0.1.0-alpha.8",
-    "tiqian-protocol": "workspace:*",
-    "tiqian-shared": "workspace:*"
+    "@tiqian/protocol": "workspace:*",
+    "@tiqian/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "22.15.29",

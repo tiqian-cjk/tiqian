@@ -2,7 +2,7 @@
 // from the package root; root paths remain as compatibility re-export shims.
 //
 // The lowering itself (string markup, evidence overlays, the prepared paragraph
-// artifact) is generated from Haxe into the tiqian-shared package. This module keeps
+// artifact) is generated from Haxe into the @tiqian/shared package. This module keeps
 // what the generated layer cannot hold: plan wire parsing and validation,
 // semantic normalization, live-source and inline-object DOM swaps, the
 // value-style registry, and the typed-to-wire artifact serialization.
@@ -20,23 +20,23 @@ import type {
   LiveSemanticSpan,
   SnapshotSemanticSpan,
 } from "./snapshot-source.js";
-import { EvidenceDecorationKind } from "tiqian-shared/org/tiqian/shared/prepared_dom/EvidenceDecorationKind";
-import { PreparedArtifact } from "tiqian-shared/org/tiqian/shared/prepared_dom/PreparedArtifact";
-import { PreparedDom as GeneratedPreparedDom } from "tiqian-shared/org/tiqian/shared/prepared_dom/PreparedDom";
-import type { AttributeEntry as GeneratedAttributeEntry } from "tiqian-shared/org/tiqian/shared/prepared_dom/AttributeEntry";
-import type { BopomofoZone as GeneratedBopomofoZone } from "tiqian-shared/org/tiqian/shared/prepared_dom/BopomofoZone";
-import type { EvidenceDecorationSegment as GeneratedEvidenceDecorationSegment } from "tiqian-shared/org/tiqian/shared/prepared_dom/EvidenceDecorationSegment";
-import type { EvidenceEmphasisDot as GeneratedEvidenceEmphasisDot } from "tiqian-shared/org/tiqian/shared/prepared_dom/EvidenceEmphasisDot";
-import type { MarkupArtifact as GeneratedMarkupArtifact } from "tiqian-shared/org/tiqian/shared/prepared_dom/MarkupArtifact";
-import type { PreparedArtifactOptions as GeneratedPreparedArtifactOptions } from "tiqian-shared/org/tiqian/shared/prepared_dom/PreparedArtifactOptions";
-import type { PreparedArtifactResult as GeneratedPreparedArtifactResult } from "tiqian-shared/org/tiqian/shared/prepared_dom/PreparedArtifactResult";
-import type { PreparedPlan as GeneratedPreparedPlan } from "tiqian-shared/org/tiqian/shared/prepared_dom/PreparedPlan";
-import type { PreparedPlanCell as GeneratedPreparedPlanCell } from "tiqian-shared/org/tiqian/shared/prepared_dom/PreparedPlanCell";
-import type { PreparedPlanLine as GeneratedPreparedPlanLine } from "tiqian-shared/org/tiqian/shared/prepared_dom/PreparedPlanLine";
-import type { PreparedRenderTextSpan as GeneratedPreparedRenderTextSpan } from "tiqian-shared/org/tiqian/shared/prepared_dom/PreparedRenderTextSpan";
-import type { PreparedSemanticSpan as GeneratedPreparedSemanticSpan } from "tiqian-shared/org/tiqian/shared/prepared_dom/PreparedSemanticSpan";
-import type { RubyAnnotation as GeneratedRubyAnnotation } from "tiqian-shared/org/tiqian/shared/prepared_dom/RubyAnnotation";
-import type { StyleDelta as GeneratedStyleDelta } from "tiqian-shared/org/tiqian/shared/prepared_dom/StyleDelta";
+import { EvidenceDecorationKind } from "@tiqian/shared/org/tiqian/shared/prepared_dom/EvidenceDecorationKind";
+import { PreparedArtifact } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedArtifact";
+import { PreparedDom as GeneratedPreparedDom } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedDom";
+import type { AttributeEntry as GeneratedAttributeEntry } from "@tiqian/shared/org/tiqian/shared/prepared_dom/AttributeEntry";
+import type { BopomofoZone as GeneratedBopomofoZone } from "@tiqian/shared/org/tiqian/shared/prepared_dom/BopomofoZone";
+import type { EvidenceDecorationSegment as GeneratedEvidenceDecorationSegment } from "@tiqian/shared/org/tiqian/shared/prepared_dom/EvidenceDecorationSegment";
+import type { EvidenceEmphasisDot as GeneratedEvidenceEmphasisDot } from "@tiqian/shared/org/tiqian/shared/prepared_dom/EvidenceEmphasisDot";
+import type { MarkupArtifact as GeneratedMarkupArtifact } from "@tiqian/shared/org/tiqian/shared/prepared_dom/MarkupArtifact";
+import type { PreparedArtifactOptions as GeneratedPreparedArtifactOptions } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedArtifactOptions";
+import type { PreparedArtifactResult as GeneratedPreparedArtifactResult } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedArtifactResult";
+import type { PreparedPlan as GeneratedPreparedPlan } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedPlan";
+import type { PreparedPlanCell as GeneratedPreparedPlanCell } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedPlanCell";
+import type { PreparedPlanLine as GeneratedPreparedPlanLine } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedPlanLine";
+import type { PreparedRenderTextSpan as GeneratedPreparedRenderTextSpan } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedRenderTextSpan";
+import type { PreparedSemanticSpan as GeneratedPreparedSemanticSpan } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedSemanticSpan";
+import type { RubyAnnotation as GeneratedRubyAnnotation } from "@tiqian/shared/org/tiqian/shared/prepared_dom/RubyAnnotation";
+import type { StyleDelta as GeneratedStyleDelta } from "@tiqian/shared/org/tiqian/shared/prepared_dom/StyleDelta";
 import type { EnhancedElementContext } from "../../engine/context/enhance-context.js";
 
 // --- Internal types ---

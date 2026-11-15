@@ -1,13 +1,13 @@
 // Field and issue-name equality between the generated host request model
-// (tiqian-protocol, driver bundle protocol-ts) and the domain contract the
+// (@tiqian/protocol, driver bundle protocol-ts) and the domain contract the
 // two replaced lanes publish (the retired ParagraphWireCodec.kt:279-297,
 // precompute/engine/src/paragraph.rs:72-131). Run:
 //   (cd platforms/web/server/core && npm test -- paragraph-request)
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ParagraphRequestChecks } from "tiqian-protocol/org/tiqian/protocol/ParagraphRequestChecks";
-import type { ParagraphRequest } from "tiqian-protocol/org/tiqian/protocol/ParagraphRequest";
-import { ParagraphRequestException } from "tiqian-protocol/org/tiqian/protocol/ParagraphRequestException";
+import { ParagraphRequestChecks } from "@tiqian/protocol/org/tiqian/protocol/ParagraphRequestChecks";
+import type { ParagraphRequest } from "@tiqian/protocol/org/tiqian/protocol/ParagraphRequest";
+import { ParagraphRequestException } from "@tiqian/protocol/org/tiqian/protocol/ParagraphRequestException";
 
 const ideographicSpace = String.fromCodePoint(0x3000);
 const nbsp = String.fromCodePoint(0x00a0);

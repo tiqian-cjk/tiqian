@@ -1,6 +1,6 @@
 // The TypeScript adapter of the single-source canonical encoder (ADR 0052).
 // The byte form itself lives in the Haxe module org.tiqian.protocol.Canonical
-// and arrives through the generated tree in the tiqian-protocol package
+// and arrives through the generated tree in the @tiqian/protocol package
 // (driver bundle protocol-ts). The bytes
 // are the hash preimage of the cache layers and the content of the binary
 // bridge; golden vectors in test/canonical.test.ts pin the same hex strings
@@ -14,9 +14,9 @@
 
 import { createHash } from "node:crypto";
 
-import { Canonical } from "tiqian-protocol/org/tiqian/protocol/Canonical";
-import type { WireField } from "tiqian-protocol/org/tiqian/protocol/WireField";
-import type { WireValue } from "tiqian-protocol/org/tiqian/protocol/WireValue";
+import { Canonical } from "@tiqian/protocol/org/tiqian/protocol/Canonical";
+import type { WireField } from "@tiqian/protocol/org/tiqian/protocol/WireField";
+import type { WireValue } from "@tiqian/protocol/org/tiqian/protocol/WireValue";
 
 /** Snapshot paragraph submission: carries `maxWidthPx`. */
 export const KIND_SNAPSHOT = 0;

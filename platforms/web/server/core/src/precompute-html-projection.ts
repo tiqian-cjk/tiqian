@@ -10,9 +10,9 @@
 // survives the fold (a semantic paragraph stays with the host and declines the
 // snapshot). The semantic ranges are still collected because an element whose
 // range collapses to nothing in the fold does not count.
-import type { DomAttribute } from "tiqian-shared/org/tiqian/shared/html/DomAttribute";
-import type { DomNode } from "tiqian-shared/org/tiqian/shared/html/DomNode";
-import { SnapshotSource } from "tiqian-shared/org/tiqian/shared/snapshot/SnapshotSource";
+import type { DomAttribute } from "@tiqian/shared/org/tiqian/shared/html/DomAttribute";
+import type { DomNode } from "@tiqian/shared/org/tiqian/shared/html/DomNode";
+import { SnapshotSource } from "@tiqian/shared/org/tiqian/shared/snapshot/SnapshotSource";
 
 export interface RawSemanticSpan {
     readonly start: number;
