@@ -106,8 +106,8 @@ class ParagraphDpReferenceExperiment {
 
     private fun union(a: SortedSetTable<Int>, b: SortedSetTable<Int>): SortedSetTable<Int> {
         val builder = SortedTable.setBuilder<Int>(SortedTable::compareInts)
-        for (i in 0 until a.size()) builder.put(a.at(i))
-        for (i in 0 until b.size()) builder.put(b.at(i))
+        for (i in 0 until a.size) builder.put(a.at(i))
+        for (i in 0 until b.size) builder.put(b.at(i))
         return builder.build()
     }
 
@@ -149,7 +149,7 @@ class ParagraphDpReferenceExperiment {
         if (n == 0) return null
         val gapBoundaries = union(inputs.cjkInterCharBoundaries, inputs.sinoWesternBoundaries)
         val dRef = inputs.maxCjkStretchPerGap
-        val sortedHard = buildList { for (i in 0 until inputs.hardBreakAfterClusters.size()) add(inputs.hardBreakAfterClusters.at(i)) }
+        val sortedHard = buildList { for (i in 0 until inputs.hardBreakAfterClusters.size) add(inputs.hardBreakAfterClusters.at(i)) }
 
         val allLines = mutableListOf<LineCandidate>()
         var segmentStart = 0
@@ -312,7 +312,7 @@ class ParagraphDpReferenceExperiment {
         val usedHyphen = lookLines.any {
             it.endReason == LineEndReason.AutoWrap && inputs.hyphenBreakClusters.has(it.clusterRange.last + 1)
         }
-        val usedRepair = lookLines.any { it.repair != null || it.hangingClusterIndices.size() > 0 }
+        val usedRepair = lookLines.any { it.repair != null || it.hangingClusterIndices.size > 0 }
         val flags = (if (usedHyphen) "H" else "") + (if (usedRepair) "R" else "")
         val row = "%-34s %-2s lines=%2d/%2d cost look=%8.2f dp=%8.2f Δ=%6.1f%% maxD %5.2f→%5.2f σ %5.2f→%5.2f".format(
             id.take(34), flags, lookLines.size, dpLines.size, lookCost, dpCost, rel,

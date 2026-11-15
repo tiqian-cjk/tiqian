@@ -19,7 +19,7 @@ import org.tiqian.core.TextStyle
 import org.tiqian.core.positionedClusters
 import org.tiqian.core.positionedRichTextSegments
 import org.tiqian.core.richTextDecorationLineY
-import org.tiqian.core.trimmedRichTextDecorationSegments
+import org.tiqian.core.richTextDecorationSegments
 import org.tiqian.font.fontRoleNameUsesLatinFace
 import org.tiqian.shaping.coretext.CoreTextSupport
 import platform.CoreFoundation.CFArrayGetCount
@@ -414,7 +414,7 @@ class CoreTextLayoutRenderer(
             if (span.role is RichTextRole.Link) span.copy(role = RichTextRole.Underline) else null
         }
         if (underlines.isEmpty()) return
-        val segments = result.trimmedRichTextDecorationSegments(
+        val segments = result.richTextDecorationSegments(
             result.positionedRichTextSegments(underlines),
         )
         val stroke = (result.input.textStyle.fontSize / 16f).coerceAtLeast(1f)

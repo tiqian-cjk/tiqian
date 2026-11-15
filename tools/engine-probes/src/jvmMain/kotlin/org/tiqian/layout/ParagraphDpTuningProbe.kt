@@ -113,7 +113,7 @@ class ParagraphDpTuningProbe {
             val sinoGaps = lineGapCount(inMeasure, r.sinoWesternBoundaries)
             val cjkGaps = lineGapCount(inMeasure, r.cjkInterCharBoundaries)
             val pushIn = line.repair as? RepairOption.PushIn
-            val hang = line.hangingClusterIndices.size() > 0
+            val hang = line.hangingClusterIndices.size > 0
             // `adjustedWidth` is already post-shrink (tryPushIn contract), so the
             // deficit below is the HONEST leftover the justifier still has to
             // stretch — a push-in line is not automatically a flush line.

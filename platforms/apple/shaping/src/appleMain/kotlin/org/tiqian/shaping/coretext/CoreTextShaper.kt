@@ -234,7 +234,13 @@ class CoreTextShaper(
         openTypeFeatures: List<String> = emptyList(),
         capabilityIssue: String? = null,
     ): ShapingResult {
-        val cluster = Cluster(input.range, sourceText, displayText, fontKey, 0f)
+        val cluster = Cluster(
+            range = input.range,
+            text = sourceText,
+            fontKey = fontKey,
+            advance = 0f,
+            displayText = displayText,
+        )
         val run = GlyphRun(input.range, fontKey, emptyList(), 0f, openTypeFeatures)
         val decision = ShapingDecisionInfo(
             range = input.range,
