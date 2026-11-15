@@ -32,33 +32,28 @@ git push origin v0.1.0-alpha07
 `v0.1.0-alpha07` 对应 `0.1.0-alpha07`。发版运行失败后，在 GitHub 上对同一次
 运行选择 "Re-run failed jobs"；重跑从同一个标签 commit 读取代码。
 
-没有通过检查的 commit 不能发版。检查要求目标 commit 上的 `Native precompute CI`
-与 `Build Neon precompute` 都为 success；缺少运行记录时同样拒绝。
 
-## 2. 需要的 secrets
+### 版本号形式
 
-工作流读取以下 GitHub Actions secrets。缺少任何一个都会让对应步骤失败：
+发布版本是点分的预发布标识符。标签 `v0.1.0-alpha.8` 对应包版本 `0.1.0-alpha.8`，
+最后一段 `8` 是纯数字，不带前导零。这个形式下 `0.1.0-alpha.9` 小于
+`0.1.0-alpha.10`；旧的单标识符形式按字符比较，到 `alpha100` 时会得到 `alpha100`
+小于 `alpha99`。
 
-| secret | 用途 |
-| --- | --- |
-| `REGISTRY_REPO_TOKEN` | 提交 registry 元数据到 registry 仓库（`tiqian-cjk/registry`） |
-| `R2_ACCESS_KEY_ID` | 上传 Swift 归档到 R2 存储 |
-| `R2_SECRET_ACCESS_KEY` | 上传 Swift 归档到 R2 存储 |
-| `PAGES_DEPLOY_HOOK` | 触发 Cloudflare Pages 部署 |
-| `NPM_DIST_TAG_TOKEN` | npm 发布（`publish-precompute.yml`、`publish-ffi.yml`、`publish-prose.yml`） |
-| `CARGO_DIST_TOKEN` | cargo 发布预留 |
+两位补零的 `alphaNN` 形式（例如 `0.1.0-alpha07`）已经废弃，新版本只写点分纯数字。
+该版本的目录随 `v0.1.0-alpha.8` 发布从 registry 删除（`tools/merge-registry-tree.py`
+的 `--retire` 参数）。删除由用户确认：该版本只有一个消费者，用户会通知对方，所以
+「不删除 registry 里已发布版本」的规则在这个版本上不再适用。
 
-`GITHUB_TOKEN` 是 GitHub 内置 secret，用于创建 GitHub Release，不需要单独配置。
-
-## 3. 打包前置
-
-发布版本只有一个来源：`v*.*.*` 标签去掉 `v` 前缀。`tools/align-package-versions.py`
-把这个版本写入两类清单，发布准备阶段与打包 job 各调用一次。
-
-发布准备阶段，在仓库根目录执行：
+旧形式与新形式不可比较：`alpha` 是 `alpha07` 的前缀，短者优先，所以
+`0.1.0-alpha.8` 小于 `0.1.0-alpha07`。registry 站点按包名下的版本列表计算 `latest`：
+npm 与 pub 的元数据、Maven 的 `maven-metadata.xml` 都取同一个包里最高的版本。
+旧 `alphaNN` 条目还在 registry 里时，这个指针会停在旧条目，不带版本号的安装因此
+解析到旧版本。删除 `0.1.0-alpha07` 的目录之后，指针指向 `0.1.0-alpha.8`。发版前
+逐个生态核对指针，例如：
 
 ```shell
-python3 tools/align-package-versions.py --npm "${VERSION}"
+npm view tiqian-engine dist-tags --registry https://registry.tiqian.org/npm/
 ```
 
 `--npm` 改写以下文件的 `version` 字段：根 `package.json` 的 `workspaces` 列出的每个
@@ -107,7 +102,7 @@ GitHub Release 下载前缀，`--registry-out` 取树的根目录。四个参数
 4. Commit metadata to registry repo：克隆 registry 仓库，运行
    `tools/merge-registry-tree.py` 把 `$RUNNER_TEMP/registry-tree/<owner>` 里的每个版本
    目录并入 `<owner>` 目录，提交并推送。合并保留 registry 里已有的版本，同一个版本重新
-   发布时替换该版本目录。这一步的输入是第 3 步写在 R2 的归档与 `boring pack` 写出的树。
+   发布时替换该版本目录；`--retire` 参数在合并之后删除指定的版本目录，包内没有其他版本时连包目录一起删除。这一步的输入是第 3 步写在 R2 的归档与 `boring pack` 写出的树。
 
 提交之后执行 Deploy the registry site 一步，用 `PAGES_DEPLOY_HOOK` 触发 Cloudflare
 Pages 构建。registry 工具在 boring 仓库构建并随发布资产上传
@@ -314,8 +309,8 @@ package `consumer` depends on `tiqian-engine` with feature `f32` but `tiqian-eng
 
 #### 从 `tiqian-engine-f32` 与 `tiqian-engine-f64` 迁移
 
-alpha08 起 registry 只输出 `tiqian-engine` 一个 cargo 包，`tiqian-engine-f32` 与
-`tiqian-engine-f64` 不再有 alpha08 的新版本。发版步骤把新版本目录并入 `<owner>` 目录
+`0.1.0-alpha.8` 起 registry 只输出 `tiqian-engine` 一个 cargo 包，`tiqian-engine-f32` 与
+`tiqian-engine-f64` 不再有 `0.1.0-alpha.8` 的新版本。发版步骤把新版本目录并入 `<owner>` 目录
 （`.github/workflows/release-registry.yml` 调用 `tools/merge-registry-tree.py`），
 alpha07 的 `tiqian-engine-f32`、`tiqian-engine-f64` 目录与索引条目保留在 registry 里，
 锁定 `0.1.0-alpha07` 的消费者仍能解析到该版本。
@@ -326,16 +321,16 @@ alpha07 的 `tiqian-engine-f32`、`tiqian-engine-f64` 目录与索引条目保�
 - 新建工程或清空 `CARGO_HOME` 后，`cargo add tiqian-engine-f32` 报
   `error: the crate tiqian-engine-f32 could not be found in registry index.`
 
-迁移方式是把依赖名换成 `tiqian-engine` 并显式选择精度，这样 alpha08 及之后的版本可用：
+迁移方式是把依赖名换成 `tiqian-engine` 并显式选择精度，这样 `0.1.0-alpha.8` 及之后的版本可用：
 
 ```toml
 # 原 tiqian-engine-f32 = "0.1.0-alpha07"
-tiqian-engine = { version = "0.1.0-alpha08", features = ["f32"] }
+tiqian-engine = { version = "0.1.0-alpha.8", features = ["f32"] }
 ```
 
 ```toml
 # 原 tiqian-engine-f64 = "0.1.0-alpha07"
-tiqian-engine = "0.1.0-alpha08"
+tiqian-engine = "0.1.0-alpha.8"
 ```
 
 ### pub

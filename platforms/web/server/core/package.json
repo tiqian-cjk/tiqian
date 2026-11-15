@@ -1,6 +1,6 @@
 {
   "name": "@tiqian/precompute",
-  "version": "0.1.0-alpha08",
+  "version": "0.1.0-alpha.8",
   "description": "Native font session and precompute entry points for Tiqian.",
   "keywords": [
     "cjk",
@@ -92,16 +92,16 @@
   ],
   "dependencies": {
     "@neon-rs/load": "^0.1.82",
-    "@tiqian/prose": "0.1.0-alpha08",
+    "@tiqian/prose": "0.1.0-alpha.8",
     "linkedom": "^0.18.13",
-    "tiqian-protocol": "0.1.0-alpha08",
-    "tiqian-shared": "0.1.0-alpha08"
+    "tiqian-protocol": "0.1.0-alpha.8",
+    "tiqian-shared": "0.1.0-alpha.8"
   },
   "optionalDependencies": {
-    "@tiqian/precompute-darwin-arm64": "0.1.0-alpha08",
-    "@tiqian/precompute-linux-arm64-gnu": "0.1.0-alpha08",
-    "@tiqian/precompute-linux-x64-gnu": "0.1.0-alpha08",
-    "@tiqian/precompute-win32-x64-msvc": "0.1.0-alpha08"
+    "@tiqian/precompute-darwin-arm64": "0.1.0-alpha.8",
+    "@tiqian/precompute-linux-arm64-gnu": "0.1.0-alpha.8",
+    "@tiqian/precompute-linux-x64-gnu": "0.1.0-alpha.8",
+    "@tiqian/precompute-win32-x64-msvc": "0.1.0-alpha.8"
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.7.2",

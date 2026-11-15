@@ -73,8 +73,11 @@ jobs:
           OWNER="${{ github.repository_owner }}"
           # Merge the released versions into the clone instead of replacing the
           # owner directory: earlier versions stay published, and a re-run of a
-          # release rewrites that version directory with the same bytes.
-          python3 tools/merge-registry-tree.py --tree "$RUNNER_TEMP/registry-tree" --owner "$OWNER" --registry /tmp/registry
+          # release rewrites that version directory with the same bytes. The
+          # pre-dotted alphaNN version is retired here: its only consumer has
+          # been notified, and it outranks 0.1.0-alpha.8, so the registry site
+          # would otherwise keep pointing latest at it.
+          python3 tools/merge-registry-tree.py --tree "$RUNNER_TEMP/registry-tree" --owner "$OWNER" --registry /tmp/registry --retire 0.1.0-alpha07
           cd /tmp/registry
           git config user.name "Release Bot"
           git config user.email "release@tiqian.dev"

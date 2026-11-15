@@ -1,6 +1,6 @@
 {
   "name": "tiqian-web-demo",
-  "version": "0.1.0-alpha08",
+  "version": "0.1.0-alpha.8",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,8 +10,8 @@
     "test": "node --test --test-concurrency=1 tests/*.test.js"
   },
   "dependencies": {
-    "@tiqian/core": "0.1.0-alpha08",
-    "@tiqian/prose": "0.1.0-alpha08"
+    "@tiqian/core": "0.1.0-alpha.8",
+    "@tiqian/prose": "0.1.0-alpha.8"
   },
   "devDependencies": {
     "parcel": "^2.16.4",

@@ -1,6 +1,6 @@
 {
   "name": "@tiqian/core",
-  "version": "0.1.0-alpha08",
+  "version": "0.1.0-alpha.8",
   "description": "Core paragraph layout engine, snapshot tables, and runtime bindings for Tiqian.",
   "keywords": [
     "cjk",
@@ -137,9 +137,9 @@
     }
   },
   "dependencies": {
-    "@tiqian/ffi": "0.1.0-alpha08",
-    "tiqian-protocol": "0.1.0-alpha08",
-    "tiqian-shared": "0.1.0-alpha08"
+    "@tiqian/ffi": "0.1.0-alpha.8",
+    "tiqian-protocol": "0.1.0-alpha.8",
+    "tiqian-shared": "0.1.0-alpha.8"
   },
   "devDependencies": {
     "@types/node": "22.15.29",

@@ -8,7 +8,7 @@ tool reads the whole tree and lists every version it finds, so the site shows
 the history and the newest release together.
 
 Usage:
-    merge-registry-tree.py --tree <registry-tree> --owner <owner> --registry <clone>
+    merge-registry-tree.py --tree <registry-tree> --owner <owner> --registry <clone> [--retire <version>]...
     merge-registry-tree.py --selftest
 
 For every repository directory under <tree>/<owner> the merge copies the
@@ -17,6 +17,12 @@ repository level files (README.md) over the clone and replaces
 names. Version directories the run does not name, and repositories it does
 not name, stay untouched. Re-running the same release writes the same bytes,
 so the commit stays empty.
+
+Versions named with --retire are deleted from every repository under the
+owner after the merge; a repository left without any version directory is
+removed as a whole, because the registry tool refuses a repository with no
+versions. Retirement is idempotent: a version that is already absent is not
+an error.
 
 Exit status: 0 merged, 1 a malformed tree, 2 a misconfigured invocation.
 """
@@ -96,6 +102,33 @@ def merge(tree: Path, owner: str, registry: Path) -> int:
     return versions
 
 
+def validate_version(version: str) -> None:
+    if not version or version in (".", "..") or "/" in version:
+        fail("--retire takes a plain version name, got %r" % version)
+
+
+def retire(registry: Path, owner: str, versions: list) -> int:
+    """Delete the named version directories from every repository under owner."""
+    target_owner = registry / owner
+    if not target_owner.is_dir():
+        return 0
+    removed = 0
+    for repo in sorted(target_owner.iterdir()):
+        if not repo.is_dir():
+            continue
+        for version in versions:
+            victim = repo / version
+            if victim.is_symlink() or victim.is_file():
+                victim.unlink()
+                removed += 1
+            elif victim.is_dir():
+                shutil.rmtree(victim)
+                removed += 1
+        if not any(entry.is_dir() for entry in repo.iterdir()):
+            shutil.rmtree(repo)
+    return removed
+
+
 def snapshot(root: Path) -> dict:
     out = {}
     for path in sorted(root.rglob("*")):
@@ -158,7 +191,17 @@ def selftest() -> int:
         before = snapshot(clone)
         merge(narrower, owner, clone)
         assert snapshot(clone) == before, "merging the same release twice must leave the tree unchanged"
-        print("selftest: OK (v1 and v2 both present, repeated v2 writes one directory)")
+
+        retired = root / "retired"
+        stage(retired, owner, "old-only", "0.0.1-old", ["npm"], "old\n")
+        merge(retired, owner, clone)
+        assert version_names(clone / owner / "old-only") == ["0.0.1-old"], "the single-version sample must be present before retirement"
+        removed = retire(clone, owner, ["0.0.9-old", "0.0.1-old"])
+        assert removed == 2, "retirement must count every removed version directory"
+        assert version_names(clone / owner / repo) == ["0.1.0", "0.2.0"], "a retired version must be gone from the surviving repository"
+        assert not (clone / owner / "old-only").exists(), "a repository left with no version directory must be removed"
+        assert retire(clone, owner, ["0.0.9-old"]) == 0, "retiring an absent version must be a no-op"
+        print("selftest: OK (v1 and v2 both present, repeated v2 writes one directory, retirement removes named versions and empty repositories)")
     return EXIT_OK
 
 
@@ -168,6 +211,8 @@ def main(argv: list) -> int:
     parser.add_argument("--tree", type=Path)
     parser.add_argument("--owner")
     parser.add_argument("--registry", type=Path)
+    parser.add_argument("--retire", action="append", default=[], metavar="VERSION",
+                        help="delete this version directory from every repository under --owner")
     args = parser.parse_args(argv)
     if args.selftest:
         return selftest()
@@ -176,7 +221,12 @@ def main(argv: list) -> int:
     if not args.registry.is_dir():
         print("MISCONFIGURED: registry clone is missing: %s" % args.registry)
         return EXIT_MISCONFIGURED
+    for version in args.retire:
+        validate_version(version)
     merge(args.tree, args.owner, args.registry)
+    if args.retire:
+        removed = retire(args.registry, args.owner, args.retire)
+        print("retired %d version directories from %s: %s" % (removed, args.owner, ", ".join(args.retire)))
     return EXIT_OK
 
 

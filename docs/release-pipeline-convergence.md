@@ -29,7 +29,7 @@
 
 ### 2.1 收敛后 protocol-gen 的位置
 
-TS 侧的入库副本已删除。`platforms/web/client/core/src/sampler/snapshot/protocol-gen/`、`platforms/web/client/core/src/sampler/snapshot/prepared-dom-gen/` 与 `platforms/web/server/core/src/protocol-gen/` 在收敛前是 `protocol-ts` 的入库副本，`t-mwgrgela-p83q` 完成后随提交 `6d1a305ea` 从仓库删除；`platforms/web/client/core/package.json` 与 `platforms/web/server/core/package.json` 改为依赖 npm 上的 `tiqian-protocol@0.1.0-alpha08` 与 `tiqian-shared@0.1.0-alpha08`。`scripts/cutover/tq-vendor-prepared-dom.sh` 与 `platforms/web/server/core/scripts/copy-protocol-gen.sh` 同步删除。
+TS 侧的入库副本已删除。`platforms/web/client/core/src/sampler/snapshot/protocol-gen/`、`platforms/web/client/core/src/sampler/snapshot/prepared-dom-gen/` 与 `platforms/web/server/core/src/protocol-gen/` 在收敛前是 `protocol-ts` 的入库副本，`t-mwgrgela-p83q` 完成后随提交 `6d1a305ea` 从仓库删除；`platforms/web/client/core/package.json` 与 `platforms/web/server/core/package.json` 改为依赖 npm 上的 `tiqian-protocol@0.1.0-alpha.8` 与 `tiqian-shared@0.1.0-alpha.8`。`scripts/cutover/tq-vendor-prepared-dom.sh` 与 `platforms/web/server/core/scripts/copy-protocol-gen.sh` 同步删除。
 
 Rust 侧的 `platforms/web/server/precompute/protocol-gen/` 改为构建期生成（`t-mwgxnvsu-wn10`）。`scripts/generate-engine-gen.mjs` 的 rust 分支在 `boring gen engine-rust` 之后运行 `boring gen protocol-rust`，把 `engine-haxe/out/protocol-rust/gen` 复制到该目录；`platforms/web/server/precompute/Cargo.toml` 的 `exclude` 列出 `protocol-gen`，`platforms/web/server/precompute/engine/Cargo.toml` 仍以 `tiqian-protocol-gen = { path = "../protocol-gen" }` 依赖它，`.gitignore` 以 `/platforms/web/server/precompute/protocol-gen/` 排除该目录。`.github/workflows/build-neon-precompute.yml` 在生成 job 上传 `protocol-gen` 制品，并在 binaries job 下载到同一路径。
 
@@ -59,7 +59,7 @@ Rust 侧的 `platforms/web/server/precompute/protocol-gen/` 改为构建期生�
 
 1. 重复的形态是同一 bundle 的生成树存在两条消费路径。`scripts/cutover/tq-vendor-check.sh:59-96` 的登记表把驱动输出登记为挂载点，收敛前全部是入库副本并交给 npm 与 Gradle 构建；`release-registry.yml:86` 对相同 bundle 运行 `boring pack`。两条路径各自改动时没有交叉检查。收敛后 `protocol-rust` 与 `engine-rust` 的挂载点改为构建期生成的 gitignored 目录。
 2. 覆盖范围由三处手写清单决定：`release-registry.yml:86` 的 12 个 id、`release-manifest.json:130-133` 的 2 个包名、各 `publish-*.yml` 内的包路径。`boring.json` 新增 bundle 时，三处都需要人工修改。
-3. `shared` 没有 bundle。prepared-dom 与 shared-gen 产自 `protocol-ts`，收敛前分别以入库副本形式进入 `@tiqian/core` 与 `platforms/web/server/core`；这些副本已随 `t-mwgrgela-p83q` 删除，两个包改为依赖已发布的 `tiqian-protocol@0.1.0-alpha08` 与 `tiqian-shared@0.1.0-alpha08`（见 2.1）。`boring pack` 写出的 registry 元数据只覆盖 `tiqian-engine` 与 `tiqian-protocol` 两个包。
+3. `shared` 没有 bundle。prepared-dom 与 shared-gen 产自 `protocol-ts`，收敛前分别以入库副本形式进入 `@tiqian/core` 与 `platforms/web/server/core`；这些副本已随 `t-mwgrgela-p83q` 删除，两个包改为依赖已发布的 `tiqian-protocol@0.1.0-alpha.8` 与 `tiqian-shared@0.1.0-alpha.8`（见 2.1）。`boring pack` 写出的 registry 元数据只覆盖 `tiqian-engine` 与 `tiqian-protocol` 两个包。
 4. 官方仓库与私有 registry 可以互相校对的依据已经存在：registry 元数据的 digest 字段由 `boring pack` 对制品文件计算（`release-registry.yml:86` 的同一次 pack），两边记录同一个文件时摘要相同。
 
 ## 5. 已发现的两条独立缺陷
@@ -103,7 +103,7 @@ registry 元数据由同一次 pack 写出（`release-registry.yml:86` 的四个
 
 ### 6.4 新增 bundle 自动进入发布清单
 
-在 `boring.json` 增加带 `package` 的 bundle 后，matrix 自动把它加入 pack 与对应生态的发布 job，工作流文件不需要修改，registry 元数据在同一次运行写出。`shared` 的 bundle 由 `t-mwgrgela-p83q` 完成：`tq-vendor-check.sh` 的 prepared-dom 行与 `scripts/cutover/tq-vendor-prepared-dom.sh` 已删除，`@tiqian/core` 与 `@tiqian/precompute` 改为依赖已发布的 `tiqian-shared@0.1.0-alpha08`。
+在 `boring.json` 增加带 `package` 的 bundle 后，matrix 自动把它加入 pack 与对应生态的发布 job，工作流文件不需要修改，registry 元数据在同一次运行写出。`shared` 的 bundle 由 `t-mwgrgela-p83q` 完成：`tq-vendor-check.sh` 的 prepared-dom 行与 `scripts/cutover/tq-vendor-prepared-dom.sh` 已删除，`@tiqian/core` 与 `@tiqian/precompute` 改为依赖已发布的 `tiqian-shared@0.1.0-alpha.8`。
 
 `release-manifest.json:130-133` 的静态包名列表改为从 `boring.json` 派生：`tools/release-gate.py` 的 `check_coverage`（:186-242）对 `kind=boring` 的单元比较 matrix 的输出。
 

@@ -1,6 +1,6 @@
 {
   "name": "@tiqian/ffi",
-  "version": "0.1.0-alpha08",
+  "version": "0.1.0-alpha.8",
   "description": "Kotlin/JS engine face for Tiqian paragraph precompute.",
   "keywords": [
     "cjk",
