@@ -153,19 +153,36 @@ demo 覆盖 Compose density，例如 Plasma 的 150% 缩放使用：
 ### Web 引擎包
 
 `platforms/web/client/engine-runtime` 的 `engine-gen/` 与 `runtime/` 都是构建产物，不入库。
-在仓库根目录执行 `npm install` 或 `bun install` 时，install 钩子按以下顺序补齐：
+在仓库根目录执行 `bun install` 时，install 钩子按以下顺序补齐：
 
 | 割接期临时前置 | 作用 | 取消条件 |
 | --- | --- | --- |
 | 把 `.haxelib/boring/git/tools/unicode-data/` 拷到 `tools/unicode-data/` | `reflaxe.unicode.GraphemeData` 按 cwd 读取该目录 | boring 不再按 cwd 读取 `tools/unicode-data`（`t-mwcxehpz-fict`） |
-| 用 `boring` 生成 `engine-gen/` | Web 引擎包的 TypeScript 产物 | 发布链路与本地开发都不再依赖 install 钩子生成 `engine-gen/` |
-| 用 `tsc` 编译出 `runtime/` | Web 引擎包的运行时 | 发布链路与本地开发都不再依赖 install 钩子生成 `runtime/` |
+| 用 `boring` 生成 `engine-gen/` | Web 引擎包的 TypeScript 产物 | 发布流程与本地开发都不再依赖 install 钩子生成 `engine-gen/` |
+| 用 `tsc` 编译出 `runtime/` | Web 引擎包的运行时 | 发布流程与本地开发都不再依赖 install 钩子生成 `runtime/` |
+
+`tiqian-protocol` 与 `tiqian-shared` 是根 `package.json` 的两个 workspace 成员，成员目录为
+`engine-haxe/out/protocol-ts/gen` 与 `engine-haxe/out/shared-ts/gen`；消费方
+`platforms/web/client/core` 与 `platforms/web/server/core` 用 `workspace:*` 依赖它们。成员目录的
+`package.json` 由 `boring pack` 写出，`boring gen` 只写源码，两个目录不入库，所以干净检出按下面
+的顺序执行：
+
+```shell
+nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+nix develop -c bun install --ignore-scripts
+```
+
+`workspace:*` 是 npm 不支持的协议，根目录安装用 `bun install`。上面两条命令之后由
+`nix develop -c npm run build:runtime` 生成 `engine-runtime/engine-gen/` 与
+`engine-runtime/runtime/`。`--ignore-scripts` 跳过根 postinstall。该钩子与 `boring pack` 都写
+`engine-haxe/out/protocol-ts/gen/package.json`：钩子在 `engine-gen/` 缺失时重新生成该目录，删除
+`package.json`。两个生产者对同一文件的所有权冲突，命令顺序只能规避它，不能消除它。
 
 Unicode 数据的来源在仓库内：`.haxelib/boring/git/tools/unicode-data/` 来自 flake 固定的
 boring 检出。`boring` 生成需要 flake 提供的驱动：
 
 ```shell
-nix develop -c npm install
+nix develop -c bun install
 nix develop -c npm test --workspace @tiqian/ffi
 ```
 
