@@ -109,7 +109,7 @@
       "id": "shared-ts",
       "compare": false,
       "target": "ts",
-      "rootsFile": "engine-haxe/targets/shared-ts.hxml",
+      "rootsFile": "platforms/web/shared/targets/shared-ts.hxml",
       "package": { "name": "tiqian-shared", "npmName": "@tiqian/shared", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }

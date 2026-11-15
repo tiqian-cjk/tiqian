@@ -7,11 +7,11 @@
 -cp .haxelib/boring/git/samples
 -cp engine-haxe/src
 -cp engine-haxe/macros
--cp shared-haxe/src
+-cp platforms/web/shared/src
 --macro haxe.macro.Compiler.addGlobalMetadata('org.tiqian', '@:build(std.RecordMember.build())')
 -cp .haxelib/boring/git/packages/compiler/reflaxe/ts/std-shadow
 -cp .haxelib/boring/git/packages/compiler/reflaxe/ts
---macro Intercept.run(['engine-haxe/src', '.haxelib/boring/git/samples', 'shared-haxe/src'])
+--macro Intercept.run(['engine-haxe/src', '.haxelib/boring/git/samples', 'platforms/web/shared/src'])
 --macro tscompiler.Compiler.use()
 -D ts-test-runner=bun
 -D tiqian_ts
