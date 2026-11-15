@@ -3,7 +3,7 @@ name: Stage Tiqian Maven release
 # Staged by .github/workflows/release.yml from the v*.*.* release tag, so one
 # version number covers Maven too. The Central Portal deployment still needs a
 # human to press publish in the Portal UI; staging and the preflight tests run
-# inside the release. The lane can also be dispatched on a release tag to
+# inside the release. The workflow can also be dispatched on a release tag to
 # re-stage a failed run.
 on:
   workflow_call:
@@ -61,7 +61,7 @@ jobs:
           set -euo pipefail
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_call" ]]; then
             if [[ "${GITHUB_REF_TYPE}" != "tag" || "${GITHUB_REF_NAME}" != v*.*.* ]]; then
-              echo "::error::The release lane runs only from a v*.*.* release tag."
+              echo "::error::The release workflow runs only from a v*.*.* release tag."
               exit 1
             fi
             if [[ "${TIQIAN_VERSION}" == v* ]]; then
@@ -124,18 +124,42 @@ jobs:
       - name: Generate the Kotlin engine sources
         run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring gen kotlin-f32 --project boring.json'
 
+      # The Gradle steps run with the Android SDK the flake devShell exports,
+      # because the runner image's SDK cannot satisfy the Android modules.
+      # platforms/android/native-font/build.gradle.kts:19 pins
+      # ndkVersion 29.0.13599879-rc2 and :34 pins cmake version 3.22.1; the
+      # ubuntu-latest image preinstalls NDK 27.3.13750724, 29.0.14206865 and
+      # 30.0.16248370 only, and no sdkmanager call in this workflow installs
+      # the pinned one. flake.nix:50-59 composes exactly platforms;android-36,
+      # build-tools;36.0.0, cmake;3.22.1 and ndk;29.0.13599879-rc2, and
+      # flake.nix:100-101 exports that SDK as ANDROID_HOME.
+      # Gradle refuses to configure any Android project when ANDROID_HOME and
+      # ANDROID_SDK_ROOT name different roots ("Several environment variables
+      # and/or system properties contain different paths to the SDK"), and the
+      # image exports ANDROID_SDK_ROOT=/usr/local/lib/android/sdk, so that
+      # variable is dropped before the devShell starts, as in
+      # staging-pipeline.yml:77.
       - name: Verify the engine and the release artifacts
+        shell: bash
         run: |
-          ./gradlew \
-            :engine:generatedTestSuite \
-            :engine:allTests \
-            assemble \
-            publishTiqianToMavenLocal \
-            -Dmaven.repo.local="$RUNNER_TEMP/tiqian-maven-preflight" \
-            --no-daemon
+          unset ANDROID_SDK_ROOT
+          nix develop -c bash -c '
+            ./gradlew \
+              :engine:generatedTestSuite \
+              :engine:allTests \
+              assemble \
+              publishTiqianToMavenLocal \
+              -Dmaven.repo.local="$RUNNER_TEMP/tiqian-maven-preflight" \
+              --no-daemon
+          '
 
+      # The Central upload publishes the same Android modules, so this step
+      # needs the same SDK and the same unset.
       - name: Upload Tiqian modules
-        run: ./gradlew publishTiqianToCentral --no-daemon
+        shell: bash
+        run: |
+          unset ANDROID_SDK_ROOT
+          nix develop -c bash -c './gradlew publishTiqianToCentral --no-daemon'
 
       - name: Create Central Portal deployment
         env:
