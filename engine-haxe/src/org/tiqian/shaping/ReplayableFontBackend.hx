@@ -7,6 +7,7 @@ import std.SortedMap;
 import std.SortedSet;
 
 /** Stable identity of one physical SFNT face, collection index and variation instance. */
+@:mainOnly
 abstract FontFaceId(String) {
     public static function of(value:String):FontFaceId {
         if (value == null || StringTools.trim(value).length == 0)
@@ -26,6 +27,7 @@ abstract FontFaceId(String) {
         return this;
 }
 
+@:mainOnly
 class ReplayableFontFaceDescriptor {
     public final id:FontFaceId;
     public final familyAliases:SortedSet<String>;
@@ -49,6 +51,7 @@ class ReplayableFontFaceDescriptor {
     }
 }
 
+@:mainOnly
 class ReplayableFontFaceRequest {
     public final role:FontRole;
     public final preferredFamilies:Array<String>;
@@ -71,6 +74,7 @@ class ReplayableFontFaceRequest {
     }
 }
 
+@:mainOnly
 class FontBackendCapabilityIssue {
     public final code:String;
     public final detail:String;
@@ -81,6 +85,7 @@ class FontBackendCapabilityIssue {
     }
 }
 
+@:mainOnly
 class FontBackendCapabilityReport {
     public final backend:String;
     public final sourceKind:String;
@@ -107,6 +112,7 @@ class FontBackendCapabilityReport {
 }
 
 /** Platform-neutral catalog contract shared by shaping, metrics and replay. */
+@:mainOnly
 interface ReplayableFontCatalog {
     public var faces(get, never):Array<ReplayableFontFaceDescriptor>;
     public var capabilityReport(get, never):FontBackendCapabilityReport;

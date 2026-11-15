@@ -29,7 +29,7 @@ import org.tiqian.clreq.ClreqProfile
 import org.tiqian.core.LayoutInput
 import org.tiqian.core.LayoutResult
 import org.tiqian.core.LayoutResultReplayIndex
-import org.tiqian.core.RichTextRole
+import org.tiqian.core.Link
 import org.tiqian.core.TextRange
 import org.tiqian.core.TextStyle
 import org.tiqian.core.legalHangingPunctuationClipEdge
@@ -768,7 +768,7 @@ class CjkTextView @JvmOverloads constructor(
         val y = toContentY(viewY)
         return content.richTextSpans.asSequence()
             .mapNotNull { span ->
-                val link = span.role as? RichTextRole.Link ?: return@mapNotNull null
+                val link = span.role as? Link ?: return@mapNotNull null
                 val hit = snapshot.replayIndex.richTextSegments.any { segment ->
                     segment.span.range == span.range &&
                         x >= segment.left && x <= segment.right &&
@@ -813,7 +813,7 @@ class CjkTextView @JvmOverloads constructor(
     }
 
     internal fun links(): List<LinkHit> = content.richTextSpans.mapNotNull { span ->
-        (span.role as? RichTextRole.Link)?.let { LinkHit(it.target, span.range) }
+        (span.role as? Link)?.let { LinkHit(it.target, span.range) }
     }
 
     private fun obtainLayout(input: LayoutInput): LayoutSnapshot {
