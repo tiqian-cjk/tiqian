@@ -14,6 +14,7 @@ import { precomputeParagraphWithDiagnostics } from "@tiqian/ffi";
 import type { DecorationWire } from "@tiqian/ffi";
 import { prepareParagraphRequestWire } from "./wire-construction.js";
 import type { WorkerLayoutRequestBody } from "./web-worker/worker-channel.js";
+import { initializeGlobalServices } from "../services/global-services.js";
 
 type WorkerMessageEventListener = (event: MessageEvent<WorkerRequestEnvelope>) => void | Promise<void>;
 
@@ -23,6 +24,9 @@ interface LayoutWorkerMessageScope {
 }
 
 const sessions: Map<string, ServerReplayFontSession> = new Map();
+
+// Workers own a separate global scope; custom-element registration only initializes the page.
+initializeGlobalServices();
 
 function errorDetail(error: unknown): string {
   return String(error instanceof Error ? error.message : error).slice(0, 1_000);
