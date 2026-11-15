@@ -92,9 +92,11 @@ GitHub Release 下载前缀，`--registry-out` 取树的根目录。四个参数
 
 从 `boring pack` 的输出到 registry 仓库提交之间有四个步骤，输入如下：
 
-1. Collect artifacts：把 `engine-haxe/out` 下每个 bundle 目录的 `*.tgz`、
-   `*.tar.gz`、`*.jar`、`*.crate`、`*.zip` 与 `*.pom`
-   复制到扁平的 `release-artifacts/`。
+1. Collect artifacts：`tools/collect-release-artifacts.py` 读取同一次 pack 写出的
+   registry 树，把每份 `metadata.json` 命名的文件从 `engine-haxe/out` 复制到扁平的
+   `release-artifacts/`；某个命名的文件在输出根下找不到时该步骤失败。清单来自 pack
+   写出的元数据，Gradle 的 `.module`、Kotlin/Native 的 `.klib` 与 Android 的
+   `.aar` 因此随 pack 的产物一并进入发布资产。
 2. Create GitHub Release：把 `release-artifacts/*` 作为标签的发布资产上传。
 3. Upload the Swift archives：把 `release-artifacts/*.zip` 上传到 R2 的
    `swift/tiqian/<包名>/<版本>.zip`。元数据的 `archive` 字段指向这个路径，

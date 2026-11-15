@@ -140,22 +140,15 @@ step_pack() {
   return "$rc"
 }
 
-# Collect the install units the way release.yml does, so a metadata entry that
-# names a file this list never collects fails in the next step.
+# Collect the install units the way release.yml does: the registry tree of the
+# same pack run names every artifact file, and collect-release-artifacts.py
+# copies exactly those, so a metadata entry the collection misses cannot reach
+# the next step. An extension list here would stop matching once the pack run
+# writes a new artifact type.
 step_collect() {
   rm -f "$ARTIFACTS"/*
-  find engine-haxe/out -path "$ROOT" -prune -o -type f \( \
-    -name "*.tgz" -o -name "*.tar.gz" -o -name "*.jar" -o -name "*.crate" \
-    -o -name "*.zip" -o -name "*.pom" \) -print0 |
-    while IFS= read -r -d "" file; do
-      case "$(basename "$file")" in
-        *-"$STAGING_VERSION"*) cp -f "$file" "$ARTIFACTS/" ;;
-      esac
-    done
-  if [ -z "$(ls -A "$ARTIFACTS")" ]; then
-    echo "no pack artifacts were produced"
-    return 1
-  fi
+  python3 tools/collect-release-artifacts.py \
+    --tree "$TREE" --source engine-haxe/out --artifacts "$ARTIFACTS" || return 1
   ( cd "$ARTIFACTS" && sha256sum -- * | sort > SHA256SUMS )
   ls -la "$ARTIFACTS"
 }

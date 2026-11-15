@@ -90,11 +90,14 @@ jobs:
       - name: Collect the artifacts
         shell: bash
         run: |
-          mkdir -p release-artifacts
-          find engine-haxe/out \( -name "*.tgz" -o -name "*.tar.gz" -o -name "*.jar" -o -name "*.crate" -o -name "*.zip" -o -name "*.pom" \) | while read -r f; do
-            cp "$f" "release-artifacts/$(basename "$f")"
-          done
-          test -n "$(ls -A release-artifacts)" || { echo "no pack artifacts were produced"; exit 1; }
+          # The registry tree the same pack run wrote is the artifact list: the
+          # collect step copies exactly the files the metadata names, so a new
+          # artifact type (the Kotlin Multiplatform .module, .klib and .aar)
+          # enters the release without an allowlist edit here.
+          python3 tools/collect-release-artifacts.py \
+            --tree "${RUNNER_TEMP}/registry-tree" \
+            --source engine-haxe/out \
+            --artifacts release-artifacts
           ls -la release-artifacts/
       - name: Record the artifact digests
         shell: bash
