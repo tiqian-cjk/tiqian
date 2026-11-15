@@ -10,10 +10,13 @@ import std.SortedSet;
 @:mainOnly
 @:valueType
 abstract FontFaceId(String) {
+    public inline function new(value:String)
+        this = value;
+
     public static function of(value:String):FontFaceId {
         if (value == null || StringTools.trim(value).length == 0)
             throw new TiqianIllegalArgumentException(Message("FontFaceId must not be blank"));
-        return cast(value, FontFaceId);
+        return new FontFaceId(value);
     }
 
     @:from public static function fromString(value:String):FontFaceId
