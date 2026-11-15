@@ -106,8 +106,24 @@ jobs:
       # Kotlin that boring generates from engine-haxe/src, and this workflow
       # publishes that module as tiqian-engine. :engine:generatedTestSuite runs
       # the generated test suite through TestMainKt; :engine:allTests covers
-      # the remaining Kotlin test targets. Haxe-source regeneration (gates.sh)
-      # belongs to the development CI, not the Maven release.
+      # the remaining Kotlin test targets.
+      #
+      # That generated Kotlin tree is not in git: .gitignore excludes
+      # /engine-haxe/out/, and engine/build.gradle.kts:63 points the
+      # commonMain srcDirs at engine-haxe/out/kotlin-f32/gen. A clean
+      # checkout therefore has no sources for :engine:commonMain, and the
+      # assemble and publish tasks below would compile an empty source set.
+      # Generate the tree in this job before Gradle runs; gates.sh remains
+      # the development CI entry point and is not used here.
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Generate the Kotlin engine sources
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring gen kotlin-f32 --project boring.json'
+
       - name: Verify the engine and the release artifacts
         run: |
           ./gradlew \
