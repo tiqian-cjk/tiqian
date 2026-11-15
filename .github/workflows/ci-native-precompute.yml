@@ -114,17 +114,39 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
-      - name: Install workspace dependencies
-        working-directory: .
-        run: npm install --no-audit --no-fund
-      # The flake devShell is the only source of the boring driver, and only
-      # the engine-gen generation needs it. npm test stays on the setup-node
-      # Node 24; wrapping it in `nix develop` would shadow that toolchain
-      # with the devShell's Node 22.
+      # The flake devShell is the only source of the boring driver, and the
+      # manifest and engine trees the install consumes need it. npm test stays
+      # on the setup-node Node 24; wrapping it in `nix develop` would shadow
+      # that toolchain with the devShell's Node 22.
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
       - name: Allow unprivileged user namespaces
         run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+      # engine-gen/ is a build product. Generating it before the install keeps
+      # build:runtime from regenerating the protocol-ts tree, which would drop
+      # the package manifest written below.
+      - name: Generate the TypeScript engine tree with the flake toolchain
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node scripts/generate-engine-gen.mjs ts'
+      # tiqian-protocol and tiqian-shared are workspace members at
+      # engine-haxe/out/{protocol-ts,shared-ts}/gen. boring gen writes source
+      # only; the package.json each member needs is written by boring pack, so
+      # pack runs before the install resolves the members. Both bundles are
+      # TypeScript, so the pack step's package-tsc runs the pinned TypeScript
+      # through the devShell's bun.
+      - name: Write the protocol and shared package manifests
+        run: |
+          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
+          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
+          chmod +x "$BORING_PACKAGE_TSC"
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+      - name: Install workspace dependencies
+        working-directory: .
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and drop its manifest;
+        # build:runtime below builds the runtime this job needs.
+        run: nix develop -c bun install --ignore-scripts
       - name: Build the @tiqian/ffi runtime with the flake toolchain
         working-directory: platforms/web/client/engine-runtime
         run: nix develop -c npm run build:runtime
@@ -170,6 +192,24 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24"
+      # The flake devShell is the only source of the boring driver, and the
+      # manifest the install consumes needs it.
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+      # tiqian-protocol and tiqian-shared are workspace members at
+      # engine-haxe/out/{protocol-ts,shared-ts}/gen. boring gen writes source
+      # only; the package.json each member needs is written by boring pack, so
+      # pack runs before the install resolves the members. Both bundles are
+      # TypeScript, so the pack step's package-tsc runs the pinned TypeScript
+      # through the devShell's bun.
+      - name: Write the protocol and shared package manifests
+        run: |
+          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
+          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
+          chmod +x "$BORING_PACKAGE_TSC"
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
       # Workspace install hoists @tiqian/* packages as symlinks; prose and
       # precompute resolve them without link scripts. The build runs with
       # --noCheck: the @tiqian/ffi type declarations are npm build products
@@ -179,10 +219,12 @@ jobs:
       # test in both packages) and the release lanes.
       - name: Install workspace dependencies
         working-directory: .
-        # npm install, not npm ci: the platform binary optional deps of the
-        # precompute member are not on the registry, so no lockfile can carry
-        # resolved entries for them and npm ci (npm >= 11) rejects the gap.
-        run: npm install --no-audit --no-fund
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and drop its manifest;
+        # this lane builds no ffi runtime.
+        run: nix develop -c bun install --ignore-scripts
       - name: Build the TypeScript packages
         working-directory: platforms/web/client/web-component
         run: npx tsc -b --noCheck
@@ -227,20 +269,40 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
-      - name: Install workspace dependencies
-        working-directory: .
-        # npm install, not npm ci: the platform binary optional deps of the
-        # precompute member are not on the registry, so no lockfile can carry
-        # resolved entries for them and npm ci (npm >= 11) rejects the gap.
-        run: npm install --no-audit --no-fund
-      # The flake devShell is the only source of the boring driver, and only
-      # the engine-gen generation needs it. The npx tsc -b and npm test steps
-      # stay on the setup-node Node 24; wrapping them in `nix develop` would
-      # shadow that toolchain with the devShell's Node 22.
+      # The flake devShell is the only source of the boring driver, and the
+      # manifest and engine trees the install consumes need it. The npx tsc -b
+      # and npm test steps stay on the setup-node Node 24; wrapping them in
+      # `nix develop` would shadow that toolchain with the devShell's Node 22.
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
       - name: Allow unprivileged user namespaces
         run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+      # engine-gen/ is a build product. Generating it before the install keeps
+      # build:runtime from regenerating the protocol-ts tree, which would drop
+      # the package manifest written below; the core type check after
+      # build:runtime resolves tiqian-protocol through that manifest.
+      - name: Generate the TypeScript engine tree with the flake toolchain
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node scripts/generate-engine-gen.mjs ts'
+      # tiqian-protocol and tiqian-shared are workspace members at
+      # engine-haxe/out/{protocol-ts,shared-ts}/gen. boring gen writes source
+      # only; the package.json each member needs is written by boring pack, so
+      # pack runs before the install resolves the members. Both bundles are
+      # TypeScript, so the pack step's package-tsc runs the pinned TypeScript
+      # through the devShell's bun.
+      - name: Write the protocol and shared package manifests
+        run: |
+          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
+          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
+          chmod +x "$BORING_PACKAGE_TSC"
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+      - name: Install workspace dependencies
+        working-directory: .
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and drop its manifest;
+        # build:runtime below builds the runtime this job needs.
+        run: nix develop -c bun install --ignore-scripts
       - name: Generate the precompute engine tree with the flake toolchain
         # The precompute crates read tiqian-engine-gen from the gitignored
         # engine-gen/ tree, and the boring driver reads tools/unicode-data/
