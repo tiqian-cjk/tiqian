@@ -36,6 +36,7 @@ permissions:
 jobs:
   matrix:
     name: Generate build matrix
+    needs: [engine-gen]
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.result }}
@@ -48,11 +49,26 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
-      - name: Install npm dependencies
-        working-directory: platforms/web/server/core
-        # npm install, not npm ci: the platform binary packages are not on the
-        # registry yet, so no lockfile can carry entries for them.
-        run: npm install --no-audit --no-fund
+      # The install resolves workspace:* members tiqian-protocol and
+      # tiqian-shared, whose generated trees and boring pack manifests come from
+      # the engine-gen job; npm refuses the workspace protocol with
+      # EUNSUPPORTEDPROTOCOL, so install with bun. The root install covers the
+      # server/core member this job queries.
+      - name: Download the generated trees and package manifests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: generated-trees
+          path: .
+      - name: Use a bun CLI for the workspace install
+        # The pinned bun lives in the flake devShell; this job has no Nix.
+        run: npm install --global bun@1.3.13
+      - name: Install workspace dependencies
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and delete the manifest
+        # boring pack wrote.
+        run: bun install --ignore-scripts
       - name: Look up matrix data
         id: matrixData
         working-directory: platforms/web/server/core
@@ -131,6 +147,29 @@ jobs:
         run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
       - name: Generate the precompute engine tree with the flake toolchain
         run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node scripts/generate-engine-gen.mjs'
+      - name: Generate the TypeScript engine tree with the flake toolchain
+        # tiqian-protocol and tiqian-shared are workspace:* members under
+        # engine-haxe/out/{protocol-ts,shared-ts}/gen whose package.json is
+        # written by boring pack, and engine-gen/ feeds the @tiqian/ffi
+        # runtime. The matrix spans Windows and macOS runners with no Nix, so
+        # generate the trees once here and hand every leg the result.
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node scripts/generate-engine-gen.mjs ts'
+      - name: Write the protocol and shared package manifests
+        run: |
+          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
+          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
+          chmod +x "$BORING_PACKAGE_TSC"
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+      - name: Upload the generated TypeScript workspace
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: generated-trees
+          path: |
+            engine-haxe/out/protocol-ts
+            engine-haxe/out/shared-ts
+            platforms/web/client/engine-runtime/engine-gen
+          if-no-files-found: error
+          retention-days: 7
       - name: Upload the generated engine tree
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -181,24 +220,35 @@ jobs:
       # declarations a full type check would need are absent; emit the
       # packages and the suite without checks (the Native precompute CI runs
       # the full checks over the same sources).
-      # Workspace install (root npm ci) hoists @tiqian/* packages as symlinks;
-      # the matrix spans Windows runners, whose default pwsh shell has no
-      # rm -rf and cannot execute the extensionless .bin shims; run every
-      # step of this block under bash like the build steps below.
+      - name: Download the generated trees and package manifests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: generated-trees
+          path: .
+      - name: Use a bun CLI for the workspace install
+        shell: bash
+        # The pinned bun lives in the flake devShell; the matrix spans Windows
+        # and macOS runners with no Nix, so install the same version from npm.
+        run: npm install --global bun@1.3.13
+      # Workspace install hoists @tiqian/* packages as symlinks; the matrix
+      # spans Windows runners, whose default pwsh shell has no rm -rf and cannot
+      # execute the extensionless .bin shims; run every step of this block under
+      # bash like the build steps below.
       - name: Install workspace dependencies
         working-directory: .
-        # npm install, not npm ci: the platform binary optional deps of the
-        # precompute member are not on the registry, so no lockfile can carry
-        # resolved entries for them and npm ci (npm >= 11) rejects the gap.
-        run: npm install --no-audit --no-fund
+        shell: bash
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and delete the manifest
+        # boring pack wrote. The root install covers server/core as a workspace
+        # member, so the former server/core-local install is gone; it walked up
+        # to the workspace root and failed with the same protocol error.
+        run: bun install --ignore-scripts
       - name: Emit the prose packages
         working-directory: platforms/web/client/web-component
         shell: bash
         run: npx tsc -b --noCheck
-      - name: Install npm dependencies
-        working-directory: platforms/web/server/core
-        shell: bash
-        run: npm install --no-audit --no-fund
       - name: Build addon and place platform binary
         working-directory: platforms/web/server/core
         shell: bash
@@ -238,7 +288,7 @@ jobs:
 
   main-package:
     name: Pack main package
-    needs: [matrix]
+    needs: [matrix, engine-gen]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -255,18 +305,27 @@ jobs:
       # full type check would need are absent; build without checks and drop
       # the typecheck script (the Native precompute CI runs the full checks
       # over the same sources).
+      - name: Download the generated trees and package manifests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: generated-trees
+          path: .
+      - name: Use a bun CLI for the workspace install
+        # The pinned bun lives in the flake devShell; this job has no Nix.
+        run: npm install --global bun@1.3.13
       - name: Install workspace dependencies
         working-directory: .
-        # npm install, not npm ci: the platform binary optional deps of the
-        # precompute member are not on the registry, so no lockfile can carry
-        # resolved entries for them and npm ci (npm >= 11) rejects the gap.
-        run: npm install --no-audit --no-fund
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and delete the manifest
+        # boring pack wrote. The root install covers server/core as a workspace
+        # member, so the former server/core-local install is gone; it walked up
+        # to the workspace root and failed with the same protocol error.
+        run: bun install --ignore-scripts
       - name: Emit the prose packages
         working-directory: platforms/web/client/web-component
         run: npx tsc -b --noCheck
-      - name: Install npm dependencies
-        working-directory: platforms/web/server/core
-        run: npm install --no-audit --no-fund
       - name: Lint and build the JS entry
         working-directory: platforms/web/server/core
         run: |

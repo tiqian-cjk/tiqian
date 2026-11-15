@@ -83,30 +83,55 @@ jobs:
         shell: bash
         run: yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
-      - name: Install workspace dependencies
-        working-directory: .
-        # npm install, not npm ci: the platform binary optional deps of the
-        # precompute member are not on the registry, so no lockfile can carry
-        # resolved entries for them and npm ci (npm >= 11) rejects the gap.
-        run: npm install --no-audit --no-fund
-
+      # The install resolves two generated, gitignored trees: tiqian-protocol
+      # and tiqian-shared are workspace:* members under
+      # engine-haxe/out/{protocol-ts,shared-ts}/gen whose package.json is
+      # written by boring pack, and prepack's build:runtime compiles the
+      # @tiqian/ffi runtime/ declarations. npm cannot resolve the workspace
+      # protocol (EUNSUPPORTEDPROTOCOL), so this lane generates the trees, packs
+      # the member manifests, then installs with bun.
+      #
       # The flake devShell is the only source of the boring driver, and only
       # the generation needs it. Wrapping the whole job in `nix develop` would
-      # put npm install, npm test and npm publish on the devShell's Node 22
-      # and npm 10.9.8, shadowing the setup-node Node 24 and the OIDC-capable
-      # npm 11 installed above; the measured wall time is the same either way
-      # because the devShell startup is paid once.
+      # put npm test and npm publish on the devShell's Node 22 and npm 10.9.8,
+      # shadowing the setup-node Node 24 and the OIDC-capable npm 11 installed
+      # above; the measured wall time is the same either way because the
+      # devShell startup is paid once.
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
 
       - name: Allow unprivileged user namespaces
         run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
 
-      - name: Generate engine-gen with the flake toolchain
+      - name: Generate the TypeScript engine tree with the flake toolchain
         working-directory: .
-        # The install hook skips the generation when the flake devShell is
-        # absent, and prepack's build:runtime needs engine-gen/. Generating
-        # it here leaves prepack with the runtime/ recompile only.
+        # engine-gen/ is a build product. Generating it before the install keeps
+        # the install hook and prepack's build:runtime from regenerating the
+        # protocol-ts tree, which would drop the package manifest written below.
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node scripts/generate-engine-gen.mjs ts'
+
+      - name: Write the protocol and shared package manifests
+        working-directory: .
+        run: |
+          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
+          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
+          chmod +x "$BORING_PACKAGE_TSC"
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+
+      - name: Install workspace dependencies
+        working-directory: .
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall
+        # (which would regenerate the protocol-ts tree and delete the manifest
+        # boring pack wrote) and the @tiqian/ffi prepare hook; build:runtime
+        # below assembles the runtime this lane ships.
+        run: nix develop -c bun install --ignore-scripts
+
+      - name: Assemble the @tiqian/ffi runtime with the flake toolchain
+        working-directory: .
+        # The install hook and the @tiqian/ffi prepare hook were the only
+        # callers of this build, and --ignore-scripts skipped both.
         run: nix develop -c npm run build:runtime --workspace @tiqian/ffi
 
       - name: Build and verify the release tarball
