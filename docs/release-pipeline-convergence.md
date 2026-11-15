@@ -12,20 +12,26 @@
 
 ## 2. 现有工作流对照表
 
-本节与 3 节的对照表记录收敛前的状态；收敛后 pack 在 `release.yml` 的 pack job，`release-registry.yml` 只下载并使用 pack 的制品。
+> **以下对照表为收敛前状态。** 第 2、3 节的对照表记录收敛前的工作流与 bundle 状态；收敛后 pack 在 `release.yml` 的 pack job，`release-registry.yml` 只下载并使用 pack 的制品。生成物的去向在收敛后另有变化，见 2.1。
 
 | 工作流（行数） | 打包的包 | 工具 | 发布目标 | 凭据 | 与 boring pack 的重复 |
 | --- | --- | --- | --- | --- | --- |
 | `.github/workflows/release-gate.yml`（48） | 无 | `tools/release-gate.py:42-49` | 无 | `github.token` | 无 |
 | `.github/workflows/publish-ffi.yml`（177） | `@tiqian/ffi` | `scripts/generate-engine-gen.mjs:37-60` 运行 `boring gen ts` 与 `boring gen protocol-ts`，再 `npm pack`（:112-116） | `registry.npmjs.org`，`alpha` 标签，随后 `latest` | OIDC（`id-token: write`）、`NPM_DIST_TAG_TOKEN` | 输入是 bundle `ts` 与 `protocol-ts` 的生成树；`release-registry.yml:86` 对同两个 bundle 运行 `boring pack` |
-| `.github/workflows/publish-core.yml`（159） | `@tiqian/core` | `tsc` 与 `npm pack`（:87-97） | npmjs，`alpha` 与 `latest` | OIDC、`NPM_DIST_TAG_TOKEN` | `src/sampler/snapshot/protocol-gen`（10 个文件）与 `prepared-dom-gen`（45 个文件）是 `protocol-ts` 的入库副本（`scripts/cutover/tq-vendor-check.sh:61-62`） |
+| `.github/workflows/publish-core.yml`（159） | `@tiqian/core` | `tsc` 与 `npm pack`（:87-97） | npmjs，`alpha` 与 `latest` | OIDC、`NPM_DIST_TAG_TOKEN` | `src/sampler/snapshot/protocol-gen`（10 个文件）与 `prepared-dom-gen`（45 个文件）是 `protocol-ts` 的入库副本（`scripts/cutover/tq-vendor-check.sh:61-62`）；两个目录已随 `t-mwgrgela-p83q` 删除，见 2.1 |
 | `.github/workflows/publish-prose.yml`（157） | `@tiqian/prose` | `tsc -b` 与 `npm pack`（:92-95） | npmjs，`alpha` 与 `latest` | OIDC、`NPM_DIST_TAG_TOKEN` | 无直接重复，依赖 `@tiqian/core` |
-| `.github/workflows/publish-precompute.yml`（323） | `@tiqian/precompute` 与 4 个平台二进制包 | `cargo build`、`npx neon dist`（:114-123）、`npm pack` | npmjs，`alpha` 与 `latest` | OIDC、`NPM_DIST_TAG_TOKEN` | 输入含 `protocol-rust`、`protocol-ts`、`engine-rust` 的入库副本（`tq-vendor-check.sh:59-63`） |
+| `.github/workflows/publish-precompute.yml`（323） | `@tiqian/precompute` 与 4 个平台二进制包 | `cargo build`、`npx neon dist`（:114-123）、`npm pack` | npmjs，`alpha` 与 `latest` | OIDC、`NPM_DIST_TAG_TOKEN` | 输入含 `protocol-rust`、`protocol-ts`、`engine-rust` 的入库副本（`tq-vendor-check.sh:59-63`）；其中 `protocol-rust` 与 `engine-rust` 现为构建期生成的挂载点，见 2.1 |
 | `.github/workflows/publish.yml`（134） | 9 个 Maven 模块（`build.gradle.kts:30-67`） | Gradle KMP；`:engine` 直接编译 `engine-haxe/out/kotlin-f32/gen`（`engine/build.gradle.kts:43`） | Central staging，由人在 Portal 确认（:124-134） | `MAVEN_CENTRAL_USERNAME`、`MAVEN_CENTRAL_PASSWORD`、`SIGNING_KEY_ID`、`SIGNING_KEY`、`SIGNING_PASSWORD` | `kotlin-f32` 与 `protocol-kotlin` 既由 Gradle 编译，又由 `boring pack` 写出 maven 目录（`PackageArtifacts.hx:347-397`） |
 | `.github/workflows/release-registry.yml`（173） | `tiqian-engine` 与 `tiqian-protocol` | `boring pack` 12 个 bundle（:86），同一次运行用 `--registry-out`、`--owner`、`--repo`、`--asset-base` 写出 registry 树 | GitHub Release（:101-107）、R2（:109-128）、`tiqian-cjk/registry`（:130-148）、Pages（:149-160） | `R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`REGISTRY_REPO_TOKEN`、`PAGES_DEPLOY_HOOK` | 这条工作流就是 `boring pack` 路径本身 |
 | `.github/workflows/release.yml`（82） | 无 | 按依赖顺序调用上述工作流（:31-83） | 无 | `secrets: inherit` | 无 |
 | `.github/workflows/publish-snapshots.yml`（66） | 9 个 Maven 模块 | Gradle（:62-66） | Central snapshots | `MAVEN_CENTRAL_USERNAME`、`MAVEN_CENTRAL_PASSWORD` | 无 |
 | `.github/workflows/snapshot-precompute.yml`（691） | 11 个 npm 包 | `npm pack`，时间戳版本（:59-74） | `npm.pkg.github.com`（:621） | 仓库内置凭据 | 无 |
+
+### 2.1 收敛后 protocol-gen 的位置
+
+TS 侧的入库副本已删除。`platforms/web/client/core/src/sampler/snapshot/protocol-gen/`、`platforms/web/client/core/src/sampler/snapshot/prepared-dom-gen/` 与 `platforms/web/server/core/src/protocol-gen/` 在收敛前是 `protocol-ts` 的入库副本，`t-mwgrgela-p83q` 完成后随提交 `6d1a305ea` 从仓库删除；`platforms/web/client/core/package.json` 与 `platforms/web/server/core/package.json` 改为依赖 npm 上的 `tiqian-protocol@0.1.0-alpha08` 与 `tiqian-shared@0.1.0-alpha08`。`scripts/cutover/tq-vendor-prepared-dom.sh` 与 `platforms/web/server/core/scripts/copy-protocol-gen.sh` 同步删除。
+
+Rust 侧的 `platforms/web/server/precompute/protocol-gen/` 改为构建期生成（`t-mwgxnvsu-wn10`）。`scripts/generate-engine-gen.mjs` 的 rust 分支在 `boring gen engine-rust` 之后运行 `boring gen protocol-rust`，把 `engine-haxe/out/protocol-rust/gen` 复制到该目录；`platforms/web/server/precompute/Cargo.toml` 的 `exclude` 列出 `protocol-gen`，`platforms/web/server/precompute/engine/Cargo.toml` 仍以 `tiqian-protocol-gen = { path = "../protocol-gen" }` 依赖它，`.gitignore` 以 `/platforms/web/server/precompute/protocol-gen/` 排除该目录。`.github/workflows/build-neon-precompute.yml` 在生成 job 上传 `protocol-gen` 制品，并在 binaries job 下载到同一路径。
 
 ## 3. bundle 对照表
 
@@ -45,13 +51,15 @@
 | `protocol-swift` | swift | `tiqian-protocol` | `tiqian-protocol` | swift | 是 | 无 |
 | `engine-rust` | rust | `tiqian-engine` | `tiqian-engine` | cargo | 是 | :60 |
 
+表中「入库副本」列记录收敛前的登记行；`protocol-rust` 与 `engine-rust` 在收敛后改登记为构建期生成的挂载点，`protocol-ts` 的入库副本已删除（见 2.1）。
+
 `engine-rust` 不设置 `package-artifact-stem`，cargo 目录名与文件名都取包名 `tiqian-engine`；精度在 Rust 编译期由 cargo feature `f32` 选择，不再有第二个 Rust 制品。`tools/release-matrix.py` 的 `EXCLUDED_BUNDLES` 当前为空表。
 
 ## 4. 研究结论
 
-1. 重复的形态是同一 bundle 的生成树存在两条消费路径。`scripts/cutover/tq-vendor-check.sh:59-96` 的登记表把驱动输出写成入库副本，交给 npm 与 Gradle 构建；`release-registry.yml:86` 对相同 bundle 运行 `boring pack`。两条路径各自改动时没有交叉检查。
+1. 重复的形态是同一 bundle 的生成树存在两条消费路径。`scripts/cutover/tq-vendor-check.sh:59-96` 的登记表把驱动输出登记为挂载点，收敛前全部是入库副本并交给 npm 与 Gradle 构建；`release-registry.yml:86` 对相同 bundle 运行 `boring pack`。两条路径各自改动时没有交叉检查。收敛后 `protocol-rust` 与 `engine-rust` 的挂载点改为构建期生成的 gitignored 目录。
 2. 覆盖范围由三处手写清单决定：`release-registry.yml:86` 的 12 个 id、`release-manifest.json:130-133` 的 2 个包名、各 `publish-*.yml` 内的包路径。`boring.json` 新增 bundle 时，三处都需要人工修改。
-3. `shared` 没有 bundle。prepared-dom 与 shared-gen 产自 `protocol-ts`（`tq-vendor-check.sh:62`、:71），分别以入库副本形式进入 `@tiqian/core` 与 `platforms/web/server/core`；`boring pack` 写出的 registry 元数据只覆盖 `tiqian-engine` 与 `tiqian-protocol` 两个包。
+3. `shared` 没有 bundle。prepared-dom 与 shared-gen 产自 `protocol-ts`，收敛前分别以入库副本形式进入 `@tiqian/core` 与 `platforms/web/server/core`；这些副本已随 `t-mwgrgela-p83q` 删除，两个包改为依赖已发布的 `tiqian-protocol@0.1.0-alpha08` 与 `tiqian-shared@0.1.0-alpha08`（见 2.1）。`boring pack` 写出的 registry 元数据只覆盖 `tiqian-engine` 与 `tiqian-protocol` 两个包。
 4. 官方仓库与私有 registry 可以互相校对的依据已经存在：registry 元数据的 digest 字段由 `boring pack` 对制品文件计算（`release-registry.yml:86` 的同一次 pack），两边记录同一个文件时摘要相同。
 
 ## 5. 已发现的两条独立缺陷
@@ -95,7 +103,7 @@ registry 元数据由同一次 pack 写出（`release-registry.yml:86` 的四个
 
 ### 6.4 新增 bundle 自动进入发布清单
 
-在 `boring.json` 增加带 `package` 的 bundle 后，matrix 自动把它加入 pack 与对应生态的发布 job，工作流文件不需要修改，registry 元数据在同一次运行写出。`shared` 依 `t-mwgrgela-p83q` 的 bundle 完成后走同一路径，同时删除 `tq-vendor-check.sh:62` 的 prepared-dom 行与 `scripts/cutover/tq-vendor-prepared-dom.sh`。
+在 `boring.json` 增加带 `package` 的 bundle 后，matrix 自动把它加入 pack 与对应生态的发布 job，工作流文件不需要修改，registry 元数据在同一次运行写出。`shared` 的 bundle 由 `t-mwgrgela-p83q` 完成：`tq-vendor-check.sh` 的 prepared-dom 行与 `scripts/cutover/tq-vendor-prepared-dom.sh` 已删除，`@tiqian/core` 与 `@tiqian/precompute` 改为依赖已发布的 `tiqian-shared@0.1.0-alpha08`。
 
 `release-manifest.json:130-133` 的静态包名列表改为从 `boring.json` 派生：`tools/release-gate.py` 的 `check_coverage`（:186-242）对 `kind=boring` 的单元比较 matrix 的输出。
 
