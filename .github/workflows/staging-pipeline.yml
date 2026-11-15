@@ -59,9 +59,22 @@ jobs:
           nix develop -c bash -c "mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/"
           ls -l tools/unicode-data
 
+      # Gradle refuses to configure any Android project when ANDROID_HOME and
+      # ANDROID_SDK_ROOT name different SDK roots ("Several environment
+      # variables and/or system properties contain different paths to the
+      # SDK"). Two writers set them here: the ubuntu-latest image exports
+      # ANDROID_SDK_ROOT=/usr/local/lib/android/sdk, and the flake devShell
+      # (flake.nix:100) exports ANDROID_HOME=<nix store>/libexec/android-sdk,
+      # which carries platforms;android-36, build-tools;36.0.0 and
+      # NDK 29.0.13599879-rc2. The Android modules pin exactly those three
+      # (platforms/android/native-font/build.gradle.kts:18-19 and :34), so the
+      # devShell SDK is the one Gradle must resolve and the runner variable is
+      # dropped before the devShell starts. Removing the unset brings back
+      # maven-local-publish rc=1 on every run.
       - name: Run the staging pipeline
         shell: bash
         run: |
+          unset ANDROID_SDK_ROOT
           export STAGING_VERSION="0.0.0-staging.${GITHUB_SHA::7}"
           nix develop -c bash scripts/staging-pipeline.sh
 
