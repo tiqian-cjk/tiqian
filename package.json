@@ -2,6 +2,8 @@
   "name": "tiqian",
   "private": true,
   "workspaces": [
+    "engine-haxe/out/protocol-ts/gen",
+    "engine-haxe/out/shared-ts/gen",
     "platforms/web/client/engine-runtime",
     "platforms/web/client/core",
     "platforms/web/client/web-component",

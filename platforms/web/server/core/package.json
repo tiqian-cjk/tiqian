@@ -94,8 +94,8 @@
     "@neon-rs/load": "^0.1.82",
     "@tiqian/prose": "0.1.0-alpha.8",
     "linkedom": "^0.18.13",
-    "tiqian-protocol": "0.1.0-alpha.8",
-    "tiqian-shared": "0.1.0-alpha.8"
+    "tiqian-protocol": "workspace:*",
+    "tiqian-shared": "workspace:*"
   },
   "optionalDependencies": {
     "@tiqian/precompute-darwin-arm64": "0.1.0-alpha.8",
