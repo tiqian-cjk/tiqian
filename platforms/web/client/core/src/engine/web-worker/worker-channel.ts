@@ -422,7 +422,9 @@ export async function createPrepareJob(
             inflight -= 1;
             finishIfIdle();
             if (done) job.finishedResolve!(stored);
-            else if (job.onFinished) job.onFinished(job as PrepareJob);
+            // The coordinator owns a separate completion promise and must
+            // retire the prepare member when the final Worker reply arrives.
+            if (job.onFinished) job.onFinished(job as PrepareJob);
           });
       }
       finishIfIdle();
