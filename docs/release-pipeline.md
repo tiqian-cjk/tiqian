@@ -435,6 +435,38 @@ Fetching tiqian.tiqian-engine-f32
 4. 检查 zip 是否只有一个顶层目录（`unzip -l` 查看顶层条目）。
 5. 检查 `metadata.json` 的 `packageSwift` 字段是否存清单正文，不存放 URL。
 
+## 9. staging 管线
+
+`.github/workflows/staging-pipeline.yml` 在 push 到 `main` 与手动 dispatch 时运行，
+用 staging 版本执行发版流程的打包、registry 树生成、cargo 消费与 Maven 本地发布，
+不推送任何远端、不打标签。命令实现放在 `scripts/staging-pipeline.sh`，本地检出运行
+同一条脚本即可复现。
+
+版本号取 `0.0.0-staging.<提交前七位>`，由 `tools/align-package-versions.py` 写入
+`boring.json`。脚本按 `tools/release-matrix.py --list-bundles` 的列表逐个调用
+`boring pack`，单个 bundle 失败时其余 bundle 仍会执行并记录结果。
+
+脚本步骤与对应的发版步骤：
+
+| staging 步骤 | 对应的发版步骤 |
+| --- | --- |
+| `align` | `release.yml` 的 Align the package versions |
+| `pack` | `release.yml` 的 Pack every bundle |
+| `collect-artifacts` | `release.yml` 的 Collect the artifacts 与 Record the artifact digests |
+| `registry-tree` | `release-registry.yml` 的 Check the registry tree against the artifacts |
+| `maven-artifact-ids` | maven 元数据的 `artifacts` 数组要带 `artifactId` |
+| `cargo-consume` | cargo 消费者从 pack 产物构建依赖 |
+| `maven-local-publish` 与 `maven-local-repo` | `publish.yml` 的 `publishTiqianToMavenLocal` 与九个坐标 |
+
+隔离方式：`--registry-out` 指向 staging 根目录，owner 写成 `staging-local`，
+`--asset-base` 写成保留域 `staging.invalid`；Maven 发布加
+`-Dmaven.repo.local=<staging 根>/maven-repo`。脚本不含 npm publish、cargo publish、
+`git push`、标签创建与 R2 上传。
+
+刻意不覆盖的动作是需要凭据的上传：npm 与 pub 的正式发布、crates.io 发布、Swift 归档
+上传到 R2、Maven Central 部署、registry 仓库提交与 GitHub Release 创建。这些动作在
+staging 管线里没有对应步骤。
+
 ## 验证命令
 
 本文档的命令在 v0.1.0-alpha07 发布后逐一实测。文档修改后运行：
