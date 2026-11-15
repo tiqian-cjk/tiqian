@@ -123,8 +123,15 @@ step_pack() {
   echo "packs: $ids"
   local rc=0
   local id
+  local out_root
+  out_root="$(python3 -c 'import json, pathlib; text = pathlib.Path("boring.json").read_text(); print(json.loads(text[text.index("{") :])["outRoot"])')"
   for id in $ids; do
     echo "--- pack $id ---"
+    # A repeated run with a new staging version would otherwise leave the
+    # previous version's artifacts beside the output tree, and both the pack
+    # finders and the artifact collection match by name stem. CI checks out
+    # fresh; a local checkout does not.
+    rm -rf "$out_root/$id"
     if ! boring pack "$id" --registry-out "$TREE" --owner "$OWNER" --repo tiqian --asset-base "$ASSET_BASE"; then
       echo "--- pack $id FAILED ---"
       rc=1
@@ -140,7 +147,11 @@ step_collect() {
   find engine-haxe/out -path "$ROOT" -prune -o -type f \( \
     -name "*.tgz" -o -name "*.tar.gz" -o -name "*.jar" -o -name "*.crate" \
     -o -name "*.zip" -o -name "*.pom" \) -print0 |
-    while IFS= read -r -d "" file; do cp -f "$file" "$ARTIFACTS/"; done
+    while IFS= read -r -d "" file; do
+      case "$(basename "$file")" in
+        *-"$STAGING_VERSION".*) cp -f "$file" "$ARTIFACTS/" ;;
+      esac
+    done
   if [ -z "$(ls -A "$ARTIFACTS")" ]; then
     echo "no pack artifacts were produced"
     return 1
