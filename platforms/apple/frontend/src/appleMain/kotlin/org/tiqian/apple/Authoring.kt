@@ -12,13 +12,13 @@ import org.tiqian.core.LineLengthGrid
 import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.RubyKind
 import org.tiqian.core.RubySpan
-import org.tiqian.core.RichTextRole
+import org.tiqian.core.Link
 import org.tiqian.core.RichTextSpan
 import org.tiqian.core.TextRange
 import org.tiqian.core.TextSpan
 import org.tiqian.core.TextStyle
 import org.tiqian.core.TiqianTextContent
-import org.tiqian.core.ic
+import org.tiqian.core.FloatIc
 import org.tiqian.apple.coretext.CoreTextLayoutRenderer
 import kotlin.math.ceil
 import kotlin.math.max
@@ -142,8 +142,8 @@ internal sealed interface Indent {
     fun resolve(): Pair<Ic, Ic?> = when (this) {
         FirstLine -> Ic.Zero to null // adaptive default
         Flush -> Ic.Zero to Ic.Zero
-        is Hanging -> amount.ic to (-amount).ic
-        is Quote -> amount.ic to firstLine.ic
+        is Hanging -> FloatIc.ic(amount) to FloatIc.ic(-amount)
+        is Quote -> FloatIc.ic(amount) to FloatIc.ic(firstLine)
     }
 }
 
@@ -282,7 +282,7 @@ internal fun lower(content: ParagraphContent, baseSize: Float): Lowered {
                     bounds += start; bounds += end
                 }
                 piece.linkTarget?.let { target ->
-                    richText += RichTextSpan(TextRange(start, end), RichTextRole.Link(target))
+                    richText += RichTextSpan(TextRange(start, end), Link(target))
                     bounds += start; bounds += end
                 }
             }
@@ -332,7 +332,7 @@ private fun layoutBlocks(
         val (blockIc, firstIc) = indent.resolve()
         val result = engineLayout(
             LayoutInput(
-                content = TiqianTextContent(low.text, low.spans, low.sourceBoundaries),
+                content = TiqianTextContent(low.text, low.spans, low.sourceBoundaries.toList()),
                 textStyle = TextStyle(fontSize = baseSize, locale = low.locale),
                 paragraphStyle = ParagraphStyle(blockIndent = blockIc, firstLineIndent = firstIc),
                 constraints = LayoutConstraints(maxWidth = columnWidth),

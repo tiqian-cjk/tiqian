@@ -3,7 +3,7 @@ package org.tiqian.apple
 import kotlinx.cinterop.ExperimentalForeignApi
 import org.tiqian.core.ColorSpan
 import org.tiqian.core.LayoutResult
-import org.tiqian.core.RichTextRole
+import org.tiqian.core.Link
 import org.tiqian.core.RichTextSpan
 import org.tiqian.core.SourceBoundaryBias
 import org.tiqian.core.TextSpan
@@ -197,7 +197,7 @@ class Document internal constructor(
         indexedBlocks.forEach { indexed ->
             val block = indexed.placed
             block.richTextSpans.forEach spanLoop@ { span ->
-                val link = span.role as? RichTextRole.Link ?: return@spanLoop
+                val link = span.role as? Link ?: return@spanLoop
                 block.result.getBoundingBoxes(span.range).forEach { rect ->
                     add(
                         LinkBox(
