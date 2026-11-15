@@ -443,7 +443,7 @@ Fetching tiqian.tiqian-engine-f32
 同一条脚本即可复现。
 
 版本号取 `0.0.0-staging.<提交前七位>`，由 `tools/align-package-versions.py` 写入
-`boring.json`。脚本按 `tools/release-matrix.py --list-bundles` 的列表逐个调用
+`boring.json` 与各 npm 清单。脚本按 `tools/release-matrix.py --list-bundles` 的列表逐个调用
 `boring pack`，单个 bundle 失败时其余 bundle 仍会执行并记录结果。
 
 脚本步骤与对应的发版步骤：
