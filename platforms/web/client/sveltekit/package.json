@@ -1,6 +1,6 @@
 {
   "name": "@tiqian/sveltekit",
-  "version": "0.1.0-alpha.3",
+  "version": "0.1.0-alpha08",
   "description": "SvelteKit integration for @tiqian/prose.",
   "license": "MPL-2.0",
   "type": "module",
@@ -34,13 +34,13 @@
   },
   "peerDependencies": {
     "@sveltejs/kit": ">=2",
-    "@tiqian/precompute": "0.1.0-alpha.3",
-    "@tiqian/prose": "0.1.0-alpha.6",
+    "@tiqian/precompute": "0.1.0-alpha08",
+    "@tiqian/prose": "0.1.0-alpha08",
     "svelte": ">=5"
   },
   "devDependencies": {
-    "@tiqian/precompute": "0.1.0-alpha.3",
-    "@tiqian/prose": "0.1.0-alpha.6",
+    "@tiqian/precompute": "0.1.0-alpha08",
+    "@tiqian/prose": "0.1.0-alpha08",
     "svelte": "5.56.7"
   },
   "scripts": {

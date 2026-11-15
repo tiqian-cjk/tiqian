@@ -52,15 +52,36 @@ git push origin v0.1.0-alpha07
 
 ## 3. 打包前置
 
-打包前 `tools/align-package-versions.py` 按发布版本改写清单：
+发布版本只有一个来源：`v*.*.*` 标签去掉 `v` 前缀。`tools/align-package-versions.py`
+把这个版本写入两类清单，发布准备阶段与打包 job 各调用一次。
+
+发布准备阶段，在仓库根目录执行：
+
+```shell
+python3 tools/align-package-versions.py --npm "${VERSION}"
+```
+
+`--npm` 改写以下文件的 `version` 字段：根 `package.json` 的 `workspaces` 列出的每个
+npm 清单，`release-manifest.json` 中各发布单元与 `notInRelease` 列出的每个 npm 清单。
+同一次调用把仓库内部 `@tiqian/*` 依赖以及 `tiqian-engine`、`tiqian-protocol`、
+`tiqian-shared` 的依赖版本改成同一个值；写成 `workspace:` 的依赖不改写。改写结果需要
+随发布提交进入标签，标签与手写包版本之间就此对应。
+
+`.github/workflows/release-gate.yml` 在解析发布版本之后运行
+`tools/align-package-versions.py --check "${GITHUB_REF_NAME#v}"`。标签 commit 上的
+任何 npm 清单或内部依赖版本不等于标签版本时，发布在开始之前终止。
+
+`boring.json` 保持占位版本 `0.1.0`。打包 job 在 `boring pack` 之前运行不带 `--npm` 的
+形式：
 
 ```shell
 python3 tools/align-package-versions.py "${GITHUB_REF_NAME#v}"
 ```
 
-`tools/align-package-versions.py` 把 `boring.json` 里每个声明了 `package` 的 bundle
-的 `version` 字段改成标签版本。registry 的产物名是 `<包名>-<版本>`，如果清单还带着
+它除了写入 npm 清单，还把 `boring.json` 里每个声明了 `package` 的 bundle 的
+`version` 字段改成标签版本。registry 的产物名是 `<包名>-<版本>`，如果清单还带着
 占位版本 `0.1.0`，下载地址就不存在。
+
 
 制品与 registry 元数据由同一条 `boring pack` 命令产出。四个 registry 参数同时给出时，
 `boring pack` 在写出每个 bundle 的制品之后，把 registry 树写到 `$RUNNER_TEMP/registry-tree`：

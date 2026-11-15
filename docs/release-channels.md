@@ -104,4 +104,6 @@ npm 快照只发 GitHub Packages 属于有意设计。`snapshot-precompute.yml:3
 
 1. 是否新增公开的 npm 快照通道。
 2. Maven Central 的暂存发布是否保持人工确认。
-3. 三个 npm 包的版本是否先对齐到同一个版本（当前分别是 alpha.1、alpha.3、alpha.6）。
+3. 三个 npm 包的版本是否先对齐到同一个版本（当前分别是 alpha.1、alpha.3、alpha.6）。该问题已有结论：
+   所有 npm 清单一律由 `tools/align-package-versions.py --npm` 写到标签版本，标签 commit 由此
+   定位每个手写包版本；现行流程见 [release-pipeline.md](release-pipeline.md) 的 3 节。
