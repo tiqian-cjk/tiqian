@@ -72,7 +72,7 @@ class AndroidNativeTextShaper(
                 } else {
                     AndroidNativeGlyphReplay.transformInkBounds(
                         bounds = Rect(values[0], values[1], values[2], values[3]),
-                        syntheticItalic = TiqianAndroidFontBackend.isSyntheticItalicFace(face.descriptor.id),
+                        syntheticItalic = TiqianAndroidFontBackend.isSyntheticItalicFace(face.descriptor.id.value),
                     )
                 }
             }
@@ -82,13 +82,13 @@ class AndroidNativeTextShaper(
                 advance = shaped.positions[p + 2],
                 x = shaped.positions[p],
                 y = shaped.positions[p + 1],
-                renderFontKey = face.descriptor.id,
+                renderFontKey = face.descriptor.id.value,
                 bounds = bound,
                 haltAdvance = halt?.first,
                 haltPlacementX = halt?.second,
             )
         }
-        val physicalFontKey = face.descriptor.id
+        val physicalFontKey = face.descriptor.id.value
         return ShapingResult(
             clusters = listOf(
                 Cluster(
@@ -157,7 +157,7 @@ class AndroidNativeTextShaper(
         capabilityIssue: String,
     ): ShapingResult {
         val advance = face.degradedRunAdvance
-        val faceKey = face.descriptor.id
+        val faceKey = face.descriptor.id.value
         val glyph = Glyph(
             id = 0,
             clusterRange = input.range,
