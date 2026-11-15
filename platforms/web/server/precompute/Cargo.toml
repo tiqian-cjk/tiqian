@@ -5,8 +5,8 @@
 # test suite is not part of this workspace's acceptance surface.
 [workspace]
 resolver = "2"
-members = ["engine", "binding", "protocol-gen", "tiqian"]
-exclude = ["engine-gen"]
+members = ["engine", "binding", "tiqian"]
+exclude = ["engine-gen", "protocol-gen"]
 
 [workspace.package]
 version = "0.1.0"

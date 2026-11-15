@@ -11,6 +11,9 @@ tiqian = { path = "../tiqian", version = "0.1.0" }
 # depend on a gitignored build output and collide with the vendored package
 # name in the lockfile.
 tiqian-engine-gen = { path = "../engine-gen" }
+# The generated protocol crate. Like tiqian-engine-gen it is produced by
+# `node scripts/generate-engine-gen.mjs` into a gitignored mount before cargo
+# build; the path is that mount, not engine-haxe/out/.
 tiqian-protocol-gen = { path = "../protocol-gen" }
 harfrust = "0.13"
 skrifa = "0.46"

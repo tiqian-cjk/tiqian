@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Generates the engine trees that used to be committed:
 //   platforms/web/server/precompute/engine-gen    (bundle engine-rust)
+//   platforms/web/server/precompute/protocol-gen  (bundle protocol-rust)
 //   platforms/web/client/engine-runtime/engine-gen (bundles ts + protocol-ts)
 //
 // Both directories are build products and are gitignored. Run the script
@@ -73,6 +74,24 @@ if (target === "ts") {
     cpSync(tests, rustGen, { recursive: true });
   }
   console.log(`generate-engine-gen: wrote ${rustGen}`);
+
+  // The protocol crate follows the same shape: `boring gen protocol-rust`
+  // writes engine-haxe/out/protocol-rust/gen, and the precompute workspace
+  // reads it from this gitignored mount (engine/Cargo.toml points at it).
+  runDriver("protocol-rust");
+  const protocolGenerated = join(outRoot, "protocol-rust", "gen");
+  if (!existsSync(protocolGenerated)) {
+    throw new Error(`generate-engine-gen: expected driver output at ${protocolGenerated}`);
+  }
+  const protocolGen = join(repoRoot, "platforms/web/server/precompute/protocol-gen");
+  rmSync(protocolGen, { recursive: true, force: true });
+  mkdirSync(protocolGen, { recursive: true });
+  cpSync(protocolGenerated, protocolGen, { recursive: true });
+  const protocolTests = join(outRoot, "protocol-rust", "gen-tests");
+  if (existsSync(protocolTests)) {
+    cpSync(protocolTests, protocolGen, { recursive: true });
+  }
+  console.log(`generate-engine-gen: wrote ${protocolGen}`);
 } else {
   console.error(`generate-engine-gen: unknown target ${target} (expected rust or ts)`);
   process.exit(1);
