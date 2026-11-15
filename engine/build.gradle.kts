@@ -3,8 +3,28 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     kotlin("multiplatform")
     id("com.android.kotlin.multiplatform.library")
-    // Haxe port lane: coverage baseline for the pre-refactor engine.
+    // Haxe port coverage baseline for the pre-refactor engine.
     id("org.jetbrains.kotlinx.kover") version "0.9.9"
+}
+
+// Skiko publishes its native Skia library as one artifact per host, so a JVM
+// runtime must name the machine running the build. A fixed macOS classifier
+// leaves every Linux and x64 macOS host without a native library, which turns
+// the first Skia call into an UnsatisfiedLinkError.
+fun skikoRuntimeClassifier(): String {
+    val osName = System.getProperty("os.name").lowercase()
+    val archName = System.getProperty("os.arch").lowercase()
+    val arch = when (archName) {
+        "x86_64", "amd64" -> "x64"
+        "aarch64", "arm64" -> "arm64"
+        else -> error("skiko has no runtime artifact for host architecture '" + archName + "'")
+    }
+    return when {
+        osName.startsWith("linux") -> "linux-" + arch
+        osName.startsWith("mac") -> "macos-" + arch
+        osName.startsWith("windows") -> "windows-" + arch
+        else -> error("skiko has no runtime artifact for host OS '" + osName + "'")
+    }
 }
 
 // commonTest is shared with the Android host-test compilation. AGP's lint model tasks do not
@@ -58,7 +78,7 @@ kotlin {
         jvmTest.dependencies {
             implementation(project(":platforms:jvm:shaping"))
             implementation(project(":platforms:jvm:skia"))
-            runtimeOnly("org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.144.6")
+            runtimeOnly("org.jetbrains.skiko:skiko-awt-runtime-" + skikoRuntimeClassifier() + ":0.144.6")
         }
     }
 }
