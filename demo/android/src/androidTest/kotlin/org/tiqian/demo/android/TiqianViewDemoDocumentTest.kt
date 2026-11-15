@@ -5,7 +5,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.tiqian.android.view.cjkSpannedCompatibility
 import org.tiqian.core.ColorSpan
-import org.tiqian.core.RichTextRole
+import org.tiqian.core.Link
+import org.tiqian.core.Underline
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -17,8 +18,8 @@ class TiqianViewDemoDocumentTest {
         assertTrue(source.cjkSpannedCompatibility().canPreserveAllKnownSemantics)
 
         val paragraph = tiqianViewDemoParagraph(index = 0, textSize = 17f, lineHeight = 27f)
-        val link = paragraph.richTextSpans.single { it.role is RichTextRole.Link }
-        val underline = paragraph.richTextSpans.single { it.role == RichTextRole.Underline }
+        val link = paragraph.richTextSpans.single { it.role is Link }
+        val underline = paragraph.richTextSpans.single { it.role == Underline.instance }
 
         assertEquals(link.range, underline.range)
         assertEquals(
