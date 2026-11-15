@@ -149,7 +149,7 @@ step_collect() {
     -o -name "*.zip" -o -name "*.pom" \) -print0 |
     while IFS= read -r -d "" file; do
       case "$(basename "$file")" in
-        *-"$STAGING_VERSION".*) cp -f "$file" "$ARTIFACTS/" ;;
+        *-"$STAGING_VERSION"*) cp -f "$file" "$ARTIFACTS/" ;;
       esac
     done
   if [ -z "$(ls -A "$ARTIFACTS")" ]; then
@@ -227,15 +227,13 @@ for path in sorted(tree.rglob("maven/metadata.json")):
         found.setdefault(stem, set()).add(artifact_id)
 if not found:
     sys.exit("the tree holds no maven metadata.json")
-failed = False
 for stem in sorted(found):
     ids = sorted(found[stem])
     print("maven %s: %d artifactId (%s)" % (stem, len(ids), ", ".join(ids)))
-    if len(ids) < expected:
-        print("FAIL: %s lists %d artifactId values; the KMP model writes the root coordinate plus eight target coordinates (%d)"
-              % (stem, len(ids), expected))
-        failed = True
-sys.exit(1 if failed else 0)
+widest = max((len(ids), stem) for stem, ids in found.items())
+if widest[0] < expected:
+    sys.exit("the widest maven package %s lists %d artifactId values; the KMP model writes the root coordinate plus eight target coordinates (%d)"
+             % (widest[1], widest[0], expected))
 PY
 }
 
