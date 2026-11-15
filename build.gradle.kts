@@ -188,6 +188,21 @@ fun Project.configureMavenPublishing(module: PublishedModule) {
             }
         }
     }
+
+    val publishedProject = this
+    gradle.projectsEvaluated {
+        publishedProject.extensions.configure<PublishingExtension>("publishing") {
+            publications.withType(MavenPublication::class.java).configureEach {
+                val suffix = when (name) {
+                    "kotlinMultiplatform" -> ""
+                    "jvm" -> "-jvm"
+                    "android" -> "-android"
+                    else -> "-" + name.lowercase()
+                }
+                artifactId = module.artifactId + suffix
+            }
+        }
+    }
 }
 
 subprojects {
