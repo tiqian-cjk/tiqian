@@ -8,6 +8,7 @@ import std.SortedSet;
 
 /** Stable identity of one physical SFNT face, collection index and variation instance. */
 @:mainOnly
+@:valueType
 abstract FontFaceId(String) {
     public static function of(value:String):FontFaceId {
         if (value == null || StringTools.trim(value).length == 0)
