@@ -7,8 +7,8 @@ name: Staging pipeline
 # output below one staging directory and publishes nothing: no tag, no push to
 # an official registry, no R2 upload and no Central deployment.
 #
-# The work lives in scripts/staging-pipeline.sh so the lane can also run in a
-# developer checkout with the same commands.
+# The work lives in scripts/staging-pipeline.sh so the same commands also run
+# in a developer checkout.
 on:
   push:
     branches: ["main"]
