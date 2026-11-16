@@ -9,6 +9,10 @@
 # below one staging root. It never tags, never pushes and never contacts an
 # official registry.
 #
+# The Gradle task set is not repeated here: it comes from
+# scripts/release-gradle-tasks.sh, the same file .github/workflows/publish.yml
+# reads, so this run cannot verify a subset of what the release verifies.
+#
 # Usage: scripts/staging-pipeline.sh [--bundles "id ..."] [--stages "name ..."] [--root <dir>]
 #
 # Stages (default: all of them): align, pack, collect-artifacts, registry-tree,
@@ -30,6 +34,9 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 2
+
+# shellcheck source=scripts/release-gradle-tasks.sh
+. "$REPO_ROOT/scripts/release-gradle-tasks.sh"
 
 DEFAULT_STAGES="align pack collect-artifacts registry-tree staging-isolation maven-artifact-ids cargo-consume maven-local-publish maven-local-repo summary"
 BUNDLES_OVERRIDE=""
@@ -270,12 +277,16 @@ EOF
   return "$rc"
 }
 
-# The Maven lane of publish.yml generates the Kotlin tree first and then
-# publishes to an isolated repository, so a clean checkout compiles real
-# sources rather than an empty source set.
+# The Maven lane of publish.yml generates the Kotlin tree, runs the generated
+# suite through the driver and then runs the shared release task set against an
+# isolated repository, so a clean checkout compiles real sources rather than an
+# empty source set and the modules only assemble reaches (demo,
+# tools:engine-probes, platforms:apple) break here instead of on the release tag.
 step_maven_publish() {
   in_devshell "bash tools/setup-haxe-env.sh && boring gen kotlin-f32 --project boring.json" || return 1
-  TIQIAN_VERSION="$STAGING_VERSION" ./gradlew publishTiqianToMavenLocal \
+  # Same command as publish.yml's "Run the generated Kotlin test suite" step.
+  in_devshell "boring test kotlin-f32 --project boring.json" || return 1
+  TIQIAN_VERSION="$STAGING_VERSION" ./gradlew "${RELEASE_GRADLE_TASKS[@]}" \
     -Dmaven.repo.local="$MAVEN_REPO" --no-daemon
 }
 

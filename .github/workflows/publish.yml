@@ -147,14 +147,17 @@ jobs:
       # image exports ANDROID_SDK_ROOT=/usr/local/lib/android/sdk, so that
       # variable is dropped before the devShell starts, as in
       # staging-pipeline.yml:77.
+      # The task set comes from scripts/release-gradle-tasks.sh, the file
+      # scripts/staging-pipeline.sh sources on every push to main. Adding a task
+      # to that file changes both runs at once, so the staging run verifies the
+      # whole release set instead of a copy that drifts from this one.
       - name: Verify the engine and the release artifacts
         shell: bash
         run: |
           unset ANDROID_SDK_ROOT
           nix develop -c bash -c '
-            ./gradlew \
-              assemble \
-              publishTiqianToMavenLocal \
+            . scripts/release-gradle-tasks.sh
+            ./gradlew "${RELEASE_GRADLE_TASKS[@]}" \
               -Dmaven.repo.local="$RUNNER_TEMP/tiqian-maven-preflight" \
               --no-daemon
           '
