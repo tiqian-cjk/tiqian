@@ -25,14 +25,14 @@
       },
     },
     "engine-haxe/out/protocol-ts/gen": {
-      "name": "tiqian-protocol",
+      "name": "@tiqian/protocol",
       "version": "0.1.0",
       "devDependencies": {
         "typescript": "^5.9.0",
       },
     },
     "engine-haxe/out/shared-ts/gen": {
-      "name": "tiqian-shared",
+      "name": "@tiqian/shared",
       "version": "0.1.0",
       "devDependencies": {
         "typescript": "^5.9.0",
@@ -58,8 +58,8 @@
       "version": "0.1.0-alpha.8",
       "dependencies": {
         "@tiqian/ffi": "0.1.0-alpha.8",
-        "tiqian-protocol": "workspace:*",
-        "tiqian-shared": "workspace:*",
+        "@tiqian/protocol": "workspace:*",
+        "@tiqian/shared": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "22.15.29",
@@ -121,10 +121,11 @@
       "version": "0.1.0-alpha.8",
       "dependencies": {
         "@neon-rs/load": "^0.1.82",
+        "@tiqian/core": "0.1.0-alpha.8",
         "@tiqian/prose": "0.1.0-alpha.8",
+        "@tiqian/protocol": "workspace:*",
+        "@tiqian/shared": "workspace:*",
         "linkedom": "^0.18.13",
-        "tiqian-protocol": "workspace:*",
-        "tiqian-shared": "workspace:*",
       },
       "devDependencies": {
         "@eslint-community/eslint-plugin-eslint-comments": "^4.7.2",
@@ -685,7 +686,11 @@
 
     "@tiqian/prose": ["@tiqian/prose@workspace:platforms/web/client/web-component"],
 
+    "@tiqian/protocol": ["@tiqian/protocol@workspace:engine-haxe/out/protocol-ts/gen"],
+
     "@tiqian/react": ["@tiqian/react@workspace:platforms/web/client/react"],
+
+    "@tiqian/shared": ["@tiqian/shared@workspace:engine-haxe/out/shared-ts/gen"],
 
     "@tiqian/sveltekit": ["@tiqian/sveltekit@workspace:platforms/web/client/sveltekit"],
 
@@ -1202,10 +1207,6 @@
     "tinyexec": ["tinyexec@1.3.1", "", {}, "sha512-GCvB3aoys96IuDFBMcTB46JOR6mdMtAToqwiW8JlWhsoh1mhHi/xn9ss/Dg7N555GiJyEt2qzoG/NHCwM6h1EA=="],
 
     "tinyglobby": ["tinyglobby@0.2.17", "", { "dependencies": { "fdir": "^6.5.0", "picomatch": "^4.0.4" } }, "sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g=="],
-
-    "tiqian-protocol": ["tiqian-protocol@workspace:engine-haxe/out/protocol-ts/gen"],
-
-    "tiqian-shared": ["tiqian-shared@workspace:engine-haxe/out/shared-ts/gen"],
 
     "tiqian-web-demo": ["tiqian-web-demo@workspace:demo/web"],
 
