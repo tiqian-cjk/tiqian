@@ -14,7 +14,7 @@ kotlin {
             languageSettings.optIn("kotlinx.cinterop.ExperimentalForeignApi")
         }
         commonMain.dependencies {
-            api(project(":engine"))
+            api(project(":platforms:engine"))
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

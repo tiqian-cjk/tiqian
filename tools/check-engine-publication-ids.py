@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assert every :engine publication artifactId carries the tiqian-engine prefix.
+"""Assert every :platforms:engine publication artifactId carries the tiqian-engine prefix.
 
 The root build script rewrites each MavenPublication artifactId, and the poms
 are only written during a publish, so no ordinary compile covers this. The
@@ -11,8 +11,8 @@ pre-rewrite value.
 Usage:
     check-engine-publication-ids.py [--offline] [--gradle-arg ARG ...]
 
-Exit status: 0 every :engine publication is prefixed, 1 a publication is missing
-or not prefixed, 2 the checker or the gradle run is unusable.
+Exit status: 0 every :platforms:engine publication is prefixed, 1 a publication
+is missing or not prefixed, 2 the checker or the gradle run is unusable.
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def run_gradle(repo: pathlib.Path, init_script: pathlib.Path, extra: list) -> st
     wrapper = repo / "gradlew"
     if not wrapper.is_file():
         raise SystemExit("MISCONFIGURED: gradle wrapper is missing: %s" % wrapper)
-    command = [str(wrapper), "-I", str(init_script), ":engine:printArtifactIds"]
+    command = [str(wrapper), "-I", str(init_script), ":platforms:engine:printArtifactIds"]
     command.extend(extra)
     completed = subprocess.run(command, cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     return completed.stdout
@@ -53,7 +53,7 @@ def parse(output: str) -> dict:
 
 
 def main(argv: list, repo: pathlib.Path) -> int:
-    parser = argparse.ArgumentParser(description="Check the :engine publication artifact ids.")
+    parser = argparse.ArgumentParser(description="Check the :platforms:engine publication artifact ids.")
     parser.add_argument("--offline", action="store_true", help="pass --offline to gradle")
     parser.add_argument("--gradle-arg", action="append", default=[], help="extra gradle argument (repeatable)")
     args = parser.parse_args(argv)
@@ -79,13 +79,13 @@ def main(argv: list, repo: pathlib.Path) -> int:
         if not artifact_id.startswith(PREFIX):
             failures.append("%s: artifactId %r does not start with %r" % (name, artifact_id, PREFIX))
     if len(publications) != EXPECTED_COUNT:
-        failures.append("expected %d :engine publications, found %d" % (EXPECTED_COUNT, len(publications)))
+        failures.append("expected %d :platforms:engine publications, found %d" % (EXPECTED_COUNT, len(publications)))
     if failures:
         for failure in failures:
             print("FAIL: %s" % failure)
         print("check: FAIL (%d)" % len(failures))
         return EXIT_MISMATCH
-    print("check: OK (%d :engine publications, all prefixed with %s)" % (len(publications), PREFIX))
+    print("check: OK (%d :platforms:engine publications, all prefixed with %s)" % (len(publications), PREFIX))
     return EXIT_OK
 
 

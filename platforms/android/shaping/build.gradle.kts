@@ -21,7 +21,7 @@ android {
 }
 
 dependencies {
-    api(project(":engine"))
+    api(project(":platforms:engine"))
 
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

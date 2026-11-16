@@ -6,20 +6,21 @@ plugins {
 //
 // The probes are measurement and regression tools, not part of a test suite, so
 // they live in jvmMain and are compiled by :tools:engine-probes:compileKotlinJvm.
-// They used to sit in a private "tools" compilation of :engine; they moved here
-// so :engine keeps only its build configuration, the generated commonMain tree
-// and the Android baseline profile.
+// They used to sit in a private "tools" compilation of the engine module; they
+// moved here so the engine module keeps only its build configuration and the
+// generated commonMain tree.
 //
-// The engine classes this module compiles against come from the :engine project.
-// engine/build.gradle.kts sets commonMain.setSrcDirs to
-// engine-haxe/out/kotlin-f32/gen, so depending on :engine consumes exactly that
-// generated tree. This module declares no handwritten engine source set.
+// The engine classes this module compiles against come from the
+// :platforms:engine project. platforms/engine/build.gradle.kts sets
+// commonMain.setSrcDirs to engine-haxe/out/kotlin-f32/gen, so depending on
+// :platforms:engine consumes exactly that generated tree. This module declares
+// no handwritten engine source set.
 kotlin {
     jvm()
 
     sourceSets {
         jvmMain.dependencies {
-            implementation(project(":engine"))
+            implementation(project(":platforms:engine"))
             implementation(project(":platforms:jvm:shaping"))
             implementation(project(":platforms:jvm:skia"))
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")

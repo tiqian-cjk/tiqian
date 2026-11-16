@@ -27,7 +27,7 @@ kotlin {
 
     sourceSets {
         jvmMain.dependencies {
-            api(project(":engine"))
+            api(project(":platforms:engine"))
             api("org.jetbrains.skiko:skiko-awt:0.144.6")
         }
 

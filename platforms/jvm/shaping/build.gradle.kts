@@ -7,7 +7,7 @@ kotlin {
 
     sourceSets {
         jvmMain.dependencies {
-            api(project(":engine"))
+            api(project(":platforms:engine"))
         }
 
         jvmTest.dependencies {

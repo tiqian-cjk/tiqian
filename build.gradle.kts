@@ -30,7 +30,7 @@ data class PublishedModule(
 )
 
 val publishedModules = mapOf(
-    ":engine" to PublishedModule(
+    ":platforms:engine" to PublishedModule(
         "tiqian-engine",
         "Tiqian Engine",
         "The Tiqian CJK paragraph layout engine: document and layout data types, font " +

@@ -18,7 +18,7 @@ android {
 }
 
 dependencies {
-    api(project(":engine"))
+    api(project(":platforms:engine"))
     api(project(":platforms:android:shaping"))
 
     testImplementation(kotlin("test-junit"))

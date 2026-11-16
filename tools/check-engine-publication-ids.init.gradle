@@ -1,4 +1,4 @@
-// Execution-phase reader for the :engine MavenPublication artifact ids.
+// Execution-phase reader for the :platforms:engine MavenPublication artifact ids.
 //
 // The root build script rewrites each publication's artifactId inside its own
 // gradle.projectsEvaluated handler. An init script that reads the value from
@@ -7,16 +7,16 @@
 // from a broken one. Registering a task and reading in doLast runs after every
 // configuration callback, so the value is final (PIT-689).
 allprojects { project ->
-    if (project.path == ":engine") {
+    if (project.path == ":platforms:engine") {
         project.tasks.register("printArtifactIds") {
             doLast {
                 def publishing = project.extensions.findByName("publishing")
                 if (publishing == null) {
-                    println "ARTIFACT_ID|:engine|<no-publishing-extension>|"
+                    println "ARTIFACT_ID|:platforms:engine|<no-publishing-extension>|"
                     return
                 }
                 publishing.publications.each { publication ->
-                    println "ARTIFACT_ID|:engine|" + publication.name + "|" + publication.artifactId
+                    println "ARTIFACT_ID|:platforms:engine|" + publication.name + "|" + publication.artifactId
                 }
             }
         }

@@ -45,16 +45,16 @@ dependencyResolutionManagement {
 rootProject.name = "tiqian"
 
 // ============================================================================
-// engine-haxe is the only active source for the engine: ":engine" compiles the
-// Kotlin that boring generates from engine-haxe/src. The handwritten Kotlin
-// implementation is gone; the module keeps only the Gradle configuration for
-// the generated tree and the platform test glue. Do not add engine code to
-// ":engine"; edit engine-haxe/src instead.
+// engine-haxe is the only active source for the engine: ":platforms:engine"
+// compiles the Kotlin that boring generates from engine-haxe/src. The
+// handwritten Kotlin implementation is gone; the module keeps only the Gradle
+// configuration for the generated tree. Do not add engine code to
+// ":platforms:engine"; edit engine-haxe/src instead.
 // ============================================================================
-logger.info("tiqian: :engine compiles the Kotlin generated from engine-haxe")
+logger.info("tiqian: :platforms:engine compiles the Kotlin generated from engine-haxe")
 
 include(
-    ":engine", // generated from engine-haxe
+    ":platforms:engine", // generated from engine-haxe
     ":platforms:jvm:shaping",
     ":platforms:jvm:skia",
     ":platforms:android:shaping",
@@ -71,6 +71,6 @@ include(
     ":demo:android",
     ":demo:font-diagnostics",
     // Developer probes (measurement and regression tools) and the README sample
-    // generator live outside :engine; see engine/build.gradle.kts.
+    // generator live outside the engine module; see platforms/engine/build.gradle.kts.
     ":tools:engine-probes",
 )
