@@ -29,13 +29,10 @@ data class PublishedModule(
     val description: String,
 )
 
+// The engine is not published from this build: boring owns the nine tiqian-engine
+// Maven coordinates through the kotlin-f32 bundle's kmpPublication. This map
+// lists only the platform modules that still carry their own publication.
 val publishedModules = mapOf(
-    ":platforms:engine" to PublishedModule(
-        "tiqian-engine",
-        "Tiqian Engine",
-        "The Tiqian CJK paragraph layout engine: document and layout data types, font " +
-            "and shaping contracts, line breaking, and Chinese composition rules.",
-    ),
     ":platforms:jvm:shaping" to PublishedModule("tiqian-jvm-shaping", "Tiqian JVM Shaping", "JVM shaping support for Tiqian."),
     ":platforms:jvm:skia" to PublishedModule("tiqian-jvm-skia", "Tiqian Skia Shaping", "Skia shaping and glyph replay support for Tiqian."),
     ":platforms:android:shaping" to PublishedModule(

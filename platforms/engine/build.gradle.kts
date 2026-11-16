@@ -5,9 +5,9 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 // The module holds no sources: commonMain points at
 // engine-haxe/out/kotlin-f32/gen, which .gitignore excludes, so a clean
 // checkout has no inputs until boring generates the tree. The module exists to
-// compile that tree for every consumer in this repository and to publish the
-// nine tiqian-engine Maven coordinates (the kotlinMultiplatform root plus one
-// module per target).
+// compile that tree for every consumer in this repository; publishing the nine
+// tiqian-engine Maven coordinates belongs to boring, which the kotlin-f32
+// bundle's kmpPublication setting turns on.
 //
 // The generated test suite (bundle kotlin-f32, gen-tests) does not live here:
 // every case carries @boring.test.Test and the driver's test lane runs it from
