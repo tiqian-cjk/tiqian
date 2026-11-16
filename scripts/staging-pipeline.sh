@@ -278,16 +278,20 @@ EOF
 }
 
 # The Maven lane of publish.yml generates the Kotlin tree, runs the generated
-# suite through the driver and then runs the shared release task set against an
+# suite through the driver and runs the shared release task set against an
 # isolated repository, so a clean checkout compiles real sources rather than an
 # empty source set and the modules only assemble reaches (demo,
 # tools:engine-probes, platforms:apple) break here instead of on the release tag.
+#
+# The Gradle set runs before the driver test lane: a break in a module that only
+# assemble compiles has to surface now, and the generated suite is red on the
+# pinned driver until the next boring re-pin (the lane still runs on every pass).
 step_maven_publish() {
   in_devshell "bash tools/setup-haxe-env.sh && boring gen kotlin-f32 --project boring.json" || return 1
-  # Same command as publish.yml's "Run the generated Kotlin test suite" step.
-  in_devshell "boring test kotlin-f32 --project boring.json" || return 1
   TIQIAN_VERSION="$STAGING_VERSION" ./gradlew "${RELEASE_GRADLE_TASKS[@]}" \
-    -Dmaven.repo.local="$MAVEN_REPO" --no-daemon
+    -Dmaven.repo.local="$MAVEN_REPO" --no-daemon || return 1
+  # Same command as publish.yml's "Run the generated Kotlin test suite" step.
+  in_devshell "boring test kotlin-f32 --project boring.json"
 }
 
 # The engine module publishes the root coordinate plus eight target modules.
