@@ -10,17 +10,20 @@ import std.SortedSet;
 @:mainOnly
 @:valueType
 abstract FontFaceId(String) {
-    public inline function new(value:String)
-        this = value;
-
-    public static function of(value:String):FontFaceId {
+    public function new(value:String) {
         if (value == null || StringTools.trim(value).length == 0)
             throw new TiqianIllegalArgumentException(Message("FontFaceId must not be blank"));
-        return new FontFaceId(value);
+        this = value;
     }
 
+    public static function of(value:String):FontFaceId
+        return new FontFaceId(value);
+
+    // Both factories construct directly: a return of another static on this
+    // value-type abstract reaches the Rust target without the callee's Result
+    // propagation, so the generated crate stops with E0308.
     @:from public static function fromString(value:String):FontFaceId
-        return of(value);
+        return new FontFaceId(value);
 
     public var value(get, never):String;
 
