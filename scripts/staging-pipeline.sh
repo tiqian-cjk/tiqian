@@ -15,9 +15,9 @@
 #
 # Usage: scripts/staging-pipeline.sh [--bundles "id ..."] [--stages "name ..."] [--root <dir>]
 #
-# Stages (default: all of them): align, pack, collect-artifacts, registry-tree,
-# staging-isolation, maven-artifact-ids, cargo-consume, maven-local-publish,
-# maven-local-repo, summary.
+# Stages (default: all of them): align, pack, compile-bundles, collect-artifacts,
+# registry-tree, staging-isolation, maven-artifact-ids, cargo-consume,
+# maven-local-publish, maven-local-repo, verify, summary.
 #
 # Environment:
 #   STAGING_VERSION              version to pack with; defaults to 0.0.0-staging.<short sha>
@@ -38,7 +38,7 @@ cd "$REPO_ROOT" || exit 2
 # shellcheck source=scripts/release-gradle-tasks.sh
 . "$REPO_ROOT/scripts/release-gradle-tasks.sh"
 
-DEFAULT_STAGES="align pack collect-artifacts registry-tree staging-isolation maven-artifact-ids cargo-consume maven-local-publish maven-local-repo summary"
+DEFAULT_STAGES="align pack compile-bundles collect-artifacts registry-tree staging-isolation maven-artifact-ids cargo-consume maven-local-publish maven-local-repo verify summary"
 BUNDLES_OVERRIDE=""
 STAGES="$DEFAULT_STAGES"
 while [ "$#" -gt 0 ]; do
@@ -145,6 +145,16 @@ step_pack() {
     fi
   done
   return "$rc"
+}
+
+# Every bundle whose target compiler the pack action does not run gets one here.
+# The pack action compiles TypeScript (package-tsc) and Kotlin (package-kotlinc
+# or the bundle's mavenPublication) and archives the Swift zip, the Dart pub
+# archive and the Rust crate without reading the generated sources, so a
+# generation defect in those three targets reached the release unseen. The tool
+# lives in tools/compile-bundles.py and prints one verdict per bundle.
+step_compile_bundles() {
+  in_devshell "python3 tools/compile-bundles.py --project boring.json"
 }
 
 # Collect the install units the way release.yml does: the registry tree of the
@@ -324,6 +334,18 @@ if missing:
 PY
 }
 
+# The cross-target consistency lane. boring verify generates every bundle,
+# runs every bundle's generated test suite and compares every bundle that
+# declares compare=true against the project baseline
+# (driver Main.hx actionVerify; docs/cross-target-alignment.md line 33 names
+# this command as the entry point). Nothing in this repository invoked it
+# before this stage, so 13 bundle generations and 13 generated test suites ran
+# in no release lane. It regenerates the trees in gen mode, so it runs after
+# every consumer of the pack-mode trees.
+step_verify() {
+  in_devshell "boring verify --project boring.json"
+}
+
 step_summary() {
   local report="$ROOT/report.md"
   {
@@ -348,6 +370,7 @@ run_named_step() {
   case "$1" in
     align) run_step align step_align ;;
     pack) run_step pack step_pack ;;
+    compile-bundles) run_step compile-bundles step_compile_bundles ;;
     collect-artifacts) run_step collect-artifacts step_collect ;;
     registry-tree) run_step registry-tree step_check_tree ;;
     staging-isolation) run_step staging-isolation step_isolation ;;
@@ -355,6 +378,7 @@ run_named_step() {
     cargo-consume) run_step cargo-consume step_cargo ;;
     maven-local-publish) run_step maven-local-publish step_maven_publish ;;
     maven-local-repo) run_step maven-local-repo step_maven_local_repo ;;
+    verify) run_step verify step_verify ;;
     summary) run_step summary step_summary ;;
     *) echo "unknown stage: $1" >&2; exit 2 ;;
   esac
