@@ -339,9 +339,10 @@ PY
 # declares compare=true against the project baseline
 # (driver Main.hx actionVerify; docs/cross-target-alignment.md line 33 names
 # this command as the entry point). Nothing in this repository invoked it
-# before this stage, so 13 bundle generations and 13 generated test suites ran
-# in no release lane. It regenerates the trees in gen mode, so it runs after
-# every consumer of the pack-mode trees.
+# before this stage: only kotlin-f32's generated suite ran (publish.yml:133),
+# so the other 12 suites and every cross-target comparison ran in no release
+# lane. It regenerates the trees in gen mode, so it runs after every consumer
+# of the pack-mode trees.
 step_verify() {
   in_devshell "boring verify --project boring.json"
 }

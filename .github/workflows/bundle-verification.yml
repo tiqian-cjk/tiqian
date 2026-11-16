@@ -1,8 +1,9 @@
 name: Bundle verification
 
 # The release gate requires this lane on the release commit
-# (release-manifest.json release.requiredLanes). It runs the two checks that
-# the pack and Maven lanes never ran:
+# (release-manifest.json release.requiredLanes). Before it existed only
+# kotlin-f32's generated suite ran in a release lane (publish.yml:133), and no
+# lane ran a cross-target comparison. It runs the two checks that no lane ran:
 #
 #   boring verify   generates every bundle in boring.json, runs every bundle's
 #                   generated test suite and compares every bundle that
