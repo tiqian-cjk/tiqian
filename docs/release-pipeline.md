@@ -106,6 +106,29 @@ GitHub Release 下载前缀，`--registry-out` 取树的根目录。四个参数
    目录并入 `<owner>` 目录，提交并推送。合并保留 registry 里已有的版本，同一个版本重新
    发布时替换该版本目录；`--retire` 参数在合并之后删除指定的版本目录，包内没有其他版本时连包目录一起删除。这一步的输入是第 3 步写在 R2 的归档与 `boring pack` 写出的树。
 
+### 生成物的编译点与跨目标一致性
+
+`boring pack` 只对两个目标运行编译器：TypeScript 走 `package-tsc`（pinned boring 检出
+`packages/compiler/PackageArtifacts.hx:184-209`），Kotlin 走 `package-kotlinc` 或 bundle 的
+`mavenPublication`（同一文件 `:357-384`）。Swift 的 zip、Dart 的 pub 归档与 Rust 的 crate
+是把生成源码打成归档，没有任何编译器读取它们。发版路径因此增加两个检查。
+
+1. `python3 tools/compile-bundles.py --project boring.json` 对每个 bundle 的生成物运行一次
+   目标编译器，逐 bundle 打印退出码；pack 已经编译的目标打印 `compiled by pack`。
+   `.github/workflows/release.yml` 的 pack job 在打包之后运行这条命令，
+   `scripts/staging-pipeline.sh` 的 `compile-bundles` stage 运行同一条命令。
+2. `nix develop -c bash -c 'boring verify --project boring.json'` 生成全部 bundle、运行全部
+   bundle 的生成测试，并比较参与比较的 bundle（driver `packages/driver/src/driver/Main.hx`
+   的 `actionVerify`；`docs/cross-target-alignment.md:33` 把这条命令列为入口）。
+   `.github/workflows/bundle-verification.yml` 运行这条命令，该 workflow 写在
+   `release-manifest.json` 的 `release.requiredLanes` 里；标签 commit 上没有它的成功记录时
+   `tools/release-gate.py` 拒绝发版。`scripts/staging-pipeline.sh` 的 `verify` stage 运行
+   同一条命令。
+
+`boring.json` 声明 `compare: false` 的 6 个 protocol 与 shared bundle 不参与
+`boring compare`：该命令按单一 baseline（`kotlin-f32`）的测试 id 逐目标比对，而 protocol
+bundle 的测试语料与 baseline 不同。它们的生成测试仍由 `boring verify` 运行。
+
 提交之后执行 Deploy the registry site 一步，用 `PAGES_DEPLOY_HOOK` 触发 Cloudflare
 Pages 构建。registry 工具在 boring 仓库构建并随发布资产上传
 （`.github/workflows/publish-registry-tool.yml`），registry 仓库不同步该工具。
