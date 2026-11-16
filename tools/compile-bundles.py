@@ -17,6 +17,13 @@ itself so no bundle can drop out of the check silently:
   dart    dart analyze --no-fatal-warnings <gen>   (only analyzer errors fail)
   rust    cargo build --release --manifest-path <gen>/Cargo.toml
 
+The Swift compile point reads every .swift file under <gen> except the SwiftPM
+manifest <gen>/Package.swift that boring pack writes there. That file is a
+package manifest, not source: PackageDescription exists only while SwiftPM
+compiles it as a manifest, so handing it to swiftc fails with "no such module
+'PackageDescription'". The tree holds the manifest only after a pack run, which
+is the stage this tool runs after.
+
 TypeScript and Kotlin are compiled by boring pack itself; this tool records
 that compile point instead of running the compiler a second time. A bundle
 whose target is in neither table fails the run, so a new target cannot be added
@@ -55,6 +62,12 @@ PACK_COMPILES = {
     "ts": "boring pack: package-tsc",
     "kotlin": "boring pack: package-kotlinc or mavenPublication",
 }
+
+# The SwiftPM manifest boring pack writes into the generated tree
+# (packages/compiler/reflaxe/swift/swiftcompiler/Compiler.hx packageManifest).
+# It carries "import PackageDescription", which exists only while SwiftPM
+# compiles the file as a manifest; passing it to swiftc always fails.
+SWIFT_PACKAGE_MANIFEST = "Package.swift"
 
 # Targets this tool compiles. The command mirrors the build step of the
 # driver's test lane (driver Plan.hx testSteps), minus running anything.
@@ -182,7 +195,9 @@ def plan_command(project_root: pathlib.Path, out_root: pathlib.Path, bundle: dic
     env = build_env(bundle)
     build_args = list((bundle.get("build") or {}).get("args") or [])
     if target == "swift":
-        files = walk(gen, ".swift")
+        # Exclude the SwiftPM manifest by file name, not by dropping the swift
+        # target: every generated source file still goes to the compiler.
+        files = [path for path in walk(gen, ".swift") if pathlib.Path(path).name != SWIFT_PACKAGE_MANIFEST]
         if not files:
             raise Misconfigured('bundle "%s": no generated .swift files under %s; run boring gen first' % (bundle_id, gen))
         module = swift_module(project_root, bundle)
