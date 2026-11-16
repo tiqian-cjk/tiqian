@@ -25,6 +25,9 @@
 #   STAGING_BUNDLES              bundle ids to pack; defaults to release-matrix.py --list-bundles
 #   STAGING_OWNER                owner directory in the staging registry tree; defaults to staging-local
 #   EXPECTED_MAVEN_ARTIFACT_IDS  KMP artifactId count to require per maven package; defaults to 9
+#   BORING_PACKAGE_TSC           TypeScript compiler the pack action runs; the pack stage writes a
+#                                bun-backed shim below the staging root when it is unset and no tsc is
+#                                on PATH
 #
 # Every output stays below STAGING_ROOT. The cargo consumer build consumes the
 # packed .crate directly, and the Maven publish passes
@@ -115,6 +118,42 @@ step_align() {
   echo "every package version in boring.json is $STAGING_VERSION"
 }
 
+# The output root boring.json declares. The driver resolves it against the
+# project file's directory and this script cds to REPO_ROOT, so the value is
+# used as written.
+boring_out_root() {
+  python3 -c 'import json, pathlib; text = pathlib.Path("boring.json").read_text(); print(json.loads(text[text.index("{"):])["outRoot"])'
+}
+
+# The directory the kotlin-f32 pack action fills with the nine engine Maven
+# coordinates. boring owns that publication: the kotlin-publication project
+# ships with the driver and runs publishToMavenLocal with
+# -PmavenDir=<outRoot>/<id>/maven (driver Main.hx publishKotlinBundle), and
+# kotlin-f32 is the bundle that declares kmpPublication (boring.json:39).
+engine_maven_publication() {
+  echo "$(boring_out_root)/kotlin-f32/maven"
+}
+
+# The pack action compiles every ts bundle through package-tsc: the driver
+# takes BORING_PACKAGE_TSC, then tsc on PATH, and stops the pack with "pack on
+# the ts target needs tsc" when it finds neither (driver Main.hx
+# resolvePackTool). A clean runner has no tsc on PATH and the flake devShell
+# ships none, so all three ts bundles packed red while every other bundle
+# succeeded. .github/workflows/release.yml:93-99 writes the same bun-backed
+# shim before its pack step; this stage writes it below the staging root so a
+# CI job and a developer checkout pack the same artifacts.
+ensure_package_tsc() {
+  if [ -n "${BORING_PACKAGE_TSC:-}" ] || command -v tsc >/dev/null 2>&1; then
+    return 0
+  fi
+  local shim="$ROOT/package-tsc"
+  printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' >"$shim"
+  chmod +x "$shim"
+  BORING_PACKAGE_TSC="$shim"
+  export BORING_PACKAGE_TSC
+  echo "no tsc on PATH: pack compiles TypeScript through $shim (bun)"
+}
+
 # Pack every bundle of the release matrix, one invocation per bundle, so one
 # red bundle does not hide the rest. RegistryMetadata.emitAll writes only the
 # bundles of the current invocation, so the tree accumulates across the loop.
@@ -128,10 +167,11 @@ step_pack() {
     ids="$(python3 tools/release-matrix.py --list-bundles | paste -sd' ' -)"
   fi
   echo "packs: $ids"
+  ensure_package_tsc
   local rc=0
   local id
   local out_root
-  out_root="$(python3 -c 'import json, pathlib; text = pathlib.Path("boring.json").read_text(); print(json.loads(text[text.index("{") :])["outRoot"])')"
+  out_root="$(boring_out_root)"
   for id in $ids; do
     echo "--- pack $id ---"
     # A repeated run with a new staging version would otherwise leave the
@@ -293,6 +333,12 @@ EOF
 # empty source set and the modules only assemble reaches (demo,
 # tools:engine-probes, platforms:apple) break here instead of on the release tag.
 #
+# publishTiqianToMavenLocal writes only the modules build.gradle.kts still
+# publishes (publishedModules: platforms:jvm:shaping through
+# platforms:compose:material3). The nine engine coordinates are not among
+# them; the pack stage's kotlin-f32 publication writes those, and
+# step_maven_local_repo copies them into the same isolated repository.
+#
 # The Gradle set runs before the driver test lane: a break in a module that only
 # assemble compiles has to surface now, and the generated suite is red on the
 # pinned driver until the next boring re-pin (the lane still runs on every pass).
@@ -304,8 +350,26 @@ step_maven_publish() {
   in_devshell "boring test kotlin-f32 --project boring.json"
 }
 
-# The engine module publishes the root coordinate plus eight target modules.
+# The isolated repository must serve the engine's root coordinate plus eight
+# target modules. build.gradle.kts:32-34 records where they come from: the
+# engine is not published from this build, boring owns the nine tiqian-engine
+# Maven coordinates through the kotlin-f32 bundle's kmpPublication. The pack
+# stage therefore writes them below <outRoot>/kotlin-f32/maven, and this stage
+# copies that publication into the isolated repository so the nine coordinates
+# sit beside the platform modules maven-local-publish writes there. The
+# assertion below then checks the packed POMs, not a lane that cannot produce
+# them.
 step_maven_local_repo() {
+  local publication
+  publication="$(engine_maven_publication)"
+  if [ ! -d "$publication/org/tiqian" ]; then
+    echo "the pack stage produced no engine Maven publication at $publication"
+    echo "run the pack stage (bundle kotlin-f32) before this one"
+    return 1
+  fi
+  mkdir -p "$MAVEN_REPO"
+  cp -a "$publication/." "$MAVEN_REPO/"
+  echo "engine Maven publication $publication -> $MAVEN_REPO"
   python3 - "$MAVEN_REPO" "$STAGING_VERSION" <<"PY"
 import pathlib
 import sys

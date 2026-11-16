@@ -471,6 +471,11 @@ Fetching tiqian.tiqian-engine-f32
 `boring.json` 与各 npm 清单。脚本按 `tools/release-matrix.py --list-bundles` 的列表逐个调用
 `boring pack`，单个 bundle 失败时其余 bundle 仍会执行并记录结果。
 
+`boring pack` 在 ts 目标上调用 `package-tsc`，按 `BORING_PACKAGE_TSC`、PATH 上的
+`tsc` 的顺序解析编译器，两者都缺时以 `pack on the ts target needs tsc` 结束。flake
+devShell 不提供 `tsc`，脚本因此在两者都缺时把 bun 承载的 shim 写到 staging 根目录并
+导出 `BORING_PACKAGE_TSC`，与 `release.yml` 的 Pack every bundle 步骤做法一致。
+
 脚本步骤与对应的发版步骤：
 
 | staging 步骤 | 对应的发版步骤 |
@@ -481,7 +486,8 @@ Fetching tiqian.tiqian-engine-f32
 | `registry-tree` | `release-registry.yml` 的 Check the registry tree against the artifacts |
 | `maven-artifact-ids` | maven 元数据的 `artifacts` 数组要带 `artifactId` |
 | `cargo-consume` | cargo 消费者从 pack 产物构建依赖 |
-| `maven-local-publish` 与 `maven-local-repo` | `publish.yml` 的 `publishTiqianToMavenLocal` 与九个坐标 |
+| `maven-local-publish` | `publish.yml` 的 `publishTiqianToMavenLocal`，写出平台模块 |
+| `maven-local-repo` | 九个 `tiqian-engine` 坐标：把 `pack` 阶段 kotlin-f32 的 `kmpPublication` 产物复制进隔离仓库后逐个断言 |
 
 隔离方式：`--registry-out` 指向 staging 根目录，owner 写成 `staging-local`，
 `--asset-base` 写成保留域 `staging.invalid`；Maven 发布加
