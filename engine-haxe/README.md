@@ -31,7 +31,8 @@ driver 与编译器固定在同一修订，进入开发 shell 时配置 `.haxeli
   包发现 `*Test.hx`，并给出 `types` 列出的五个入口类型；各目标的引擎配置共用
   它。生成与测试以此文件为准。
 - `scripts/setup-haxe-env.sh`（仓库根）：把 Unicode 数据同步进当前检出，见下节。
-- `engine-haxe/out/`、`engine-haxe/smoke/`：生成物与本地基线拷贝，不入库。
+- `engine-haxe/out/`：生成物与测试结果的输出位置，由 `boring.json` 的 `outRoot` 与
+  `resultsDir` 指定，不入库。
 
 ## 首次准备
 
