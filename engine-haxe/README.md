@@ -4,7 +4,8 @@
 独立仓库）从这棵树生成 Kotlin、Swift、Dart、JavaScript、Rust 的代码。
 
 仓库根的 `boring.json` 声明每个 bundle 的目标、精度、源码范围与发布信息；
-`platforms/engine` 编译 `kotlin-f32` 生成的 Kotlin。tiqian 的 flake 把 boring 的
+settings.gradle.kts 以 `:boring-kotlin-f32` 引入 boring 发布工程里的 `:engine`
+模块，由它编译 `kotlin-f32` 生成的 Kotlin。tiqian 的 flake 把 boring 的
 driver 与编译器固定在同一修订，进入开发 shell 时配置 `.haxelib/` 并重新生成
 `engine-haxe/targets/classes.hxml`。
 
@@ -107,4 +108,4 @@ bun engine-haxe/out/haxe-tests.js
 ## 同步纪律
 
 引擎行为只在 `engine-haxe/src/` 修改。改完 Haxe 后运行该配置的 `boring gen` 与
-`boring test`；Kotlin 平台通过 `platforms/engine` 使用生成结果。
+`boring test`；Kotlin 平台通过 `:boring-kotlin-f32` 使用生成结果。

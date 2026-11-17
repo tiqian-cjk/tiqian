@@ -124,12 +124,13 @@ val paragraph = CjkTextView(context).apply {
 ## 引擎源码
 
 engine-haxe/src/ 是引擎的 Haxe 源码。boring 编译器从它生成 Kotlin、Swift、
-Dart、JS、Rust 五个目标的代码；platforms/engine 是编译生成 Kotlin 的 Gradle
-模块，它的 commonMain 指向 engine-haxe/out/kotlin-f32/gen。
+Dart、JS、Rust 五个目标的代码；编译生成 Kotlin 的 Gradle 工程由 boring 提供，
+settings.gradle.kts 以 :boring-kotlin-f32 引入它的 :engine 模块，commonMain 指向
+engine-haxe/out/kotlin-f32/gen（由 gradle.properties 的 kotlinGenDir 指定）。
 
 - 五个目标的生成、编译与测试见 engine-haxe/README.md。
 - Kotlin 平台的行为改动落在 engine-haxe/src/ 的 Haxe 源码，生成物不入库。
-- platforms/engine 只保留构建配置，模块自身不含源码。
+- 生成 Kotlin 的构建配置只存在于 boring 的发布工程，tiqian 不再维护副本。
 
 ## 体验与构建
 
