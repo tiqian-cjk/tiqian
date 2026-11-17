@@ -65,7 +65,7 @@ roadmap 不是贡献许可清单。修复明确的 bug、增加测试或改善�
 ```
 
 该命令会重建 browser 与 precompute Kotlin/JS runtime、运行 npm 测试，再把 tarball 安装到临时 consumer
-验证 `@tiqian/prose` 的公开 exports；它不会执行 `npm publish`。
+验证 `@tiqian/web-component` 的公开 exports；它不会执行 `npm publish`。
 
 如果改动会影响断行、标点空间、字体选择或行内几何，还需要运行 layout golden test
 并生成诊断报告：

@@ -1,4 +1,4 @@
-// Native-lane ports of the @tiqian/prose font-source suite (ADR 0050). The
+// Native-lane ports of the @tiqian/web-component font-source suite (ADR 0050). The
 // wrapper owns file reads and URL resolution; the CSS parse runs in Rust.
 // These cases never read a font file, so they run wherever an addon build
 // exists.

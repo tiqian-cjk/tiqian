@@ -57,12 +57,12 @@
       ]
     },
     {
-      "id": "npm-prose",
+      "id": "npm-web-component",
       "ecosystem": "npm",
-      "workflow": ".github/workflows/publish-prose.yml",
+      "workflow": ".github/workflows/publish-web-component.yml",
       "trigger": "release",
       "packages": [
-        "@tiqian/prose"
+        "@tiqian/web-component"
       ],
       "packageSource": {
         "kind": "npm",
@@ -97,7 +97,7 @@
         ]
       },
       "dependsOn": [
-        "npm-prose"
+        "npm-web-component"
       ]
     },
     {
@@ -139,7 +139,7 @@
       "dependsOn": [
         "npm-ffi",
         "npm-core",
-        "npm-prose",
+        "npm-web-component",
         "npm-precompute",
         "maven"
       ]

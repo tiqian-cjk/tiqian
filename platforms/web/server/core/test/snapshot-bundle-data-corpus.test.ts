@@ -1,7 +1,7 @@
 // Byte-parity gate of the shared renderer in the server package (criterion
 // 3). The committed prepared-DOM corpus fixture carries the shared renderer's
 // bytes; this test asserts the same file case by case. The
-// bundle data phase drives the same shared module (`@tiqian/prose/prepared-dom`,
+// bundle data phase drives the same shared module (`@tiqian/web-component/prepared-dom`,
 // the browser implementation), so replaying the fixture's call shape here
 // must reproduce every committed byte.
 //
@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { renderPreparedParagraphArtifact } from "@tiqian/prose/prepared-dom";
+import { renderPreparedParagraphArtifact } from "@tiqian/web-component/prepared-dom";
 
 import { renderSnapshotBundleData } from "../lib/precompute.js";
 import { ValueStyleInterner } from "@tiqian/shared/org/tiqian/shared/ValueStyleInterner";

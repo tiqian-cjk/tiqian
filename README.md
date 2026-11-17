@@ -6,7 +6,7 @@
 </h1>
 
 [![Maven Central](https://img.shields.io/maven-central/v/org.tiqian/tiqian-compose?label=maven)](https://central.sonatype.com/artifact/org.tiqian/tiqian-compose)
-[![npm version](https://img.shields.io/npm/v/%40tiqian%2Fprose?label=npm)](https://www.npmjs.com/package/@tiqian/prose)
+[![npm version](https://img.shields.io/npm/v/%40tiqian%2Fweb-component?label=npm)](https://www.npmjs.com/package/@tiqian/web-component)
 [![Telegram Link](https://img.shields.io/badge/Telegram-@tiqian__cjk-blue?logo=telegram&logoColor=fff)](https://t.me/tiqian_cjk)
 
 提椠是一个中日韩段落书写器。
@@ -99,7 +99,7 @@ val paragraph = CjkTextView(context).apply {
 
 ## Web
 
-`@tiqian/prose` 渐进增强服务器已经输出的正文 HTML。没有 JavaScript、加载失败或遇到暂不支持的
+`@tiqian/web-component` 渐进增强服务器已经输出的正文 HTML。没有 JavaScript、加载失败或遇到暂不支持的
 内容时，原文仍由浏览器排版；网站原有的字体、颜色、链接、选择与复制语义继续生效。
 
 静态博客和 SSR 网站可以把现有正文放进 `<tiqian-prose>`，再导入自定义元素入口：
@@ -114,12 +114,12 @@ val paragraph = CjkTextView(context).apply {
 </style>
 
 <script type="module">
-  import "@tiqian/prose/element";
+  import "@tiqian/web-component/element";
 </script>
 ```
 
 安装、命令式 API、构建期预排与运行环境见
-[`@tiqian/prose` 使用文档](platforms/web/client/web-component/README.md)。
+[`@tiqian/web-component` 使用文档](platforms/web/client/web-component/README.md)。
 
 ## 引擎源码
 
@@ -190,7 +190,7 @@ nix develop -c npm test --workspace @tiqian/ffi
 
 ## 文档
 
-- [`@tiqian/prose` 使用文档](platforms/web/client/web-component/README.md) 说明 Web 安装、接入方式与构建期预排。
+- [`@tiqian/web-component` 使用文档](platforms/web/client/web-component/README.md) 说明 Web 安装、接入方式与构建期预排。
 - [Roadmap](docs/roadmap.md) 记录当前进度、已完成的 Slice 与下一步工作。
 - [当前架构](docs/architecture.md) 说明 pipeline、模块边界与平台接入方式。
 - [ADR 索引](docs/adr/README.md) 记录已经确定的架构和排版取舍。

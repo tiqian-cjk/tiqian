@@ -296,7 +296,7 @@ test("layout Worker plans survive duplicate module instances and reach the layou
   const originalWorker = globalThis.Worker;
   const originalInnerHeight = globalThis.innerHeight;
   const originalBridge = globalServices().coordination.layoutWorker;
-  const coordinatorKey = Symbol.for("@tiqian/prose.layout-worker-coordinator.v1");
+  const coordinatorKey = Symbol.for("@tiqian/web-component.layout-worker-coordinator.v1");
   const originalCoordinator = (globalThis as Record<symbol, unknown>)[coordinatorKey];
   const originalComputedStyle = globalThis.getComputedStyle;
   const ROOT_SELECTOR = "tiqian-prose, [data-tiqian-root]";

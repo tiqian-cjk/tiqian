@@ -14,9 +14,9 @@
 
 排版引擎只有一份实现（core/font/linebreak/clreq/layout 的 Kotlin 多平台代码），以三个形态被消费：JVM 进程内直调（Compose、Android）；Kotlin/JS mjs（`:ffi:js` 编译产物，浏览器 module Worker 经 `layout-worker.js:8` 静态引入）；Kotlin/Native 静态库经 C ABI（`ffi/native/tiqian_layout_abi.h`，0050 amendment EngineLevelAbi）被 Rust 链接。Rust 侧的 `tiqian-precompute` 是编排层，不含第二套排版实现。
 
-### @tiqian/prose 的构成与两条通道
+### @tiqian/web-component 的构成与两条通道
 
-`@tiqian/prose` 由手写 JS 与两个编译产物组成：
+`@tiqian/web-component` 由手写 JS 与两个编译产物组成：
 
 - `runtime/tiqian-web.js`：`:frontend:web` 的 Kotlin 主线程运行时 bundle。jsMain 共 5669 行（WebEnhancer 系列、`DomParagraphRenderer.kt` 与 Overlays 共 1335 行、`MarkdownParagraphLowering.kt` 880 行），配套 jsTest 3981 行行为测试。
 - `precompute-runtime/*.mjs`：`:ffi:js` 的 Node 引擎运行时，生产消费者只有 `layout-worker.js:8` 一处静态 import。
@@ -74,7 +74,7 @@ ffi/js 自身同时做三件事：PrecomputeWire.kt 在一个文件内做分隔�
 
 ### 无消费者导出与 shared 副本落后
 
-`@tiqian/precompute` 迁出（d79be52）后遗留：digest.js 与 font-contract.js 没有生产消费者；`compactSnapshotManifest`、`loadedPrecomputedSnapshots`、`validatePrecomputedExactFontReplayRuntimeContract`、`renderPreparedParagraph` 的包装导出只有测试使用。`renderPreparedParagraph` 需要注明：web-precompute 的同名导出是它自己 shared 副本上的包装（`src/precompute.ts:14` import `../shared/prepared-dom.js`），不构成 `@tiqian/prose` 导出的消费者；Kotlin 走 `__TiqianPreparedDomRenderer` 桥（`WebEnhancerSupport.kt:199`）。
+`@tiqian/precompute` 迁出（d79be52）后遗留：digest.js 与 font-contract.js 没有生产消费者；`compactSnapshotManifest`、`loadedPrecomputedSnapshots`、`validatePrecomputedExactFontReplayRuntimeContract`、`renderPreparedParagraph` 的包装导出只有测试使用。`renderPreparedParagraph` 需要注明：web-precompute 的同名导出是它自己 shared 副本上的包装（`src/precompute.ts:14` import `../shared/prepared-dom.js`），不构成 `@tiqian/web-component` 导出的消费者；Kotlin 走 `__TiqianPreparedDomRenderer` 桥（`WebEnhancerSupport.kt:199`）。
 
 shared/ 副本曾落后一个 schema-2 常量批次，ADR 0052 批次补齐后与
 `frontend/web/npm/snapshot-schema.js` 逐字节一致（2026-08-22 核对，diff 为空）。
@@ -208,7 +208,7 @@ G2 全局清除后仍成立的运行时单例集中存放在 core/services/ 一�
 
 ### `UnusedExportCleanup`：无消费者导出删除与 cp 机制删除
 
-删除 digest.js、font-contract.js 与全部 test-only 兼容导出。shared/ 目录的字节拷贝删除：web-precompute 依赖 @tiqian/prose 的正式导出获取 prepared-dom 与 snapshot-source，cp 脚本删除。schema 常量由同源生成，不再依赖人工同步。
+删除 digest.js、font-contract.js 与全部 test-only 兼容导出。shared/ 目录的字节拷贝删除：web-precompute 依赖 @tiqian/web-component 的正式导出获取 prepared-dom 与 snapshot-source，cp 脚本删除。schema 常量由同源生成，不再依赖人工同步。
 
 ### `DualLoweringStance`：prepared-dom 维持双实现
 
@@ -302,7 +302,7 @@ D 组在 0054 执行清单的 54-10（回填）完成后重测判定。B7 先按
 - [x] **P6 批次 6**：快照四件回归原位，lazy-capabilities 拆分，element 快照失效区域
   提取，sync:shared 路径更新。验收：npm test；jsBrowserTest；web-precompute parity。
   提交：5097307、784d2ff（6a）；ea2dda8（6b）。
-- [x] **P7 批次 7**：demo/web 以 @tiqian/prose 符号链接替换做 A/B 对比。
+- [x] **P7 批次 7**：demo/web 以 @tiqian/web-component 符号链接替换做 A/B 对比。
   验收：demo/web 对比数据记录。对照由 demo/web `npm-published-vs-dev` 套件执行：
   同一浏览器经 CDP 双开两页，一侧加载符号链接文件集指向的工作树（含批次 0-6，
   HEAD ea2dda8），一侧加载 registry 的 `@tiqian/prose@0.1.0-alpha.5`（重构前
@@ -343,11 +343,11 @@ D 组在 0054 执行清单的 54-10（回填）完成后重测判定。B7 先按
   提交：da92871（整体移入 `layout` 模块 `ParagraphWireFace`，`PrecomputeWire.kt`
   删除，ffi/js 只剩导出接口转发与会话连接）。
 - [x] **A4 ffi/js 独立 npm 包**：单独发包，产物导出类型定义与 source map。
-  KPI：.d.ts 与 .js.map 覆盖全部导出接口；@tiqian/prose 依赖切换完成。
+  KPI：.d.ts 与 .js.map 覆盖全部导出接口；@tiqian/web-component 依赖切换完成。
   验收：包产物检查；消费者构建与测试通过。
   包位于 `ffi/js/npm`（`@tiqian/ffi` 0.1.0-alpha.1）。`generateTypeScriptDefinitions()`
   产出 `Tiqian-tiqian-ffi-js.d.mts`，声明两个 `@JsExport` 函数；九个引擎模块各带
-  嵌入 sources 的 `.mjs.map`（dom-api 兼容层无源文件可嵌）。`@tiqian/prose` 声明
+  嵌入 sources 的 `.mjs.map`（dom-api 兼容层无源文件可嵌）。`@tiqian/web-component` 声明
   精确依赖 `0.1.0-alpha.1`，`layout-worker.js` 与 worker bench 改从 `@tiqian/ffi`
   导入；开发侧以 `npm run link:ffi` 建符号链接指向工作树。发布工作流
   `publish-ffi.yml` 与 prose 相同，两包同一提交锁步发版，ffi 先发。2026-08-23
@@ -816,7 +816,7 @@ jsBrowserTest、jsNodeTest 全部通过；golden 零 diff。统一 KPI：对照�
   （link-prose.mjs 建工作树符号链接），renderPreparedParagraph 与 styles.css
   经包导出消费。
   验收：Verification 6。
-- [ ] **F2 三包拆分**（`ProseCoreLayering`）：`@tiqian/prose` 拆为 core 与
+- [ ] **F2 三包拆分**（`ProseCoreLayering`）：`@tiqian/web-component` 拆为 core 与
   web-component 两个 npm 包，连同 ffi 包共三个；依赖方向 web-component → core →
   ffi 单向，跨包相对导入 0；kotlin-js-store 回归原位。可在 B 组之前执行，使 TS 移植
   全程处于包边界内，跨层引用即时暴露。
@@ -826,7 +826,7 @@ jsBrowserTest、jsNodeTest 全部通过；golden 零 diff。统一 KPI：对照�
   （frontend/web/npm-core，0.1.0-alpha.5，依赖 @tiqian/ffi）：core/ 整树、
   顶层引擎模块（snapshot-schema/manifest/tables/table-binary、
   browser-font-replay、layout-worker 与六个顶层垫片）与运行时产物通道迁入；
-  @tiqian/prose 留原目录成为 web-component 面（api、element、prepared-dom、
+  @tiqian/web-component 留原目录成为 web-component 面（api、element、prepared-dom、
   snapshot-client、styles），依赖 prose-core，对外 exports、metadata 与版本
   不变。跨包引用经包名子路径；Gradle 桥生成与产物路径、assembly-record
   schema 与类型生成器目标路径、link-prose（双链接）、ci 语料 job 的
@@ -856,7 +856,7 @@ jsBrowserTest、jsNodeTest 全部通过；golden 零 diff。统一 KPI：对照�
   frontend/web/npm-core 与 ffi/js/npm 的产物目录，import map 增 /npm-core/
   路由，layout-worker 路径改由 npm-core 目录解析；framework-commit-conflict
   与 npm-published-vs-dev 两个测试文件随该提交进入仓库。两条发布金丝雀
-  （npm-published-vs-dev、scroll-adaptive-quota）在下次 @tiqian/prose 发布前
+  （npm-published-vs-dev、scroll-adaptive-quota）在下次 @tiqian/web-component 发布前
   保持失败，属设计。
   进度（jsMain 置零路径，2026-08-23）：a460ab7。端口计划
   docs/research/2026-08-23-tshost-runtime-port-plan.md 按七个 Slice 给出 jsMain
@@ -1083,7 +1083,7 @@ jsBrowserTest、jsNodeTest 全部通过；golden 零 diff。统一 KPI：对照�
   rect 读取、ResponsiveMeasure 全局缺省、measures 序列缺 live 采样）与
   一处实现缺陷（canonical 再入误走 bag 解析），并补删委托规格范围外的
   零引用辅助簇。demo/web 基线同步复核：33/35 稳定通过，
-  NpmPublishedVsDev 在下次 @tiqian/prose 发布前按设计保持失败，
+  NpmPublishedVsDev 在下次 @tiqian/web-component 发布前按设计保持失败，
   OneShotEquivalence 失败原因已另档记录（增量通道不刷新 dash 能力属性）。
   进度（Slice 6，2026-08-24）：9f799c97、e8752ae4、65608fde。npm-core 新增
   core/engine/engine-entry.js（globalThis.__TiqianEngine：enhance 的
@@ -1325,7 +1325,7 @@ jsBrowserTest、jsNodeTest 全部通过；golden 零 diff。统一 KPI：对照�
     退出 deps。提交 ab4f7a75。
   - S2-a（CoordinationService 与 globalServices 容器）：coordinator
     改名 CoordinationService，coordination/ 目录分簇，core/services/
-    global-services.ts 以 Symbol.for("@tiqian/prose.global-services.v1")
+    global-services.ts 以 Symbol.for("@tiqian/web-component.global-services.v1")
     挂 globalThis，提供 installGlobalServicesForTesting 注入钩。
     提交 3f53c1bc。
   - S2-b（散置状态收编）：font-loader、declared-faces、browser-fonts、

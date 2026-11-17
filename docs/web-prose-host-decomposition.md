@@ -284,7 +284,7 @@ coordinator 路径（直调、测试、detach 收尾）的上限。准入检查�
 ## 7. 目标目录结构
 
 ```
-platforms/web/client/web-component/            @tiqian/prose 拆为 core 与 web-component 两个 npm 包
+platforms/web/client/web-component/            @tiqian/web-component 拆为 core 与 web-component 两个 npm 包
                               （连同 ffi 包共三个，依赖方向 web-component → core → ffi
                                 单向；ffi 包独立发布，见 ADR 0053 A4）
   core/                        独立 npm 包，依赖 ffi 包
@@ -415,7 +415,7 @@ Kotlin 侧：WebEnhancerSupport.kt 的 JsFun 体在 custody 写入前后增减�
 :529），内容观察者按它过滤引擎自有写入（:483）；element.js 没有引用。
 
 Symbol.for 键控通道另有两个：worker-layout.js:33
-（`@tiqian/prose.layout-worker-coordinator.v1`，主线程 layout-worker coordinator 单例）与
+（`@tiqian/web-component.layout-worker-coordinator.v1`，主线程 layout-worker coordinator 单例）与
 browser-font-replay.js:8（`org.tiqian.web.font-replay.<revision>`，replay registry）。Symbol.for
 跨 realm 共享注册表，性质与 globalThis 赋值相同，处置随对应模块移回原处评估。
 
@@ -522,7 +522,7 @@ tiqian:error 与 tiqian:relayout-error 由运行时宿主派发（WebEnhancerSup
 | 4 | engine/exact-font.js：两套会话状态机合并 | npm test；package.test.mjs |
 | 5 | engine/face.js：派发点收拢；globalThis 读取收敛；detail.result 改返回值 | npm test；jsBrowserTest；demo/web |
 | 6 | snapshot 四件移回 core/sampler/snapshot/；lazy-capabilities 拆分（restoreAdoptedSnapshot 随之一起移动）；element 快照失效区域（2019–2246）提取；web-precompute sync:shared 路径更新 | npm test；jsBrowserTest；web-precompute parity |
-| 7 | A/B 对比：demo/web 以 @tiqian/prose 符号链接替换验证 | demo/web 对比数据 |
+| 7 | A/B 对比：demo/web 以 @tiqian/web-component 符号链接替换验证 | demo/web 对比数据 |
 
 批次 7 之后接 ADR 0053 实施 Slice（任务池、Worker 统一执行、Canvas 度量任务、直连 Kotlin）。
 
@@ -532,7 +532,7 @@ tiqian:error 与 tiqian:relayout-error 由运行时宿主派发（WebEnhancerSup
    路径（npm-published-vs-dev.test.mjs:225 与 ab/compare-refs.ts:259 带
    `/platforms/web/client/web-component/` 前缀；framework-commit-conflict.test.mjs:397–398 写 `/npm/`
    前缀，由测试服务器映射到包目录），根路径模块必须
-   实际存在；demo/web 生产消费只有 main.js:1 的 `import '@tiqian/prose/element'` 与
+   实际存在；demo/web 生产消费只有 main.js:1 的 `import '@tiqian/web-component/element'` 与
    package.json 的 `file:` 依赖。
 2. `globalThis.TiqianWeb` 挂载在兼容期保留；宿主可见事件不动。snapshot 表文件五个不碰。
 3. verify-package.mjs:14–15 要求产物含 marker `TiqianWeb`、不含

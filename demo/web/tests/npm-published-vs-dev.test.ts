@@ -36,7 +36,7 @@ const ffiRuntimeDir: string = join(repoRoot, "platforms/web/client/engine-runtim
 
 // The published release and the working tree are served through the same
 // static server and import map, so the only variable between the two pages is
-// which @tiqian/prose directory /platforms/web/client/web-component/ resolves to. Both sides run
+// which @tiqian/web-component directory /platforms/web/client/web-component/ resolves to. Both sides run
 // as native ESM; neither goes through parcel.
 const devPort: number = 9002;
 const pubPort: number = 9004;
@@ -236,12 +236,12 @@ function compareScreenshots(a: Buffer, b: Buffer): ScreenshotComparison {
 }
 
 // Serves the demo page with an import map so main.js's bare specifier
-// "@tiqian/prose/element" resolves to the chosen package directory. The dev
+// "@tiqian/web-component/element" resolves to the chosen package directory. The dev
 // side also maps "@tiqian/core/" to the core working tree, from
 // which the dev layout worker loads. The stylesheet link
 // "../../platforms/web/client/web-component/styles.css" resolves from the page root to the same
 // directory, so published CSS pairs with published JS. The prefix entry alone
-// maps "@tiqian/prose/auto" onto the extensionless URL /platforms/web/client/web-component/auto,
+// maps "@tiqian/web-component/auto" onto the extensionless URL /platforms/web/client/web-component/auto,
 // which the file server below cannot answer, so the auto entry carries its
 // own exact mapping.
 function startDemoServer(port: number, pkgDir: string): Promise<DemoServerHandle> {
@@ -252,7 +252,7 @@ function startDemoServer(port: number, pkgDir: string): Promise<DemoServerHandle
       if (path === "/") {
         const html: string = (await readFile(join(webDemoDir, "index.html"), "utf8")).replace(
           "</head>",
-          `<script type="importmap">{"imports":{"@tiqian/prose/element":"/platforms/web/client/web-component/element.js","@tiqian/prose/auto":"/platforms/web/client/web-component/auto.js","@tiqian/prose/":"/platforms/web/client/web-component/","@tiqian/prose":"/platforms/web/client/web-component/element.js","@tiqian/core/":"/platforms/web/client/core/","@tiqian/ffi":"/engine-runtime/Tiqian-tiqian-ffi-js.mjs"}}</script></head>`,
+          `<script type="importmap">{"imports":{"@tiqian/web-component/element":"/platforms/web/client/web-component/element.js","@tiqian/web-component/auto":"/platforms/web/client/web-component/auto.js","@tiqian/web-component/":"/platforms/web/client/web-component/","@tiqian/web-component":"/platforms/web/client/web-component/element.js","@tiqian/core/":"/platforms/web/client/core/","@tiqian/ffi":"/engine-runtime/Tiqian-tiqian-ffi-js.mjs"}}</script></head>`,
         );
         res.setHeader("content-type", "text/html; charset=utf-8");
         res.end(html);
@@ -459,7 +459,7 @@ function geometryReport(dev: GeometryNodeReport[], pub: GeometryNodeReport[]): G
   return { firstDiff, childDiffs, paraRectDiffs, maxDelta, examples };
 }
 
-test("NpmPublishedVsDev: published @tiqian/prose matches the working tree visually and geometrically", async () => {
+test("NpmPublishedVsDev: published @tiqian/web-component matches the working tree visually and geometrically", async () => {
   const tmpBase: string = await mkdtemp(join(tmpdir(), "tq-npm-pub-"));
   let chromeProc: ChildProcess | null = null;
   let dev: CdpClient | null = null;
@@ -467,14 +467,14 @@ test("NpmPublishedVsDev: published @tiqian/prose matches the working tree visual
   const servers: DemoServerHandle[] = [];
 
   try {
-    await run("npm", ["pack", "@tiqian/prose@latest", "--pack-destination", tmpBase]);
+    await run("npm", ["pack", "@tiqian/web-component@latest", "--pack-destination", tmpBase]);
     const tarball: string | undefined = (await readdir(tmpBase)).find((f: string) => f.endsWith(".tgz"));
     assert.ok(tarball, "npm pack must produce a tarball");
     await run("tar", ["xzf", join(tmpBase, tarball), "-C", tmpBase]);
     const pubPkgDir: string = join(tmpBase, "package");
     const pubVersion: string = JSON.parse(await readFile(join(pubPkgDir, "package.json"), "utf8")).version;
     const devVersion: string = JSON.parse(await readFile(join(devPkgDir, "package.json"), "utf8")).version;
-    console.log(`published @tiqian/prose@${pubVersion} vs working tree ${devVersion}`);
+    console.log(`published @tiqian/web-component@${pubVersion} vs working tree ${devVersion}`);
 
     servers.push(await startDemoServer(devPort, devPkgDir));
     servers.push(await startDemoServer(pubPort, pubPkgDir));

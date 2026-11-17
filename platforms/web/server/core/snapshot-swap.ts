@@ -55,7 +55,7 @@ const sourceExtensions: readonly string[] = [".js", ".cjs", ".mjs", ".ts", ".mts
 const rescopeSet: readonly string[] = [
   "@tiqian/ffi",
   "@tiqian/core",
-  "@tiqian/prose",
+  "@tiqian/web-component",
   "@tiqian/precompute",
 ];
 

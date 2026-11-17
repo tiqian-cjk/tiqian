@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@tiqian/core": "0.1.0-alpha.8",
-    "@tiqian/prose": "0.1.0-alpha.8"
+    "@tiqian/web-component": "0.1.0-alpha.8"
   },
   "devDependencies": {
     "parcel": "^2.16.4",

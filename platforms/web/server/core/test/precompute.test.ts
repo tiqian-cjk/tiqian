@@ -1,4 +1,4 @@
-// Native-lane ports of the @tiqian/prose precompute suite (ADR 0050). The
+// Native-lane ports of the @tiqian/web-component precompute suite (ADR 0050). The
 // pure computation entries run wherever an addon build exists; the engine
 // path additionally needs a local CJK font and covers both build flavors: a
 // build without the engine archive reports PrecomputeEngineNotLinked.

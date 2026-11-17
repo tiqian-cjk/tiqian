@@ -209,7 +209,7 @@ TalkBack character-location 能力不属于当前静态正文路径。
 
 ### Web
 
-`platforms/web/client` 发布 ESM 包 `@tiqian/prose` 与 light-DOM `<tiqian-prose>`。服务器输出的
+`platforms/web/client` 发布 ESM 包 `@tiqian/web-component` 与 light-DOM `<tiqian-prose>`。服务器输出的
 HTML 先保持可读，TS runtime（`@tiqian/core` 宿主模块与 `@tiqian/ffi` 引擎）与字体就绪后按 viewport 距离逐段原子增强。原 `<p>`、链接、代码、强调、自定义
 inline 与 CSS 仍由宿主持有；引擎只写入断行和 spacing geometry。
 `strong-as-emphasis` lowering 先保留 source range，等整段文本完成空白投影后再通过 FFI 批量取得
@@ -218,7 +218,7 @@ inline 与 CSS 仍由宿主持有；引擎只写入断行和 spacing geometry。
 
 同仓库的 `platforms/web/client/sveltekit` 与 `platforms/web/client/astro` 分别发布
 `@tiqian/sveltekit` 和 `@tiqian/astro`。它们只把框架的 SSR、静态构建、head 资产与客户端导航生命周期
-接到 `@tiqian/prose`，不拥有另一份 HTML 投影或排版规则。最低配置的组件输出 semantic SSR，浏览器按
+接到 `@tiqian/web-component`，不拥有另一份 HTML 投影或排版规则。最低配置的组件输出 semantic SSR，浏览器按
 实时 content width 增强；构建字体证据不要求宽度，只有显式 fixed-measure snapshot 需要
 `maxWidthPx`。完整边界见 [ADR 0042](adr/0042-framework-web-integrations.md)。
 
@@ -314,7 +314,7 @@ caret/selection 几何；平台 tokenizer 不参与 shaping、断行或字位计
 - `ffi/js`：引擎的 Kotlin/JS 对外接口（`@JsExport` wire 与 HarfBuzz session 后端）；不拥有排版规则。
 - `platforms/web/server`：Rust workspace（`tiqian-precompute`、`tiqian-precompute-neon`）与
   `@tiqian/precompute` npm 包；Node exact-font session 与构建期编排；不拥有排版规则。
-- `platforms/web/client/astro`、`platforms/web/client/sveltekit`：框架 SSR / build / navigation transport；消费 `@tiqian/prose` 的公共
+- `platforms/web/client/astro`、`platforms/web/client/sveltekit`：框架 SSR / build / navigation transport；消费 `@tiqian/web-component` 的公共
   HTML prepare 与 snapshot contract，不拥有排版或字体 policy。
 - `demo`：Desktop / Android 共用的 Compose 示例界面与 Desktop 启动入口。
 - `demo/android`：Android 应用壳、Compose 启动入口、原生 View 的 RecyclerView dogfood surface

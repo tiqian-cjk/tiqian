@@ -14,13 +14,13 @@
 ## Context
 
 Node precompute 现状分两层。`frontend/web-precompute` 编译为 Kotlin/JS，`@JsExport` 暴露扁平
-wire ABI：分隔符编码的入参、JSON plan 出参。`@tiqian/prose` 内约 3400 行 Node JS 持有字体会话、
+wire ABI：分隔符编码的入参、JSON plan 出参。`@tiqian/web-component` 内约 3400 行 Node JS 持有字体会话、
 编排、prepared DOM 渲染与 manifest。字体会话依赖 `harfbuzzjs` 1.4.0 与 `woff2-encoder` 两个
 WASM 包，经 `globalThis.__TiqianFontBackend` 回调协议服务 Kotlin 的 shaping / metrics 请求。
 
 这个结构有三个代价：
 
-1. precompute 与浏览器运行时混合发布于 `@tiqian/prose`。构建工具用户携带无关文件与两个 WASM
+1. precompute 与浏览器运行时混合发布于 `@tiqian/web-component`。构建工具用户携带无关文件与两个 WASM
    依赖，包边界与 ADR 0042 的分层目标冲突。
 2. 引擎只能经 Node 生态消费。Rust 使用者没有入口，也无法把 precompute 嵌入非 Node 工具链。
 3. 构建期 shaping 走 WASM，加载与版本对齐受 npm 包发布节奏约束。
@@ -152,13 +152,13 @@ Android native 的 aarch64、x86_64、x86、armv7（需 NDK sysroot）。新增�
 没有消费者需求时不预先发布，也不在文档宣称支持。Intel macOS 与 Intel iOS simulator 沿用
 ADR 0045 的排除。
 
-### `NpmPrecomputePackage`：precompute 从 `@tiqian/prose` 迁出
+### `NpmPrecomputePackage`：precompute 从 `@tiqian/web-component` 迁出
 
 npm 侧新增 `@tiqian/precompute`。主包持有 JS 入口、`.d.ts` 与 Neon 加载器；四个 npm 平台包
 持有 `.node`，经 `optionalDependencies` 按平台安装。同维护者的 blurest 仓库验证过 Neon 多
 平台 npm 分发，包结构沿用其主包与平台包的形式。npm 平台包同样内嵌 revision；加载器在
 require 时校验主包与平台包的版本及 revision 配对；不一致时报具名错误。产物基于 N-API，跨
-Node 大版本稳定；`engines` 沿用 `@tiqian/prose` 的 Node 22 下限。musl Linux 与 win32-arm64 不在
+Node 大版本稳定；`engines` 沿用 `@tiqian/web-component` 的 Node 22 下限。musl Linux 与 win32-arm64 不在
 首版支持清单，加载时与 darwin-x64 一样报具名错误；需求出现时按同一平台包模式补充。
 
 兼容性约束：`./precompute` 与 `./precompute-html` 的全部现有导出在 Neon 重构后同名同签名
@@ -171,9 +171,9 @@ prepared-dom 实现；浏览器无法加载 `.node`，该实现留在 JS，由�
 留在 JS，它们是负责连接的代码。README 说明推荐用法：常见站点只用 `createPrecomputer` 或
 `createHtmlPreparer` 配合 bundle 渲染，其余导出供调用方灵活组合。Astro / SvelteKit 集成与新
 站点只改 import 来源。`@tiqian/astro` 与 `@tiqian/sveltekit` 新增
-`@tiqian/precompute` 依赖，与 `@tiqian/prose`、`@tiqian/precompute` 同版本发布。
+`@tiqian/precompute` 依赖，与 `@tiqian/web-component`、`@tiqian/precompute` 同版本发布。
 
-`@tiqian/prose` 删除 `./precompute`、`./precompute-html` 入口、Node 侧 precompute 文件与
+`@tiqian/web-component` 删除 `./precompute`、`./precompute-html` 入口、Node 侧 precompute 文件与
 三个 WASM 依赖，移除随 0.2.0-alpha 发布生效；`@tiqian/precompute` 以同一版本号起步。这是一次
 breaking change，发生在 alpha 阶段，不提供兼容 re-export。浏览器运行时继续使用
 `prepared-dom.js`、`snapshot-manifest.js` 等共享文件的浏览器副本。
@@ -196,12 +196,12 @@ breaking change，发生在 alpha 阶段，不提供兼容 re-export。浏览器
    浮点序列化在 Kotlin/JS 与 Kotlin/Native 间的差异是首要核对项。harness 发现差异
    时先判断属于格式还是语义：格式差异修 canonical 层，语义差异阻塞。这一要求按最终支持平台全集计算；
    Windows 链接验证长期受阻时把 Windows 移出支持清单并记录，legacy 移除按剩余平台达标执行。
-2. 删除 `@tiqian/prose` 的 Node precompute 与 WASM 依赖；`frontend/web-precompute` 的 js
+2. 删除 `@tiqian/web-component` 的 Node precompute 与 WASM 依赖；`frontend/web-precompute` 的 js
    目标降为 oracle。
 3. 删除 js 目标，发布 `@tiqian/precompute` 稳定版并更新架构文档。
 
 oracle 期间 Rust 侧逐字复用 `snapshot-schema.js` 的既有 revision 常量。迁移完成后 revision
-常量在 `@tiqian/prose` 与 Rust 侧各持一份声明，npm 测试断言两侧相等；`@tiqian/prose` 不依赖
+常量在 `@tiqian/web-component` 与 Rust 侧各持一份声明，npm 测试断言两侧相等；`@tiqian/web-component` 不依赖
 `@tiqian/precompute`，浏览器包不引入原生依赖。`snapshot-schema.js` 还定义 replay key 函数，
 Rust 会话产出相同的 replay key，该层一致性由差分 harness 与共享 golden 覆盖。
 字体会话层的 parity 曾由 `tiqian-precompute` 的 `js_session_parity` 集成测试承载：同一
@@ -337,7 +337,7 @@ f64 加宽值（`20.34000015258789`、整数无小数点），JVM 与 Kotlin/Nat
   仓库的验证记录。
 - **Kotlin/Native 直接产出 Node addon。** 否决：Kotlin/Native 无法独立产出 N-API addon；
   Rust 生态入口仍缺失。
-- **precompute 继续留在 `@tiqian/prose`。** 否决：混合发布与 ADR 0042 分层冲突，breaking
+- **precompute 继续留在 `@tiqian/web-component`。** 否决：混合发布与 ADR 0042 分层冲突，breaking
   迁移趁 alpha 阶段完成。
 
 ## Verification
@@ -347,7 +347,7 @@ f64 加宽值（`20.34000015258789`、整数无小数点），JVM 与 Kotlin/Nat
 - 差分 harness：最终支持平台全集 × 全语料 byte-identical，是移除 legacy 的硬性要求。
 - 差分 harness 记录每段落的跨 FFI 调用次数，断言与 segment 数线性相关。
 - 迁移完成后共享 golden 语料在 `cargo test` 与 npm 测试双向断言字节一致。
-- revision 常量由 `@tiqian/prose` 与 Rust 两侧声明，npm 测试断言相等。
+- revision 常量由 `@tiqian/web-component` 与 Rust 两侧声明，npm 测试断言相等。
 - CI `ldd` / `dumpbin` 审计四平台 `.node` 与示例二进制。
 - npm 测试套件经 Neon 路径全部通过；Astro / SvelteKit 集成测试改引 `@tiqian/precompute` 后
   全部通过。

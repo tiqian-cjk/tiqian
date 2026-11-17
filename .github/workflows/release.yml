@@ -324,17 +324,17 @@ jobs:
     uses: ./.github/workflows/publish-core.yml
     secrets: inherit
 
-  npm-prose:
+  npm-web-component:
     needs: [gate, npm-core]
     permissions:
       contents: read
       actions: read
       id-token: write
-    uses: ./.github/workflows/publish-prose.yml
+    uses: ./.github/workflows/publish-web-component.yml
     secrets: inherit
 
   npm-precompute:
-    needs: [gate, npm-prose]
+    needs: [gate, npm-web-component]
     permissions:
       contents: read
       actions: read
@@ -353,7 +353,7 @@ jobs:
       version: ${{ needs.gate.outputs.version }}
 
   registry:
-    needs: [gate, npm-precompute, npm-ffi, npm-core, npm-prose, maven, publish]
+    needs: [gate, npm-precompute, npm-ffi, npm-core, npm-web-component, maven, publish]
     permissions:
       contents: write
       actions: read

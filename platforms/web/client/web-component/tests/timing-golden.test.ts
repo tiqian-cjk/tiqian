@@ -539,7 +539,7 @@ async function runWorkerMessagesJourney() {
   const savedWorker = globalThis.Worker;
   const savedInnerHeight = globalThis.innerHeight;
   const savedBridge = globalServices().coordination.layoutWorker;
-  const coordinatorKey = Symbol.for("@tiqian/prose.layout-worker-coordinator.v1");
+  const coordinatorKey = Symbol.for("@tiqian/web-component.layout-worker-coordinator.v1");
   const savedCoordinator = probe<Record<symbol, unknown>>(globalThis)[coordinatorKey];
   const savedComputedStyle = globalThis.getComputedStyle;
   const compactTake = (resultText: string | null) => {
