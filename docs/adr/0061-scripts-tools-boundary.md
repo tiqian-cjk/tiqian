@@ -14,7 +14,7 @@
 
 1. `scripts/` 存放流程入口。CI job 与人工命令直接执行的命令文件放在这里；入口按顺序调用其它程序，或在生成、测试之前准备运行环境。当前入口是 `scripts/staging-pipeline.sh`、`scripts/test-engine-rust.sh`、`scripts/generate-engine-gen.mjs` 与 `scripts/setup-haxe-env.sh`。
 2. `tools/` 存放可复用的实现。被入口、git hook、构建脚本或文档直接调用的单步程序放在这里；同一实现被多处调用时只保留 `tools/` 里的一份。当前实现是七个 Python 发布程序、`tools/release-gradle-tasks.sh`、`tools/doc-style/check.py`、`tools/git-hooks/` 与四个 `tools/unicode-*` 数据生成器。
-3. 入库的构建输入数据放在 `engine-haxe/data/`。生成期创建的目录写入 `.gitignore`，不进入 `scripts/` 或 `tools/` 的入库树。`tools/unicode-data/` 属于生成期目录：`reflaxe.unicode.GraphemeData` 按检出根解析该路径，README.md 的割接期临时前置登记它在 `t-mwcxehpz-fict` 完成后取消。
+3. 入库的构建输入数据放在 `engine-haxe/data/`。生成期创建的目录写入 `.gitignore`，不进入 `scripts/` 或 `tools/` 的入库树。`tools/unicode-data/` 属于生成期目录：`reflaxe.unicode.GraphemeData` 按检出根解析该路径，README.md 的「Web 引擎包」一节登记它在 `t-mwcxehpz-fict` 完成后取消。
 4. 工作手册与运行手册放在 `docs/`。`scripts/` 只保留可执行文件，不保留 Markdown 文档。
 5. 构建模块不放在 `tools/`。`:tools:engine-probes` 是 Gradle 模块，迁移它会改动 `settings.gradle.kts` 与 `build.gradle.kts`，列入 engine、probes 与 jvm 那一轮，本轮保留原路径。
 
