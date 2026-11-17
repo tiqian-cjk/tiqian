@@ -19,7 +19,7 @@ import java.util.Locale
  * full-buffer ink MUST stay ≥ the sub-range ink (and near 2em for `⸺`).
  */
 @RunWith(AndroidJUnit4::class)
-class PartialRunDrawProbe {
+class PartialRunDrawTest {
     @Test
     fun scan() {
         val typefaces = SystemAndroidTypefaceResolver()

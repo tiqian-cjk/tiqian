@@ -134,7 +134,7 @@ Rust 侧的 `engine-gen` 是构建期生成物（`node scripts/generate-engine-g
 ## 模块边界
 
 - **排版核心**：`engine`（单一发布模块，整合原 `core`、`font`、`linebreak`、`clreq`、`layout`、`shaping/api`）定义数据结构、字体策略、断行规则、中文排版规则、塑造接口定义与最终 `LayoutResult`；代码按 `org.tiqian.{core,font,linebreak,clreq,layout,shaping}` 包组织。
-- **平台字形塑造**：塑造接口定义于 `engine`；`platforms/jvm/{shaping,skia}`、`platforms/android/{shaping,native-font}`、`platforms/apple/shaping` 提供各平台实现。
+- **平台字形塑造**：塑造接口定义于 `engine`；`platforms/compose/skia-jvm`、`platforms/android/{shaping,native-font}`、`platforms/apple/shaping` 提供各平台实现。
 - **前端适配**：`platforms/compose/{compose,material3}`、`platforms/web/client`、`platforms/android/view`、`platforms/apple/frontend` 接收排版结果并执行界面呈现。
 - **外部语言接口**：`platforms/web/client/engine-runtime` 提供 Web 客户端使用的 npm 引擎包；`platforms/web/server/precompute/tiqian` 与 `platforms/web/server/precompute/engine-gen` 提供 Rust 预计算绑定。`platforms/web/server` 由项目维护者管理。
 - **示例与工具**：`demo` 包含跨平台 Desktop 与 Android 示例界面，`demo/android` 提供 Android 运行壳；`engine` 模块的 `commonTest` 包含测试用例数据与排版报告生成工具。

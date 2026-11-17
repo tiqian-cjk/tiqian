@@ -15,8 +15,17 @@ import kotlin.system.measureNanoTime
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
-/** Observational baseline for the default Desktop backend's repeated-width reflow path. */
-class ComposeReflowBenchmarkProbe {
+/**
+ * Observational baseline for the default Desktop backend's repeated-width reflow path.
+ *
+ * This class drives the module-internal [BoundedComposeTextShaperCache] /
+ * [BoundedComposeFontMetricsCache], so it lives in this module's jvmTest instead
+ * of tools/engine-probes: making those caches public just to move a benchmark
+ * would widen the published API. It is named `Test` because compose jvmTest has
+ * no release lane; run it with
+ * `./gradlew :platforms:compose:compose:jvmTest --tests org.tiqian.compose.ComposeReflowBenchmarkTest`.
+ */
+class ComposeReflowBenchmarkTest {
 
     private val paragraph =
         "咖啡（coffee）在十七世纪经威尼斯传入欧洲。最初它被当作药物出售，价格高得吓人，真正" +

@@ -30,7 +30,7 @@ kotlin {
         }
 
         jvmMain.dependencies {
-            implementation(project(":platforms:jvm:skia"))
+            implementation(project(":platforms:compose:skia-jvm"))
         }
 
         androidMain.dependencies {

@@ -91,8 +91,6 @@ logger.info("tiqian: :boring-kotlin-f32 compiles the Kotlin boring generates fro
 
 include(
     ":boring-kotlin-f32", // boring's publication project, see above
-    ":platforms:jvm:shaping",
-    ":platforms:jvm:skia",
     ":platforms:android:shaping",
     ":platforms:android:native-font",
     ":platforms:android:rendering",
@@ -102,6 +100,7 @@ include(
     ":platforms:apple:frontend",
     ":platforms:apple:frontend:coretext-render",
     ":platforms:compose:compose",
+    ":platforms:compose:skia-jvm",
     ":platforms:compose:material3",
     ":demo",
     ":demo:android",

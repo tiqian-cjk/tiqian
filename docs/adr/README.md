@@ -81,6 +81,7 @@ ADR 记录已经做出的架构与排版决定。它们按编号保留当时的 
 ## 工程组织
 
 - [0061 仓库脚本与工具的分工](0061-scripts-tools-boundary.md)
+- [0062 删除 platforms/jvm 分组，Skia 模块移入 Compose，探针集中到 engine-probes](0062-platform-jvm-dissolution-and-probe-home.md)
 
 ## 早期状态说明
 

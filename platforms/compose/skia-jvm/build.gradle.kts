@@ -33,7 +33,6 @@ kotlin {
 
         jvmTest.dependencies {
             implementation(kotlin("test"))
-            implementation(project(":platforms:jvm:shaping"))
             runtimeOnly("org.jetbrains.skiko:skiko-awt-runtime-" + skikoRuntimeClassifier() + ":0.144.6")
         }
     }

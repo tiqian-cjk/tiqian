@@ -334,7 +334,7 @@ EOF
 # tools:engine-probes, platforms:apple) break here instead of on the release tag.
 #
 # publishTiqianToMavenLocal writes only the modules build.gradle.kts still
-# publishes (publishedModules: platforms:jvm:shaping through
+# publishes (publishedModules: platforms:compose:skia-jvm through
 # platforms:compose:material3). The nine engine coordinates are not among
 # them; the pack stage's kotlin-f32 publication writes those, and
 # step_maven_local_repo copies them into the same isolated repository.

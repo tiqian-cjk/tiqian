@@ -33,8 +33,11 @@ data class PublishedModule(
 // Maven coordinates through the kotlin-f32 bundle's kmpPublication. This map
 // lists only the platform modules that still carry their own publication.
 val publishedModules = mapOf(
-    ":platforms:jvm:shaping" to PublishedModule("tiqian-jvm-shaping", "Tiqian JVM Shaping", "JVM shaping support for Tiqian."),
-    ":platforms:jvm:skia" to PublishedModule("tiqian-jvm-skia", "Tiqian Skia Shaping", "Skia shaping and glyph replay support for Tiqian."),
+    ":platforms:compose:skia-jvm" to PublishedModule(
+        "tiqian-jvm-skia",
+        "Tiqian Skia Shaping",
+        "Skia shaping and glyph replay support for Tiqian Compose on the JVM.",
+    ),
     ":platforms:android:shaping" to PublishedModule(
         "tiqian-android-shaping",
         "Tiqian Android Shaping",

@@ -107,8 +107,7 @@ cluster、glyph、advance 和 ink bounds。可重放后端还用稳定 `FontFace
 
 当前平台实现包括：
 
-- `platforms/jvm/shaping`：AWT 字体与 glyph vector；
-- `platforms/jvm/skia`：Skia / Skiko，供 Compose Desktop 与 JVM 渲染；
+- `platforms/compose/skia-jvm`：Skia / Skiko，是 Compose Desktop 的 JVM shaping 与绘制后端；
 - `platforms/android/native-font`：宿主可显式选择的 Android API 23+ HarfBuzz / FreeType
   受控字体后端，从同一字体字节完成
   shaping、metrics、ink 与 outline replay；文件字体按内容身份只读映射一次，`ByteArray` / asset
@@ -122,6 +121,9 @@ cluster、glyph、advance 和 ink bounds。可重放后端还用稳定 `FontFace
 - `platforms/apple/shaping`：Apple Core Text shaping、系统字体度量与 glyph ink。语言和显式 OpenType
   feature 进入同一条 `CTLine` 测绘路径；无法施加的 feature 以具名 capability issue 降级，不能
   只把请求原样写进 `GlyphRun`。
+
+AWT 对照实现 `AwtTextShaper`（包 `org.tiqian.shaping.jvm`）不发布，也不是平台模块：它只服务
+`tools/engine-probes` 里 `AwtSkiaShapingComparisonTest` 与标点探针的 AWT ↔ Skia 对照。
 
 平台 adapter 不决定 CLREQ 码点替换、标点宽度、避头尾或两端对齐。它无法提供某项证据时，
 必须输出具名降级原因，不用在 renderer 中猜补偿值。
@@ -297,7 +299,7 @@ caret/selection 几何；平台 tokenizer 不参与 shaping、断行或字位计
   数据结构与 layout contract、字体角色 / fallback / 度量策略、平台无关的 shaping / replayable
   font contract、断行机会与西文断词、中文 profile / 标点分类 / 禁则 / 空间策略、段落布局 / 修复 /
   行调整与结构化 decision。
-- `platforms/jvm/{shaping,skia}`、`platforms/android/{shaping,native-font,rendering}`、
+- `platforms/compose/skia-jvm`、`platforms/android/{shaping,native-font,rendering}`、
   `platforms/apple/shaping`：各宿主的 shaping / replayable font 实现；
   `platforms/android/shaping` 是 Compose Android 默认的公开平台 run 后端，
   `platforms/android/native-font` 持有宿主可显式选择的共享字体源、受控 face、

@@ -9,15 +9,15 @@
 
 | 工作流 | 触发 | 目标仓库 | 发布单元 | 版本来源 |
 | --- | --- | --- | --- | --- |
-| `publish.yml` | `workflow_dispatch`，手填 `version` 与 `namespace`（第 3-14 行） | Maven Central 暂存区 | 9 个 Maven 模块 | 输入参数 `version`，写入环境变量 `TIQIAN_VERSION`（第 27 行） |
-| `publish-snapshots.yml` | `workflow_dispatch`，手填 `version`（第 3-10 行） | Maven Central 快照仓库 | 9 个 Maven 模块 | 输入参数 `version`，必须带 `-SNAPSHOT` 后缀（第 34-37 行） |
+| `publish.yml` | `workflow_dispatch`，手填 `version` 与 `namespace`（第 3-14 行） | Maven Central 暂存区 | 8 个 Maven 模块 | 输入参数 `version`，写入环境变量 `TIQIAN_VERSION`（第 27 行） |
+| `publish-snapshots.yml` | `workflow_dispatch`，手填 `version`（第 3-10 行） | Maven Central 快照仓库 | 8 个 Maven 模块 | 输入参数 `version`，必须带 `-SNAPSHOT` 后缀（第 34-37 行） |
 | `publish-ffi.yml` | 推送标签 `@tiqian/ffi@*`（第 3-6 行） | npmjs.com | 1 个 npm 包 | `platforms/web/client/engine-runtime/package.json` 的 `version`（第 54 行） |
 | `publish-precompute.yml` | 推送标签 `@tiqian/precompute@*`（第 8-11 行） | npmjs.com | 5 个 npm 包 | `platforms/web/server/core/package.json` 的 `version`（第 43 行） |
 | `publish-prose.yml` | 推送标签 `@tiqian/prose@*`（第 3-6 行） | npmjs.com | 1 个 npm 包 | `platforms/web/client/web-component/package.json` 的 `version`（第 54 行） |
 | `release-registry.yml` | 推送标签 `v*.*.*`（第 2-4 行） | 自建 registry 仓库 `tiqian-cjk/registry`、R2 存储、Pages 站点 | 13 个 bundle，归并为 2 个包 | 标签名去掉 `v` 前缀（第 56 行） |
 | `snapshot-precompute.yml` | `workflow_dispatch`，无输入（第 13-14 行） | GitHub Packages | 11 个 npm 包 | `platforms/web/server/core/package.json` 的主版本加 `-snapshot.<UTC 时间戳>`（第 59-70 行） |
 
-9 个 Maven 模块在 `build.gradle.kts:32-67` 的 `publishedModules` 里声明：`tiqian-engine`、`tiqian-jvm-shaping`、`tiqian-jvm-skia`、`tiqian-android-shaping`、`tiqian-android-native-font`、`tiqian-android-rendering`、`tiqian-android-view`、`tiqian-compose`、`tiqian-compose-material3`。
+发布 8 个 Maven 模块：`tiqian-engine` 由 boring 的 kotlin-f32 publication 发布，其余 7 个平台模块在 `build.gradle.kts:35-67` 的 `publishedModules` 里声明，分别是 `tiqian-jvm-skia`、`tiqian-android-shaping`、`tiqian-android-native-font`、`tiqian-android-rendering`、`tiqian-android-view`、`tiqian-compose`、`tiqian-compose-material3`。
 
 13 个 bundle 在 `release-registry.yml:61` 的 `boring pack` 参数里逐个列出，`boring.json` 里每个 bundle 都声明了 `package` 字段，归并后只有两个包名：`tiqian-engine` 与 `tiqian-protocol`（`boring.json` 里每个 bundle 的 `package.name` 只取这两个值）。
 

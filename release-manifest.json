@@ -106,7 +106,6 @@
       "workflow": ".github/workflows/publish.yml",
       "trigger": "release",
       "packages": [
-        "tiqian-jvm-shaping",
         "tiqian-jvm-skia",
         "tiqian-android-shaping",
         "tiqian-android-native-font",
