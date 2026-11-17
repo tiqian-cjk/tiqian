@@ -24,7 +24,7 @@ driver 与编译器固定在同一修订，进入开发 shell 时配置 `.haxeli
 - `engine-haxe/textrange-kotlin.hxml`、`engine-haxe/smoke-kotlin.hxml`：不经
   `boring.json` 的 Kotlin 生成清单，前者只列出 `org.tiqian.core.TextRange` 相关
   类型，后者编译 boring 的 `boring.Fp16` 样例。
-- `engine-haxe/data/`：生成 Unicode 数据类所用的区间数据。
+- `engine-haxe/data/`：生成 Unicode 数据类所用的区间数据，来源与重造步骤见 [docs/unicode-data.md](../docs/unicode-data.md)。
 - `engine-haxe/tools/`：`compare-traces.py` 解析 trace 行，并用
   `EXCEPTION_NAME_ALIASES` 把 `raises exception=` 行上的 Kotlin 内建异常名对到
   对应的 `Tiqian` 前缀名；`f64-trace-compare.sh` 调用
