@@ -27,7 +27,7 @@
 - `boring.json`：生成与测试配置驱动器（boring feature spec 59）的项目文件，声明本目录
   的目标、精度及命名源码范围。`engine` 范围从六个包发现 `*Test.hx`，加上两个
   runtime 根类型；八个引擎配置共用它。生成与测试以此文件为准。
-- `tools/setup-haxe-env.sh`：把 `tools/unicode-data/` 同步进当前检出，见下节。
+- `scripts/setup-haxe-env.sh`：把 `tools/unicode-data/` 同步进当前检出，见下节。
 - `textrange-kotlin.hxml`、`smoke-kotlin.hxml`：独立用途的 Kotlin
   生成清单。
 - `data/`：生成 Unicode 数据类所需的区间数据。
@@ -47,8 +47,8 @@
 作为已准备输入的源检出；目录布局不同时显式传入源检出。复制前会逐项检查输入：
 
 ```shell
-bash tools/setup-haxe-env.sh
-bash tools/setup-haxe-env.sh /path/to/prepared/tiqian
+bash scripts/setup-haxe-env.sh
+bash scripts/setup-haxe-env.sh /path/to/prepared/tiqian
 ```
 
 flake 把 boring 的 driver 与编译器固定在同一修订，并在进入开发 shell 时配置

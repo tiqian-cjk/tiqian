@@ -85,13 +85,13 @@ jobs:
       - name: Allow unprivileged user namespaces
         run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
       - name: Generate the TypeScript engine tree with the flake toolchain
-        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node scripts/generate-engine-gen.mjs ts'
+        run: nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && node scripts/generate-engine-gen.mjs ts'
       - name: Write the protocol and shared package manifests
         run: |
           export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+          nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
       - name: Install workspace dependencies
         working-directory: .
         # bun, not npm: the web consumers declare tiqian-protocol and

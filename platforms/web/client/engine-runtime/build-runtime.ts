@@ -30,7 +30,7 @@ const engineGenDirectory = fileURLToPath(new URL("./engine-gen/", import.meta.ur
 if (!existsSync(engineGenDirectory)) {
   const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
   const generator = fileURLToPath(new URL("../../../../scripts/generate-engine-gen.mjs", import.meta.url));
-  const setupScript = fileURLToPath(new URL("../../../../tools/setup-haxe-env.sh", import.meta.url));
+  const setupScript = fileURLToPath(new URL("../../../../scripts/setup-haxe-env.sh", import.meta.url));
 
   // The boring driver is the generation toolchain, and only the flake devShell
   // provides it. Probe it before staging so an install without nix skips the
@@ -70,8 +70,8 @@ if (!existsSync(engineGenDirectory)) {
     console.error(
       [
         "build:runtime: could not stage the local data inputs.",
-        "  cause: " + (stage.error ? stage.error.message : "tools/setup-haxe-env.sh exited with status " + stage.status),
-        "  next step: bash tools/setup-haxe-env.sh",
+        "  cause: " + (stage.error ? stage.error.message : "scripts/setup-haxe-env.sh exited with status " + stage.status),
+        "  next step: bash scripts/setup-haxe-env.sh",
       ].join("\n"),
     );
     process.exit(1);
@@ -90,7 +90,7 @@ if (!existsSync(engineGenDirectory)) {
         "build:runtime: engine-gen/ is missing and could not be generated.",
         "  cause: " + cause,
         "  next step: nix develop -c npm run build:runtime",
-        "  (the boring driver comes from the flake; tools/setup-haxe-env.sh stages the local data inputs)",
+        "  (the boring driver comes from the flake; scripts/setup-haxe-env.sh stages the local data inputs)",
         "  runtime/ was not rebuilt; @tiqian/ffi has no entry point until the generation succeeds.",
       ].join("\n"),
     );

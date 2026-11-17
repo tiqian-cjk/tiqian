@@ -60,7 +60,7 @@ jobs:
           ls -l tools/unicode-data
 
       - name: Generate, test and compare every bundle
-        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring verify --project boring.json'
+        run: nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && boring verify --project boring.json'
 
       - name: Compile every bundle that the pack action does not compile
         if: always()

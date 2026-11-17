@@ -10,7 +10,7 @@
 # official registry.
 #
 # The Gradle task set is not repeated here: it comes from
-# scripts/release-gradle-tasks.sh, the same file .github/workflows/publish.yml
+# tools/release-gradle-tasks.sh, the same file .github/workflows/publish.yml
 # reads, so this run cannot verify a subset of what the release verifies.
 #
 # Usage: scripts/staging-pipeline.sh [--bundles "id ..."] [--stages "name ..."] [--root <dir>]
@@ -38,8 +38,8 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 2
 
-# shellcheck source=scripts/release-gradle-tasks.sh
-. "$REPO_ROOT/scripts/release-gradle-tasks.sh"
+# shellcheck source=tools/release-gradle-tasks.sh
+. "$REPO_ROOT/tools/release-gradle-tasks.sh"
 
 DEFAULT_STAGES="align pack compile-bundles collect-artifacts registry-tree staging-isolation maven-artifact-ids cargo-consume maven-local-publish maven-local-repo verify summary"
 BUNDLES_OVERRIDE=""
@@ -343,7 +343,7 @@ EOF
 # assemble compiles has to surface now, and the generated suite is red on the
 # pinned driver until the next boring re-pin (the lane still runs on every pass).
 step_maven_publish() {
-  in_devshell "bash tools/setup-haxe-env.sh && boring gen kotlin-f32 --project boring.json" || return 1
+  in_devshell "bash scripts/setup-haxe-env.sh && boring gen kotlin-f32 --project boring.json" || return 1
   TIQIAN_VERSION="$STAGING_VERSION" ./gradlew "${RELEASE_GRADLE_TASKS[@]}" \
     -Dmaven.repo.local="$MAVEN_REPO" --no-daemon || return 1
   # Same command as publish.yml's "Run the generated Kotlin test suite" step.

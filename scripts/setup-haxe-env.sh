@@ -9,8 +9,8 @@
 #   $BORING_SOURCE/tools/unicode-data/       the boring flake input source
 #
 # Usage:
-#   bash tools/setup-haxe-env.sh              # stage from the in-repo sources
-#   bash tools/setup-haxe-env.sh <checkout>   # stage from a prepared checkout
+#   bash scripts/setup-haxe-env.sh              # stage from the in-repo sources
+#   bash scripts/setup-haxe-env.sh <checkout>   # stage from a prepared checkout
 set -euo pipefail
 
 TARGET="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
