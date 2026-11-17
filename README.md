@@ -121,16 +121,15 @@ val paragraph = CjkTextView(context).apply {
 安装、命令式 API、构建期预排与运行环境见
 [`@tiqian/prose` 使用文档](platforms/web/client/web-component/README.md)。
 
-## 引擎源码（engine-haxe 是唯一活跃源码）
+## 引擎源码
 
-engine-haxe/src/ 是引擎的唯一活跃源码。boring 编译器从它生成 Kotlin、Swift、
-Dart、JS、Rust 五个目标的产物；engine/ 是编译生成 Kotlin 的 Gradle 模块，
-不再包含手写的引擎实现。
+engine-haxe/src/ 是引擎的 Haxe 源码。boring 编译器从它生成 Kotlin、Swift、
+Dart、JS、Rust 五个目标的代码；platforms/engine 是编译生成 Kotlin 的 Gradle
+模块，它的 commonMain 指向 engine-haxe/out/kotlin-f32/gen。
 
 - 五个目标的生成、编译与测试见 engine-haxe/README.md。
 - Kotlin 平台的行为改动落在 engine-haxe/src/ 的 Haxe 源码，生成物不入库。
-- engine/src/commonMain 的手写 Kotlin 已删除；engine/ 只保留生成物编译所需的
-  Gradle 配置与平台测试胶水。
+- platforms/engine 只保留构建配置，模块自身不含源码。
 
 ## 体验与构建
 
@@ -155,7 +154,7 @@ demo 覆盖 Compose density，例如 Plasma 的 150% 缩放使用：
 `platforms/web/client/engine-runtime` 的 `engine-gen/` 与 `runtime/` 都是构建产物，不入库。
 在仓库根目录执行 `bun install` 时，install 钩子按以下顺序补齐：
 
-| 割接期临时前置 | 作用 | 取消条件 |
+| 安装钩子步骤 | 作用 | 取消条件 |
 | --- | --- | --- |
 | 把 `.haxelib/boring/git/tools/unicode-data/` 拷到 `tools/unicode-data/` | `reflaxe.unicode.GraphemeData` 按 cwd 读取该目录 | boring 不再按 cwd 读取 `tools/unicode-data`（`t-mwcxehpz-fict`） |
 | 用 `boring` 生成 `engine-gen/` | Web 引擎包的 TypeScript 产物 | 发布流程与本地开发都不再依赖 install 钩子生成 `engine-gen/` |
