@@ -1,7 +1,7 @@
 name: Snapshot precompute packages
 
 # Manual-only snapshot lane for the full npm set: precompute and its platform
-# binaries, the astro and sveltekit integrations, and the ffi, core, prose,
+# binaries, the astro and sveltekit integrations, and the ffi, core, web-component,
 # and react client packages. Each dispatch stamps its own timestamped tag,
 # builds the eleven packages from that commit, temporarily swaps the manifests
 # to the running repository owner's scope (GitHub Packages requires the npm
@@ -9,7 +9,7 @@ name: Snapshot precompute packages
 # `snapshot` dist-tag, and restores the manifests. Snapshot publishing
 # belongs to the fork; the stamp job refuses to run under the canonical
 # owner. Release publishing stays in publish-precompute.yml and
-# publish-prose.yml and never runs the swap.
+# publish-web-component.yml and never runs the swap.
 on:
   workflow_dispatch:
 
@@ -208,7 +208,7 @@ jobs:
         # boring pack wrote; the trees come from the generated-trees artifact.
         run: bun install --ignore-scripts
 
-      # The smoke test's pretest build consumes prose's prepared-dom, whose
+      # The smoke test's pretest build consumes web-component's prepared-dom, whose
       # project references consume core's declarations; a fresh checkout
       # carries neither emit, so build that chain first (same order as
       # ci-native-precompute.yml).
@@ -216,7 +216,7 @@ jobs:
         working-directory: platforms/web/client/core
         run: npx tsc -b
 
-      - name: Emit the prose package
+      - name: Emit the web-component package
         working-directory: platforms/web/client/web-component
         run: npx tsc -b --noCheck
 
@@ -347,7 +347,7 @@ jobs:
         working-directory: platforms/web/client/engine-runtime
         run: nix develop -c npm run build:runtime
 
-      # The precompute build consumes prose's prepared-dom, whose project
+      # The precompute build consumes web-component's prepared-dom, whose project
       # references consume core's declarations; a fresh checkout carries
       # neither emit, so build that chain first (same order as
       # ci-native-precompute.yml).
@@ -355,7 +355,7 @@ jobs:
         working-directory: platforms/web/client/core
         run: npx tsc -b
 
-      - name: Emit the prose package
+      - name: Emit the web-component package
         working-directory: platforms/web/client/web-component
         run: npx tsc -b --noCheck
 
@@ -476,7 +476,7 @@ jobs:
         working-directory: platforms/web/client/engine-runtime
         run: nix develop -c npm run build:runtime
 
-      # The precompute build consumes prose's prepared-dom, whose project
+      # The precompute build consumes web-component's prepared-dom, whose project
       # references consume core's declarations; a fresh checkout carries
       # neither emit, so build that chain first (same order as
       # ci-native-precompute.yml).
@@ -484,7 +484,7 @@ jobs:
         working-directory: platforms/web/client/core
         run: npx tsc -b
 
-      - name: Emit the prose package
+      - name: Emit the web-component package
         working-directory: platforms/web/client/web-component
         run: npx tsc -b --noCheck
 
@@ -508,7 +508,7 @@ jobs:
           (cd sveltekit && npx tsc -p .)
 
       # The integration suites assert the canonical manifest set (peer
-      # versions against the precompute and prose manifests), so they run
+      # versions against the precompute and web-component manifests), so they run
       # before the swap flips names and versions.
       - name: Install and test @tiqian/astro
         working-directory: platforms/web/client/astro
@@ -573,7 +573,7 @@ jobs:
           retention-days: 7
 
   client-packages:
-    name: Pack ffi, core, prose, and react packages
+    name: Pack ffi, core, web-component, and react packages
     needs: [stamp]
     runs-on: ubuntu-latest
     env:
@@ -649,13 +649,13 @@ jobs:
 
       # The suites assert the canonical @tiqian manifests and resolve the
       # workspace dev links, so they all run before the swap. The order
-      # satisfies the build chain: prose and react consume core's emitted
+      # satisfies the build chain: web-component and react consume core's emitted
       # declarations through tsc -b.
       - name: Test @tiqian/core
         working-directory: platforms/web/client/core
         run: npm test
 
-      - name: Test @tiqian/prose
+      - name: Test @tiqian/web-component
         working-directory: platforms/web/client/web-component
         run: npm test
 
@@ -678,7 +678,7 @@ jobs:
           repository="$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
           node snapshot-swap.ts apply "${SNAPSHOT_VERSION}" "${scope}" "${repository}"
 
-      # prose and ffi declare verify prepacks that assert the canonical
+      # web-component and ffi declare verify prepacks that assert the canonical
       # manifest set, and every package's emitted build products were made
       # before the swap, so all four pack without scripts. The content
       # assertions grep a saved listing: piping tar straight into grep -q
@@ -697,14 +697,14 @@ jobs:
           test "$(find "${out}" -name '*.tgz' | wc -l)" -eq 4
           ffi_tarball="$(find "${out}" -name '*ffi*.tgz' -print -quit)"
           core_tarball="$(find "${out}" -name '*core*.tgz' -print -quit)"
-          prose_tarball="$(find "${out}" -name '*prose*.tgz' -print -quit)"
+          web_component_tarball="$(find "${out}" -name '*web-component*.tgz' -print -quit)"
           react_tarball="$(find "${out}" -name '*react*.tgz' -print -quit)"
           listing="${out}/listing.txt"
           tar -tzf "${ffi_tarball}" > "${listing}"
           grep -q '^package/runtime/Tiqian-tiqian-ffi-js.mjs$' "${listing}"
           tar -tzf "${core_tarball}" > "${listing}"
           grep -q '^package/src/' "${listing}"
-          tar -tzf "${prose_tarball}" > "${listing}"
+          tar -tzf "${web_component_tarball}" > "${listing}"
           grep -q '^package/element.js$' "${listing}"
           tar -tzf "${react_tarball}" > "${listing}"
           grep -q '^package/binding.js$' "${listing}"
@@ -765,11 +765,11 @@ jobs:
           done < <(find packages -name '*.tgz' -print0)
 
       # Publish in dependency order so every version resolves as it lands:
-      # ffi first (core imports it at runtime), then core (prose and react
+      # ffi first (core imports it at runtime), then core (web-component and react
       # depend on it), then the platform binaries (the main package lists
       # them as optional dependencies at the same version), then the main
       # package, and finally the integrations that peer on the snapshot
-      # precompute and prose.
+      # precompute and web-component.
       - name: Publish each tarball
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -780,7 +780,7 @@ jobs:
             tarball="$(find "packages/$1" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
             npm publish "${tarball}" --ignore-scripts --access public --tag snapshot
           }
-          for pattern in '*ffi*.tgz' '*core*.tgz' '*prose*.tgz' '*react*.tgz'; do
+          for pattern in '*ffi*.tgz' '*core*.tgz' '*web-component*.tgz' '*react*.tgz'; do
             tarball="$(find packages/client-packages -maxdepth 1 -type f -name "${pattern}" -print -quit)"
             npm publish "${tarball}" --ignore-scripts --access public --tag snapshot
           done
@@ -801,7 +801,7 @@ jobs:
             echo ""
             echo '```sh'
             echo "npm install \\"
-            for package in ffi core prose react precompute astro sveltekit; do
+            for package in ffi core web-component react precompute astro sveltekit; do
               echo "  ${scope}/${package}@${SNAPSHOT_VERSION} \\"
             done
             echo "  --registry=https://npm.pkg.github.com"

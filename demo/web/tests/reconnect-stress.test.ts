@@ -152,8 +152,8 @@ function startFixtureServer(): Promise<Server> {
 <script type="importmap">
 {
   "imports": {
-    "@tiqian/prose/element": "/npm/element.js",
-    "@tiqian/prose/": "/npm/",
+    "@tiqian/web-component/element": "/npm/element.js",
+    "@tiqian/web-component/": "/npm/",
     "@tiqian/core/": "/core/",
     "@tiqian/ffi": "/npm-engine-runtime/Tiqian-tiqian-ffi-js.mjs"
   }
@@ -200,7 +200,7 @@ function startFixtureServer(): Promise<Server> {
 }
 
 const PAGE_DRIVER: string = `
-  import { registerTiqianProse } from "@tiqian/prose/element";
+  import { registerTiqianProse } from "@tiqian/web-component/element";
   registerTiqianProse();
 
   const stage = document.getElementById("stage");

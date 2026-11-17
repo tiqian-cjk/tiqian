@@ -126,7 +126,7 @@ jobs:
   # the rust job above; this job regenerates the fixture from the js oracle and
   # fails on drift, then replays the same fixture through the js test.
   # Workspace install (root npm ci) hoists @tiqian/* packages as symlinks;
-  # prose and precompute resolve them without link scripts.
+  # web-component and precompute resolve them without link scripts.
   prepared-dom-corpus:
     name: Shared prepared-dom corpus
     runs-on: ubuntu-latest
@@ -153,7 +153,7 @@ jobs:
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
           nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
-      # Workspace install hoists @tiqian/* packages as symlinks; prose and
+      # Workspace install hoists @tiqian/* packages as symlinks; web-component and
       # precompute resolve them without link scripts. The build runs with
       # --noCheck: the @tiqian/ffi type declarations are npm build products
       # (platforms/web/client/engine-runtime/runtime) that a fresh checkout does not have, and this
@@ -183,7 +183,7 @@ jobs:
   # consume the boring-generated types directly. What remains of this job is
   # the full-type-checked npm suite over the web precompute server: build the
   # @tiqian/ffi runtime (its .d.mts declarations feed the core type check),
-  # then type-check core and prose, then build the Neon addon from cargo and
+  # then type-check core and web-component, then build the Neon addon from cargo and
   # run the precompute npm suite.
   rust-engine-linked:
     name: Web precompute npm suite (full type checks)
@@ -257,7 +257,7 @@ jobs:
       - name: Build core with full type checks
         working-directory: platforms/web/client/core
         run: npx tsc -b
-      - name: Emit the prose package
+      - name: Emit the web-component package
         working-directory: platforms/web/client/web-component
         run: npx tsc -b --noCheck
       - name: Run the npm suite over the built addon

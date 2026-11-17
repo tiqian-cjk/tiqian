@@ -1,4 +1,4 @@
-name: Publish prose package
+name: Publish web-component package
 
 # Called by .github/workflows/release.yml from the v*.*.* release tag, after
 # the core lane published @tiqian/core, and gated before publishing.
@@ -11,7 +11,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: publish-tiqian-prose
+  group: publish-tiqian-web-component
   cancel-in-progress: false
 
 jobs:
@@ -121,14 +121,14 @@ jobs:
 
       - name: Build and verify the release tarball
         env:
-          TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-prose-release
-        run: npm run verify:release --workspace @tiqian/prose
+          TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-web-component-release
+        run: npm run verify:release --workspace @tiqian/web-component
 
       - name: Publish the verified tarball to alpha
         shell: bash
         run: |
           set -euo pipefail
-          tarball="$(find "${RUNNER_TEMP}/tiqian-prose-release" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          tarball="$(find "${RUNNER_TEMP}/tiqian-web-component-release" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
           if [[ -z "${tarball}" ]]; then
             echo "::error::Verified release tarball is missing"
             exit 1
@@ -163,7 +163,7 @@ jobs:
             echo "::error::NPM_DIST_TAG_TOKEN is not configured"
             exit 1
           fi
-          npm dist-tag add "@tiqian/prose@${RELEASE_VERSION}" latest
+          npm dist-tag add "@tiqian/web-component@${RELEASE_VERSION}" latest
 
       - name: Verify alpha and latest
         env:
@@ -172,7 +172,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in {1..12}; do
-            tags="$(npm view @tiqian/prose dist-tags --json)"
+            tags="$(npm view @tiqian/web-component dist-tags --json)"
             if DIST_TAGS="${tags}" node --input-type=module -e '
               const tags = JSON.parse(process.env.DIST_TAGS);
               const version = process.env.RELEASE_VERSION;

@@ -173,7 +173,7 @@ async function compileSvelteMultiComponent(): Promise<string> {
 // The in-page driver: framework loaders, scenario registry, settle helpers,
 // and per-scenario state snapshots. Served at /page-driver.mjs.
 const PAGE_DRIVER: string = `
-  import { registerTiqianProse } from "@tiqian/prose/element";
+  import { registerTiqianProse } from "@tiqian/web-component/element";
   registerTiqianProse();
 
   const stage = document.getElementById("stage");
@@ -473,8 +473,8 @@ function startFixtureServer(svelteComponents: SvelteComponents): Promise<Server>
 <script type="importmap">
 {
   "imports": {
-    "@tiqian/prose/element": "/npm/element.js",
-    "@tiqian/prose/": "/npm/",
+    "@tiqian/web-component/element": "/npm/element.js",
+    "@tiqian/web-component/": "/npm/",
     "@tiqian/core/": "/core/",
     "@tiqian/ffi": "/npm-engine-runtime/Tiqian-tiqian-ffi-js.mjs",
     "svelte": "/svelte/src/index-client.js",

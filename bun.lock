@@ -14,7 +14,7 @@
       "version": "0.1.0-alpha.8",
       "dependencies": {
         "@tiqian/core": "0.1.0-alpha.8",
-        "@tiqian/prose": "0.1.0-alpha.8",
+        "@tiqian/web-component": "0.1.0-alpha.8",
       },
       "devDependencies": {
         "parcel": "^2.16.4",
@@ -44,12 +44,12 @@
       "devDependencies": {
         "@astrojs/compiler-rs": "0.3.1",
         "@tiqian/precompute": "0.1.0-alpha.8",
-        "@tiqian/prose": "0.1.0-alpha.8",
+        "@tiqian/web-component": "0.1.0-alpha.8",
         "astro": "7.0.7",
       },
       "peerDependencies": {
         "@tiqian/precompute": "0.1.0-alpha.8",
-        "@tiqian/prose": "0.1.0-alpha.8",
+        "@tiqian/web-component": "0.1.0-alpha.8",
         "astro": ">=5",
       },
     },
@@ -96,18 +96,18 @@
       "version": "0.1.0-alpha.8",
       "devDependencies": {
         "@tiqian/precompute": "0.1.0-alpha.8",
-        "@tiqian/prose": "0.1.0-alpha.8",
+        "@tiqian/web-component": "0.1.0-alpha.8",
         "svelte": "5.56.7",
       },
       "peerDependencies": {
         "@sveltejs/kit": ">=2",
         "@tiqian/precompute": "0.1.0-alpha.8",
-        "@tiqian/prose": "0.1.0-alpha.8",
+        "@tiqian/web-component": "0.1.0-alpha.8",
         "svelte": ">=5",
       },
     },
     "platforms/web/client/web-component": {
-      "name": "@tiqian/prose",
+      "name": "@tiqian/web-component",
       "version": "0.1.0-alpha.8",
       "dependencies": {
         "@tiqian/core": "0.1.0-alpha.8",
@@ -122,9 +122,9 @@
       "dependencies": {
         "@neon-rs/load": "^0.1.82",
         "@tiqian/core": "0.1.0-alpha.8",
-        "@tiqian/prose": "0.1.0-alpha.8",
         "@tiqian/protocol": "workspace:*",
         "@tiqian/shared": "workspace:*",
+        "@tiqian/web-component": "0.1.0-alpha.8",
         "linkedom": "^0.18.13",
       },
       "devDependencies": {
@@ -684,8 +684,6 @@
 
     "@tiqian/precompute": ["@tiqian/precompute@workspace:platforms/web/server/core"],
 
-    "@tiqian/prose": ["@tiqian/prose@workspace:platforms/web/client/web-component"],
-
     "@tiqian/protocol": ["@tiqian/protocol@workspace:engine-haxe/out/protocol-ts/gen"],
 
     "@tiqian/react": ["@tiqian/react@workspace:platforms/web/client/react"],
@@ -693,6 +691,8 @@
     "@tiqian/shared": ["@tiqian/shared@workspace:engine-haxe/out/shared-ts/gen"],
 
     "@tiqian/sveltekit": ["@tiqian/sveltekit@workspace:platforms/web/client/sveltekit"],
+
+    "@tiqian/web-component": ["@tiqian/web-component@workspace:platforms/web/client/web-component"],
 
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.4", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A=="],
 

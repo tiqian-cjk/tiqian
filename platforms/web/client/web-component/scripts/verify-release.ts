@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packageRoot: string = fileURLToPath(new URL("../", import.meta.url));
-const consumerRoot: string = await mkdtemp(resolve(tmpdir(), "tiqian-prose-release-"));
+const consumerRoot: string = await mkdtemp(resolve(tmpdir(), "tiqian-web-component-release-"));
 
 interface ReleaseState {
   tarballPath: string | null;
@@ -105,11 +105,11 @@ try {
     resolve(consumerRoot, ffiFilename),
   ], { cwd: consumerRoot });
 
-  // Stylesheet single-source-of-truth: prose tarball must not carry styles.css,
+  // Stylesheet single-source-of-truth: web-component tarball must not carry styles.css,
   // core tarball must. This replaces the previous byte-identity pin.
-  const proseTarballList: string = listTarball(state.tarballPath);
-  if (proseTarballList.includes("styles.css")) {
-    throw new Error("ReleaseTarballVerificationFailed: @tiqian/prose tarball must not contain styles.css (stylesheet ships from @tiqian/core)");
+  const webComponentTarballList: string = listTarball(state.tarballPath);
+  if (webComponentTarballList.includes("styles.css")) {
+    throw new Error("ReleaseTarballVerificationFailed: @tiqian/web-component tarball must not contain styles.css (stylesheet ships from @tiqian/core)");
   }
   const coreTarballList: string = listTarball(resolve(consumerRoot, coreFilename));
   if (!coreTarballList.includes("styles.css")) {
@@ -119,16 +119,16 @@ try {
   await writeFile(
     resolve(consumerRoot, "verify.mjs"),
     `import assert from "node:assert/strict";
-import { registerTiqianProse, TiqianProseElement, CoordinationService } from "@tiqian/prose";
+import { registerTiqianProse, TiqianProseElement, CoordinationService } from "@tiqian/web-component";
 import { readFile, stat } from "node:fs/promises";
 
 assert.equal(typeof registerTiqianProse, "function");
 assert.equal(typeof TiqianProseElement, "function");
 assert.equal(typeof CoordinationService, "function");
 // Single source of truth: the stylesheet ships from @tiqian/core only;
-// prose neither ships nor exports it.
-const proseManifest = JSON.parse(await readFile(new URL("./node_modules/@tiqian/prose/package.json", import.meta.url), "utf8"));
-assert.equal(proseManifest.exports["./styles.css"], undefined);
+// web-component neither ships nor exports it.
+const webComponentManifest = JSON.parse(await readFile(new URL("./node_modules/@tiqian/web-component/package.json", import.meta.url), "utf8"));
+assert.equal(webComponentManifest.exports["./styles.css"], undefined);
 // The stylesheet resolves through core's exports map and exists on disk.
 const coreStylesResolution = import.meta.resolve("@tiqian/core/styles.css");
 assert.match(coreStylesResolution, /@tiqian\\/core\\/styles\\.css$/u);
@@ -146,7 +146,7 @@ assert.ok(coreStylesMeta.isFile() && coreStylesMeta.size > 0);
     const detail: string = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
     throw new Error(`ReleaseConsumerImportFailed:\n${detail}`);
   }
-  console.log("verified packed @tiqian/prose exports in an isolated consumer");
+  console.log("verified packed @tiqian/web-component exports in an isolated consumer");
   const artifactDirectory: string = String(process.env.TIQIAN_RELEASE_ARTIFACT_DIR ?? "").trim();
   if (artifactDirectory && state.tarballPath !== null) {
     const outputDirectory: string = resolve(artifactDirectory);

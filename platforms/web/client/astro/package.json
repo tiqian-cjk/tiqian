@@ -1,7 +1,7 @@
 {
   "name": "@tiqian/astro",
   "version": "0.1.0-alpha.8",
-  "description": "Astro integration for @tiqian/prose.",
+  "description": "Astro integration for @tiqian/web-component.",
   "license": "MPL-2.0",
   "type": "module",
   "types": "./index.d.ts",
@@ -28,13 +28,13 @@
   },
   "peerDependencies": {
     "@tiqian/precompute": "0.1.0-alpha.8",
-    "@tiqian/prose": "0.1.0-alpha.8",
+    "@tiqian/web-component": "0.1.0-alpha.8",
     "astro": ">=5"
   },
   "devDependencies": {
     "@astrojs/compiler-rs": "0.3.1",
     "@tiqian/precompute": "0.1.0-alpha.8",
-    "@tiqian/prose": "0.1.0-alpha.8",
+    "@tiqian/web-component": "0.1.0-alpha.8",
     "astro": "7.0.7"
   },
   "scripts": {

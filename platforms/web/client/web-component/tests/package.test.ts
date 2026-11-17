@@ -7,7 +7,7 @@ test("published package ships the TS runtime modules and no repository-only bin"
   const rootLock = JSON.parse(await readFile(new URL("../../../../../package-lock.json", import.meta.url), "utf8"));
   const lock = rootLock.packages["platforms/web/client/web-component"];
 
-  assert.equal(manifest.name, "@tiqian/prose");
+  assert.equal(manifest.name, "@tiqian/web-component");
   assert.equal(lock.version, manifest.version);
   assert.equal(manifest.license, "MPL-2.0");
   assert.equal(manifest.types, "./element.d.ts");
@@ -77,7 +77,7 @@ test("the release helper derives the repository tag and commit subject from one 
   );
 
   assert.equal(normalizeReleaseVersion("0.1.0-alpha.3"), "0.1.0-alpha.3");
-  assert.equal(releaseTag("0.1.0-alpha.3"), "@tiqian/prose@0.1.0-alpha.3");
+  assert.equal(releaseTag("0.1.0-alpha.3"), "@tiqian/web-component@0.1.0-alpha.3");
   assert.equal(releaseCommitSubject("0.1.0-alpha.3"), "chore(web): prepare alpha.3 release");
   assert.equal(releaseCommitSubject("0.1.0"), "chore(web): prepare 0.1.0 release");
   assert.throws(() => normalizeReleaseVersion("v0.1.0-alpha.3"), /InvalidReleaseVersion/u);
@@ -85,7 +85,7 @@ test("the release helper derives the repository tag and commit subject from one 
   assert.throws(() => normalizeReleaseVersion("0.1.0+local"), /InvalidReleaseVersion/u);
 });
 
-test("the ffi release workflow mirrors the prose one for the engine package", async () => {
+test("the ffi release workflow mirrors the web-component one for the engine package", async () => {
   const workflow = await readFile(
     new URL("../../../../../.github/workflows/publish-ffi.yml", import.meta.url),
     "utf8",
@@ -102,16 +102,16 @@ test("the ffi release workflow mirrors the prose one for the engine package", as
 
 test("the release workflow publishes one verified artifact and synchronizes both dist-tags", async () => {
   const workflow = await readFile(
-    new URL("../../../../../.github/workflows/publish-prose.yml", import.meta.url),
+    new URL("../../../../../.github/workflows/publish-web-component.yml", import.meta.url),
     "utf8",
   );
 
-  assert.match(workflow, /tags:\s*\n\s*- "@tiqian\/prose@\*"/u);
+  assert.match(workflow, /tags:\s*\n\s*- "@tiqian\/web-component@\*"/u);
   assert.match(workflow, /id-token: write/u);
   assert.match(workflow, /TIQIAN_RELEASE_ARTIFACT_DIR/u);
   assert.match(workflow, /npm publish "\$\{tarball\}" --ignore-scripts --access public --tag alpha/u);
   assert.match(workflow, /NODE_AUTH_TOKEN: \$\{\{ secrets\.NPM_DIST_TAG_TOKEN \}\}/u);
-  assert.match(workflow, /npm dist-tag add "@tiqian\/prose@\$\{RELEASE_VERSION\}" latest/u);
+  assert.match(workflow, /npm dist-tag add "@tiqian\/web-component@\$\{RELEASE_VERSION\}" latest/u);
   assert.match(workflow, /tags\.alpha !== version \|\| tags\.latest !== version/u);
 });
 
@@ -185,10 +185,10 @@ test("the custom element validates a snapshot before dynamically loading the bro
     "utf8",
   );
   // Single source of truth: the stylesheet ships from @tiqian/core only;
-  // @tiqian/prose neither ships nor exports it.
-  const proseManifestForStyles = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
-  assert.equal(proseManifestForStyles.exports["./styles.css"], undefined, "@tiqian/prose must not export ./styles.css");
-  assert.equal(proseManifestForStyles.files.includes("styles.css"), false, "styles.css must not be in @tiqian/prose files");
+  // @tiqian/web-component neither ships nor exports it.
+  const webComponentManifestForStyles = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(webComponentManifestForStyles.exports["./styles.css"], undefined, "@tiqian/web-component must not export ./styles.css");
+  assert.equal(webComponentManifestForStyles.files.includes("styles.css"), false, "styles.css must not be in @tiqian/web-component files");
   const coreStylesSource = await readFile(new URL("../../core/styles.css", import.meta.url), "utf8");
   assert.ok(coreStylesSource.length > 0);
   assert.match(coreStylesSource, /--tq-styles-ready:\s*1/u);

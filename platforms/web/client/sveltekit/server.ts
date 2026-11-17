@@ -16,7 +16,7 @@ import {
   createSnapshotTableFileTransport,
   type SnapshotTableFileTransport,
 } from "@tiqian/precompute/transport";
-import type { ClientSnapshotBundle } from "@tiqian/prose/snapshot-client";
+import type { ClientSnapshotBundle } from "@tiqian/web-component/snapshot-client";
 
 const SNAPSHOT_REFERENCE = /<tiqian-prose\b[^>]*\bsnapshot-ref=(["'])([A-Za-z][A-Za-z0-9_-]*)\1[^>]*>/giu;
 

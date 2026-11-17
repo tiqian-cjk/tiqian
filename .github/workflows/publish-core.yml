@@ -1,7 +1,7 @@
 name: Publish core package
 
 # Release lane for @tiqian/core. The package is the dependency of
-# @tiqian/prose, so it has to be on the registry before the prose lane
+# @tiqian/web-component, so it has to be on the registry before the web-component lane
 # publishes; the release entrypoint orders the two lanes that way.
 #
 # Every npm lane is callable only from the release entrypoint (or dispatched

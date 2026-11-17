@@ -378,7 +378,7 @@ function compareScreenshots(a: Buffer, b: Buffer): ScreenshotComparison {
 }
 
 // Serves the current demo page with an import map that resolves
-// @tiqian/prose inside the given package directory, so the page chrome is a
+// @tiqian/web-component inside the given package directory, so the page chrome is a
 // constant and the engine build is the only variable.
 function startDemoServer(port: number, pkgDir: string, label: string): Promise<Server> {
   const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
@@ -387,7 +387,7 @@ function startDemoServer(port: number, pkgDir: string, label: string): Promise<S
       if (urlPath === "/") {
         const html: string = (await readFile(join(webDemoDir, "index.html"), "utf8")).replace(
           "</head>",
-          `<script type="importmap">{"imports":{"@tiqian/prose/element":"/platforms/web/client/web-component/element.js","@tiqian/prose/":"/platforms/web/client/web-component/","@tiqian/prose":"/platforms/web/client/web-component/element.js"}}</script></head>`,
+          `<script type="importmap">{"imports":{"@tiqian/web-component/element":"/platforms/web/client/web-component/element.js","@tiqian/web-component/":"/platforms/web/client/web-component/","@tiqian/web-component":"/platforms/web/client/web-component/element.js"}}</script></head>`,
         );
         res.setHeader("content-type", "text/html; charset=utf-8");
         res.end(html);

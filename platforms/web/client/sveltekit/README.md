@@ -1,10 +1,10 @@
 # `@tiqian/sveltekit`
 
-SvelteKit integration for `@tiqian/prose`. Plain component usage keeps the
+SvelteKit integration for `@tiqian/web-component`. Plain component usage keeps the
 server-rendered semantic HTML and enhances it at the live browser width:
 
 ```shell
-npm install @tiqian/prose@alpha @tiqian/sveltekit@alpha
+npm install @tiqian/web-component@alpha @tiqian/sveltekit@alpha
 ```
 
 ```svelte

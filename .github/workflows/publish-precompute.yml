@@ -6,7 +6,7 @@ name: Publish precompute packages
 # engine-rust bundle; the legacy Kotlin/Native C ABI engine archive is
 # retired with the Stage1 cutover.
 # Called by .github/workflows/release.yml from the v*.*.* release tag, after
-# the prose lane published the @tiqian/prose version this package pins, and
+# the web-component lane published the @tiqian/web-component version this package pins, and
 # gated before publishing.
 on:
   workflow_call:

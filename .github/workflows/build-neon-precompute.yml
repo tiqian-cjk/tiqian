@@ -213,7 +213,7 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
-      # The smoke test resolves `@tiqian/prose` and `@tiqian/core` from
+      # The smoke test resolves `@tiqian/web-component` and `@tiqian/core` from
       # this checkout: the registry alpha predates the `./prepared-dom`
       # subpath the precompute sources import, and the emitted declarations
       # are not tracked. This lane has no Gradle step, so the ffi
@@ -245,7 +245,7 @@ jobs:
         # member, so the former server/core-local install is gone; it walked up
         # to the workspace root and failed with the same protocol error.
         run: bun install --ignore-scripts
-      - name: Emit the prose packages
+      - name: Emit the web-component packages
         working-directory: platforms/web/client/web-component
         shell: bash
         # Run the workspace TypeScript directly. npx looks for an extensionless
@@ -337,7 +337,7 @@ jobs:
         # member, so the former server/core-local install is gone; it walked up
         # to the workspace root and failed with the same protocol error.
         run: bun install --ignore-scripts
-      - name: Emit the prose packages
+      - name: Emit the web-component packages
         working-directory: platforms/web/client/web-component
         # Same resolution as the binaries job: run the workspace TypeScript
         # through node, so a missing install fails the step instead of letting

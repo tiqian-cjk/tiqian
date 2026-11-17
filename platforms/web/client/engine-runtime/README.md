@@ -5,7 +5,7 @@ TypeScript tree under `engine-gen/` and the hand-written facade modules under
 `src/`; `npm run build:runtime` compiles the generated tree into `runtime/`
 and copies the facade entries beside it.
 
-`@tiqian/prose` depends on this package for the layout worker engine. The two
+`@tiqian/web-component` depends on this package for the layout worker engine. The two
 packages release in lockstep from the same commit with exact-pinned versions, so
 the worker engine and the browser runtime always come from one engine build.
 
@@ -52,5 +52,5 @@ npm run release:prepare -- 0.1.0-alpha.2
 
 The command runs the same verification, commits the version bump, and creates
 the annotated tag. Pushing a tag runs the publish workflow. Publish
-`@tiqian/ffi` before the matching `@tiqian/prose` release so the registry
+`@tiqian/ffi` before the matching `@tiqian/web-component` release so the registry
 dependency resolves.

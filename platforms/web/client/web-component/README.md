@@ -1,9 +1,9 @@
-# `@tiqian/prose`
+# `@tiqian/web-component`
 
-提椠是一个中日韩段落书写器。`@tiqian/prose` 是提椠的 Web 前端，目前用于简体中文横排。
+提椠是一个中日韩段落书写器。`@tiqian/web-component` 是提椠的 Web 前端，目前用于简体中文横排。
 
 它适合已经用 Markdown、静态站点生成器或 SSR 输出文章的网站。网站继续生成普通 HTML，
-`@tiqian/prose` 在浏览器支持时接管能够保真处理的段落。你不需要重写现有内容管线，字体、颜色、
+`@tiqian/web-component` 在浏览器支持时接管能够保真处理的段落。你不需要重写现有内容管线，字体、颜色、
 链接和交互样式也仍由网站自己控制。
 
 提椠会按整段正文计算字体、标点空间和断行，再把结果呈现为普通 DOM 文字，而不是 Canvas 或图片；
@@ -15,7 +15,7 @@ alpha 版本，不承诺稳定 API，也还不支持竖排、日文 JLREQ 或所
 ## 安装
 
 ```shell
-npm install @tiqian/prose@alpha
+npm install @tiqian/web-component@alpha
 ```
 
 ## 自定义元素
@@ -32,7 +32,7 @@ npm install @tiqian/prose@alpha
 </style>
 
 <script type="module">
-  import "@tiqian/prose/element";
+  import "@tiqian/web-component/element";
 </script>
 ```
 
@@ -121,7 +121,7 @@ tiqian-prose {
 不能使用自定义元素时，可以自行管理正文根节点的生命周期：
 
 ```js
-import { destroy, enhance } from "@tiqian/prose";
+import { destroy, enhance } from "@tiqian/web-component";
 
 const article = document.querySelector("article");
 await enhance(article);
@@ -140,7 +140,7 @@ await destroy(article);
 执行；安装时会按平台带入对应的二进制可选依赖：
 
 ```sh
-npm install @tiqian/prose @tiqian/precompute
+npm install @tiqian/web-component @tiqian/precompute
 ```
 
 ```js
@@ -212,7 +212,7 @@ template 的形式进入页面，不改变浏览器的首次绘制。浏览器�
 与
 [ADR 0052](https://github.com/tiqian-cjk/tiqian/blob/main/docs/adr/0052-precompute-cache-and-batch-renderer.md)。
 
-客户端导航照常传递原始正文 HTML；创建新的 `<tiqian-prose>` 前，用 `@tiqian/prose/snapshot-client`
+客户端导航照常传递原始正文 HTML；创建新的 `<tiqian-prose>` 前，用 `@tiqian/web-component/snapshot-client`
 的 `registerSnapshotBundle()` 注册 bundle 中的客户端数据即可复用快照，不必重复传输整篇预排
 HTML。
 
@@ -251,7 +251,7 @@ const fontBundle = assembleFontContractBundle(contractData, contractTables);
 正文，即可得到 semantic SSR 和按浏览器真实容器宽度运行的提椠增强；无需声明最大宽度。需要构建期
 exact-font replay 时再配置宿主字体，只有主动开启 fixed-measure snapshot 时才传 `maxWidthPx`。
 
-框架包保持独立，是为了不让普通 `@tiqian/prose` 用户安装 Svelte 或 Astro；它们与核心放在同一仓库，
+框架包保持独立，是为了不让普通 `@tiqian/web-component` 用户安装 Svelte 或 Astro；它们与核心放在同一仓库，
 以便 snapshot wire 和发布版本始终一起验证。开启构建期预排时，框架包的服务端入口同样来自
 `@tiqian/precompute`，需要一并安装。
 

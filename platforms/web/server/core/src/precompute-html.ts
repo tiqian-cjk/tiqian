@@ -1,5 +1,5 @@
 // The HTML preparer entry over the generated shared lanes (Html-B2). The
-// exported surface matches the former `@tiqian/prose/precompute-html` module.
+// exported surface matches the former `@tiqian/web-component/precompute-html` module.
 // Parsing, selection, projection and the prepare orchestration run here in
 // TypeScript over linkedom and the B1 generated modules; the paragraph and
 // font-contract lanes, the snapshot tables and the bundle assembly stay in the
@@ -83,7 +83,7 @@ export type HtmlPreparerOptions = {
     readonly skippedAncestorSelector?: string;
     /**
      * Rejected in this lane with `UnsupportedHtmlProjector`: projection needs a
-     * host DOM. Kept for type parity with the `@tiqian/prose` entry.
+     * host DOM. Kept for type parity with the `@tiqian/web-component` entry.
      */
     readonly projectSnapshotParagraph?: (...args: never[]) => unknown;
 } & ({
@@ -213,7 +213,7 @@ type Plan = {
  * snapshot keys inserted into paragraphs that produced reusable geometry.
  * `projectSnapshotParagraph` needs a host DOM and throws
  * `UnsupportedHtmlProjector` here; hosts projecting rich semantics keep the
- * `@tiqian/prose` entry.
+ * `@tiqian/web-component` entry.
  */
 export async function createHtmlPreparer(options: HtmlPreparerOptions): Promise<HtmlPreparer> {
     if (typeof options.projectSnapshotParagraph === "function") {
