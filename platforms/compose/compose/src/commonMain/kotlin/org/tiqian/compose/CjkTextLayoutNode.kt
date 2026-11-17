@@ -197,12 +197,19 @@ internal class CjkTextLayoutNode(
         get() = semanticsText
 
     override fun selectionTextForCopy(range: org.tiqian.core.TextRange): String {
-        val projected = result?.getTextForCopy(range)
-            ?: semanticsText.text.substring(
-                range.start.coerceIn(0, semanticsText.length),
-                range.end.coerceIn(range.start.coerceIn(0, semanticsText.length), semanticsText.length),
-            )
-        return projected
+        val start = range.start.coerceIn(0, semanticsText.length)
+        val end = range.end.coerceIn(start, semanticsText.length)
+        val layout = result
+        // `wbr()` markers are left out by projecting each range between them on its own. Ruby
+        // builders take a plain String base, so a ruby base never contains a marker.
+        return buildString {
+            semanticsText.cjkWbrOffsets().forEachWbrFreeRange(start, end) { from, to ->
+                append(
+                    layout?.getTextForCopy(org.tiqian.core.TextRange(from, to))
+                        ?: semanticsText.text.substring(from, to),
+                )
+            }
+        }
     }
 
     override fun onAttach() {
@@ -346,12 +353,22 @@ internal class CjkTextLayoutNode(
     }
 
     override fun SemanticsPropertyReceiver.applySemantics() {
-        text = this@CjkTextLayoutNode.semanticsText
+        // Accessibility text omits `wbr()` markers; semantic selection offsets are mapped between
+        // that text and the source text that selection state uses.
+        val wbrOffsets = semanticsText.cjkWbrOffsets()
+        text = semanticsText.withoutCjkWbr(wbrOffsets = wbrOffsets)
         val state = selectionState ?: return
         val range = state.rangeFor(this@CjkTextLayoutNode)
-        textSelectionRange = ComposeTextRange(range?.start ?: 0, range?.end ?: 0)
+        textSelectionRange = ComposeTextRange(
+            wbrOffsets.wbrSourceToProjectedOffset(range?.start ?: 0),
+            wbrOffsets.wbrSourceToProjectedOffset(range?.end ?: 0),
+        )
         setSelection { start, end, _ ->
-            state.setSelectionFromSemantics(this@CjkTextLayoutNode, start, end)
+            state.setSelectionFromSemantics(
+                this@CjkTextLayoutNode,
+                wbrOffsets.wbrProjectedToSourceOffset(start),
+                wbrOffsets.wbrProjectedToSourceOffset(end),
+            )
         }
         if (range != null && !range.isEmpty) {
             copyText { state.copySelection() }

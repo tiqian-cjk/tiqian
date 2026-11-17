@@ -59,6 +59,12 @@ internal const val CjkRichTextTag = "org.tiqian.richtext"
 /** Annotation tag carrying [InlineAttachment] over a layout-affecting range. */
 internal const val CjkInlineAttachmentTag = "org.tiqian.inline-attachment"
 
+/** Annotation tag marking the U+200B appended by [wbr] as a line break opportunity, not content. */
+internal const val CjkWbrTag = "org.tiqian.wbr"
+
+private const val ZeroWidthSpace = '\u200B'
+private const val WbrItem = "wbr"
+
 /** Separates an optional ruby font family from the reading inside the annotation item. */
 private const val RubyFontSeparator = "\u001F"
 
@@ -137,6 +143,95 @@ fun AnnotatedString.Builder.ruby(base: String, ruby: String, fontFamily: String?
 fun AnnotatedString.Builder.bopomofo(base: String, bopomofo: String, fontFamily: String? = null) {
     val item = if (fontFamily != null) "$fontFamily$RubyFontSeparator$bopomofo" else bopomofo
     withAnnotation(CjkBopomofoTag, item) { append(base) }
+}
+
+/**
+ * Line break opportunity, the Compose counterpart of HTML `<wbr>`: appends U+200B ZERO WIDTH SPACE
+ * and marks it with [CjkWbrTag]. The engine treats U+200B as a zero-width soft break opportunity
+ * (UAX #14 class ZW), so a line may break at this position without a hyphen or visible space,
+ * which matches how browsers lay out `<wbr>`.
+ *
+ * HTML `<wbr>` is an element and contributes no characters to the text content, so browsers leave
+ * it out of copied text and the accessibility tree. The marked U+200B follows the same rule: the
+ * clipboard text and the accessibility semantics text omit it. Selection offsets and
+ * [CjkSelectionState.selectedText] still count it, because it occupies one source index. A U+200B
+ * appended with plain `append` carries no tag and is copied as ordinary source text.
+ *
+ * ```
+ * CjkText(buildAnnotatedString {
+ *     withStyle(topicStyle) { append("#话题甲#") }
+ *     wbr()                                    // 两个话题之间允许换行
+ *     withStyle(topicStyle) { append("#话题乙#") }
+ * })
+ * ```
+ */
+fun AnnotatedString.Builder.wbr() {
+    withAnnotation(CjkWbrTag, WbrItem) { append(ZeroWidthSpace) }
+}
+
+/** Source offsets of the characters appended by [wbr], in ascending order. */
+internal fun AnnotatedString.cjkWbrOffsets(): IntArray =
+    getStringAnnotations(CjkWbrTag, 0, length)
+        .filter { it.end == it.start + 1 && text[it.start] == ZeroWidthSpace }
+        .map { it.start }
+        .distinct()
+        .sorted()
+        .toIntArray()
+
+/** Calls [block] with each non-empty sub-range of [start, end) that lies between [wbr] offsets. */
+internal inline fun IntArray.forEachWbrFreeRange(start: Int, end: Int, block: (start: Int, end: Int) -> Unit) {
+    var cursor = start
+    for (offset in this) {
+        if (offset < start || offset >= end) continue
+        if (offset > cursor) block(cursor, offset)
+        cursor = offset + 1
+    }
+    if (end > cursor) block(cursor, end)
+}
+
+/**
+ * Returns the [start, end) slice of this text with the [wbr] characters removed. Every other span
+ * and annotation keeps one range whose offsets are mapped to the shorter text, so a link that
+ * covers a [wbr] stays one link instead of two adjacent ones.
+ */
+internal fun AnnotatedString.withoutCjkWbr(
+    start: Int = 0,
+    end: Int = length,
+    wbrOffsets: IntArray = cjkWbrOffsets(),
+): AnnotatedString {
+    val slice = if (start == 0 && end == length) this else subSequence(start, end)
+    val removed = wbrOffsets.filter { it in start until end }.map { it - start }.toIntArray()
+    if (removed.isEmpty()) return slice
+    val text = buildString {
+        removed.forEachWbrFreeRange(0, slice.length) { from, to -> append(slice.text, from, to) }
+    }
+    val annotations = mutableListOf<AnnotatedString.Range<out AnnotatedString.Annotation>>()
+    // mapAnnotations is the only public accessor that visits every annotation type; the
+    // transform records each range and returns it unchanged.
+    slice.mapAnnotations { range ->
+        if (range.tag != CjkWbrTag) {
+            val mappedStart = removed.wbrSourceToProjectedOffset(range.start)
+            val mappedEnd = removed.wbrSourceToProjectedOffset(range.end)
+            // A range that covered only wbr characters has nothing left to annotate.
+            if (mappedStart < mappedEnd || range.start == range.end) {
+                annotations += AnnotatedString.Range(range.item, mappedStart, mappedEnd, range.tag)
+            }
+        }
+        range
+    }
+    return AnnotatedString(text, annotations)
+}
+
+/** Maps a source offset to the matching offset in [withoutCjkWbr] output. */
+internal fun IntArray.wbrSourceToProjectedOffset(offset: Int): Int = offset - count { it < offset }
+
+/** Maps an offset in [withoutCjkWbr] output back to a source offset before any adjacent [wbr]. */
+internal fun IntArray.wbrProjectedToSourceOffset(offset: Int): Int {
+    var source = offset
+    for (wbrOffset in this) {
+        if (wbrOffset < source) source++ else break
+    }
+    return source
 }
 
 /** Extracts [RubySpan]s from 拼音 ([CjkRubyTag]) + 注音 ([CjkBopomofoTag]) annotations. */
@@ -261,6 +356,7 @@ internal fun AnnotatedString.cjkSourceBoundaries(): Set<Int> {
     getStringAnnotations(CjkBopomofoTag, 0, length).forEach { addRange(it.start, it.end) }
     getStringAnnotations(CjkRichTextTag, 0, length).forEach { addRange(it.start, it.end) }
     getStringAnnotations(CjkInlineAttachmentTag, 0, length).forEach { addRange(it.start, it.end) }
+    cjkWbrOffsets().forEach { addRange(it, it + 1) }
     return out
 }
 

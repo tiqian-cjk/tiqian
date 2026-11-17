@@ -112,8 +112,8 @@ class CjkSelectionState internal constructor() {
 
     /**
      * Copies the Web-compatible plain-text projection of the current selection. Selection state
-     * and accessibility semantics stay source-faithful; only fully selected ruby / 注音 readings
-     * are appended to the clipboard text.
+     * stays source-faithful; only fully selected ruby / 注音 readings are appended to the clipboard
+     * text, and characters appended by [wbr] are left out of it.
      */
     fun copySelection(): Boolean {
         if (!hasSelection) return false
@@ -599,9 +599,9 @@ class CjkSelectionState internal constructor() {
                 val end = if (index == endIndex) normalized.second.offset else fragment.text.length
                 if (end > start) {
                     if (start == 0 && end == fragment.text.length) {
-                        append(fragment.textForCopy)
+                        append(fragment.textForCopy.withoutCjkWbr())
                     } else {
-                        append(fragment.text, start, end)
+                        append(fragment.text.withoutCjkWbr(start, end))
                     }
                 }
                 if (index < endIndex) append(fragment.separatorAfter)

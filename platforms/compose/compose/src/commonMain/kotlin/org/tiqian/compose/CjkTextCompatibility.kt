@@ -108,6 +108,7 @@ fun AnnotatedString.cjkTextCompatibility(
         add(CjkRubyTag)
         add(CjkBopomofoTag)
         add(CjkRichTextTag)
+        add(CjkWbrTag)
         if (composeInlineAnnotationsAreModeled) add(ComposeInlineContentTag)
     }
     if (getStringAnnotations(0, length).any { it.tag !in supportedStringTags }) {
