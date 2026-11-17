@@ -435,6 +435,18 @@ runtimeClasspath - Runtime classpath of source set 'main'.
 3. 检查 `_redirects` 里 `/maven/<包名>/<包名>/:version/<文件>` 是否指向 GitHub Release 资产。
 4. 检查是否配置了 `mavenCentral()` 回退仓库。
 
+#### 平台坐标的消费关系
+
+`publishTiqianToMavenLocal` 写出的七个平台坐标里，应用构建文件只需要声明 `tiqian-compose` 或
+`tiqian-compose-material3`。`tiqian-compose-material3` 以 api 依赖引入 `tiqian-compose`；
+`tiqian-compose` 的 jvm 变体把 `tiqian-jvm-skia` 记为 runtime 依赖，消费方不单独声明它。
+源码里调用 `MaterialTheme.typography` 的消费方需要自己声明 Compose Material 3 依赖。
+
+2026-11-17 的消费验证：在仓库外建一个 Gradle 工程，只声明 `org.tiqian:tiqian-compose`、
+`org.tiqian:tiqian-compose-material3`、`org.tiqian:tiqian-jvm-skia` 三个坐标，源码调用
+`org.tiqian.compose.CjkText`、`org.tiqian.compose.material3.CjkText` 与
+`org.tiqian.shaping.skia.SkiaTextShaper`，`compileKotlin` 通过。该工程不入库。
+
 ### swift
 
 ```shell
