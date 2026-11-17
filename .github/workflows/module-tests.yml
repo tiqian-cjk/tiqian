@@ -9,20 +9,23 @@ name: Module tests
 # under platforms/ and demo/ therefore had no CI verdict at all, and the
 # instrumented and Apple test sources were never compiled.
 #
-# The lane reports two different verdicts, because a test that runs and a test
-# that only compiles do not prove the same thing:
+# The lane reports three different verdicts, because they do not prove the same
+# thing:
 #
 #   execute      tasks whose tests run on this runner. Their pass/fail count is
 #                the lane's verdict, and the lane carries no --tests filter, no
 #                --exclude and no skip switch.
+#   probe        assertion classes in :tools:engine-probes, which keeps them in
+#                jvmMain and runs them through runProbe one class at a time.
+#                They run, and their pass/fail count is part of the verdict.
 #   compile only tasks whose test sources this runner can compile but cannot run.
 #                androidTest and androidDeviceTest are instrumented tests and
 #                need a device or emulator; the Apple Kotlin/Native tests link
 #                and run only on macOS. The lane says those sources compile and
 #                never reports them as passing.
 #
-# tools/module-test-tasks.sh holds both task sets and the module-by-module
-# reason for each entry.
+# tools/module-test-tasks.sh holds the task sets, the probe discovery rule and
+# the module-by-module reason for each entry.
 on:
   push:
     branches: ["main"]
@@ -72,14 +75,16 @@ jobs:
           set -euo pipefail
           . tools/module-test-tasks.sh
           printf 'execute:      %s\n' "${MODULE_TEST_EXECUTE_TASKS[*]}"
+          printf 'probe:        %s\n' "${MODULE_TEST_PROBE_TASK}"
+          printf 'probe classes: %s\n' "$(module_test_probe_classes | paste -sd ' ' -)"
           printf 'compile only: %s\n' "${MODULE_TEST_COMPILE_ONLY_TASKS[*]}"
 
       # skiko resolves its native library on first use and writes
       # ~/.skiko/.skiko.lock before the load. When the JVM's user.home is
       # read-only that open fails with EROFS, org.jetbrains.skiko.LibraryLoader
       # reports the consequence as an UnsatisfiedLinkError, and every
-      # :platforms:jvm:skia and :platforms:compose:compose test fails for a
-      # reason that has nothing to do with the code under test. The lane
+      # :platforms:compose:skia-jvm and :platforms:compose:compose test fails for
+      # a reason that has nothing to do with the code under test. The lane
       # therefore hands every JVM it starts a writable user.home instead of
       # relying on the runner's HOME.
       #
@@ -105,6 +110,29 @@ jobs:
             set -euo pipefail
             . tools/module-test-tasks.sh
             ./gradlew "${MODULE_TEST_EXECUTE_TASKS[@]}" --continue --no-daemon
+          '
+
+      # :tools:engine-probes keeps its assertion classes in jvmMain, so
+      # :tools:engine-probes:jvmTest is NO-SOURCE and the task step above cannot
+      # reach them. runProbe takes one class name per invocation, so this step
+      # pays one build configuration per class; the class list comes from the
+      # source tree (module_test_probe_classes), not from a hand-kept list.
+      - name: Run the probe assertion classes
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset ANDROID_SDK_ROOT
+          module_test_home="$RUNNER_TEMP/tiqian-module-tests-home"
+          mkdir -p "$module_test_home"
+          export JAVA_TOOL_OPTIONS="-Duser.home=$module_test_home"
+          export KONAN_DATA_DIR="$module_test_home/.konan"
+          nix develop -c bash -c '
+            set -euo pipefail
+            . tools/module-test-tasks.sh
+            mapfile -t probe_classes < <(module_test_probe_classes)
+            for probe_class in "${probe_classes[@]}"; do
+              ./gradlew "$MODULE_TEST_PROBE_TASK" -PprobeClass="$probe_class" --no-daemon
+            done
           '
 
       # Compile-only tasks still run when the test step is red, so one failing
