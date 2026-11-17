@@ -248,7 +248,15 @@ jobs:
       - name: Emit the prose packages
         working-directory: platforms/web/client/web-component
         shell: bash
-        run: npx tsc -b --noCheck
+        # Run the workspace TypeScript directly. npx looks for an extensionless
+        # node_modules/.bin/tsc to decide whether the command is installed, and
+        # bun writes only tsc.exe plus tsc.bunx on Windows, so npx falls back to
+        # installing the unrelated registry `tsc` package. Resolving the
+        # package through node keeps the installed compiler and fails this step
+        # when the workspace does not contain it.
+        run: |
+          TSC="$(node -p "require('node:path').join(require('node:path').dirname(require.resolve('typescript/package.json')), 'bin', 'tsc')")"
+          node "$TSC" -b --noCheck
       - name: Build addon and place platform binary
         working-directory: platforms/web/server/core
         shell: bash
@@ -263,7 +271,8 @@ jobs:
         working-directory: platforms/web/server/core
         shell: bash
         run: |
-          npx tsc -p tsconfig.build.json --noCheck
+          TSC="$(node -p "require('node:path').join(require('node:path').dirname(require.resolve('typescript/package.json')), 'bin', 'tsc')")"
+          node "$TSC" -p tsconfig.build.json --noCheck
           node --test "test/**/*.test.ts"
       - name: Pack platform package
         working-directory: platforms/web/server/core/platforms/${{ matrix.cfg.platform }}
@@ -325,12 +334,18 @@ jobs:
         run: bun install --ignore-scripts
       - name: Emit the prose packages
         working-directory: platforms/web/client/web-component
-        run: npx tsc -b --noCheck
+        # Same resolution as the binaries job: run the workspace TypeScript
+        # through node, so a missing install fails the step instead of letting
+        # npx fetch the unrelated registry `tsc` package.
+        run: |
+          TSC="$(node -p "require('node:path').join(require('node:path').dirname(require.resolve('typescript/package.json')), 'bin', 'tsc')")"
+          node "$TSC" -b --noCheck
       - name: Lint and build the JS entry
         working-directory: platforms/web/server/core
         run: |
           npm run lint
-          npx tsc -p tsconfig.build.json --noCheck
+          TSC="$(node -p "require('node:path').join(require('node:path').dirname(require.resolve('typescript/package.json')), 'bin', 'tsc')")"
+          node "$TSC" -p tsconfig.build.json --noCheck
       - name: Pack
         working-directory: platforms/web/server/core
         shell: bash
