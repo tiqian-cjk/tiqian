@@ -1,0 +1,127 @@
+name: Module tests
+
+# Every Gradle module test source set, in one lane.
+#
+# Before this lane existed no workflow ran a module test: the only Gradle
+# invocations in .github/workflows were assemble + publishTiqianToMavenLocal
+# (publish.yml, also sourced by scripts/staging-pipeline.sh),
+# publishTiqianToCentral and publishTiqianToCentralSnapshots. The JUnit suites
+# under platforms/ and demo/ therefore had no CI verdict at all, and the
+# instrumented and Apple test sources were never compiled.
+#
+# The lane reports two different verdicts, because a test that runs and a test
+# that only compiles do not prove the same thing:
+#
+#   execute      tasks whose tests run on this runner. Their pass/fail count is
+#                the lane's verdict, and the lane carries no --tests filter, no
+#                --exclude and no skip switch.
+#   compile only tasks whose test sources this runner can compile but cannot run.
+#                androidTest and androidDeviceTest are instrumented tests and
+#                need a device or emulator; the Apple Kotlin/Native tests link
+#                and run only on macOS. The lane says those sources compile and
+#                never reports them as passing.
+#
+# tools/module-test-tasks.sh holds both task sets and the module-by-module
+# reason for each entry.
+on:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: module-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  module-tests:
+    name: Execute the host-runnable module tests and compile the rest
+    runs-on: ubuntu-latest
+    # A cold run generates the Kotlin engine tree, compiles 16 modules, executes
+    # the JVM suites and compiles three Apple Kotlin/Native test klibs per Apple
+    # module.
+    timeout-minutes: 120
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      # settings.gradle.kts stops with the generation command when the generated
+      # tree is missing, and the tree is gitignored, so every Gradle invocation
+      # below needs this step first.
+      - name: Generate the Kotlin engine sources
+        run: nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && boring gen kotlin-f32 --project boring.json'
+
+      - name: Show the lane definition
+        shell: bash
+        run: |
+          set -euo pipefail
+          . tools/module-test-tasks.sh
+          printf 'execute:      %s\n' "${MODULE_TEST_EXECUTE_TASKS[*]}"
+          printf 'compile only: %s\n' "${MODULE_TEST_COMPILE_ONLY_TASKS[*]}"
+
+      # skiko resolves its native library on first use and writes
+      # ~/.skiko/.skiko.lock before the load. When the JVM's user.home is
+      # read-only that open fails with EROFS, org.jetbrains.skiko.LibraryLoader
+      # reports the consequence as an UnsatisfiedLinkError, and every
+      # :platforms:jvm:skia and :platforms:compose:compose test fails for a
+      # reason that has nothing to do with the code under test. The lane
+      # therefore hands every JVM it starts a writable user.home instead of
+      # relying on the runner's HOME.
+      #
+      # KONAN_DATA_DIR is pinned next to that home for the same reason: the
+      # Kotlin/Native distribution creates a lock file inside its own directory,
+      # and a read-only default would fail the Apple compile step.
+      #
+      # ANDROID_SDK_ROOT is dropped before the devShell starts, as in
+      # publish.yml: the runner image exports its own SDK path, and Gradle
+      # refuses to configure an Android project when ANDROID_HOME and
+      # ANDROID_SDK_ROOT name different roots. The devShell exports the pinned
+      # SDK that the Android modules require.
+      - name: Run the module tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset ANDROID_SDK_ROOT
+          module_test_home="$RUNNER_TEMP/tiqian-module-tests-home"
+          mkdir -p "$module_test_home"
+          export JAVA_TOOL_OPTIONS="-Duser.home=$module_test_home"
+          export KONAN_DATA_DIR="$module_test_home/.konan"
+          nix develop -c bash -c '
+            set -euo pipefail
+            . tools/module-test-tasks.sh
+            ./gradlew "${MODULE_TEST_EXECUTE_TASKS[@]}" --continue --no-daemon
+          '
+
+      # Compile-only tasks still run when the test step is red, so one failing
+      # JUnit case does not hide whether the instrumented and Apple test sources
+      # compile.
+      - name: Compile the test sources that cannot run on this runner
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset ANDROID_SDK_ROOT
+          module_test_home="$RUNNER_TEMP/tiqian-module-tests-home"
+          mkdir -p "$module_test_home"
+          export JAVA_TOOL_OPTIONS="-Duser.home=$module_test_home"
+          export KONAN_DATA_DIR="$module_test_home/.konan"
+          nix develop -c bash -c '
+            set -euo pipefail
+            . tools/module-test-tasks.sh
+            ./gradlew "${MODULE_TEST_COMPILE_ONLY_TASKS[@]}" --continue --no-daemon
+          '
