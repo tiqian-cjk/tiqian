@@ -6,7 +6,7 @@
 
 ## Context
 
-`scripts/` 与 `tools/` 在仓库成立以来没有成文的分工。同一性质的文件分别放在两个目录：`scripts/generate-engine-gen.mjs` 是生成命令的入口，`tools/setup-haxe-env.sh` 同样是一条命令的入口却放在 `tools/`；`scripts/release-gradle-tasks.sh` 只被两个入口 source，是被共用的实现。`scripts/cutover/` 保留了迁移期的工作手册与三个一次性脚本，四个文件在仓库里已经没有可执行的引用。
+`scripts/` 与 `tools/` 在仓库成立以来没有成文的分工。同一性质的文件分别放在两个目录：生成命令的入口 `generate-engine-gen.mjs` 放在 `scripts/`，同为一条命令入口的 `setup-haxe-env.sh` 放在 `tools/`；被两个入口 source 的 `release-gradle-tasks.sh` 放在 `scripts/`。`scripts/` 下的 cutover 子目录保留了迁移期的工作手册与三个一次性脚本，四个文件在仓库里已经没有可执行的引用。
 
 目录缺少分工时，新增文件按作者习惯放置，CI 的调用点分散在两个目录，读者无法从路径判断一个文件能否直接执行。
 
@@ -20,9 +20,9 @@
 
 ## Consequences
 
-- `tools/setup-haxe-env.sh` 移动到 `scripts/setup-haxe-env.sh`；`scripts/release-gradle-tasks.sh` 移动到 `tools/release-gradle-tasks.sh`。`.github/workflows/` 的九个文件、`flake.nix`、`README.md`、`engine-haxe/README.md`、`platforms/web/client/engine-runtime/build-runtime.ts` 与 `docs/` 的路径同步更新。
-- `scripts/cutover/` 的四个文件删除：`cutover-seat-handbook.md` 是割接期工作手册，`tq-vendor-check.sh` 检查的入库副本已由 `t-mwgrgela-p83q` 删除，`tq-pin-advance.sh` 的职能已由 `nix flake lock` 接手，`tq-mac-gen.sh` 没有引用与文档。
-- `docs/release-pipeline-convergence.md` 指向已删除脚本的路径改为叙述，历史结论不变。
+- `setup-haxe-env.sh` 从 `tools/` 移到 `scripts/`；`release-gradle-tasks.sh` 从 `scripts/` 移到 `tools/`。`.github/workflows/` 的九个文件、`flake.nix`、`README.md`、`engine-haxe/README.md`、`platforms/web/client/engine-runtime/build-runtime.ts` 与 `docs/` 的路径同步更新。
+- `scripts/` 下 cutover 子目录的四个文件已删除：一份迁移期工作手册，以及比对入库副本、推进 boring pin、在 Mac 上执行生成与编译的三个一次性脚本。删除依据记录在任务 `t-mwl041ir-1juh` 的时间线。
+- `docs/release-pipeline-convergence.md` 指向已删除脚本的路径改为按职责叙述，历史结论不变。
 
 ## Alternatives
 
