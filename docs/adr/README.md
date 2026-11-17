@@ -78,6 +78,10 @@ ADR 记录已经做出的架构与排版决定。它们按编号保留当时的 
 - [0058 Android View 一级前端与共享原生 renderer](0058-android-view-frontend.md)
 - [0060 单一发版入口与发版前总检查](0060-single-release-entry-and-gate.md)
 
+## 工程组织
+
+- [0061 仓库脚本与工具的分工](0061-scripts-tools-boundary.md)
+
 ## 早期状态说明
 
 以下早期 ADR 的核心决定仍然有效，但其中“当前”“后续”等实施状态已经被后续工作推进：
