@@ -49,7 +49,9 @@ git push origin v0.1.0-alpha07
 `0.1.0-alpha.8` 小于 `0.1.0-alpha07`。registry 站点按包名下的版本列表计算 `latest`：
 npm 与 pub 的元数据、Maven 的 `maven-metadata.xml` 都取同一个包里最高的版本。
 旧 `alphaNN` 条目还在 registry 里时，这个指针会停在旧条目，不带版本号的安装因此
-解析到旧版本。删除 `0.1.0-alpha07` 的目录之后，指针指向 `0.1.0-alpha.8`。发版前
+解析到旧版本。发版步骤以 `tools/merge-registry-tree.py --retire 0.1.0-alpha07`
+（`.github/workflows/release-registry.yml` 的 Commit metadata to registry repo
+一步）删除该版本目录，删除后指针指向 `0.1.0-alpha.8`。发版前
 逐个生态核对指针，例如：
 
 ```shell
@@ -337,8 +339,10 @@ package `consumer` depends on `tiqian-engine` with feature `f32` but `tiqian-eng
 `0.1.0-alpha.8` 起 registry 只输出 `tiqian-engine` 一个 cargo 包，`tiqian-engine-f32` 与
 `tiqian-engine-f64` 不再有 `0.1.0-alpha.8` 的新版本。发版步骤把新版本目录并入 `<owner>` 目录
 （`.github/workflows/release-registry.yml` 调用 `tools/merge-registry-tree.py`），
-alpha07 的 `tiqian-engine-f32`、`tiqian-engine-f64` 目录与索引条目保留在 registry 里，
-锁定 `0.1.0-alpha07` 的消费者仍能解析到该版本。
+同一次运行以 `--retire 0.1.0-alpha07` 删除每个包的 `0.1.0-alpha07` 目录；
+`tiqian-engine-f32` 与 `tiqian-engine-f64` 只有这一个版本目录，删除后整个包目录随之移除。
+锁定 `0.1.0-alpha07` 的消费者要在 `v0.1.0-alpha.8` 发布前迁移到 `tiqian-engine`，
+发布后这两个包不再解析。
 
 索引条目缺失时的消费者行为如下（本地 sparse registry 实测，条目为手工删除）：
 

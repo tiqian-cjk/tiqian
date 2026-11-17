@@ -1,14 +1,16 @@
 # 共享模块标准行为测试集与 trace 验证规格
 
-本文定义用「标准行为测试集 + trace 验证」替换 `tools/registry-guard/backstop.ts`
-grep 断言的规格。规格只定义用例类别、记录字段与比较判据，不包含实现。
+本文定义用「标准行为测试集 + trace 验证」替换 boring 仓 `tools/registry-guard/backstop.ts`
+grep 断言的规格。规格只定义用例类别、记录字段与比较判据，不包含实现。替换已在
+boring 仓按运行时轨迹实施，实施状态见「替换 backstop.ts 的实施状态」一节。
 
 ## 背景与现状
 
 `SemanticPassRegistry` 注册的共享模块（`DataTableHelper`、`DefaultArgExpander`、
-`EnumCycleDetector` 等 23 个）当前的验证手段是
+`EnumCycleDetector` 等 23 个）此前的验证手段是 boring 仓的
 `tools/registry-guard/backstop.ts`：该脚本对每个消费目标的
 `packages/compiler/reflaxe/<target>` 树做文本扫描，断言目标提及注册模块且不重定义模块。
+该脚本已删除，现在的验证手段是运行时消费轨迹（见「替换 backstop.ts 的实施状态」）。
 grep 断言只证明「名称出现」，不证明「行为一致」：一个目标可以正确引用模块名称，
 却在该模块的数值排序、异常命名或浮点打印上偏离其他目标，grep 断言对此不报错。
 
@@ -73,8 +75,9 @@ grep 断言只证明「名称出现」，不证明「行为一致」：一个目
 期望记录字段：`raises exception=<Name>` 事件行；异常名等价规则
 （`IllegalArgumentException` 与 Tiqian 前缀名互认）保留在
 `compare-traces.py` 的 `EXCEPTION_NAME_ALIASES`，基准轨迹已删除。
-比较判据：逐值。异常名与消息文本必须完全一致；别名规则仅用于内置名向
-Tiqian 前缀名的过渡，迁移完成后删除。
+比较判据：逐值。异常名与消息文本必须完全一致；别名规则在跨目标 f64 比对
+（`engine-haxe/tools/compare-f64-traces.py` 的 L1 判据）里继续使用，原「迁移
+完成后删除」的条件随基准轨迹删除不再适用。
 
 ### 异步
 
@@ -121,36 +124,29 @@ f32 侧由 `boring test kotlin-f32` 的生成测试判定，f64 侧五目标
 （ts、kotlin、rust、swift、dart）逐行 JSONL 一致，命令入口为
 `boring compare` 与 `boring verify`。
 
-## 替换 backstop.ts 的方式与迁移顺序
+## 替换 backstop.ts 的实施状态
 
-backstop.ts 承担两项断言：消费目标提及注册模块（存在性），以及目标不重定义
-注册模块（唯一性）。行为测试集只替代第一项；第二项由
-`tests/haxe/semantic-registry-comment-control/run.sh` 的注册器宏时校验承担，
-该校验已能拒绝仅注释、仅字符串与同前缀名称的伪消费（见
-`.haxelib/boring/git/docs/compiler-policy-interfaces.md` 对 consumer 行的说明）。
-因此迁移完成后，backstop.ts 整体删除，不保留精简版本。
+boring 仓的 `tools/registry-guard/backstop.ts` 曾承担两项断言：消费目标提及注册模块
+（存在性），以及目标不重定义注册模块（唯一性）。替换在该仓实施时改变了实现方式：
+提交 `10655b0b8` 同时删除 `tools/registry-guard/backstop.ts` 与
+`tests/haxe/semantic-registry-comment-control/run.sh`，两项断言改由运行时消费轨迹
+承担。`packages/compiler/SharedModuleTrace.hx` 在 `-D shared-module-trace` 指定
+输出文件时记录每个注册模块公开入口的实际调用者，`tools/registry-guard/trace-check.ts`
+从 `examples/<target>.hxml` 派生各目标的编译清单（写到
+`out/shared-module-trace/<target>/trace.hxml`，只排除 `tests.DriverPlanTests`），
+按运行期写出的 `out/shared-module-consumers.json` 断言每行 (module, target) 都出现在
+该目标的 `trace.tsv` 里；声明而不消费、或只被另一个共享机制间接到达的模块会被报告。
+测试集的说明在 `tests/haxe/shared-module-trace/README.md`。
 
-迁移顺序，每步完成后进入下一步：
-
-1. 建立标准行为测试集骨架：按本文类别为每个注册模块编写最小用例清单，
-   用例以 boring 测试形态写入仓库，trace 输出接入 driver 的
-   `BORING_TEST_RESULTS` 与 TraceFormat。
-2. 双轨运行：backstop.ts 与行为测试集同时执行。运行 `boring verify`，
-   记录每个模块在五个目标上的 verdict JSONL；此阶段 backstop.ts 的失败
-   仍然阻塞，行为测试的失败记录为待修条目。
-3. 逐模块切换判定：某模块的行为测试集在五个目标全部通过后，从 backstop.ts
-   的 `consumers` 表删除该模块的行；backstop.ts 对已迁移模块不再扫描。
-4. 收尾删除：最后一个模块迁移完成后，删除
-   `tools/registry-guard/backstop.ts` 与其调用入口；唯一性断言由
-   semantic-registry-comment-control 校验继续承担。若运行中发现
-   trace 验证无法覆盖的共享机制（例如仅存在于编译期的行为），
-   在删除前于本文档补充该机制的验证规格，不得静默保留 grep 断言。
+本文此前的迁移顺序（建骨架、双轨运行、逐模块从 `consumers` 表摘除、收尾删除）
+是源码扫描被替换前的计划，实际实施没有按该顺序执行；上文定义的用例类别与比较
+判据描述行为测试集本身，与 trace-check 的消费断言是两件事。
 
 ## 结论
 
 本规格定义了七类用例（数值、字符串、集合、闭包、异常、异步、边界）、
 每类的最小用例形态与期望 trace 字段，以及逐位、逐值、逐结构三级比较判据，
 全部复用 `engine TraceFormat` 与 `boring compare`/`boring verify` 既有入口。
-迁移分四步：建骨架、双轨运行、逐模块从 `consumers` 表摘除、
-删除 `tools/registry-guard/backstop.ts`；唯一性断言由
-`tests/haxe/semantic-registry-comment-control/run.sh` 承担。
+源码扫描的替换在 boring 仓以运行时轨迹完成（提交 `10655b0b8`），
+`tools/registry-guard/trace-check.ts` 按 `out/shared-module-consumers.json`
+断言存在性与唯一性，见「替换 backstop.ts 的实施状态」一节。
