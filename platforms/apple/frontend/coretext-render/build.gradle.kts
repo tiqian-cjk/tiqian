@@ -17,7 +17,7 @@ kotlin {
             languageSettings.optIn("kotlinx.cinterop.ExperimentalForeignApi")
         }
         commonMain.dependencies {
-            api(project(":platforms:engine"))
+            api(project(":boring-kotlin-f32"))
             api(project(":platforms:apple:shaping"))
         }
         commonTest.dependencies {

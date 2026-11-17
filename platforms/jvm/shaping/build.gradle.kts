@@ -7,7 +7,7 @@ kotlin {
 
     sourceSets {
         jvmMain.dependencies {
-            api(project(":platforms:engine"))
+            api(project(":boring-kotlin-f32"))
         }
 
         jvmTest.dependencies {

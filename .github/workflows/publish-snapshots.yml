@@ -59,12 +59,11 @@ jobs:
           echo "$cmake_bin_dir" >> "$GITHUB_PATH"
           "$cmake_bin_dir/cmake" --version
 
-      # The previous gate ran the engine module's allTests task. After the
-      # module moved to platforms/engine it has no test source sets (its only
-      # tracked source was the Android baseline profile), so the task discovered
-      # no tests. The generated Kotlin suite is hosted by the boring checkout
-      # and runs in publish.yml's verification job; adding a Gradle test gate
-      # here would change which tests a snapshot publish runs, which is a
-      # separate change.
+      # The previous gate ran the engine module's allTests task. The engine
+      # module now comes from boring's publication project, which declares no
+      # test source sets, so that task would discover no tests. The generated
+      # Kotlin suite is hosted by the boring checkout and runs in publish.yml's
+      # verification job; adding a Gradle test gate here would change which
+      # tests a snapshot publish runs, which is a separate change.
       - name: Upload Tiqian snapshot modules
         run: ./gradlew publishTiqianToCentralSnapshots --no-daemon

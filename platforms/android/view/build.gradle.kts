@@ -20,7 +20,7 @@ android {
 }
 
 dependencies {
-    api(project(":platforms:engine"))
+    api(project(":boring-kotlin-f32"))
     api(project(":platforms:android:rendering"))
     implementation("androidx.core:core:1.16.0")
     implementation("androidx.customview:customview:1.2.0")

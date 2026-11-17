@@ -45,16 +45,52 @@ dependencyResolutionManagement {
 rootProject.name = "tiqian"
 
 // ============================================================================
-// engine-haxe is the only active source for the engine: ":platforms:engine"
-// compiles the Kotlin that boring generates from engine-haxe/src. The
-// handwritten Kotlin implementation is gone; the module keeps only the Gradle
-// configuration for the generated tree. Do not add engine code to
-// ":platforms:engine"; edit engine-haxe/src instead.
+// The generated Kotlin tree has exactly one Gradle owner: boring's publication
+// project. boring (bundle kotlin-f32) writes engine-haxe/out/kotlin-f32/gen and
+// gen-tests; the project that compiles them ships with the driver, which copies
+// it to <outRoot>/<id>/gradle/project on every pack run. tiqian includes that
+// project's :engine module here instead of keeping its own adapter module, so
+// the target set, compiler options, Android namespace and publication POM are
+// written once, in boring's file.
+//
+// The project directory is the devShell's staged copy of that project:
+// Gradle 9 refuses to configure a project whose directory is read-only, so the
+// flake install (BORING_PUBLICATION_PROJECT / BORING_SOURCE) cannot be the
+// project directory even though it holds the same files. kotlinGenDir and
+// kotlinGenTestsDir in gradle.properties point the project at tiqian's
+// emission, exactly as the driver's -P arguments do on a pack run.
+//
+// The generated tree is gitignored, so a checkout has no engine sources until
+// 'boring gen kotlin-f32' writes them: the resolution below fails with that
+// exact command instead of configuring an empty source set.
 // ============================================================================
-logger.info("tiqian: :platforms:engine compiles the Kotlin generated from engine-haxe")
+val generatedEngineTree = settingsDir.resolve("engine-haxe/out/kotlin-f32/gen")
+val publicationProjectRoot = settingsDir.resolve(".haxelib/boring/git/tools/kotlin-publication")
+val stagedEngineProject = publicationProjectRoot
+    .takeIf { it.resolve("engine/build.gradle.kts").isFile }
+
+val ownerUnavailable = listOf(
+    "The Kotlin engine tree has no Gradle owner.",
+    "",
+    "boring generates the tree and ships the only Gradle project that compiles it.",
+    "Run this before any tiqian Gradle invocation, from the flake devShell:",
+    "",
+    "    nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring gen kotlin-f32 --project boring.json'",
+    "",
+    "generated sources: " + generatedEngineTree.path +
+        " (" + (if (generatedEngineTree.isDirectory) "present" else "missing") + ")",
+    "publication project: " + publicationProjectRoot.path +
+        " (" + (if (stagedEngineProject != null) "present" else "missing") + "); the flake devShell stages it",
+).joinToString("\n")
+
+if (!generatedEngineTree.isDirectory || stagedEngineProject == null) {
+    throw GradleException(ownerUnavailable)
+}
+val engineProject = stagedEngineProject ?: throw GradleException(ownerUnavailable)
+logger.info("tiqian: :boring-kotlin-f32 compiles the Kotlin boring generates from engine-haxe")
 
 include(
-    ":platforms:engine", // generated from engine-haxe
+    ":boring-kotlin-f32", // boring's publication project, see above
     ":platforms:jvm:shaping",
     ":platforms:jvm:skia",
     ":platforms:android:shaping",
@@ -71,6 +107,11 @@ include(
     ":demo:android",
     ":demo:font-diagnostics",
     // Developer probes (measurement and regression tools) and the README sample
-    // generator live outside the engine module; see platforms/engine/build.gradle.kts.
+    // generator live outside the generated engine project; see
+    // tools/engine-probes/build.gradle.kts.
     ":tools:engine-probes",
 )
+
+// The included project supplies its own settings file; tiqian points Gradle at
+// the :engine module directory boring ships in that project.
+project(":boring-kotlin-f32").projectDir = engineProject.resolve("engine")

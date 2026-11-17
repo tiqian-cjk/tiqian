@@ -29,7 +29,7 @@ jobs:
   # no platform module carries Kotlin/Native test sources.
   # The engine publication moved to boring: the kotlin-f32 bundle publishes the
   # nine tiqian-engine Maven coordinates through kmpPublication, so no job here
-  # has a :platforms:engine publication to check.
+  # has an engine publication to check.
 
   js-node:
     name: Kotlin/JS engine export node tests (boring-generated TS)

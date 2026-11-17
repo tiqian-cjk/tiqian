@@ -27,7 +27,7 @@ kotlin {
 
     sourceSets {
         jvmMain.dependencies {
-            api(project(":platforms:engine"))
+            api(project(":boring-kotlin-f32"))
             api("org.jetbrains.skiko:skiko-awt:0.144.6")
         }
 

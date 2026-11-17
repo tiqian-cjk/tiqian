@@ -206,6 +206,14 @@ subprojects {
     group = rootProject.group
     version = rootProject.version
 
+    // The included project is a staged copy of boring's publication project; its
+    // outputs belong to this build, not to the staging directory the devShell
+    // replaces when the boring pin changes. The driver redirects the same way
+    // with -PbuildRoot on a pack run.
+    if (path == ":boring-kotlin-f32") {
+        layout.buildDirectory.set(rootProject.layout.projectDirectory.dir("build/boring-kotlin-f32"))
+    }
+
     plugins.withId("org.jetbrains.kotlin.multiplatform") {
         extensions.configure<KotlinMultiplatformExtension>("kotlin") {
             // Compile and test with the uniform provisioned JDK 25 toolchain, but emit Java 17

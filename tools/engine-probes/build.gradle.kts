@@ -11,16 +11,17 @@ plugins {
 // generated commonMain tree.
 //
 // The engine classes this module compiles against come from the
-// :platforms:engine project. platforms/engine/build.gradle.kts sets
-// commonMain.setSrcDirs to engine-haxe/out/kotlin-f32/gen, so depending on
-// :platforms:engine consumes exactly that generated tree. This module declares
-// no handwritten engine source set.
+// :boring-kotlin-f32 project: boring's publication project, which the
+// settings.gradle.kts points at engine-haxe/out/kotlin-f32/gen through
+// kotlinGenDir in gradle.properties. Depending on :boring-kotlin-f32 consumes
+// exactly that generated tree. This module declares no handwritten engine
+// source set.
 kotlin {
     jvm()
 
     sourceSets {
         jvmMain.dependencies {
-            implementation(project(":platforms:engine"))
+            implementation(project(":boring-kotlin-f32"))
             implementation(project(":platforms:jvm:shaping"))
             implementation(project(":platforms:jvm:skia"))
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
