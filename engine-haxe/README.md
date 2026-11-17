@@ -16,8 +16,11 @@ driver 与编译器固定在同一修订，进入开发 shell 时配置 `.haxeli
 - `engine-haxe/targets/`：各目标的生成参数。`common.hxml` 提供共用的类路径与
   宏，`kotlin-common.hxml`、`swift-common.hxml`、`rust-common.hxml` 补充各
   目标的编译器与运行时参数，精度入口沿用这些设置。`protocol-*.hxml` 单列协议
-  根类，`rust.hxml` 供 `engine-rust` 配置使用。`classes.hxml` 由开发 shell 的
-  `boring roots engine` 写出，不入库：Haxe 不会仅凭 `-cp` 编译目录下的全部类。
+  根类，`rust.hxml` 供 `engine-rust` 配置使用。`classes.hxml` 由
+  `boring roots engine` 按 `boring.json` 的 `engine` source set 生成，生成结果
+  入库；`flake.nix` 的 shellHook 每次进入开发 shell 时重跑该命令
+  （`flake.nix:166`），`.gitignore` 第 45 行列了该路径，已跟踪的文件不受该行
+  影响。Haxe 不会仅凭 `-cp` 编译目录下的全部类。
 - `engine-haxe/textrange-kotlin.hxml`、`engine-haxe/smoke-kotlin.hxml`：不经
   `boring.json` 的 Kotlin 生成清单，前者只列出 `org.tiqian.core.TextRange` 相关
   类型，后者编译 boring 的 `boring.Fp16` 样例。
@@ -80,8 +83,9 @@ nix develop -c boring test kotlin-f32 --project boring.json
 生成发布包，只有声明了 `package` 的配置可以打包，`verify --with-pack` 会一并打包
 这些配置。
 
-`classes.hxml` 由开发 shell 写出。在同一个 shell 内新增测试类之后，重新生成入口
-文件，再直接调用 HXML：
+`classes.hxml` 由开发 shell 写出，生成结果入库。改动 `boring.json` 的 sourceSet 或
+新增测试类之后必须重跑下面的命令，否则它会与项目文件漂移；重跑后把该文件的改动
+一并提交，再直接调用 HXML：
 
 ```shell
 boring roots engine --project boring.json --output engine-haxe/targets/classes.hxml
