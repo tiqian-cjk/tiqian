@@ -265,7 +265,12 @@ jobs:
         run: |
           cargo build --manifest-path ../precompute/binding/Cargo.toml \
             --release --message-format=json-render-diagnostics > cargo.log
-          npx neon dist --name tiqian-precompute-neon < cargo.log
+          # The local bin entry is neon.exe on Windows, which npx does not
+          # recognize as an installed command and replaces with the unrelated
+          # registry `neon` package (the Neon cloud CLI); resolve @neon-rs/cli
+          # and run its entry through node instead.
+          NEON="$(node -p "require.resolve('@neon-rs/cli')")"
+          node "$NEON" dist --name tiqian-precompute-neon < cargo.log
           test -f "platforms/${NEON_BUILD_PLATFORM}/index.node"
       - name: Smoke test through the npm loader
         working-directory: platforms/web/server/core
