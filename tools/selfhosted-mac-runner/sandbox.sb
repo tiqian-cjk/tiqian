@@ -1,0 +1,40 @@
+;; macOS sandbox-exec profile for commands run on the self-hosted runner.
+;;
+;; This file is a sample, not an enforcement point: the workflow does not wrap
+;; its steps with sandbox-exec automatically. Use it explicitly, for example:
+;;
+;;   sandbox-exec -D WORKSPACE="$PWD" -D TMPDIR="${TMPDIR:-/tmp}" \
+;;     -f tools/selfhosted-mac-runner/sandbox.sb bash -lc '<command>'
+;;
+;; The default is deny. Read access to files is open because compilers load
+;; headers, SDKs, and toolchains from system paths. Write access is limited to
+;; the checkout given as WORKSPACE and the temporary directory given as TMPDIR.
+;; Network access is denied, so every download must happen before the sandboxed
+;; command starts. Build caches that normally live under HOME must be pointed
+;; into WORKSPACE or TMPDIR (CARGO_HOME, npm_config_cache, GRADLE_USER_HOME),
+;; otherwise their writes are refused.
+(version 1)
+
+(deny default)
+
+;; Processes and the local IPC the compiler toolchain needs.
+(allow process*)
+(allow signal (target self))
+(allow sysctl-read)
+(allow mach-lookup)
+(allow ipc-posix-shm)
+
+;; Read every file so system headers, SDKs, and the toolchain load.
+(allow file-read*)
+
+;; Write only the checkout, the temporary directory, and the standard streams.
+(allow file-write*
+  (subpath (param "WORKSPACE"))
+  (subpath (param "TMPDIR"))
+  (literal "/dev/null")
+  (literal "/dev/stdout")
+  (literal "/dev/stderr"))
+
+;; No network. The deny default already covers it; the explicit rule documents
+;; the intent and keeps the profile clear if the default changes.
+(deny network*)

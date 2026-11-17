@@ -4,6 +4,12 @@ name: Build Neon precompute
 # release lane: it builds every supported platform, smokes the addon through
 # the npm loader, packs the npm packages, and uploads them as artifacts.
 # Nothing here publishes.
+# The self-hosted macOS runner is opt-in. Only workflow_dispatch (or a
+# workflow_call that explicitly passes runner: self-hosted) selects the
+# tiqian-mac-arm64 label; push, pull_request, and every other trigger keep
+# using GitHub-hosted runners. A pull request from a fork therefore never
+# reaches the self-hosted runner, because pull_request has no way to set the
+# runner input and its macos leg stays on macos-latest.
 on:
   workflow_call:
     inputs:
@@ -11,6 +17,14 @@ on:
         description: "The branch, tag, or SHA to check out"
         required: true
         type: string
+      # workflow_call takes a string because choice inputs exist only for
+      # workflow_dispatch. Any value other than self-hosted falls back to
+      # macos-latest, so existing callers keep the previous behaviour.
+      runner:
+        description: "Runner label set for the macOS addon leg: github-hosted for macos-latest, self-hosted for tiqian-mac-arm64"
+        required: false
+        type: string
+        default: github-hosted
   pull_request:
     paths:
       - 'platforms/web/server/precompute/**'
@@ -25,6 +39,15 @@ on:
       - 'platforms/web/server/precompute/engine-gen/**'
       - '.github/workflows/build-neon-precompute.yml'
   workflow_dispatch:
+    inputs:
+      runner:
+        description: "Runner label set for the macOS addon leg"
+        required: false
+        type: choice
+        options:
+          - github-hosted
+          - self-hosted
+        default: github-hosted
 
 concurrency:
   group: build-neon-${{ github.ref }}
@@ -87,6 +110,12 @@ jobs:
       - name: Compute matrix
         id: matrix
         uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        env:
+          # workflow_dispatch declares runner as a choice input, workflow_call
+          # as a string, and every other trigger leaves inputs.runner empty.
+          # Read the value through the environment so a caller-supplied string
+          # cannot alter the generated script.
+          RUNNER_INPUT: ${{ inputs.runner }}
         with:
           script: |
             const rawJson = `${{ steps.matrixData.outputs.json }}`;
@@ -101,10 +130,17 @@ jobs:
               core.setFailed(`Failed to parse matrix data JSON: ${e.message}`);
               return;
             }
+            // The macOS leg is the only one that can move to the self-hosted
+            // ARM64 runner. Any value other than self-hosted keeps the
+            // GitHub-hosted label, so pull_request and push never change.
+            const requestedRunner = (process.env.RUNNER_INPUT || '').trim();
+            const macosRunner = requestedRunner === 'self-hosted'
+              ? 'tiqian-mac-arm64'
+              : 'macos-latest';
             const matrix = [];
             if (platforms?.macOS) {
               matrix.push(...platforms.macOS.map(platform => ({
-                os: "macos-latest", platform
+                os: macosRunner, platform
               })));
             }
             if (platforms?.Windows) {
