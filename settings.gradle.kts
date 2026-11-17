@@ -75,7 +75,7 @@ val ownerUnavailable = listOf(
     "boring generates the tree and ships the only Gradle project that compiles it.",
     "Run this before any tiqian Gradle invocation, from the flake devShell:",
     "",
-    "    nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring gen kotlin-f32 --project boring.json'",
+    "    nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && boring gen kotlin-f32 --project boring.json'",
     "",
     "generated sources: " + generatedEngineTree.path +
         " (" + (if (generatedEngineTree.isDirectory) "present" else "missing") + ")",
