@@ -16,12 +16,12 @@ grep 断言只证明「名称出现」，不证明「行为一致」：一个目
 
 目标行为的既有验证基础设施有两处，规格全部复用它们，不新建格式：
 
-1. trace 行语法（`engine TraceFormat`，解析实现见 `tiqian/engine-haxe/tools/compare-traces.py`）：
+1. trace 行语法（`engine TraceFormat`，解析实现见 `engine-haxe/tools/compare-traces.py`）：
    `class: <Name>` 与 `test: <fn>` 两类头行，其后为 `<event> key=value ...` 事件行；
    数值为十进制文本，`NaN`、`Infinity` 与 `-Infinity` 以带引号文本存储，
    超长文本写入截断标记 `~<len>#<hash>`。
 2. 逐测试判定记录：每用例一行 JSONL，`{"id", "name", "verdict", "message"}`，
-   解析见 `tiqian/engine-haxe/tools/compare-verdicts-l2.py`。
+   解析见 `engine-haxe/tools/compare-verdicts-l2.py`。
 
 第三处基础设施（引擎 golden 轨迹）随 Kotlin 割接删除：golden 是对齐工具，
 105/105 对齐达成后没有保留用途。
@@ -39,7 +39,7 @@ grep 断言只证明「名称出现」，不证明「行为一致」：一个目
 最小正规数、最大有限值、舍入到不同位模式的中间值。
 期望记录字段：结果值的位模式十六进制（沿 `canonicalFloatBits` 的编码），
 禁止只记录十进制文本，因为不同运行时的浮点转十进制规则会产出位数不同的文本
-（判据依据见 `tiqian/docs/cross-target-alignment.md`）。
+（判据依据见 `docs/cross-target-alignment.md`）。
 比较判据：逐位。sin、cos、pow 的末位差按偏离处理，无容差豁免。
 
 ### 字符串
