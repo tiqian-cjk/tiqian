@@ -285,7 +285,7 @@ advance 的浏览器侧字体 polyfill，同时保留正文 face / size / weight
 一个仅移除 `CP` 的 layout-neutral 栈，在 `<tiqian-prose>:defined` 后生效；no-JS 原文仍保留
 原有 polyfill，增强路径则由 Tiqian 独占标点 advance。
 
-发布形态是 ESM package `@tiqian/prose`：`<tiqian-prose>` 使用 light DOM，按需加载优化后的 Kotlin/JS
+发布形态是 ESM package `@tiqian/web-component`：`<tiqian-prose>` 使用 light DOM，按需加载优化后的 Kotlin/JS
 runtime。custom element 的 connected / disconnected 生命周期负责 enhance / detach；仍在 document 中的
 重排才走 source restore / destroy。detach 只取消任务并释放 document-scoped style，source backing 由
 weak state 保留到同一节点重连或随节点回收，不能为了即将被路由器丢弃的旧文章同步重建整篇 DOM。

@@ -13,7 +13,7 @@
 | `publish-snapshots.yml` | `workflow_dispatch`，手填 `version`（第 3-10 行） | Maven Central 快照仓库 | 9 个 Maven 模块 | 输入参数 `version`，必须带 `-SNAPSHOT` 后缀（第 34-37 行） |
 | `publish-ffi.yml` | 推送标签 `@tiqian/ffi@*`（第 3-6 行） | npmjs.com | 1 个 npm 包 | `platforms/web/client/engine-runtime/package.json` 的 `version`（第 54 行） |
 | `publish-precompute.yml` | 推送标签 `@tiqian/precompute@*`（第 8-11 行） | npmjs.com | 5 个 npm 包 | `platforms/web/server/core/package.json` 的 `version`（第 43 行） |
-| `publish-prose.yml` | 推送标签 `@tiqian/prose@*`（第 3-6 行） | npmjs.com | 1 个 npm 包 | `platforms/web/client/web-component/package.json` 的 `version`（第 54 行） |
+| `publish-web-component.yml` | 推送标签 `@tiqian/web-component@*`（第 3-6 行） | npmjs.com | 1 个 npm 包 | `platforms/web/client/web-component/package.json` 的 `version`（第 54 行） |
 | `release-registry.yml` | 推送标签 `v*.*.*`（第 2-4 行） | 自建 registry 仓库 `tiqian-cjk/registry`、R2 存储、Pages 站点 | 13 个 bundle，归并为 2 个包 | 标签名去掉 `v` 前缀（第 56 行） |
 | `snapshot-precompute.yml` | `workflow_dispatch`，无输入（第 13-14 行） | GitHub Packages | 11 个 npm 包 | `platforms/web/server/core/package.json` 的主版本加 `-snapshot.<UTC 时间戳>`（第 59-70 行） |
 
@@ -29,14 +29,14 @@
 
 - 手工 dispatch：`publish.yml:4`、`publish-snapshots.yml:4`、`snapshot-precompute.yml:14`。
 - `v*.*.*` 标签：`release-registry.yml:3-4`。
-- `@tiqian/<包名>@*` 标签：`publish-ffi.yml:4-6`、`publish-precompute.yml:9-11`、`publish-prose.yml:4-6`。
+- `@tiqian/<包名>@*` 标签：`publish-ffi.yml:4-6`、`publish-precompute.yml:9-11`、`publish-web-component.yml:4-6`。
 
 七条通道之间没有任何调用关系。推送 `v1.2.3` 只触发 registry 通道；推送 `@tiqian/ffi@1.2.3` 只触发 ffi 的 npm 发布。两者不会同时发生。
 
 ### 2.2 包集合有四套，互不包含
 
 - Maven 侧 9 个模块（`build.gradle.kts:32-67`）。
-- npmjs 侧 7 个包：`@tiqian/ffi`、`@tiqian/precompute` 与 4 个平台包（`publish-precompute.yml:246-249`）、`@tiqian/prose`。
+- npmjs 侧 7 个包：`@tiqian/ffi`、`@tiqian/precompute` 与 4 个平台包（`publish-precompute.yml:246-249`）、`@tiqian/web-component`。
 - 自建 registry 侧 2 个包（`boring pack` 的 registry 写出按 `bundle.package` 归并）。
 - GitHub Packages 侧 11 个包（`snapshot-precompute.yml:634`）。
 
@@ -45,7 +45,7 @@
 ### 2.3 版本来源有四种，当前取值已经不一致
 
 - 输入参数：`publish.yml:27`、`publish-snapshots.yml:23`。
-- 三个独立的 `package.json`：`publish-ffi.yml:54`、`publish-precompute.yml:43`、`publish-prose.yml:54`。
+- 三个独立的 `package.json`：`publish-ffi.yml:54`、`publish-precompute.yml:43`、`publish-web-component.yml:54`。
 - 标签名：`release-registry.yml:56` 把标签去掉 `v` 前缀后写进 `boring.json`。
 - 时间戳派生：`snapshot-precompute.yml:59-70` 用 core 包的主版本加 `-snapshot.<UTC 时间戳>`。
 

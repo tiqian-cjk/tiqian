@@ -10,7 +10,7 @@
 仓库有九条与发布有关的 workflow。`release-registry.yml` 由 `v*.*.*` 标签触发，
 只 pack `boring.json` 的 13 个 bundle，写出 `tiqian-engine` 与 `tiqian-protocol`
 两个 registry 包。`publish-ffi.yml`、`publish-precompute.yml` 与
-`publish-prose.yml` 由各自的包标签触发。`publish.yml` 与
+`publish-web-component.yml` 由各自的包标签触发。`publish.yml` 与
 `publish-snapshots.yml` 只接受 `workflow_dispatch`，需要人手填写版本。
 `build-neon-precompute.yml` 只产出编译产物，没有任何 workflow 调用它。
 

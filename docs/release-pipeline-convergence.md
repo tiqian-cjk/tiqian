@@ -19,7 +19,7 @@
 | `.github/workflows/release-gate.yml`（48） | 无 | `tools/release-gate.py:42-49` | 无 | `github.token` | 无 |
 | `.github/workflows/publish-ffi.yml`（177） | `@tiqian/ffi` | `scripts/generate-engine-gen.mjs:37-60` 运行 `boring gen ts` 与 `boring gen protocol-ts`，再 `npm pack`（:112-116） | `registry.npmjs.org`，`alpha` 标签，随后 `latest` | OIDC（`id-token: write`）、`NPM_DIST_TAG_TOKEN` | 输入是 bundle `ts` 与 `protocol-ts` 的生成树；`release-registry.yml:86` 对同两个 bundle 运行 `boring pack` |
 | `.github/workflows/publish-core.yml`（159） | `@tiqian/core` | `tsc` 与 `npm pack`（:87-97） | npmjs，`alpha` 与 `latest` | OIDC、`NPM_DIST_TAG_TOKEN` | `src/sampler/snapshot/protocol-gen`（10 个文件）与 `prepared-dom-gen`（45 个文件）是 `protocol-ts` 的入库副本（`scripts/cutover/tq-vendor-check.sh:61-62`）；两个目录已随 `t-mwgrgela-p83q` 删除，见 2.1 |
-| `.github/workflows/publish-prose.yml`（157） | `@tiqian/prose` | `tsc -b` 与 `npm pack`（:92-95） | npmjs，`alpha` 与 `latest` | OIDC、`NPM_DIST_TAG_TOKEN` | 无直接重复，依赖 `@tiqian/core` |
+| `.github/workflows/publish-web-component.yml`（157） | `@tiqian/web-component` | `tsc -b` 与 `npm pack`（:92-95） | npmjs，`alpha` 与 `latest` | OIDC、`NPM_DIST_TAG_TOKEN` | 无直接重复，依赖 `@tiqian/core` |
 | `.github/workflows/publish-precompute.yml`（323） | `@tiqian/precompute` 与 4 个平台二进制包 | `cargo build`、`npx neon dist`（:114-123）、`npm pack` | npmjs，`alpha` 与 `latest` | OIDC、`NPM_DIST_TAG_TOKEN` | 输入含 `protocol-rust`、`protocol-ts`、`engine-rust` 的入库副本（`tq-vendor-check.sh:59-63`）；其中 `protocol-rust` 与 `engine-rust` 现为构建期生成的挂载点，见 2.1 |
 | `.github/workflows/publish.yml`（134） | 9 个 Maven 模块（`build.gradle.kts:30-67`） | Gradle KMP；`:engine` 直接编译 `engine-haxe/out/kotlin-f32/gen`（`engine/build.gradle.kts:43`） | Central staging，由人在 Portal 确认（:124-134） | `MAVEN_CENTRAL_USERNAME`、`MAVEN_CENTRAL_PASSWORD`、`SIGNING_KEY_ID`、`SIGNING_KEY`、`SIGNING_PASSWORD` | `kotlin-f32` 与 `protocol-kotlin` 既由 Gradle 编译，又由 `boring pack` 写出 maven 目录（`PackageArtifacts.hx:347-397`） |
 | `.github/workflows/release-registry.yml`（173） | `tiqian-engine` 与 `tiqian-protocol` | `boring pack` 12 个 bundle（:86），同一次运行用 `--registry-out`、`--owner`、`--repo`、`--asset-base` 写出 registry 树 | GitHub Release（:101-107）、R2（:109-128）、`tiqian-cjk/registry`（:130-148）、Pages（:149-160） | `R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`REGISTRY_REPO_TOKEN`、`PAGES_DEPLOY_HOOK` | 这条工作流就是 `boring pack` 路径本身 |
@@ -127,7 +127,7 @@ Maven 的目标形态等 `t-mwgpst5a-8rxn` 完成后进入。在此之前，Mave
 
 ### 7.3 四个 npm 工作区包
 
-`@tiqian/ffi`、`@tiqian/core`、`@tiqian/prose`、`@tiqian/precompute` 现在不声明为 bundle。它们保留 npm 自身的构建，输入改为依赖 pack 发布的制品，不再读包内的入库副本。让它们成为 bundle 需要 pack 支持工作区模式，属于另一条任务。
+`@tiqian/ffi`、`@tiqian/core`、`@tiqian/web-component`、`@tiqian/precompute` 现在不声明为 bundle。它们保留 npm 自身的构建，输入改为依赖 pack 发布的制品，不再读包内的入库副本。让它们成为 bundle 需要 pack 支持工作区模式，属于另一条任务。
 
 ### 7.4 precompute 的 Rust addon
 

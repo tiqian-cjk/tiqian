@@ -7,7 +7,7 @@
 
 ## Context
 
-`@tiqian/prose` 已经能消费服务器生成的语义 HTML，并在浏览器按实时容器宽度增强；构建期路径还能
+`@tiqian/web-component` 已经能消费服务器生成的语义 HTML，并在浏览器按实时容器宽度增强；构建期路径还能
 从宿主字体生成服务器 shaping / metrics 回放证据，以及可选的固定版心快照。实际 SvelteKit 与 Astro
 宿主此前各自负责 HTML 投影、快照资产注入、客户端导航注册和 custom element 生命周期，重复逻辑已经
 超过单个站点应该持有的范围。
@@ -24,7 +24,7 @@
 
 ### `CorePrepareThinAdapter`：同仓库、分 npm 包
 
-框架中立能力留在 `@tiqian/prose`：
+框架中立能力留在 `@tiqian/web-component`：
 
 - `createHtmlPreparer()` 接收宿主已经渲染好的 HTML，保留原字符串，只为成功生成固定几何的段落插入
   `data-tq-snapshot-key`；
@@ -43,12 +43,12 @@
   marker 中的 server assets 提升并去重到文档 `<head>`；
 - adapter 只负责框架生命周期和传输，不复制排版、字体选择、DOM lowering 或 snapshot schema。
 
-包不拆到独立仓库。它们需要与 `@tiqian/prose` 的 alpha wire / render revision 同步测试和发版；分仓会
+包不拆到独立仓库。它们需要与 `@tiqian/web-component` 的 alpha wire / render revision 同步测试和发版；分仓会
 增加版本漂移，却不会形成实际独立的能力所有权。独立 npm 包仍使未使用 Svelte 或 Astro 的用户不必
 安装相应框架依赖。
 
 2026-08-20 追记：[ADR 0050](0050-native-precompute-rust-bindings.md) 把 precompute 从
-`@tiqian/prose` 迁入独立的 `@tiqian/precompute` 包。框架包改引新包并锁步发版。
+`@tiqian/web-component` 迁入独立的 `@tiqian/precompute` 包。框架包改引新包并锁步发版。
 
 ### `WidthIndependentFontEvidenceCaptureMeasure`：字体校验不要求宿主宽度
 
