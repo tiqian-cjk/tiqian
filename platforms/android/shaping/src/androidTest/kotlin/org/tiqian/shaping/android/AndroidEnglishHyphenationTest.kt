@@ -14,13 +14,13 @@ class AndroidEnglishHyphenationTest {
         assertEquals("hy-phen-ation", hyphenated("hyphenation"))
         assertEquals("com-puter", hyphenated("computer"))
 
-        val international = EnglishHyphenation.enUs.hyphenate("internationalization")
+        val international = EnglishHyphenation.enUs().hyphenate("internationalization")
         assertTrue(international.size > 1, "expected enumerable hyphenation points: $international")
         assertTrue(2 in international, "expected in-ter... break: $international")
     }
 
     private fun hyphenated(word: String): String {
-        val offsets = EnglishHyphenation.enUs.hyphenate(word)
+        val offsets = EnglishHyphenation.enUs().hyphenate(word)
         return buildString {
             for (i in word.indices) {
                 if (i in offsets) append('-')

@@ -488,7 +488,7 @@ class AndroidGlyphReplayHookTest {
         selectionText: String,
     ) = ReplayableFontFaceRequest(
         role = role,
-        preferredFamilies = families,
+        preferredFamilies = families.toMutableList(),
         fontSize = fontSize,
         weight = 400,
         italic = false,

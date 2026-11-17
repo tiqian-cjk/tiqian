@@ -5,13 +5,13 @@ import android.text.TextPaint
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.tiqian.core.Ic
 import org.tiqian.core.LayoutConstraints
 import org.tiqian.core.LayoutInput
 import org.tiqian.core.LineLengthGrid
 import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.TextStyle
 import org.tiqian.core.TiqianTextContent
-import org.tiqian.core.ic
 import org.tiqian.layout.ExplainableStubParagraphLayoutEngine
 import org.tiqian.layout.LookaheadLineBreaker
 import kotlin.test.assertEquals
@@ -45,7 +45,7 @@ class AndroidDashPunctuationReproTest {
             LayoutInput(
                 content = TiqianTextContent(text),
                 textStyle = TextStyle(fontSize = fontSize, locale = "zh-Hans"),
-                paragraphStyle = ParagraphStyle(firstLineIndent = 0.ic),
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic.Zero),
                 constraints = LayoutConstraints(maxWidth = 1000f),
             ),
         )
@@ -82,7 +82,7 @@ class AndroidDashPunctuationReproTest {
                     content = TiqianTextContent(text),
                     textStyle = TextStyle(fontSize = fontSize, locale = "zh-Hans"),
                     paragraphStyle = ParagraphStyle(
-                        firstLineIndent = 0.ic,
+                        firstLineIndent = Ic.Zero,
                         lineLengthGrid = LineLengthGrid(enabled = false),
                     ),
                     constraints = LayoutConstraints(maxWidth = width.toFloat()),
@@ -123,7 +123,7 @@ class AndroidDashPunctuationReproTest {
             LayoutInput(
                 content = TiqianTextContent(text),
                 textStyle = TextStyle(fontSize = fontSize, locale = "zh-Hans"),
-                paragraphStyle = ParagraphStyle(firstLineIndent = 0.ic),
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic.Zero),
                 constraints = LayoutConstraints(maxWidth = 1248f),
             ),
         )
@@ -152,7 +152,7 @@ class AndroidDashPunctuationReproTest {
             LayoutInput(
                 content = TiqianTextContent(text),
                 textStyle = TextStyle(fontSize = fontSize, locale = "zh-Hans"),
-                paragraphStyle = ParagraphStyle(firstLineIndent = 0.ic),
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic.Zero),
                 constraints = LayoutConstraints(maxWidth = 1000f),
             ),
         )

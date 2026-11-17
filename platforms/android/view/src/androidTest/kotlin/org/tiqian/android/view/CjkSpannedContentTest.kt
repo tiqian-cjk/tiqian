@@ -19,11 +19,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.tiqian.core.ColorSpan
-import org.tiqian.core.RichTextRole
+import org.tiqian.core.LineThrough
+import org.tiqian.core.Link
 import org.tiqian.core.RichTextSpan
 import org.tiqian.core.TextRange
 import org.tiqian.core.TextSpan
 import org.tiqian.core.TextStyle
+import org.tiqian.core.Underline
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -46,12 +48,12 @@ class TiqianSpannedContentTest {
             content.content.spans,
         )
         assertEquals(listOf(ColorSpan(2, 3, Color.RED)), content.colorSpans)
-        assertTrue(RichTextSpan(TextRange(3, 4), RichTextRole.LineThrough) in content.richTextSpans)
+        assertTrue(RichTextSpan(TextRange(3, 4), LineThrough.instance) in content.richTextSpans)
         assertTrue(
-            RichTextSpan(TextRange(4, 6), RichTextRole.Link("https://example.com")) in
+            RichTextSpan(TextRange(4, 6), Link("https://example.com")) in
                 content.richTextSpans,
         )
-        assertTrue(RichTextSpan(TextRange(4, 6), RichTextRole.Underline) in content.richTextSpans)
+        assertTrue(RichTextSpan(TextRange(4, 6), Underline.instance) in content.richTextSpans)
         assertTrue(source.cjkSpannedCompatibility().canPreserveAllKnownSemantics)
     }
 
