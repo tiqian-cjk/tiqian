@@ -157,6 +157,12 @@ jobs:
       # Trusted publishing authenticates the dist-tag write; no token is read.
       id-token: write
     steps:
+      - name: Check out the release commit
+        # The dist-tag step runs tools/npm-dist-tag.sh from the repository, so
+        # this job needs the checkout the publish job has.
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
       - name: Set up Node.js 24
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
