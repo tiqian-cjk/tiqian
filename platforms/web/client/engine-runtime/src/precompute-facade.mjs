@@ -133,6 +133,21 @@ function numberMember(raw, name) {
   return typeof value === "number" ? value : Number.NaN;
 }
 
+/**
+ * Reads an optional number member the way the Haxe Cluster constructor
+ * defaults it: engine-haxe/src/org/tiqian/core/Cluster.hx:23 spells the
+ * member as "baselineShift == null ? 0.0 : baselineShift", so a shaping
+ * response that carries no baseline shift means exactly 0. A present,
+ * non-numeric value is a malformed response and stays NaN so the broken
+ * field still surfaces instead of passing as 0.
+ */
+function optionalNumberMember(raw, name) {
+  if (raw === null) return 0.0;
+  const value = raw[name];
+  if (value === undefined || value === null) return 0.0;
+  return typeof value === "number" ? value : Number.NaN;
+}
+
 /** Reads a JSON string array the way WireJson.kt parseDynamicStringList does. */
 function stringListMember(raw, name) {
   if (raw === null) return [];
@@ -235,7 +250,7 @@ function parseShapingResultJson(json) {
     stringMember(c, "fontKey"),
     numberMember(c, "advance"),
     stringMember(c, "displayText"),
-    numberMember(c, "baselineShift"),
+    optionalNumberMember(c, "baselineShift"),
   ));
   const glyphRuns = list(raw.glyphRuns, (g) => new GlyphRun(
     range(g.range),
@@ -248,7 +263,7 @@ function parseShapingResultJson(json) {
       numberMember(glyph, "y"),
     )),
     numberMember(g, "advance"),
-    list(g.openTypeFeatures, (f) => (typeof f === "string" ? f : "")),
+    stringListMember(g, "openTypeFeatures"),
   ));
   const decisions = list(raw.decisions, (d) => new ShapingDecisionInfo(
     range(d.range),
