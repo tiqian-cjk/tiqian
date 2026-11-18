@@ -9,10 +9,12 @@ to have a completed, successful workflow run on the release commit.
 
 The gate refuses when a lane is red, when a lane has not run on the release
 commit at all, and when a lane is still queued or running. A missing run is
-not evidence of success.
+not evidence of success. A --sha that is not a full 40-character commit id, or
+that the repository does not know, is reported as a separate input error
+before any lane is evaluated.
 
 Exit status: 0 the release may proceed, 1 the release is refused,
-2 the gate or the manifest is misconfigured.
+2 the gate, the manifest, or the arguments given to the gate are unusable.
 """
 
 from __future__ import annotations
@@ -384,7 +386,7 @@ def check_static(root: Path, manifest: dict) -> list[str]:
     return [f"entrypoint {release['entrypoint']} triggers on {release['tagPattern']}"]
 
 
-def api_json(url: str, token: str | None) -> object:
+def api_headers(token: str | None) -> dict[str, str]:
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
@@ -392,7 +394,11 @@ def api_json(url: str, token: str | None) -> object:
     }
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    request = urllib.request.Request(url, headers=headers)
+    return headers
+
+
+def api_json(url: str, token: str | None) -> object:
+    request = urllib.request.Request(url, headers=api_headers(token))
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             return json.loads(response.read().decode("utf-8"))
@@ -401,6 +407,44 @@ def api_json(url: str, token: str | None) -> object:
     except urllib.error.URLError as error:
         misconfigured(f"GitHub API {url} is unreachable: {error.reason}")
     return None
+
+
+FULL_SHA = re.compile(r"[0-9a-fA-F]{40}")
+
+
+def require_full_sha(sha: str) -> str:
+    """Reject anything but a full commit id.
+
+    GitHub records a workflow run's head_sha as the full 40-character id, so a
+    short sha never compares equal to a run and would be reported as a lane
+    that never ran.
+    """
+    if not FULL_SHA.fullmatch(sha):
+        misconfigured(
+            f"--sha {sha!r} is not a full 40-character hexadecimal commit id; "
+            "the gate needs the complete commit sha, and a run records its head_sha as the full id"
+        )
+    return sha.lower()
+
+
+def commit_exists(repo: str, sha: str, token: str | None) -> bool:
+    """True when the repository knows the commit; a 404 answers no, it is not an API failure."""
+    url = f"https://api.github.com/repos/{repo}/commits/{sha}"
+    request = urllib.request.Request(url, headers=api_headers(token))
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            response.read()
+        return True
+    except urllib.error.HTTPError as error:
+        # GitHub answers 404 for an unknown repository and 422 "No commit found
+        # for SHA" for a commit the repository does not contain; both mean the
+        # caller named a commit the gate cannot evaluate.
+        if error.code in (404, 422):
+            return False
+        misconfigured(f"GitHub API {url} returned HTTP {error.code}")
+    except urllib.error.URLError as error:
+        misconfigured(f"GitHub API {url} is unreachable: {error.reason}")
+    return False
 
 
 def latest_run_for_lane(runs: list[dict], lane_file: str) -> dict | None:
@@ -454,7 +498,10 @@ def check_lanes(repo: str, sha: str, manifest: dict, token: str | None, fixture:
             run = latest_run_for_lane(fixture_runs, lane_file)
         label = f"{lane['name']} ({Path(lane_file).name})"
         if run is None:
-            refuse(f"{label} has no run on {sha}; a missing run is not green")
+            refuse(
+                f"{label} has no run recorded on {sha}; a missing run is not green "
+                "(a run's head_sha is the full 40-character commit id)"
+            )
         status = run.get("status")
         conclusion = run.get("conclusion")
         if status != "completed":
@@ -468,7 +515,10 @@ def check_lanes(repo: str, sha: str, manifest: dict, token: str | None, fixture:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Decide whether a tiqian release may proceed.")
     parser.add_argument("--repo", help="owner/repository, for example tiqian-cjk/tiqian")
-    parser.add_argument("--sha", help="the release commit the lanes must have run on")
+    parser.add_argument(
+        "--sha",
+        help="the release commit the lanes must have run on, as the full 40-character commit id",
+    )
     parser.add_argument("--token", help="GitHub token with actions:read; unauthenticated reads work for public repositories")
     parser.add_argument("--runs-json", type=Path, help="read lane runs from a JSON fixture instead of the GitHub API (drills)")
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent, help="repository root")
@@ -479,16 +529,24 @@ def main(argv: list[str]) -> int:
     args = parse_args(argv)
     root = args.root.resolve()
     try:
+        # The commit id decides what the lane lookups mean, so reject an
+        # unusable one before reading the manifest or calling the API.
+        if not args.sha:
+            misconfigured("--sha is required to evaluate lane runs")
+        sha = require_full_sha(args.sha)
+        if not args.runs_json and not args.repo:
+            misconfigured("--repo is required when --runs-json is absent")
+        if not args.runs_json and not commit_exists(args.repo, sha, args.token):
+            misconfigured(
+                f"commit {sha} does not exist in {args.repo}; "
+                "an unknown commit is not the same as a commit whose lanes have no run"
+            )
         manifest = load_manifest(root)
         structural = check_static(root, manifest) + check_coverage(root, manifest)
         for line in structural:
             print(f"GATE: {line}")
-        if not args.sha:
-            misconfigured("--sha is required to evaluate lane runs")
-        if not args.runs_json and not args.repo:
-            misconfigured("--repo is required when --runs-json is absent")
-        print(f"GATE: evaluating {len(manifest['release']['requiredLanes'])} required lanes on {args.sha}")
-        lane_lines = check_lanes(args.repo or "", args.sha, manifest, args.token, args.runs_json)
+        print(f"GATE: evaluating {len(manifest['release']['requiredLanes'])} required lanes on {sha}")
+        lane_lines = check_lanes(args.repo or "", sha, manifest, args.token, args.runs_json)
         for line in lane_lines:
             print(f"GATE: {line}")
     except GateError as error:
