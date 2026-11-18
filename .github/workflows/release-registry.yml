@@ -2,8 +2,10 @@ name: Release to Registry
 
 # The registry write is the last job of .github/workflows/release.yml. The pack
 # job already produced the artifacts and the metadata tree, so this workflow
-# downloads them, checks the tree against the artifacts, publishes the release
-# assets, commits the tree and deploys the site. Every step needs the artifacts
+# downloads them, checks the tree against the artifacts, commits the tree and
+# deploys the site. The release page is published separately by
+# release-assets.yml, which depends on the pack job alone: a failed registry
+# lane must not keep the release page off the tag. Every step needs the artifacts
 # of that release run, so the workflow has no dispatch trigger of its own: a
 # failed release is retried with "Re-run failed jobs" on the release run.
 on:
@@ -57,14 +59,6 @@ jobs:
         # the digest it records, and every artifact must be named by the tree,
         # so a tree entry without an uploaded asset cannot pass.
         run: python3 tools/check-registry-tree.py --tree "$RUNNER_TEMP/registry-tree" --artifacts release-artifacts
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release-artifacts/*
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Commit metadata to registry repo
         run: |

@@ -351,6 +351,18 @@ jobs:
     with:
       version: ${{ needs.gate.outputs.version }}
 
+  # The release page carries the packed artifacts and the generated notes, so
+  # it waits for the pack job and nothing else. A lane that fails after the
+  # pack still leaves a release page on the tag.
+  release-assets:
+    name: Publish the release assets and notes
+    needs: [gate, pack]
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/release-assets.yml
+    secrets: inherit
+
   registry:
     needs: [gate, npm-precompute, npm-ffi, npm-core, npm-web-component, maven, publish]
     permissions:

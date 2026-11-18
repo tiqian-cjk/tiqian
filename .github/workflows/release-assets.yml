@@ -1,0 +1,31 @@
+name: Release assets
+
+# The GitHub release page carries this run's packed artifacts and the generated
+# notes, so it depends on the pack job alone. Keeping it here means a version
+# whose npm, Maven or registry lane failed still gets its release page, and the
+# page never waits on a registry write it does not need.
+on:
+  workflow_call:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    name: Publish the release assets and notes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-artifacts
+          path: release-artifacts
+
+      - name: Create the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-artifacts/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
