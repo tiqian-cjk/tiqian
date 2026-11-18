@@ -93,6 +93,7 @@
         "-D", "runtime-emit=runtime",
         "-D", "package-artifact-stem=tiqian-engine"
       ],
+      "kmpPublication": true,
       "package": { "name": "tiqian-engine", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
