@@ -326,6 +326,24 @@ jobs:
             fi
           done < <(find packages -name '*.tgz' -print0)
 
+      - name: Hold every precompute package to the npm publish contract
+        # Each archive is inspected before any of them reaches the registry:
+        # the manifest name, the version and a workspace range are contract
+        # violations, and the main package is installed so its entry loads.
+        # The platform packages carry a native binary, so they get the manifest
+        # and contents checks rather than an import that only works on the
+        # matching platform.
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          for tarball in $(find packages -maxdepth 2 -type f -name '*.tgz' | sort); do
+            python3 "${GITHUB_WORKSPACE}/tools/publish-contract.py" --archive "${tarball}"
+          done
+          main="$(find packages/main-package -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          bash "${GITHUB_WORKSPACE}/tools/check-npm-package.sh" "${main}" --expect @tiqian/precompute --entry @tiqian/precompute
+
       # Platform packages first: the main package lists them as optional
       # dependencies at the same version.
       - name: Publish each tarball

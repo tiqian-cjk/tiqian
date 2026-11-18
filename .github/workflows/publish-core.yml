@@ -141,6 +141,19 @@ jobs:
           tarball="$(find "${TIQIAN_RELEASE_ARTIFACT_DIR}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
           python3 "${GITHUB_WORKSPACE}/tools/publish-contract.py" --archive "${tarball}"
 
+      - name: Inspect the release package the way a consumer receives it
+        # The build step above proves the tarball matches its own checks. This
+        # step installs the archive into an empty project and imports the entry
+        # a consumer uses, so a manifest or file-list defect fails here instead
+        # of at a registry.
+        shell: bash
+        env:
+          TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-core-release
+        run: |
+          set -euo pipefail
+          tarball="$(find "${TIQIAN_RELEASE_ARTIFACT_DIR}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          bash "${GITHUB_WORKSPACE}/tools/check-npm-package.sh" "${tarball}" --expect @tiqian/core --entry @tiqian/core/snapshot-schema
+
       - name: Publish the verified tarball to alpha
         shell: bash
         run: |
