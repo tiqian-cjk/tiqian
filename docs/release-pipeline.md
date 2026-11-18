@@ -16,8 +16,8 @@ CI 打包五个目标生态的产物，写入 registry 仓库并部署站点。�
 `release-assets.yml` 与 `release-registry.yml`。
 
 GitHub Release 页面由 `release-assets.yml` 维护，只依赖 gate 与 pack：pack 一绿就把
-本次制品与自动生成的说明放到标签上，npm、Maven 或 registry 任一 lane 失败都不影响它。
-registry 元数据仍写在最后，前面的 lane 失败时不会写出元数据，也不会部署站点。
+本次制品与自动生成的说明放到标签上，npm、Maven 或 registry 任一步骤失败都不影响它。
+registry 元数据仍写在最后，前面的步骤失败时不会写出元数据，也不会部署站点。
 
 Maven Central 的部署确认仍在 Central Portal 由人执行。Maven 快照与 fork 的 npm 快照
 不属于按版本发版，继续使用 `workflow_dispatch`。
