@@ -197,6 +197,11 @@ fun Project.configureMavenPublishing(module: PublishedModule) {
                     "kotlinMultiplatform" -> ""
                     "jvm" -> "-jvm"
                     "android" -> "-android"
+                    // A com.android.library with singleVariant("release") has
+                    // exactly one publication and its name is the build type,
+                    // not a target. It carries the module coordinate itself, so
+                    // it must not append a variant suffix.
+                    "release" -> ""
                     else -> "-" + name.lowercase()
                 }
                 artifactId = module.artifactId + suffix
