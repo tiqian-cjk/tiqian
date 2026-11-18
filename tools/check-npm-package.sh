@@ -12,14 +12,15 @@
 #
 # Usage:
 #   tools/check-npm-package.sh <tarball> [--expect <name>] [--entry <specifier> ...]
-#   tools/check-npm-package.sh <tarball> --resolve-specifier @scope/pkg
+#                                          [--with <tarball> ...]
 #
 # --expect        the package name the release publishes; the manifest must match
 # --entry         a specifier to import after install; repeatable
-# --resolve-specifier
-#                 import the bare package name and report that the exports map
-#                 refuses a root entry, which a package with subpath exports only
-#                 does on purpose
+# --with          another archive of the same release, installed beside the
+#                 package so a package that depends on a sibling resolves it;
+#                 repeatable. The release publishes the siblings in dependency
+#                 order, so a lane that runs later finds them in the registry,
+#                 and a pre-release check supplies the archives instead.
 #
 # The scratch project lives under the caller's temporary directory and is
 # removed on exit. Exit status: 0 the archive is installable and loads,
@@ -29,11 +30,12 @@ set -uo pipefail
 tarball=""
 expect=""
 entries=()
+siblings=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --expect) expect="${2:-}"; shift 2 ;;
     --entry) entries+=("${2:-}"); shift 2 ;;
-    --resolve-specifier) expect="${2:-}"; shift 2 ;;
+    --with) siblings+=("${2:-}"); shift 2 ;;
     -*) echo "unknown option: $1" >&2; exit 2 ;;
     *) tarball="$1"; shift ;;
   esac
@@ -76,9 +78,14 @@ if printf '%s' "$manifest" | grep -q '"workspace:'; then
 fi
 
 printf '{"name":"package-check","version":"1.0.0","private":true,"type":"module"}\n' >"$work/project/package.json"
-if ! (cd "$work/project" && npm install --ignore-scripts --no-audit --no-fund --silent "$absolute" >/dev/null 2>&1); then
+install_args=("$absolute")
+for sibling in "${siblings[@]}"; do
+  [ -n "$sibling" ] || continue
+  install_args+=("$(cd "$(dirname "$sibling")" && pwd)/$(basename "$sibling")")
+done
+if ! (cd "$work/project" && npm install --ignore-scripts --no-audit --no-fund --silent "${install_args[@]}" >/dev/null 2>&1); then
   echo "  FAIL: npm install refused the archive"
-  (cd "$work/project" && npm install --ignore-scripts --no-audit --no-fund "$absolute" 2>&1 | tail -5 | sed 's/^/    /')
+  (cd "$work/project" && npm install --ignore-scripts --no-audit --no-fund "${install_args[@]}" 2>&1 | tail -5 | sed 's/^/    /')
   exit 1
 fi
 installed="$(node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));console.log(p.name)' "$work/project/node_modules/$name/package.json" 2>/dev/null)"
