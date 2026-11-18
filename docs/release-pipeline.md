@@ -83,7 +83,7 @@ npm 目标在 `boring.json` 的 `package` 块里有两个名字：`name` 是自�
 - `--resolve <dir> --version <v>`：把 `workspace:` 依赖范围改写成发布版本。npm 不会
   在 `npm pack` 时改写这个协议，不改写就会出现消费者装不上的 tarball。
 
-`scripts/staging-pipeline.sh` 的 `publish-contract` 阶段对每次 push 到 main 的 pack
+`tools/staging-pipeline.sh` 的 `publish-contract` 阶段对每次 push 到 main 的 pack
 产物跑这三条并装进一个空项目 import 各包的 `/runtime` 入口。
 
 `.github/workflows/release-gate.yml` 在解析发布版本之后运行
@@ -140,13 +140,13 @@ GitHub Release 下载前缀，`--registry-out` 取树的根目录。四个参数
 1. `python3 tools/compile-bundles.py --project boring.json` 对每个 bundle 的生成物运行一次
    目标编译器，逐 bundle 打印退出码；pack 已经编译的目标打印 `compiled by pack`。
    `.github/workflows/release.yml` 的 pack job 在打包之后运行这条命令，
-   `scripts/staging-pipeline.sh` 的 `compile-bundles` stage 运行同一条命令。
+   `tools/staging-pipeline.sh` 的 `compile-bundles` stage 运行同一条命令。
 2. `nix develop -c bash -c 'boring verify --project boring.json'` 生成全部 bundle、运行全部
    bundle 的生成测试，并比较参与比较的 bundle（driver `packages/driver/src/driver/Main.hx`
    的 `actionVerify`；`docs/cross-target-alignment.md:33` 把这条命令列为入口）。
    `.github/workflows/bundle-verification.yml` 运行这条命令，该 workflow 写在
    `release-manifest.json` 的 `release.requiredLanes` 里；标签 commit 上没有它的成功记录时
-   `tools/release-gate.py` 拒绝发版。`scripts/staging-pipeline.sh` 的 `verify` stage 运行
+   `tools/release-gate.py` 拒绝发版。`tools/staging-pipeline.sh` 的 `verify` stage 运行
    同一条命令。
 
 `boring.json` 声明 `compare: false` 的 6 个 protocol 与 shared bundle 不参与
@@ -298,7 +298,7 @@ crate 的 `Cargo.toml` 声明 `[features] default = []` 与 `f32 = []`。cargo �
 依赖的 feature 列表，索引条目必须带 `"features": {"f32": []}`，缺少时报
 `does not have that feature`。
 
-生成树的 f32 覆盖由 `scripts/test-engine-rust.sh` 提供：它对同一份生成树依次运行
+生成树的 f32 覆盖由 `tools/test-engine-rust.sh` 提供：它对同一份生成树依次运行
 `cargo test` 与 `cargo test --features f32`，`.github/workflows/ci-native-precompute.yml`
 的 rust job 调用该脚本。改动生成入口或 bundle 时，这一轮不依赖第二个 bundle。
 
@@ -502,7 +502,7 @@ Fetching tiqian.tiqian-engine-f32
 
 `.github/workflows/staging-pipeline.yml` 在 push 到 `main` 与手动 dispatch 时运行，
 用 staging 版本执行发版流程的打包、registry 树生成、cargo 消费与 Maven 本地发布，
-不推送任何远端、不打标签。命令实现放在 `scripts/staging-pipeline.sh`，本地检出运行
+不推送任何远端、不打标签。命令实现放在 `tools/staging-pipeline.sh`，本地检出运行
 同一条脚本即可复现。
 
 版本号取 `0.0.0-staging.<提交前七位>`，由 `tools/align-package-versions.py` 写入

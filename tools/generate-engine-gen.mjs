@@ -6,8 +6,8 @@
 //
 // Both directories are build products and are gitignored. Run the script
 // inside `nix develop` (the flake provides the boring driver):
-//   node scripts/generate-engine-gen.mjs        # Rust tree
-//   node scripts/generate-engine-gen.mjs ts     # JS tree
+//   node tools/generate-engine-gen.mjs        # Rust tree
+//   node tools/generate-engine-gen.mjs ts     # JS tree
 // The Rust build path runs the first form before `cargo build -p tiqian`;
 // the @tiqian/ffi prepack runs the second form before build:runtime.
 

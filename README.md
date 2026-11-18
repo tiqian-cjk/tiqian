@@ -168,7 +168,7 @@ demo 覆盖 Compose density，例如 Plasma 的 150% 缩放使用：
 的顺序执行：
 
 ```shell
-nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
 nix develop -c bun install --ignore-scripts
 ```
 

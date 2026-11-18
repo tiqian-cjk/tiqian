@@ -26,7 +26,7 @@ driver 与编译器固定在同一修订，进入开发 shell 时配置 `.haxeli
   并列出五个入口类型，`engine-rust` 在同样的根上补 `std.UStringException`。精度由
   bundle 的 `precision` 字段声明，输出目录与测试入口由 driver 推导。Haxe 不会仅凭
   `-cp` 编译目录下的全部类，所以每个 bundle 的模块根必须列全。
-- `scripts/setup-haxe-env.sh`（仓库根）：把 Unicode 数据同步进当前检出，见下节。
+- `tools/setup-haxe-env.sh`（仓库根）：把 Unicode 数据同步进当前检出，见下节。
 - `engine-haxe/out/`：生成物与测试结果的输出位置，由 `boring.json` 的 `outRoot` 与
   `resultsDir` 指定，不入库。
 
@@ -43,8 +43,8 @@ driver 与编译器固定在同一修订，进入开发 shell 时配置 `.haxeli
 数据文件。在仓库根目录执行一次即可补齐，已经存在的输入不做改动：
 
 ```shell
-bash scripts/setup-haxe-env.sh
-bash scripts/setup-haxe-env.sh /path/to/prepared/tiqian
+bash tools/setup-haxe-env.sh
+bash tools/setup-haxe-env.sh /path/to/prepared/tiqian
 ```
 
 脚本按顺序尝试三个源：参数给出的检出、`.haxelib/boring/git/tools/unicode-data/`、

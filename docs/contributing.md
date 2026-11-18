@@ -45,7 +45,7 @@ roadmap 不是贡献许可清单。修复明确的 bug、增加测试或改善�
 
 不确定改动应放在哪里时，可以先查看相关 ADR，或在 issue 中附上最小复现再讨论实现位置。
 
-新增可执行文件时，流程入口放在 `scripts/`，被入口调用的实现放在 `tools/`；入库的数据放在 `engine-haxe/data/`，手册放在 `docs/`。分工与例外见 [ADR 0061](adr/0061-scripts-tools-boundary.md)。
+新增可执行文件放在 `tools/`；入库的数据放在 `engine-haxe/data/`，手册放在 `docs/`。见 [ADR 0063](adr/0063-single-tools-directory.md)。
 
 ## 验证改动
 

@@ -4,7 +4,7 @@ name: Module tests
 #
 # Before this lane existed no workflow ran a module test: the only Gradle
 # invocations in .github/workflows were assemble + publishTiqianToMavenLocal
-# (publish.yml, also sourced by scripts/staging-pipeline.sh),
+# (publish.yml, also sourced by tools/staging-pipeline.sh),
 # publishTiqianToCentral and publishTiqianToCentralSnapshots. The JUnit suites
 # under platforms/ and demo/ therefore had no CI verdict at all, and the
 # instrumented and Apple test sources were never compiled.
@@ -67,7 +67,7 @@ jobs:
       # tree is missing, and the tree is gitignored, so every Gradle invocation
       # below needs this step first.
       - name: Generate the Kotlin engine sources
-        run: nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && boring gen kotlin-f32 --project boring.json'
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring gen kotlin-f32 --project boring.json'
 
       - name: Show the lane definition
         shell: bash

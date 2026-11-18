@@ -1,6 +1,6 @@
 # ADR 0061: 仓库脚本与工具的分工
 
-- Status: Accepted
+- Status: Superseded by [ADR 0063](0063-single-tools-directory.md)
 - Date: 2026-11-17
 - Relates: [ADR 0060](0060-single-release-entry-and-gate.md)（单一发版入口与发版前总检查）
 

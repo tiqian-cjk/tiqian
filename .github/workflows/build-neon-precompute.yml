@@ -182,20 +182,20 @@ jobs:
       - name: Allow unprivileged user namespaces
         run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
       - name: Generate the precompute engine tree with the flake toolchain
-        run: nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && node scripts/generate-engine-gen.mjs'
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs'
       - name: Generate the TypeScript engine tree with the flake toolchain
         # tiqian-protocol and tiqian-shared are workspace:* members under
         # engine-haxe/out/{protocol-ts,shared-ts}/gen whose package.json is
         # written by boring pack, and engine-gen/ feeds the @tiqian/ffi
         # runtime. The matrix spans Windows and macOS runners with no Nix, so
         # generate the trees once here and hand every leg the result.
-        run: nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && node scripts/generate-engine-gen.mjs ts'
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs ts'
       - name: Write the protocol and shared package manifests
         run: |
           export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
       - name: Upload the generated TypeScript workspace
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

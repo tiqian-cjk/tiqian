@@ -116,7 +116,7 @@ npm install --no-audit --no-fund
 (cd platforms/web/client/engine-runtime && npm test)
 ```
 
-Rust 侧的 `engine-gen` 是构建期生成物（`node scripts/generate-engine-gen.mjs`，产物在 `engine-haxe/out/engine-rust/gen`），不入库；生成器需要 `nix develop` 提供的 `boring` 驱动。先跑生成器再 `cargo build -p tiqian`。JS 侧的 `engine-gen` 仍入库，缺口见 `t-mwckjk9n-orhm`。
+Rust 侧的 `engine-gen` 是构建期生成物（`node tools/generate-engine-gen.mjs`，产物在 `engine-haxe/out/engine-rust/gen`），不入库；生成器需要 `nix develop` 提供的 `boring` 驱动。先跑生成器再 `cargo build -p tiqian`。JS 侧的 `engine-gen` 仍入库，缺口见 `t-mwckjk9n-orhm`。
 
 根目录 `npm install` 安装所有 workspace 依赖；预编译平台二进制的 optional dependencies 未发布到 npm 仓库，lock 文件不包含其解析条目，npm 11 以上版本执行 `npm ci` 会报错，因此统一使用 `npm install`。
 
@@ -156,7 +156,7 @@ Rust 侧的 `engine-gen` 是构建期生成物（`node scripts/generate-engine-g
 
 - 单个源码文件行数控制在 1000 行以内。新代码按功能拆分文件；既有文件超标时优先通过移动代码解耦，类文件拆分可通过定义同包 internal 扩展函数或按测试主题拆分子类实现，修改后必须保证模块测试全部通过且黄金数据无变动。
 - 入口文件仅负责接口暴露与组件装配，不存放具体业务逻辑实现；具体实现存放于按功能命名的源码文件中。
-- `scripts/` 只放流程入口，`tools/` 放被入口调用的实现；入库数据放在 `engine-haxe/data/`，手册放在 `docs/`，分工与例外见 [ADR 0061](docs/adr/0061-scripts-tools-boundary.md)。
+- 可执行文件只有一处：`tools/`。入库数据放在 `engine-haxe/data/`，手册放在 `docs/`，见 [ADR 0063](docs/adr/0063-single-tools-directory.md)。
 
 命名规范：
 

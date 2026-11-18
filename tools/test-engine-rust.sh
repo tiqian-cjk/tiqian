@@ -4,7 +4,7 @@
 # Round 1 is the default configuration. Round 2 selects the f32 cargo feature
 # on the same generated sources, so f32 needs neither a second generation entry
 # nor a second bundle. The generated tree comes from
-# node scripts/generate-engine-gen.mjs (bundle engine-rust); pass the crate
+# node tools/generate-engine-gen.mjs (bundle engine-rust); pass the crate
 # directory as the first argument (default: the bundle output).
 #
 # The Rust target harness is serial (Plan.hx pins --test-threads=1, and

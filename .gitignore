@@ -44,9 +44,9 @@ demo/web-history/*.tsbuildinfo
 /engine-haxe/out/
 /engine-haxe/smoke/
 
-# Build-time generated Rust engine tree (scripts/generate-engine-gen.mjs).
+# Build-time generated Rust engine tree (tools/generate-engine-gen.mjs).
 /platforms/web/server/precompute/engine-gen/
-# Build-time generated Rust protocol tree (scripts/generate-engine-gen.mjs).
+# Build-time generated Rust protocol tree (tools/generate-engine-gen.mjs).
 /platforms/web/server/precompute/protocol-gen/
 
 # Regenerated into the source tree by porting/instrument_tests.py

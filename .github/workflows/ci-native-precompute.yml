@@ -69,7 +69,7 @@ jobs:
       # build:runtime from regenerating the protocol-ts tree, which would drop
       # the package manifest written below.
       - name: Generate the TypeScript engine tree with the flake toolchain
-        run: nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && node scripts/generate-engine-gen.mjs ts'
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs ts'
       # tiqian-protocol and tiqian-shared are workspace members at
       # engine-haxe/out/{protocol-ts,shared-ts}/gen. boring gen writes source
       # only; the package.json each member needs is written by boring pack, so
@@ -81,7 +81,7 @@ jobs:
           export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
       - name: Install workspace dependencies
         working-directory: .
         # bun, not npm: the web consumers declare tiqian-protocol and
@@ -111,7 +111,7 @@ jobs:
         # The precompute crates read tiqian-engine-gen from the gitignored
         # engine-gen/ tree, and the boring driver reads tools/unicode-data/
         # at compile time, so stage it from the pinned checkout first.
-        run: nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && node scripts/generate-engine-gen.mjs'
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs'
       - name: Build and test the precompute workspace
         run: |
           cargo build --manifest-path platforms/web/server/precompute/Cargo.toml
@@ -119,7 +119,7 @@ jobs:
       - name: Test the generated engine with the f32 cargo feature
         # One generated tree serves both precisions: the second round selects
         # f32 through the cargo feature, so no second generation is needed.
-        run: bash scripts/test-engine-rust.sh platforms/web/server/precompute/engine-gen
+        run: bash tools/test-engine-rust.sh platforms/web/server/precompute/engine-gen
 
   # ADR 0053 F4 (DualLoweringStance): the shared golden corpus binds both
   # prepared-dom implementations to the same bytes. The rust lane runs inside
@@ -152,7 +152,7 @@ jobs:
           export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
       # Workspace install hoists @tiqian/* packages as symlinks; web-component and
       # precompute resolve them without link scripts. The build runs with
       # --noCheck: the @tiqian/ffi type declarations are npm build products
@@ -225,7 +225,7 @@ jobs:
       # the package manifest written below; the core type check after
       # build:runtime resolves tiqian-protocol through that manifest.
       - name: Generate the TypeScript engine tree with the flake toolchain
-        run: nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && node scripts/generate-engine-gen.mjs ts'
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs ts'
       # tiqian-protocol and tiqian-shared are workspace members at
       # engine-haxe/out/{protocol-ts,shared-ts}/gen. boring gen writes source
       # only; the package.json each member needs is written by boring pack, so
@@ -237,7 +237,7 @@ jobs:
           export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
       - name: Install workspace dependencies
         working-directory: .
         # bun, not npm: the web consumers declare tiqian-protocol and
@@ -250,7 +250,7 @@ jobs:
         # The precompute crates read tiqian-engine-gen from the gitignored
         # engine-gen/ tree, and the boring driver reads tools/unicode-data/
         # at compile time, so stage it from the pinned checkout first.
-        run: nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && node scripts/generate-engine-gen.mjs'
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs'
       - name: Build the @tiqian/ffi runtime with the flake toolchain
         working-directory: platforms/web/client/engine-runtime
         run: nix develop -c npm run build:runtime

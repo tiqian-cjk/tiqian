@@ -7,7 +7,7 @@ name: Staging pipeline
 # output below one staging directory and publishes nothing: no tag, no push to
 # an official registry, no R2 upload and no Central deployment.
 #
-# The work lives in scripts/staging-pipeline.sh so the same commands also run
+# The work lives in tools/staging-pipeline.sh so the same commands also run
 # in a developer checkout.
 on:
   push:
@@ -80,7 +80,7 @@ jobs:
         run: |
           unset ANDROID_SDK_ROOT
           export STAGING_VERSION="0.0.0-staging.${GITHUB_SHA::7}"
-          nix develop -c bash scripts/staging-pipeline.sh
+          nix develop -c bash tools/staging-pipeline.sh
 
       - name: Upload the staging report and registry tree
         if: always()

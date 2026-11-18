@@ -3,7 +3,7 @@
 #
 # Two entry points source this file instead of spelling the set out again:
 #   .github/workflows/publish.yml   the release, driven from a v*.*.* tag
-#   scripts/staging-pipeline.sh     the same steps on every push to main
+#   tools/staging-pipeline.sh     the same steps on every push to main
 #
 # Both must run the same set. The generated Kotlin test suite is not in this
 # list: it is not a JUnit suite, so publish.yml runs it through the driver

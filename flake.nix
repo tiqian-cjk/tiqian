@@ -123,7 +123,7 @@
             BORING_SWIFT_DYNAMIC_LINKER = pkgs.lib.optionalString (pkgs.stdenv.hostPlatform.isLinux && pkgs.stdenv.hostPlatform.isx86_64)
               "${pkgs.glibc}/lib/ld-linux-x86-64.so.2";
             # boring input source tree; its tools/unicode-data carries the
-            # Unicode 17.0.0 data files staged by scripts/setup-haxe-env.sh.
+            # Unicode 17.0.0 data files staged by tools/setup-haxe-env.sh.
             BORING_SOURCE = "${boring.outPath}";
             shellHook = ''
               # HAXELIB_PATH and the boring dev checkout belong to the flake
