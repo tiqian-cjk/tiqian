@@ -126,9 +126,8 @@
             # Unicode 17.0.0 data files staged by scripts/setup-haxe-env.sh.
             BORING_SOURCE = "${boring.outPath}";
             shellHook = ''
-              # HAXELIB_PATH, the boring dev checkout and the generated
-              # engine-haxe/targets/classes.hxml belong to the flake root:
-              # engine-haxe/targets/*.hxml reference `.haxelib/boring/git/...`
+              # HAXELIB_PATH and the boring dev checkout belong to the flake
+              # root: boring.json states the `.haxelib/boring/git/...` classpaths
               # relative to it, and CI runs `nix develop` from
               # platforms/web/client/engine-runtime. Resolve the root from the
               # invocation directory so a subdirectory invocation still stages
@@ -162,9 +161,6 @@
               haxelib dev reflaxe "${boring.inputs.reflaxe}" >/dev/null
               haxelib install format 3.8.0 >/dev/null
               haxelib install formatter 1.18.0 >/dev/null
-              if [ -f "$tq_flake_root/boring.json" ] && [ -d "$tq_flake_root/engine-haxe/targets" ]; then
-                (cd "$tq_flake_root" && boring roots engine --project boring.json --output engine-haxe/targets/classes.hxml) >/dev/null
-              fi
             '';
           };
         }

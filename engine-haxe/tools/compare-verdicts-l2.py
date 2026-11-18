@@ -51,11 +51,11 @@ Usage (from the worktree root):
   #    default and would be reported as failures that the legacy side does not
   #    have (task t-muaw8dab-s5fm records the budget).
   export BORING_TEST_TIMEOUT_MS=180000
-  haxe engine-haxe/targets/kotlin-f32.hxml
-  kotlinc -J-Xmx6g $(find engine-haxe/out/kotlin-gen-f32 -name '*.kt') \
+  nix develop -c boring gen kotlin-f32 --project boring.json
+  kotlinc -J-Xmx6g $(find engine-haxe/out/kotlin-f32/gen -name '*.kt') \
       -include-runtime -d /tmp/kf32-engine.jar
   kotlinc -J-Xmx6g -cp /tmp/kf32-engine.jar \
-      $(find engine-haxe/out/kotlin-gen-f32-tests -name '*.kt') -d /tmp/kf32-tests.jar
+      $(find engine-haxe/out/kotlin-f32/gen-tests -name '*.kt') -d /tmp/kf32-tests.jar
   BORING_TEST_RESULTS=$PWD/engine-haxe/out/test-results/kotlin-f32.jsonl \
       java -cp /tmp/kf32-engine.jar:/tmp/kf32-tests.jar TestMainKt
 

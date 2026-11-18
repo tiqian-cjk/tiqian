@@ -1,6 +1,0 @@
-# Stage A Rust generation entry. Precision is chosen at Rust compile time by
-# the cargo feature f32, so one entry covers both configurations. Run from the
-# worktree root:
-#   nix develop -c bash -c 'haxe engine-haxe/targets/rust.hxml'
-engine-haxe/targets/rust-common.hxml
--D rust-output=engine-haxe/out/rust-gen/src

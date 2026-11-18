@@ -6,7 +6,7 @@
 #   nix develop -c bash engine-haxe/tools/gates.sh [all|g4|tests|ts]
 #
 # Gates:
-#   g4      compile the engine with targets/kotlin-f32.hxml, print G4-RC
+#   g4      generate the kotlin-f32 bundle through the bundle driver, print G4-RC
 #   tests   compile the test bundle (tests/compile.hxml), then run it with
 #           bun and print the FAIL line count (want 0)
 #   ts      type-check generated TS trees under the project strict profile,
@@ -19,7 +19,7 @@ cd "$(git rev-parse --show-toplevel)"
 HERE="$(git rev-parse --show-toplevel)"
 
 run_g4() {
-  haxe engine-haxe/targets/kotlin-f32.hxml >/dev/null 2>&1
+  boring gen kotlin-f32 --project boring.json >/dev/null 2>&1
   echo "G4-RC=$?"
 }
 

@@ -42,7 +42,6 @@ demo/web-history/*.tsbuildinfo
 
 # Haxe engine module: generated outputs and local baselines, never committed
 /engine-haxe/out/
-/engine-haxe/targets/classes.hxml
 /engine-haxe/smoke/
 
 # Build-time generated Rust engine tree (scripts/generate-engine-gen.mjs).

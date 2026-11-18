@@ -3,7 +3,7 @@
 #
 # Layer 3 compares two targets that both run IEEE-754 binary64 arithmetic and
 # are generated from the same Haxe source: the Kotlin f64 target
-# (engine-haxe/targets/kotlin-f64.hxml) and a double-precision JavaScript
+# (bundle engine-kotlin-f64) and a double-precision JavaScript
 # reference. Both sides must be built from ONE source revision, so this script
 # always rebuilds the requested sides and records the revision it used.
 #
@@ -69,14 +69,14 @@ record_revision() {
 
 step_kotlin() {
   echo "=== kotlin: generate + compile + run (f64) $(date -Is)"
-  rm -rf engine-haxe/out/kotlin-gen-f64 engine-haxe/out/kotlin-gen-f64-tests engine-haxe/out/kotlin-traces
-  haxe engine-haxe/targets/kotlin-f64.hxml > "$OUT/gen-kotlin.log" 2>&1
-  echo "GEN-RC=$? kt-files=$(find engine-haxe/out/kotlin-gen-f64 -name '*.kt' | wc -l)"
-  "$KOTLINC" -J-Xmx6g $(find engine-haxe/out/kotlin-gen-f64 -name '*.kt') \
+  rm -rf engine-haxe/out/engine-kotlin-f64 engine-haxe/out/kotlin-traces
+  boring gen engine-kotlin-f64 --project boring.json > "$OUT/gen-kotlin.log" 2>&1
+  echo "GEN-RC=$? kt-files=$(find engine-haxe/out/engine-kotlin-f64/gen -name '*.kt' | wc -l)"
+  "$KOTLINC" -J-Xmx6g $(find engine-haxe/out/engine-kotlin-f64/gen -name '*.kt') \
       -include-runtime -d "$KOTLIN_ENGINE_JAR" > "$OUT/kotlinc-engine.log" 2>&1
   echo "ENGINE-RC=$? errors=$(grep -ac ' error: ' "$OUT/kotlinc-engine.log")"
   "$KOTLINC" -J-Xmx6g -cp "$KOTLIN_ENGINE_JAR" \
-      $(find engine-haxe/out/kotlin-gen-f64-tests -name '*.kt') \
+      $(find engine-haxe/out/engine-kotlin-f64/gen-tests -name '*.kt') \
       -d "$KOTLIN_TESTS_JAR" > "$OUT/kotlinc-tests.log" 2>&1
   echo "TESTS-RC=$? errors=$(grep -ac ' error: ' "$OUT/kotlinc-tests.log")"
   rm -f engine-haxe/out/test-results/kotlin-f64.jsonl

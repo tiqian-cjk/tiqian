@@ -6,34 +6,26 @@
 仓库根的 `boring.json` 声明每个 bundle 的目标、精度、源码范围与发布信息；
 settings.gradle.kts 以 `:boring-kotlin-f32` 引入 boring 发布工程里的 `:engine`
 模块，由它编译 `kotlin-f32` 生成的 Kotlin。tiqian 的 flake 把 boring 的
-driver 与编译器固定在同一修订，进入开发 shell 时配置 `.haxelib/` 并重新生成
-`engine-haxe/targets/classes.hxml`。
+driver 与编译器固定在同一修订，进入开发 shell 时配置 `.haxelib/`。
 
 ## 布局
 
 - `engine-haxe/src/`：Haxe 源码，含与引擎测试一一对应的测试类。
 - `engine-haxe/tests/`：Haxe 参照测试的入口 `Main.hx` 与编译清单
   `compile.hxml`、`compile-js-f64.hxml`。
-- `engine-haxe/targets/`：各目标的生成参数。`common.hxml` 提供共用的类路径与
-  宏，`kotlin-common.hxml`、`swift-common.hxml`、`rust-common.hxml` 补充各
-  目标的编译器与运行时参数，精度入口沿用这些设置。`protocol-*.hxml` 单列协议
-  根类，`rust.hxml` 供 `engine-rust` 配置使用。`classes.hxml` 由
-  `boring roots engine` 按 `boring.json` 的 `engine` source set 生成，生成结果
-  入库；`flake.nix` 的 shellHook 每次进入开发 shell 时重跑该命令
-  （`flake.nix:166`），`.gitignore` 第 45 行列了该路径，已跟踪的文件不受该行
-  影响。Haxe 不会仅凭 `-cp` 编译目录下的全部类。
-- `engine-haxe/textrange-kotlin.hxml`、`engine-haxe/smoke-kotlin.hxml`：不经
-  `boring.json` 的 Kotlin 生成清单，前者只列出 `org.tiqian.core.TextRange` 相关
-  类型，后者编译 boring 的 `boring.Fp16` 样例。
 - `engine-haxe/data/`：生成 Unicode 数据类所用的区间数据，来源与重造步骤见 [docs/unicode-data.md](../docs/unicode-data.md)。
 - `engine-haxe/tools/`：`compare-traces.py` 解析 trace 行，并用
   `EXCEPTION_NAME_ALIASES` 把 `raises exception=` 行上的 Kotlin 内建异常名对到
   对应的 `Tiqian` 前缀名；`f64-trace-compare.sh` 调用
   `compare-f64-traces.py` 比对 f32 与 f64 两侧的轨迹。`gates.sh`、`serial-test.sh`、
   `ts-gate.sh` 供本地检查使用。
-- `boring.json`（仓库根）：生成与测试配置的项目文件。`engine` source set 从六个
-  包发现 `*Test.hx`，并给出 `types` 列出的五个入口类型；各目标的引擎配置共用
-  它。生成与测试以此文件为准。
+- `boring.json`（仓库根）：唯一的生成入口。项目级 `haxeArgs` 给出各 bundle 共用的
+  `-lib`、`.haxelib/boring/git/samples` 类路径与全局宏；每个 bundle 的
+  `haxeArgs` 给出该目标的编译器类路径、`--macro` 与 `-D` 定义，协议与 shared 的 bundle
+  还在其中逐个列出自己要编译的模块。`sourceSets` 的 `engine` 从六个包发现 `*Test.hx`
+  并列出五个入口类型，`engine-rust` 在同样的根上补 `std.UStringException`。精度由
+  bundle 的 `precision` 字段声明，输出目录与测试入口由 driver 推导。Haxe 不会仅凭
+  `-cp` 编译目录下的全部类，所以每个 bundle 的模块根必须列全。
 - `scripts/setup-haxe-env.sh`（仓库根）：把 Unicode 数据同步进当前检出，见下节。
 - `engine-haxe/out/`：生成物与测试结果的输出位置，由 `boring.json` 的 `outRoot` 与
   `resultsDir` 指定，不入库。
@@ -58,7 +50,7 @@ bash scripts/setup-haxe-env.sh /path/to/prepared/tiqian
 脚本按顺序尝试三个源：参数给出的检出、`.haxelib/boring/git/tools/unicode-data/`、
 flake 注入的 `BORING_SOURCE`。flake 在修订变化时先把原有的
 `.haxelib/boring/git` 备份为 `.haxelib/boring/git.pre-flake-<时间戳>`，再复制固定
-修订的可写副本；各 HXML 里的 `.haxelib/boring/git/...` 类路径因此一直指向该修订。
+修订的可写副本；`boring.json` 里的 `.haxelib/boring/git/...` 类路径因此一直指向该修订。
 
 ## 生成与测试
 
@@ -83,14 +75,6 @@ nix develop -c boring test kotlin-f32 --project boring.json
 `boring compare --project boring.json`。`boring pack <配置 ID> --project boring.json`
 生成发布包，只有声明了 `package` 的配置可以打包，`verify --with-pack` 会一并打包
 这些配置。
-
-`classes.hxml` 由开发 shell 写出，生成结果入库。改动 `boring.json` 的 sourceSet 或
-新增测试类之后必须重跑下面的命令，否则它会与项目文件漂移；重跑后把该文件的改动
-一并提交，再直接调用 HXML：
-
-```shell
-boring roots engine --project boring.json --output engine-haxe/targets/classes.hxml
-```
 
 ## Haxe-JS f32 参照输出
 

@@ -5,8 +5,8 @@
 
 ## 三项目标对齐
 
-1. f32 生成物对原生 Kotlin：Haxe 生成的 Kotlin（`engine-haxe/targets/kotlin-f32.hxml`，
-   带 `-D float-precision=f32`）编译并运行后，其测试轨迹与原生 Kotlin 引擎的
+1. f32 生成物对原生 Kotlin：Haxe 生成的 Kotlin（`boring.json` 的 `kotlin-f32` bundle，
+   带 `precision: f32` 声明）编译并运行后，其测试轨迹与原生 Kotlin 引擎的
    基准轨迹逐类一致。这条判据回答「Haxe Kotlin 与原本 Kotlin 行为是否相同」。
    原生 Kotlin 引擎的基准轨迹（golden）已在 105/105 对齐达成后随 golden 机制
    一起删除；当前判定入口是 `boring test kotlin-f32` 的生成测试。
@@ -46,7 +46,7 @@ sin/cos/pow 在不同运行时的末位差按偏离处理，不作为豁免项�
 放宽容差会让 480 与 479.99982 这类差异通过比对，而这类差异在排版里会改变
 断行位置。
 
-配置 ID、入口 HXML、输出目录和打包元信息由仓库根目录的 `boring.json`
+配置 ID、生成参数、输出目录和打包元信息由仓库根目录的 `boring.json`
 指定。driver 为测试运行设置结果文件路径；手动运行生成物时才需要自行设置
 `BORING_TEST_RESULTS`。具体生成与测试步骤见
 [engine-haxe/README.md](../engine-haxe/README.md#生成与测试)。

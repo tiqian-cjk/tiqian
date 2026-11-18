@@ -107,52 +107,16 @@ def define_value(args: list, name: str):
     return None
 
 
-def roots_file_define(roots: pathlib.Path, name: str, seen: list, project_root: pathlib.Path):
-    """The value of -D <name>=<value> anywhere on a roots file include chain.
-
-    The driver resolves the same value for the Swift module name (Main.hx
-    rootsFileDefine): non-flag lines are includes resolved against the project
-    root first and the including file's directory second, and a later define
-    wins.
-    """
-    if not roots.is_file() or str(roots) in seen:
-        return None
-    seen.append(str(roots))
-    found = None
-    for raw in roots.read_text(encoding="utf-8").splitlines():
-        line = raw.split("#", 1)[0].strip()
-        if not line:
-            continue
-        tokens = line.split()
-        if tokens[0] in ("-D", "--define") and len(tokens) > 1:
-            if tokens[1].startswith(name + "="):
-                found = tokens[1].split("=", 1)[1]
-            elif tokens[1] == name and len(tokens) > 2:
-                found = " ".join(tokens[2:])
-            continue
-        if len(tokens) == 1 and not tokens[0].startswith("-"):
-            for base in (project_root, roots.parent):
-                candidate = (base / tokens[0]).resolve()
-                if candidate == roots or not candidate.is_file():
-                    continue
-                nested = roots_file_define(candidate, name, seen, project_root)
-                if nested is not None:
-                    found = nested
-    return found
-
-
-def swift_module(project_root: pathlib.Path, bundle: dict) -> str:
+# The library module name the generated sources compile to. The driver reads the
+# same define from the bundle arguments (Main.hx swiftTestImport:
+# -D swift-test-import=<module> in the effective haxeArgs).
+def swift_module(bundle: dict) -> str:
     module = define_value(bundle.get("haxeArgs") or [], "swift-test-import")
     if module:
         return module
-    roots_file = bundle.get("rootsFile")
-    if roots_file:
-        module = roots_file_define(project_root / roots_file, "swift-test-import", [], project_root)
-        if module:
-            return module
     raise Misconfigured(
         'bundle "%s": the swift bundle names no module; put -D swift-test-import=<module> '
-        "in its haxeArgs or on its roots file include chain" % bundle.get("id")
+        "in its haxeArgs" % bundle.get("id")
     )
 
 
@@ -200,7 +164,7 @@ def plan_command(project_root: pathlib.Path, out_root: pathlib.Path, bundle: dic
         files = [path for path in walk(gen, ".swift") if pathlib.Path(path).name != SWIFT_PACKAGE_MANIFEST]
         if not files:
             raise Misconfigured('bundle "%s": no generated .swift files under %s; run boring gen first' % (bundle_id, gen))
-        module = swift_module(project_root, bundle)
+        module = swift_module(bundle)
         build.mkdir(parents=True, exist_ok=True)
         output = build / ("lib" + module + (".dylib" if sys.platform == "darwin" else ".so"))
         import_args = []
