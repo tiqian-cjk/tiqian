@@ -35,13 +35,13 @@ git push origin v0.1.0-alpha07
 
 ### 版本号形式
 
-发布版本是点分的预发布标识符。标签 `v0.1.0-alpha.8` 对应包版本 `0.1.0-alpha.8`，
-最后一段 `8` 是纯数字，不带前导零。这个形式下 `0.1.0-alpha.9` 小于
+发布版本是点分的预发布标识符。标签 `v0.1.0-alpha.9` 对应包版本 `0.1.0-alpha.9`，
+最后一段 `9` 是纯数字，不带前导零。这个形式下 `0.1.0-alpha.9` 小于
 `0.1.0-alpha.10`；旧的单标识符形式按字符比较，到 `alpha100` 时会得到 `alpha100`
 小于 `alpha99`。
 
 两位补零的 `alphaNN` 形式（例如 `0.1.0-alpha07`）已经废弃，新版本只写点分纯数字。
-该版本的目录随 `v0.1.0-alpha.8` 发布从 registry 删除（`tools/merge-registry-tree.py`
+该版本的目录随 `v0.1.0-alpha.9` 发布从 registry 删除（`tools/merge-registry-tree.py`
 的 `--retire` 参数）。删除由用户确认：该版本只有一个消费者，用户会通知对方，所以
 「不删除 registry 里已发布版本」的规则在这个版本上不再适用。
 
@@ -51,7 +51,7 @@ npm 与 pub 的元数据、Maven 的 `maven-metadata.xml` 都取同一个包里�
 旧 `alphaNN` 条目还在 registry 里时，这个指针会停在旧条目，不带版本号的安装因此
 解析到旧版本。发版步骤以 `tools/merge-registry-tree.py --retire 0.1.0-alpha07`
 （`.github/workflows/release-registry.yml` 的 Commit metadata to registry repo
-一步）删除该版本目录，删除后指针指向 `0.1.0-alpha.8`。发版前
+一步）删除该版本目录，删除后指针指向 `0.1.0-alpha.9`。发版前
 逐个生态核对指针，例如：
 
 ```shell
@@ -60,9 +60,31 @@ npm view tiqian-engine dist-tags --registry https://registry.tiqian.org/npm/
 
 `--npm` 改写以下文件的 `version` 字段：根 `package.json` 的 `workspaces` 列出的每个
 npm 清单，`release-manifest.json` 中各发布单元与 `notInRelease` 列出的每个 npm 清单。
+
 同一次调用把仓库内部 `@tiqian/*` 依赖以及 `tiqian-engine`、`tiqian-protocol`、
-`tiqian-shared` 的依赖版本改成同一个值；写成 `workspace:` 的依赖不改写。改写结果需要
-随发布提交进入标签，标签与手写包版本之间就此对应。
+`tiqian-shared` 的依赖版本改成同一个值。写成 `workspace:` 的依赖不在这一步改写：它
+指向工作区里由 pack 生成的成员，发布工作流在 `npm pack` 之前用
+`tools/publish-contract.py` 把它改写成发布版本，改写结果与标签版本一致。
+
+### npm 发布规则
+
+npm 目标在 `boring.json` 的 `package` 块里有两个名字：`name` 是自建 registry 的
+目录名（例如 `tiqian-engine`），`npmName` 是 registry.npmjs.org 上的包名（例如
+`@tiqian/engine`）。boring 的 `Config.ecosystemName` 让 ts 目标写 `npmName`，所以
+发布出去的包名是 scoped 名，而 pack 写出的 tarball 文件名把 scoped 名里的 `/` 换成
+`-`、保留 `@`（`@tiqian-engine-<version>.tgz`）。`tools/release-matrix.py` 的
+`registryName` 与 artifact 名都按这个规则派生，dist-tag 步骤用 `registryName`。
+
+`tools/publish-contract.py` 是这条规则的唯一检查者，三种用法：
+
+- `--artifacts <dir> --version <v>`：矩阵点名的 tarball 必须在目录里，manifest 名
+  必须等于矩阵的 `registryName`，任何依赖字段不得残留 `workspace:` 范围。
+- `--archive <file>`：单个 tarball 的同样检查，发布工作流在 `npm pack` 之后调用。
+- `--resolve <dir> --version <v>`：把 `workspace:` 依赖范围改写成发布版本。npm 不会
+  在 `npm pack` 时改写这个协议，不改写就会出现消费者装不上的 tarball。
+
+`scripts/staging-pipeline.sh` 的 `publish-contract` 阶段对每次 push 到 main 的 pack
+产物跑这三条并装进一个空项目 import 各包的 `/runtime` 入口。
 
 `.github/workflows/release-gate.yml` 在解析发布版本之后运行
 `tools/align-package-versions.py --check "${GITHUB_REF_NAME#v}"`。标签 commit 上的

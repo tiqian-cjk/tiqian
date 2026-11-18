@@ -16,8 +16,8 @@
 # Usage: scripts/staging-pipeline.sh [--bundles "id ..."] [--stages "name ..."] [--root <dir>]
 #
 # Stages (default: all of them): align, pack, compile-bundles, collect-artifacts,
-# registry-tree, staging-isolation, maven-artifact-ids, cargo-consume,
-# maven-local-publish, maven-local-repo, verify, summary.
+# publish-contract, registry-tree, staging-isolation, maven-artifact-ids,
+# cargo-consume, maven-local-publish, maven-local-repo, verify, summary.
 #
 # Environment:
 #   STAGING_VERSION              version to pack with; defaults to 0.0.0-staging.<short sha>
@@ -41,7 +41,7 @@ cd "$REPO_ROOT" || exit 2
 # shellcheck source=tools/release-gradle-tasks.sh
 . "$REPO_ROOT/tools/release-gradle-tasks.sh"
 
-DEFAULT_STAGES="align pack compile-bundles collect-artifacts registry-tree staging-isolation maven-artifact-ids cargo-consume maven-local-publish maven-local-repo verify summary"
+DEFAULT_STAGES="align pack compile-bundles collect-artifacts publish-contract registry-tree staging-isolation maven-artifact-ids cargo-consume maven-local-publish maven-local-repo verify summary"
 BUNDLES_OVERRIDE=""
 STAGES="$DEFAULT_STAGES"
 while [ "$#" -gt 0 ]; do
@@ -210,6 +210,47 @@ step_collect() {
     --tree "$TREE" --source engine-haxe/out --artifacts "$ARTIFACTS" || return 1
   ( cd "$ARTIFACTS" && sha256sum -- * | sort > SHA256SUMS )
   ls -la "$ARTIFACTS"
+}
+
+# The publish half of the release ran only on a tag, so the artifact file
+# name, the registry name and the dependency ranges a consumer resolves were
+# all first exercised by publishing. This stage holds the packed npm archives
+# to that contract, then installs them into an empty project and imports their
+# runtime entry points, so a publish defect fails on a push to main.
+step_publish_contract() {
+  local tarballs=() consumer="$ROOT/npm-consume"
+  python3 tools/publish-contract.py --artifacts "$ARTIFACTS" --version "$STAGING_VERSION" || return 1
+  mapfile -t tarballs < <(ls "$ARTIFACTS"/@tiqian-*.tgz 2>/dev/null)
+  if [ "${#tarballs[@]}" -eq 0 ]; then
+    echo "the pack wrote no npm archive; the publish contract has nothing to install"
+    return 1
+  fi
+  rm -rf "$consumer"
+  mkdir -p "$consumer"
+  printf '{"name":"staging-consumer","version":"1.0.0","private":true,"type":"module"}\n' >"$consumer/package.json"
+  (
+    cd "$consumer" || return 1
+    npm_config_cache="$ROOT/npm-cache" npm install --ignore-scripts --no-audit --no-fund "${tarballs[@]}"
+  ) || return 1
+  (
+    cd "$consumer" || return 1
+    node --input-type=module -e '
+      import { readdirSync } from "node:fs";
+      let failed = 0;
+      for (const name of readdirSync("node_modules/@tiqian")) {
+        const spec = "@tiqian/" + name.replace(/^@tiqian\//, "") + "/runtime";
+        try {
+          const module = await import(spec);
+          console.log(spec + " ok, exports " + Object.keys(module).length);
+        } catch (error) {
+          failed++;
+          console.error(spec + " failed: " + (error.code || error.message));
+        }
+      }
+      if (failed) process.exit(1);
+    '
+  ) || return 1
+  echo "installed and imported ${#tarballs[@]} npm archive(s) in $consumer"
 }
 
 # The same check the release-registry job runs before it commits metadata.
@@ -439,6 +480,7 @@ run_named_step() {
     pack) run_step pack step_pack ;;
     compile-bundles) run_step compile-bundles step_compile_bundles ;;
     collect-artifacts) run_step collect-artifacts step_collect ;;
+    publish-contract) run_step publish-contract step_publish_contract ;;
     registry-tree) run_step registry-tree step_check_tree ;;
     staging-isolation) run_step staging-isolation step_isolation ;;
     maven-artifact-ids) run_step maven-artifact-ids step_maven_artifact_ids ;;

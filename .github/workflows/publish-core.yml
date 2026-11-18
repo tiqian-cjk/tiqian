@@ -110,6 +110,16 @@ jobs:
         working-directory: platforms/web/client/core
         run: npm run verify:package
 
+      - name: Resolve the workspace dependency ranges to the release version
+        working-directory: platforms/web/client/core
+        # npm copies a manifest as written and never rewrites the workspace
+        # protocol, so a tarball packed from the repository manifest hands the
+        # consumer a range its install cannot resolve. This lane publishes
+        # this package's version, and tools/publish-contract.py is the single
+        # writer for the rewrite; the check below refuses a tarball that still
+        # carries a workspace range.
+        run: python3 "$GITHUB_WORKSPACE/tools/publish-contract.py" --resolve . --version "${{ steps.release.outputs.version }}"
+
       - name: Build and pack the release tarball
         working-directory: platforms/web/client/core
         env:
@@ -121,6 +131,15 @@ jobs:
           npm run build
           npm pack --pack-destination "${TIQIAN_RELEASE_ARTIFACT_DIR}"
           test "$(find "${TIQIAN_RELEASE_ARTIFACT_DIR}" -maxdepth 1 -name '*.tgz' | wc -l)" -eq 1
+
+      - name: Hold the release tarball to the npm publish contract
+        shell: bash
+        env:
+          TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-core-release
+        run: |
+          set -euo pipefail
+          tarball="$(find "${TIQIAN_RELEASE_ARTIFACT_DIR}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          python3 "${GITHUB_WORKSPACE}/tools/publish-contract.py" --archive "${tarball}"
 
       - name: Publish the verified tarball to alpha
         shell: bash

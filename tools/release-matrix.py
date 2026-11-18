@@ -115,19 +115,42 @@ def artifact_stem(bundle: dict) -> str:
     return define_value(bundle, "package-artifact-stem") or package_of(bundle).get("name", "")
 
 
+def published_name(bundle: dict, ecosystem: str) -> str:
+    """The name the ecosystem registry resolves the package under.
+
+    boring reads the ecosystem-specific name for the target
+    (`Config.ecosystemName`): an npm target publishes the `npmName` when the
+    bundle states one, so @tiqian/engine reaches registry.npmjs.org even
+    though the shared `name` is tiqian-engine. The registry name and the
+    artifact file name both follow the name boring writes into the manifest;
+    a matrix that guesses the shared name disagrees with the pack output.
+    """
+    package = package_of(bundle)
+    if ecosystem == "npm":
+        return package.get("npmName") or package.get("name", "")
+    if ecosystem in ("maven", "swift"):
+        return artifact_stem(bundle)
+    if ecosystem == "pub":
+        return package.get("name", "").replace("-", "_")
+    return package.get("name", "")
+
+
 def file_stem(bundle: dict, ecosystem: str) -> str:
+    """The install artifact's file name stem, as the pack writes it.
+
+    `PackageArtifacts` joins the artifact stem with the version and replaces
+    "/" with "-", so the scoped npm name @tiqian/engine is packed as
+    @tiqian-engine-<version>.tgz. The Pub archive names its package with
+    underscores; the packed pubspec carries the same form.
+    """
+    if ecosystem == "npm":
+        return published_name(bundle, "npm").replace("/", "-")
     stem = artifact_stem(bundle)
-    # The Pub archive names its package with underscores; the packed pubspec
-    # carries the same form.
     return stem.replace("-", "_") if ecosystem == "pub" else stem
 
 
 def registry_name(bundle: dict, ecosystem: str) -> str:
-    if ecosystem in ("maven", "swift"):
-        return artifact_stem(bundle)
-    if ecosystem == "pub":
-        return package_of(bundle).get("name", "").replace("-", "_")
-    return package_of(bundle).get("name", "")
+    return published_name(bundle, ecosystem)
 
 
 def artifact_paths(project: dict, bundle: dict, ecosystem: str, version: str) -> list:

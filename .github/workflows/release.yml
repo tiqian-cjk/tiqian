@@ -155,7 +155,11 @@ jobs:
   # the Gradle publication tree (docs/release-pipeline-convergence.md 6.5).
   publish:
     name: Publish ${{ matrix.bundle }} (${{ matrix.ecosystem }})
-    needs: [matrix, pack]
+    # The npm lanes run first because they are the only lanes whose registry
+    # authorization is unproven, and every write here is irreversible. Ordering
+    # the irreversible steps behind the least certain one keeps a version from
+    # existing in some registries and not others when a lane fails.
+    needs: [matrix, pack, npm-precompute]
     permissions:
       contents: read
       actions: read
@@ -353,7 +357,10 @@ jobs:
     secrets: inherit
 
   maven:
-    needs: [gate]
+    # See the publish job: the Central staging upload waits for the npm chain
+    # so a version cannot accumulate staging deployments from a release that
+    # never published its npm packages.
+    needs: [gate, npm-precompute]
     permissions:
       contents: read
       actions: read
