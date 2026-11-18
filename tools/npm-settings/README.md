@@ -1,51 +1,40 @@
 # npm trusted publisher switches
 
-The release lanes authenticate npm with the workflow's OIDC identity, so no
-long-lived token is involved. Two switches on each package's trusted publisher
-govern what that identity may do:
+Every npm write in the release authenticates with the workflow's OIDC identity,
+so no token is involved. Two switches on each package's trusted publisher
+decide what that identity may do:
 
-- **npm publish** uploads the release tarballs.
-- **npm dist-tag** moves the `latest` tag after the upload. npm disables this
-  switch by default, so a package whose trusted publisher only allows publish
-  publishes fine and then fails at the dist-tag step.
+- **Allow npm publish** uploads the release tarballs.
+- **Allow npm dist-tag** moves the `latest` tag after the upload. npm ships
+  this switch off, so a connection that only allows publish publishes the
+  package and then fails at the dist-tag step.
 
-`apply-trusted-publishers.mjs` reports those switches and, with `--apply`,
-turns the missing ones on. It drives the npmjs.com UI because the switches are
-maintainer-only; there is no API for them.
+Both live behind the npmjs.com UI, in the package's Settings tab under
+"Trusted Publisher", inside the Edit dialog of the connection. There is no API
+for them, so they are changed through the Chromium MCP with
+`mcp__rea__capture_browser_scenario` attached to a signed-in browser.
 
-## Before you run it
+## The procedure
 
-- Playwright must be installed outside the repository:
-  `npm install --prefix .task-tmp/npm-settings playwright`
-- The Chromium binary comes from `CHROMIUM_PATH`, defaulting to
-  `/run/current-system/sw/bin/chromium`.
-- The profile directory keeps the npm session between runs, so the sign-in and
-  the one-time code are only needed once per profile.
+1. The browser must already be signed in to npmjs.com; the scenario attaches to
+   an existing tab and never handles the sign-in.
+2. Copy `enable-dist-tag.scenario.json`, replace `<package>`, `<target id>`
+   and `<otp>`, and run it once per package.
+3. Verify by inspecting the same tab afterwards: the connection card lists its
+   allowed actions, and `npm dist-tag` must appear beside `npm publish`.
 
-## Running it
+## Two constraints that the scenario cannot work around
 
-Report first; it changes nothing and records what each page actually shows:
+- **The code must be in the same run.** `capture_browser_scenario` navigates to
+  `start_url` before the first action, so a save that waits for a one-time code
+  cannot be finished by a second scenario: the navigation discards the pending
+  save. The `fill-otp` step therefore sits in the same action list.
+- **A passkey cannot be typed.** If the account challenges with a passkey rather
+  than a one-time code, the step has to be completed on the device; the
+  scenario stops at the challenge and the report shows the step that failed.
 
-```shell
-NODE_PATH=.task-tmp/npm-settings/node_modules \
-  node tools/npm-settings/apply-trusted-publishers.mjs --report
-```
+## Current state
 
-Then apply, with the one-time code in hand:
-
-```shell
-NODE_PATH=.task-tmp/npm-settings/node_modules \
-  node tools/npm-settings/apply-trusted-publishers.mjs --apply --otp 123456
-```
-
-Both modes write `.task-tmp/npm-settings-report.json`. A package whose switches
-stay `null` did not expose the control under the locator the script tried; the
-report's `attempts` list shows which page each package resolved to, and the run
-stops before touching a switch it could not read.
-
-## After it runs
-
-The dist-tag step in `tools/npm-dist-tag.sh` reads the current tags before it
-writes, so a release that already published a version and failed at the tag can
-be re-run without republishing. `tools/npm-publish.sh` compares the local
-tarball's sha1 with the published shasum for the same reason.
+`packages.json` lists the eleven packages the `release.yml` entrypoint
+publishes. A connection shows "Pending validation" until its first successful
+publish; validation is not the same as the allowed-actions switches.
