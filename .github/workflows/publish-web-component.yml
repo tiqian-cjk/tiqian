@@ -50,7 +50,7 @@ jobs:
           package-manager-cache: false
 
       - name: Use an OIDC-capable npm CLI
-        run: npm install --global npm@11.12.1
+        run: npm install --global npm@11.21.0
 
       - name: Validate release tag
         id: release
@@ -146,7 +146,7 @@ jobs:
             echo "::error::Verified release tarball is missing"
             exit 1
           fi
-          npm publish "${tarball}" --ignore-scripts --access public --tag alpha
+          bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
 
   sync-latest:
     name: Synchronize latest dist-tag
@@ -154,6 +154,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Trusted publishing authenticates the dist-tag write; no token is read.
+      id-token: write
     steps:
       - name: Set up Node.js 24
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
@@ -163,20 +165,15 @@ jobs:
           package-manager-cache: false
 
       - name: Use the release npm CLI
-        run: npm install --global npm@11.12.1
+        run: npm install --global npm@11.21.0
 
       - name: Point latest at the published alpha
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_DIST_TAG_TOKEN }}
           RELEASE_VERSION: ${{ needs.publish-alpha.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "${NODE_AUTH_TOKEN}" ]]; then
-            echo "::error::NPM_DIST_TAG_TOKEN is not configured"
-            exit 1
-          fi
-          npm dist-tag add "@tiqian/web-component@${RELEASE_VERSION}" latest
+          bash "${GITHUB_WORKSPACE}/tools/npm-dist-tag.sh" --package @tiqian/web-component --version "${RELEASE_VERSION}" --tag latest
 
       - name: Verify alpha and latest
         env:

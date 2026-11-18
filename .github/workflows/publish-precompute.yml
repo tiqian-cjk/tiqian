@@ -301,7 +301,7 @@ jobs:
           package-manager-cache: false
 
       - name: Use an OIDC-capable npm CLI
-        run: npm install --global npm@11.12.1
+        run: npm install --global npm@11.21.0
 
       - name: Download all package artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -352,10 +352,10 @@ jobs:
           set -euo pipefail
           for name in binary-package-darwin-arm64 binary-package-linux-arm64-gnu binary-package-linux-x64-gnu binary-package-win32-x64-msvc; do
             tarball="$(find "packages/$name" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
-            npm publish "${tarball}" --ignore-scripts --access public --tag alpha
+              bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
           done
           tarball="$(find packages/main-package -maxdepth 1 -type f -name '*.tgz' -print -quit)"
-          npm publish "${tarball}" --ignore-scripts --access public --tag alpha
+          bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
 
   sync-latest:
     name: Synchronize latest dist-tags
@@ -363,6 +363,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Trusted publishing authenticates the dist-tag writes; no token is read.
+      id-token: write
     env:
       RELEASE_VERSION: ${{ needs.validate.outputs.version }}
     steps:
@@ -374,25 +376,21 @@ jobs:
           package-manager-cache: false
 
       - name: Use the release npm CLI
-        run: npm install --global npm@11.12.1
+        run: npm install --global npm@11.21.0
 
       - name: Point latest at the published alpha
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_DIST_TAG_TOKEN }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "${NODE_AUTH_TOKEN}" ]]; then
-            echo "::error::NPM_DIST_TAG_TOKEN is not configured"
-            exit 1
-          fi
           for package in \
             @tiqian/precompute \
             @tiqian/precompute-darwin-arm64 \
             @tiqian/precompute-linux-arm64-gnu \
             @tiqian/precompute-linux-x64-gnu \
             @tiqian/precompute-win32-x64-msvc; do
-            npm dist-tag add "${package}@${RELEASE_VERSION}" latest
+            bash "${GITHUB_WORKSPACE}/tools/npm-dist-tag.sh" --package "${package}" --version "${RELEASE_VERSION}" --tag latest
           done
 
       - name: Verify alpha and latest

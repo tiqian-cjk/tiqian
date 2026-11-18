@@ -228,7 +228,7 @@ jobs:
           package-manager-cache: false
       - name: Use an OIDC-capable npm CLI
         if: matrix.ecosystem == 'npm'
-        run: npm install --global npm@11.12.1
+        run: npm install --global npm@11.21.0
       - name: Publish the npm package to alpha
         if: matrix.ecosystem == 'npm'
         shell: bash
@@ -243,35 +243,16 @@ jobs:
             echo "::error::expected exactly one npm tarball for this bundle, found ${#tarballs[@]}"
             exit 1
           fi
-          npm publish "${tarballs[0]}" --ignore-scripts --access public --tag alpha
+          bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarballs[0]}" --tag alpha
       - name: Point the latest dist-tag at the published version
         if: matrix.ecosystem == 'npm'
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_DIST_TAG_TOKEN }}
           PACKAGE: ${{ matrix.registryName }}
           RELEASE_VERSION: ${{ matrix.version }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "${NODE_AUTH_TOKEN}" ]]; then
-            echo "::error::NPM_DIST_TAG_TOKEN is not configured"
-            exit 1
-          fi
-          npm dist-tag add "${PACKAGE}@${RELEASE_VERSION}" latest
-          for attempt in {1..12}; do
-            tags="$(npm view "${PACKAGE}" dist-tags --json)"
-            if DIST_TAGS="${tags}" node --input-type=module -e '
-              const tags = JSON.parse(process.env.DIST_TAGS);
-              const version = process.env.RELEASE_VERSION;
-              if (tags.alpha !== version || tags.latest !== version) process.exit(1);
-            '; then
-              echo "alpha and latest both point to ${RELEASE_VERSION}"
-              exit 0
-            fi
-            if [[ "${attempt}" -lt 12 ]]; then sleep 5; fi
-          done
-          echo "::error::npm dist-tags did not converge on ${RELEASE_VERSION}"
-          exit 1
+          bash "${GITHUB_WORKSPACE}/tools/npm-dist-tag.sh" --package "${PACKAGE}" --version "${RELEASE_VERSION}" --tag latest
       - name: Upload the Swift archive to the registry storage
         if: matrix.ecosystem == 'swift'
         env:

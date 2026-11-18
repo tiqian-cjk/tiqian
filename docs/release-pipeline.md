@@ -86,6 +86,27 @@ npm 目标在 `boring.json` 的 `package` 块里有两个名字：`name` 是自�
 `tools/staging-pipeline.sh` 的 `publish-contract` 阶段对每次 push 到 main 的 pack
 产物跑这三条并装进一个空项目 import 各包的 `/runtime` 入口。
 
+### npm 鉴权与 dist-tag
+
+npm 的写入全部走 OIDC trusted publishing，没有任何长期 token。每个发布工作流装
+`npm@11.21.0`：dist-tag 的 OIDC 支持要求 11.21.0 或更高，publish 在更早的版本上也能用，
+但一个版本号避免两处漂移。发布 job 与 dist-tag job 都需要 `id-token: write`。
+
+每个包的 trusted publisher 必须同时允许 `npm publish` 与 `npm dist-tag`。后者在 npm 侧
+默认关闭，只开 publish 的包会发布成功、随后在 dist-tag 一步失败。
+`tools/npm-settings/apply-trusted-publishers.mjs` 读取并打开这两个开关，走 npmjs.com 的
+界面，因为这两项只有维护者能改，没有 API。
+
+两个脚本承担可重跑：
+
+- `tools/npm-publish.sh`：先读 `<name>@<version>` 的 `dist.shasum`。已发布且与本地
+  tarball 的 sha1 相同则跳过上传；不同则报错终止，因为重跑不能送上另一个产物。
+- `tools/npm-dist-tag.sh`：先读 dist-tags。已经不指向该版本才写，写入后用最多 12 次
+  读取确认收敛。重跑一次已发布但后续失败的发布因此不会卡在鉴权上。
+
+`snapshot-precompute.yml` 是 fork 快照工作流，发布 `-snapshot` 版本的集成包，触发标签与
+scope 都和本流程不同，不在这一套 trusted publisher 配置内。
+
 `.github/workflows/release-gate.yml` 在解析发布版本之后运行
 `tools/align-package-versions.py --check "${GITHUB_REF_NAME#v}"`。标签 commit 上的
 任何 npm 清单或内部依赖版本不等于标签版本时，发布在开始之前终止。
