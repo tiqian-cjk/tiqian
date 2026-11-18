@@ -50,7 +50,7 @@ jobs:
           package-manager-cache: false
 
       - name: Use an OIDC-capable npm CLI
-        run: npm install --global npm@11.21.0
+        run: npm install --global npm@11.12.1
 
       - name: Validate release tag
         id: release
@@ -165,7 +165,7 @@ jobs:
           package-manager-cache: false
 
       - name: Use the release npm CLI
-        run: npm install --global npm@11.21.0
+        run: npm install --global npm@11.12.1
 
       - name: Point latest at the published alpha
         env:
@@ -173,6 +173,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          npm install --global npm@11.21.0
           bash "${GITHUB_WORKSPACE}/tools/npm-dist-tag.sh" --package @tiqian/web-component --version "${RELEASE_VERSION}" --tag latest
 
       - name: Verify alpha and latest

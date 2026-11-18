@@ -228,7 +228,7 @@ jobs:
           package-manager-cache: false
       - name: Use an OIDC-capable npm CLI
         if: matrix.ecosystem == 'npm'
-        run: npm install --global npm@11.21.0
+        run: npm install --global npm@11.12.1
       - name: Publish the npm package to alpha
         if: matrix.ecosystem == 'npm'
         shell: bash
@@ -252,6 +252,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          npm install --global npm@11.21.0
           bash "${GITHUB_WORKSPACE}/tools/npm-dist-tag.sh" --package "${PACKAGE}" --version "${RELEASE_VERSION}" --tag latest
       - name: Upload the Swift archive to the registry storage
         if: matrix.ecosystem == 'swift'

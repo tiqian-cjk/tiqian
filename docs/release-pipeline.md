@@ -88,9 +88,13 @@ npm 目标在 `boring.json` 的 `package` 块里有两个名字：`name` 是自�
 
 ### npm 鉴权与 dist-tag
 
-npm 的写入全部走 OIDC trusted publishing，没有任何长期 token。每个发布工作流装
-`npm@11.21.0`：dist-tag 的 OIDC 支持要求 11.21.0 或更高，publish 在更早的版本上也能用，
-但一个版本号避免两处漂移。发布 job 与 dist-tag job 都需要 `id-token: write`。
+npm 的写入全部走 OIDC trusted publishing，没有任何长期 token。发布 job 与 dist-tag job
+都需要 `id-token: write`。
+
+CLI 版本按步骤分：打包与发布步骤保持 `npm@11.12.1`，因为 `npm pack` 的字节随 CLI 版本
+变化，换版本会让同一个版本的 tarball sha1 变掉；dist-tag 步骤在执行前单独装
+`npm@11.21.0`，那是第一个能用 OIDC 管理 dist-tag 的版本。`npm pack` 在同一棵树里可复现，
+两次打包的 sha1 相同，这一点是上面那条规则的前提。
 
 每个包的 trusted publisher 必须同时允许 `npm publish` 与 `npm dist-tag`。后者在 npm 侧
 默认关闭，只开 publish 的包会发布成功、随后在 dist-tag 一步失败。
