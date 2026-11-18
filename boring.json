@@ -15,6 +15,20 @@
 // The flake pins the boring compiler and driver to one revision. Each Rust
 // package declares its own metadata below; the generator does not borrow
 // tiqian's license from the boring repository.
+//
+// Argument order matters where roots are concerned: the driver sorts a source
+// set's roots, while module roots written in haxeArgs keep their order, and that
+// order reaches the generated text. engine-rust therefore takes its own source
+// set: the rust target also roots the std.UStringException sample module. The
+// three swift bundles state -D swift-test-import=TiqianEngine in their haxeArgs,
+// and the driver reads the library module name from those same arguments.
+//
+// Keep every comment above this line. The staging pipeline parses the text from
+// the first opening brace as strict JSON, so a comment inside the object body is
+// fatal to it while the driver's own parser would accept the file. The leading
+// paragraph must hold no brace either: the pipeline starts at the first one it
+// finds, and a brace inside a comment starts the parse inside that comment.
+//
 {
   "outRoot": "engine-haxe/out",
   "resultsDir": "engine-haxe/out/test-results",
@@ -50,8 +64,6 @@
         }
       ]
     },
-    // engine-rust repeats the engine roots because the rust target additionally roots the
-    // std.UStringException sample module, and the driver sorts one source set's roots.
     "engine-rust": {
       "types": [
         "runtime.UString",
@@ -137,8 +149,6 @@
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
     },
-    // swift-test-import names the library module the swift test recipe links;
-    // the driver reads it from these arguments, the generated module is TiqianEngine.
     {
       "id": "swift-f32",
       "target": "swift",
@@ -160,8 +170,6 @@
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
     },
-    // swift-test-import names the library module the swift test recipe links;
-    // the driver reads it from these arguments, the generated module is TiqianEngine.
     {
       "id": "swift-f64",
       "target": "swift",
@@ -437,8 +445,6 @@
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
     },
-    // swift-test-import names the library module the swift test recipe links;
-    // the driver reads it from these arguments, the generated module is TiqianEngine.
     {
       "id": "protocol-swift",
       "compare": false,

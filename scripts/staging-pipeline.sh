@@ -120,9 +120,11 @@ step_align() {
 
 # The output root boring.json declares. The driver resolves it against the
 # project file's directory and this script cds to REPO_ROOT, so the value is
-# used as written.
+# used as written. The strict-JSON rule this stage needs lives in
+# tools/project-file.py, the same rule its --check asserts in the bundle
+# verification lane, so the staging reader and the checker cannot drift apart.
 boring_out_root() {
-  python3 -c 'import json, pathlib; text = pathlib.Path("boring.json").read_text(); print(json.loads(text[text.index("{"):])["outRoot"])'
+  python3 tools/project-file.py --out-root
 }
 
 # The directory the kotlin-f32 pack action fills with the nine engine Maven
