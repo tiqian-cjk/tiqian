@@ -93,6 +93,13 @@ jobs:
       - name: Pack every bundle and write the registry tree
         shell: bash
         run: |
+          # Gradle refuses to configure any Android project when ANDROID_HOME
+          # and ANDROID_SDK_ROOT name different roots. The image exports
+          # ANDROID_SDK_ROOT=/usr/local/lib/android/sdk while flake.nix exports
+          # the pinned SDK as ANDROID_HOME, so drop the image variable before
+          # the devShell starts, as publish.yml:158 and staging-pipeline.yml:77
+          # already do for their Gradle steps.
+          unset ANDROID_SDK_ROOT
           export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
@@ -103,7 +110,10 @@ jobs:
       # the archiving steps cannot see fails the release here instead of
       # surfacing after the artifacts were uploaded.
       - name: Compile every bundle's generated tree
-        run: nix develop -c bash -c 'python3 tools/compile-bundles.py --project boring.json'
+        shell: bash
+        run: |
+          unset ANDROID_SDK_ROOT
+          nix develop -c bash -c 'python3 tools/compile-bundles.py --project boring.json'
       - name: Collect the artifacts
         shell: bash
         run: |
