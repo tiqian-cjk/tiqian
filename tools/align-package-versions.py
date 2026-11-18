@@ -121,6 +121,92 @@ def manifest_problems(root, manifests, names, version):
     return problems
 
 
+def lockfile_entries(root, manifests):
+    """The package-lock.json entries that mirror an npm manifest.
+
+    npm records each workspace package's version in the root lockfile, and an
+    install resolves the lockfile copy. A release that moves the manifests and
+    leaves the lockfile behind publishes manifests whose lock disagrees, so the
+    lockfile is part of the same rewrite.
+    """
+    lock = root / "package-lock.json"
+    if not lock.is_file():
+        return lock, None
+    document = read_json(lock)
+    packages = document.get("packages")
+    if not isinstance(packages, dict):
+        return lock, None
+    entries = []
+    for path in manifests:
+        relative = path.parent.relative_to(root).as_posix()
+        entry = packages.get(relative)
+        if isinstance(entry, dict) and "version" in entry:
+            entries.append((relative, entry))
+    return lock, document
+
+
+def lockfile_problems(root, manifests, names, version):
+    lock, document = lockfile_entries(root, manifests)
+    if document is None:
+        return []
+    problems = []
+    for path in manifests:
+        relative = path.parent.relative_to(root).as_posix()
+        entry = document["packages"].get(relative)
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("version") != version:
+            problems.append(
+                "%s: package-lock.json holds version %s, expected %s"
+                % (relative, entry.get("version"), version)
+            )
+        for field in DEPENDENCY_FIELDS:
+            dependencies = entry.get(field)
+            if not isinstance(dependencies, dict):
+                continue
+            for dependency, specifier in dependencies.items():
+                if dependency not in names or not isinstance(specifier, str):
+                    continue
+                if specifier.startswith("workspace:"):
+                    continue
+                if specifier != version:
+                    problems.append(
+                        "%s: package-lock.json %s/%s is %s, expected %s"
+                        % (relative, field, dependency, specifier, version)
+                    )
+    return problems
+
+
+def align_lockfile(root, manifests, names, version):
+    lock, document = lockfile_entries(root, manifests)
+    if document is None:
+        return 0
+    changed = 0
+    for path in manifests:
+        relative = path.parent.relative_to(root).as_posix()
+        entry = document["packages"].get(relative)
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("version") != version:
+            entry["version"] = version
+            changed += 1
+        for field in DEPENDENCY_FIELDS:
+            dependencies = entry.get(field)
+            if not isinstance(dependencies, dict):
+                continue
+            for dependency, specifier in dependencies.items():
+                if dependency not in names or not isinstance(specifier, str):
+                    continue
+                if specifier.startswith("workspace:"):
+                    continue
+                if specifier != version:
+                    dependencies[dependency] = version
+                    changed += 1
+    if changed:
+        lock.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return changed
+
+
 def align_manifests(root, manifests, names, version):
     for path in manifests:
         document = read_json(path)
@@ -170,6 +256,7 @@ def main(argv):
 
     if mode == "check":
         problems = manifest_problems(ROOT, manifests, names, version)
+        problems.extend(lockfile_problems(ROOT, manifests, names, version))
         for problem in problems:
             print("MISMATCH: %s" % problem)
         if problems:
@@ -179,8 +266,9 @@ def main(argv):
         return 0
 
     align_manifests(ROOT, manifests, names, version)
+    locked = align_lockfile(ROOT, manifests, names, version)
     if mode == "npm":
-        print("aligned %d npm manifests to %s" % (len(manifests), version))
+        print("aligned %d npm manifests and %d lockfile entries to %s" % (len(manifests), locked, version))
         return 0
     bundles = align_project(project, version)
     print("aligned %d packages to %s" % (bundles, version))

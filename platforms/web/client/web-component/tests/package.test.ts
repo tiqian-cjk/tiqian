@@ -44,7 +44,9 @@ test("published package ships the TS runtime modules and no repository-only bin"
   ]);
   assert.equal(manifest.bin, undefined);
   assert.equal(manifest.exports["./build-runtime"], undefined);
-  assert.deepEqual(manifest.dependencies, { "@tiqian/core": "0.1.0-alpha.6" });
+  // The workspace pins the sibling to the release version, so the assertion
+  // follows the manifest instead of naming a version a release has to edit.
+  assert.deepEqual(manifest.dependencies, { "@tiqian/core": manifest.version });
   for (const removed of ["precompute.js", "precompute-html.js", "precompute-fonts.js", "precompute-node-fonts.js"]) {
     assert.equal(manifest.files.includes(removed), false, `${removed} must not ship`);
   }
@@ -65,7 +67,13 @@ test("published package ships the TS runtime modules and no repository-only bin"
   const coreManifest = JSON.parse(await readFile(new URL("../../core/package.json", import.meta.url), "utf8"));
   assert.equal(coreManifest.name, "@tiqian/core");
   assert.equal(coreManifest.version, manifest.version);
-  assert.deepEqual(coreManifest.dependencies, { "@tiqian/ffi": "0.1.0-alpha.1" });
+  // The generated protocol and shared trees are workspace members until
+  // tools/publish-contract.py resolves them for the packed archive.
+  assert.deepEqual(coreManifest.dependencies, {
+    "@tiqian/ffi": coreManifest.version,
+    "@tiqian/protocol": "workspace:*",
+    "@tiqian/shared": "workspace:*",
+  });
   assert.ok(coreManifest.files.includes("src/"));
   assert.equal(coreManifest.files.includes("runtime/"), false, "the Kotlin bundle directory is retired");
   assert.ok(coreManifest.files.includes("src/engine/layout-worker.js"));
@@ -91,8 +99,11 @@ test("the ffi release workflow mirrors the web-component one for the engine pack
     "utf8",
   );
 
-  assert.match(workflow, /tags:\s*\n\s*- "@tiqian\/ffi@\*"/u);
-  assert.match(workflow, /working-directory: ffi\/js\/npm/u);
+  // The lane runs from the release entrypoint and from a manual dispatch on
+  // the release tag; it no longer triggers on a per-package tag.
+  assert.match(workflow, /workflow_call:/u);
+  assert.match(workflow, /workflow_dispatch:/u);
+  assert.match(workflow, /working-directory: platforms\/web\/client\/engine-runtime/u);
   assert.match(workflow, /TIQIAN_RELEASE_ARTIFACT_DIR/u);
   assert.match(workflow, /tiqian-ffi-release/u);
   assert.match(workflow, /npm publish "\$\{tarball\}" --ignore-scripts --access public --tag alpha/u);
@@ -106,7 +117,8 @@ test("the release workflow publishes one verified artifact and synchronizes both
     "utf8",
   );
 
-  assert.match(workflow, /tags:\s*\n\s*- "@tiqian\/web-component@\*"/u);
+  // See the ffi lane: one release entrypoint drives every package lane.
+  assert.match(workflow, /workflow_call:/u);
   assert.match(workflow, /id-token: write/u);
   assert.match(workflow, /TIQIAN_RELEASE_ARTIFACT_DIR/u);
   assert.match(workflow, /npm publish "\$\{tarball\}" --ignore-scripts --access public --tag alpha/u);
