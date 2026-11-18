@@ -19,7 +19,7 @@ driver 与编译器固定在同一修订，进入开发 shell 时配置 `.haxeli
   对应的 `Tiqian` 前缀名；`f64-trace-compare.sh` 调用
   `compare-f64-traces.py` 比对 f32 与 f64 两侧的轨迹。`gates.sh`、`serial-test.sh`、
   `ts-gate.sh` 供本地检查使用。
-- `boring.json`（仓库根）：唯一的生成入口。项目级 `haxeArgs` 给出各 bundle 共用的
+- `boring.json`（仓库根）：唯一的生成入口。`boring.json` 的 `haxeArgs` 给出各 bundle 共用的
   `-lib`、`.haxelib/boring/git/samples` 类路径与全局宏；每个 bundle 的
   `haxeArgs` 给出该目标的编译器类路径、`--macro` 与 `-D` 定义，协议与 shared 的 bundle
   还在其中逐个列出自己要编译的模块。`sourceSets` 的 `engine` 从六个包发现 `*Test.hx`

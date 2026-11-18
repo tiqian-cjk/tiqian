@@ -6,11 +6,10 @@ Dart）下的编译错误，作为跨目标行为对齐（见
 普查对象是 engine-haxe/out/ 下由 boring 从 Haxe 源码翻译出的目标语言代码目录。
 原生 `engine` 模块的 `./gradlew :engine:jvmTest` 无失败，不在本文范围内。
 
-本文是 2026-09 的测量记录，其中提到的手写生成入口（`engine-haxe/targets/*.hxml`、
-`engine-haxe/targets/classes.hxml`）与按这些入口写出的命令属于当时的状态，已在任务
-`refactor/boring-json-single-entry` 中删除；现在的生成入口只有仓库根的 `boring.json`，
-命令见 [engine-haxe/README.md](../engine-haxe/README.md#生成与测试)。本文的命令与计数
-保持原样，用来对照当时的检出，不按当前入口重写。
+本文是 2026-09 的测量记录。文中提到的生成入口与按这些入口写出的命令属于当时的
+检出，已在任务 `refactor/boring-json-single-entry` 中删除；现在的生成入口只有仓库根的
+`boring.json`，命令见 [engine-haxe/README.md](../engine-haxe/README.md#生成与测试)。
+本文的命令与计数保持原样，用来对照当时的检出，不按当前入口重写。
 
 当前状态（2026-09-10 傍晚，基线 tiqian `3f609c0f` 加 boring `a2f2bdc2`，主树直接复测）：八个生成命令退出码全部为 0。kotlin f32 176 条 / f64 187 条；ts 337 条；rust f32 3402 条 / f64 3174 条；swift gen 侧 f32 0 条 / f64 1 条、tests 侧 f64 41 条；dart 317 条（生成侧 269 条、测试侧 48 条）。两日累计：总错误 6546 降至 4394（kotlin 减半、dart tests 减 88%、ts 减半）。已解决并复测确认的修复项自 2026-09-07 起从第 11 节清单删除，只留第 12 节进度行。
 
