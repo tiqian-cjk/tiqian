@@ -14,9 +14,17 @@ name: Bundle verification
 #                   compiler the pack action does not run (Swift, Dart, Rust),
 #                   one verdict per bundle.
 #
-# The step order matters: verify generates the trees first, then
-# compile-bundles compiles them. The compile step still runs when verify is
-# red, so one red bundle does not hide the compile verdicts of the others.
+# The project-file check runs first: the bundle driver accepts whole-line //
+# comments anywhere in boring.json, while the staging pipeline parses the text
+# from the first brace as strict JSON (tools/project-file.py states both rules).
+# A comment inside the object body therefore passes every driver lane here and
+# fails only in the staging lane, after the release is already packed, so this
+# lane rejects it before verify spends the generation time.
+#
+# The step order matters: the project-file check runs before verification,
+# verify generates the trees, then compile-bundles compiles them. The compile
+# step still runs when verify is red, so one red bundle does not hide the
+# compile verdicts of the others.
 on:
   push:
     branches: ["main"]
@@ -58,6 +66,9 @@ jobs:
         run: |
           nix develop -c bash -c "mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/"
           ls -l tools/unicode-data
+
+      - name: Check the project file parses as strict JSON after the first brace
+        run: python3 tools/project-file.py --check --project boring.json
 
       - name: Generate, test and compare every bundle
         run: nix develop -c bash -c 'bash scripts/setup-haxe-env.sh && boring verify --project boring.json'

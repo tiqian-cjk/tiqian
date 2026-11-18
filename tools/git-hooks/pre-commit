@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
-# tiqian pre-commit hook: staged Markdown files must pass the Chinese
-# documentation style self-check (tools/doc-style/check.py). Any hit
-# rejects the commit; rewrite the wording or ask for an allowlist entry.
+# tiqian pre-commit hook. Two checks run on what the commit stages:
+#
+#   staged Markdown     the Chinese documentation style self-check
+#                       (tools/doc-style/check.py). Any hit rejects the commit;
+#                       rewrite the wording or ask for an allowlist entry.
+#   staged boring.json  its object body must stay strict JSON from the first
+#                       brace (tools/project-file.py). The bundle driver
+#                       tolerates whole-line comments anywhere, the staging
+#                       pipeline does not, so a body comment would pass every
+#                       local driver run and fail in that lane.
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
@@ -16,9 +23,14 @@ fi
 # spaces in paths; the *.md pathspec matches at any depth.
 mapfile -d '' staged < <(git diff --cached --name-only -z --diff-filter=ACMR -- '*.md')
 
-if [ "${#staged[@]}" -eq 0 ]; then
-  exit 0
+if [ "${#staged[@]}" -gt 0 ]; then
+  echo "pre-commit: doc-style check on ${#staged[@]} staged markdown file(s)"
+  python3 tools/doc-style/check.py "${staged[@]}"
 fi
 
-echo "pre-commit: doc-style check on ${#staged[@]} staged markdown file(s)"
-python3 tools/doc-style/check.py "${staged[@]}"
+mapfile -d '' staged_project < <(git diff --cached --name-only -z --diff-filter=ACMR -- boring.json)
+
+if [ "${#staged_project[@]}" -gt 0 ]; then
+  echo "pre-commit: boring.json strict-JSON check"
+  python3 tools/project-file.py --check --project boring.json
+fi
