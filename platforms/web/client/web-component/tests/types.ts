@@ -91,10 +91,14 @@ export interface FakeFragment extends FakeNodeBase {
 
 export type FakeAttributeTuple = [string, string] & FakeAttributeEntry;
 
-export interface FakeAttributesMap extends Map<string, string> {
-  [Symbol.iterator](): IterableIterator<FakeAttributeTuple>;
-  entries(): IterableIterator<FakeAttributeTuple>;
-}
+/**
+ * A DOM attribute list iterates [name, value] tuples that also carry name and
+ * value properties. Declaring that richer tuple as the Map iterator makes the
+ * fake structurally incompatible with Map<string, string>, which every
+ * consumer here expects, so the interface keeps the Map shape and the fake
+ * supplies the extra properties at run time.
+ */
+export interface FakeAttributesMap extends Map<string, string> {}
 
 export interface FakeInlineStyle {
   _values: Map<string, string>;
