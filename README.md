@@ -1,9 +1,7 @@
-<h1>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/tiqian_wordmark_with_pinyin_and_logo_white.svg">
-    <img src="docs/images/tiqian_wordmark_with_pinyin_and_logo_black.svg" alt="提椠 Tíqiàn" height="48">
-  </picture>
-</h1>
+<p>
+  <img src="docs/images/tiqian_wordmark_with_pinyin_and_logo_white.svg#gh-dark-mode-only" alt="提椠 Tíqiàn" height="48">
+  <img src="docs/images/tiqian_wordmark_with_pinyin_and_logo_black.svg#gh-light-mode-only" alt="提椠 Tíqiàn" height="48">
+</p>
 
 [![Maven Central](https://img.shields.io/maven-central/v/org.tiqian/tiqian-compose?label=maven)](https://central.sonatype.com/artifact/org.tiqian/tiqian-compose)
 [![npm version](https://img.shields.io/npm/v/%40tiqian%2Fweb-component?label=npm)](https://www.npmjs.com/package/@tiqian/web-component)
@@ -14,10 +12,10 @@
 它在各平台的字体与绘制能力之上，统一处理中文正文里的字体选择、
 断行、避头尾、标点空间、两端对齐、行内空间分配与行间注。
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/sample-paragraph-white.svg">
-  <img src="docs/images/sample-paragraph-black.svg" alt="提椠简体中文横排样张，包含拼音行间注与着重号">
-</picture>
+<p>
+  <img src="docs/images/sample-paragraph-white.svg#gh-dark-mode-only" alt="提椠简体中文横排样张，包含拼音行间注与着重号">
+  <img src="docs/images/sample-paragraph-black.svg#gh-light-mode-only" alt="提椠简体中文横排样张，包含拼音行间注与着重号">
+</p>
 
 ## 当前状态
 
