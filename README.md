@@ -1,7 +1,7 @@
-<p>
+<h1>
   <img src="docs/images/tiqian_wordmark_with_pinyin_and_logo_white.svg#gh-dark-mode-only" alt="提椠 Tíqiàn" height="48">
   <img src="docs/images/tiqian_wordmark_with_pinyin_and_logo_black.svg#gh-light-mode-only" alt="提椠 Tíqiàn" height="48">
-</p>
+</h1>
 
 [![Maven Central](https://img.shields.io/maven-central/v/org.tiqian/tiqian-compose?label=maven)](https://central.sonatype.com/artifact/org.tiqian/tiqian-compose)
 [![npm version](https://img.shields.io/npm/v/%40tiqian%2Fweb-component?label=npm)](https://www.npmjs.com/package/@tiqian/web-component)
