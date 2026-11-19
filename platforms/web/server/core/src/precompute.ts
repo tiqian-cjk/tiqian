@@ -442,7 +442,7 @@ function computeRenderArtifact(
  * the font-contract lanes keep their own freezeEntry call and never reach this
  * helper.
  */
-function backfillRenderFields(entry: PreparedEntry): PreparedEntry {
+export function backfillRenderFields(entry: PreparedEntry): PreparedEntry {
   if (entry.status !== "prepared") {
     return freezeEntry(entry);
   }
@@ -480,7 +480,10 @@ export async function createPrecomputer(options: CreatePrecomputerOptions): Prom
       ).map(backfillRenderFields);
     },
     async prepareFontContract(input: FontContractInput): Promise<PreparedEntry> {
-      return freezeEntry(
+      // A contract entry joins the same corpus as the snapshot entries, and
+      // the corpus gate requires the derived render fields on every member, so
+      // this lane derives them the same way.
+      return backfillRenderFields(
         parse<PreparedEntry>(addon.prepareFontContract(handle, JSON.stringify(input ?? {}))),
       );
     },
@@ -489,7 +492,7 @@ export async function createPrecomputer(options: CreatePrecomputerOptions): Prom
     ): Promise<PreparedEntry[]> {
       return parse<PreparedEntry[]>(
         addon.prepareFontContracts(handle, JSON.stringify(Array.from(inputs ?? []))),
-      ).map(freezeEntry);
+      ).map(backfillRenderFields);
     },
     close(): void {
       addon.closePrecomputer(handle);
