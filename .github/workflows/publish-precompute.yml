@@ -384,10 +384,10 @@ jobs:
           set -euo pipefail
           for name in binary-package-darwin-arm64 binary-package-linux-arm64-gnu binary-package-linux-x64-gnu binary-package-win32-x64-msvc; do
             tarball="$(find "packages/$name" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
-              bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
+              bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag latest
           done
           tarball="$(find packages/main-package -maxdepth 1 -type f -name '*.tgz' -print -quit)"
-          bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
+          bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag latest
 
   sync-latest:
     name: Synchronize latest dist-tags

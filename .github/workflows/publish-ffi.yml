@@ -161,7 +161,7 @@ jobs:
             echo "::error::Verified release tarball is missing"
             exit 1
           fi
-          bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
+          bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag latest
 
   sync-latest:
     name: Synchronize latest dist-tag
