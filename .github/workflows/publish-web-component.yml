@@ -126,15 +126,6 @@ jobs:
         working-directory: platforms/web/client/engine-runtime
         run: nix develop -c npm run build:runtime
 
-      - name: Resolve the workspace ranges in the core manifest
-        # The consumer check packs @tiqian/core from this tree, and its manifest
-        # lists the protocol and shared packages as workspace:*, which npm
-        # refuses outside the workspace.
-        working-directory: ${{ github.workspace }}
-        env:
-          RELEASE_VERSION: ${{ steps.release.outputs.version }}
-        run: python3 tools/publish-contract.py --resolve platforms/web/client/core --version "${RELEASE_VERSION}"
-
       - name: Build and verify the release tarball
         env:
           TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-web-component-release

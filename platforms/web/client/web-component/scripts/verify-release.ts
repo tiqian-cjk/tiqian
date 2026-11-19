@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -91,13 +91,31 @@ try {
   const ffiFilename: string | undefined = packedFfi?.[0]?.filename;
   if (!ffiFilename) throw new Error("ReleaseConsumerPackFailed: npm pack returned no ffi filename");
 
-  const packedCore: PackedList = JSON.parse(runNpm([
-    "pack",
-    "--ignore-scripts",
-    "--json",
-    "--pack-destination",
-    consumerRoot,
-  ], { cwd: resolve(packageRoot, "../core"), capture: true })) as PackedList;
+  // The packed artifacts carry the release versions: core's manifest lists the
+  // protocol and shared packages as workspace:*, which npm refuses outside the
+  // workspace, so pack it with the ranges resolved and put the source back.
+  const coreRoot: string = resolve(packageRoot, "../core");
+  const coreManifestPath: string = resolve(coreRoot, "package.json");
+  const coreManifestSource: string = await readFile(coreManifestPath, "utf8");
+  const releaseVersion: string = (JSON.parse(
+    await readFile(resolve(packageRoot, "package.json"), "utf8"),
+  ) as { version: string }).version;
+  let packedCore: PackedList;
+  try {
+    await writeFile(
+      coreManifestPath,
+      coreManifestSource.replaceAll('"workspace:*"', `"${releaseVersion}"`),
+    );
+    packedCore = JSON.parse(runNpm([
+      "pack",
+      "--ignore-scripts",
+      "--json",
+      "--pack-destination",
+      consumerRoot,
+    ], { cwd: coreRoot, capture: true })) as PackedList;
+  } finally {
+    await writeFile(coreManifestPath, coreManifestSource);
+  }
   const coreFilename: string | undefined = packedCore?.[0]?.filename;
   if (!coreFilename) throw new Error("ReleaseConsumerPackFailed: npm pack returned no core filename");
 
