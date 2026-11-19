@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,6 +39,17 @@ function runNpm(arguments_: readonly string[], options: NpmOptions = {}): string
 
 interface PackedItem {
   readonly filename?: string;
+}
+
+/** The bundle archive boring pack wrote, if this lane generated it. */
+async function firstArchive(directory: string): Promise<string | null> {
+  try {
+    const entries = await readdir(directory);
+    const name = entries.find((entry) => entry.endsWith(".tgz"));
+    return name === undefined ? null : resolve(directory, name);
+  } catch {
+    return null;
+  }
 }
 
 type PackedList = readonly PackedItem[];
@@ -90,6 +101,19 @@ try {
   const coreFilename: string | undefined = packedCore?.[0]?.filename;
   if (!coreFilename) throw new Error("ReleaseConsumerPackFailed: npm pack returned no core filename");
 
+  // @tiqian/core depends on the protocol and shared packages, which the
+  // release publishes from the pack matrix after this lane. Pack the two
+  // archives this lane generated so the consumer resolves them here instead of
+  // a registry that does not have them yet.
+  const siblings: string[] = [];
+  for (const bundle of ["protocol-ts", "shared-ts"]) {
+    const directory: string = resolve(packageRoot, "../../../../engine-haxe/out", bundle);
+    const archive: string | null = await firstArchive(directory);
+    if (archive !== null) {
+      siblings.push(archive);
+    }
+  }
+
   await writeFile(
     resolve(consumerRoot, "package.json"),
     `${JSON.stringify({ private: true, type: "module" }, null, 2)}\n`,
@@ -103,6 +127,7 @@ try {
     state.tarballPath,
     resolve(consumerRoot, coreFilename),
     resolve(consumerRoot, ffiFilename),
+    ...siblings,
   ], { cwd: consumerRoot });
 
   // Stylesheet single-source-of-truth: web-component tarball must not carry styles.css,
