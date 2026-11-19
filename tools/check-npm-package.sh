@@ -21,6 +21,10 @@
 #                 repeatable. The release publishes the siblings in dependency
 #                 order, so a lane that runs later finds them in the registry,
 #                 and a pre-release check supplies the archives instead.
+# --manifest-only check the manifest, version, file list and entry files
+#                 without touching the network; use it for a package whose
+#                 dependencies are not on the registry yet at this point in the
+#                 release, where the calling lane already ran the loader test.
 # --no-import     install the archive and check the manifest, but do not import
 #                 an entry. A package whose entry loads a native binary for one
 #                 platform can only be imported on that platform, so its lane
@@ -36,12 +40,14 @@ expect=""
 entries=()
 siblings=()
 skip_import=0
+manifest_only=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --expect) expect="${2:-}"; shift 2 ;;
     --entry) entries+=("${2:-}"); shift 2 ;;
     --with) siblings+=("${2:-}"); shift 2 ;;
     --no-import) skip_import=1; shift ;;
+    --manifest-only) manifest_only=1; shift ;;
     -*) echo "unknown option: $1" >&2; exit 2 ;;
     *) tarball="$1"; shift ;;
   esac
@@ -81,6 +87,14 @@ fi
 if printf '%s' "$manifest" | grep -q '"workspace:'; then
   echo "  FAIL: the manifest still carries a workspace range"
   status=1
+fi
+
+if [ "$manifest_only" -eq 1 ]; then
+  if [ "$status" -eq 0 ]; then
+    echo "  package check: OK (manifest only)"
+    exit 0
+  fi
+  exit 1
 fi
 
 printf '{"name":"package-check","version":"1.0.0","private":true,"type":"module"}\n' >"$work/project/package.json"
