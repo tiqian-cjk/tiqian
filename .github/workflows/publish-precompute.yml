@@ -292,7 +292,7 @@ jobs:
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}
         run: |
           python3 "${GITHUB_WORKSPACE}/tools/publish-contract.py" --resolve . --version "${RELEASE_VERSION}"
-          python3 "${GITHUB_WORKSPACE}/tools/publish-contract.py" . --version "${RELEASE_VERSION}"
+          python3 "${GITHUB_WORKSPACE}/tools/publish-contract.py" --package . --version "${RELEASE_VERSION}"
 
       - name: Pack
         working-directory: platforms/web/server/core
