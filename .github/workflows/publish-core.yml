@@ -187,6 +187,10 @@ jobs:
   sync-latest:
     name: Synchronize latest dist-tag
     needs: publish-alpha
+    # A trusted publisher whose connection lacks the dist-tag switch
+    # answers 403; the version is already published, so this job reports it
+    # without blocking the remaining lanes.
+    continue-on-error: true
     runs-on: ubuntu-latest
     permissions:
       contents: read
