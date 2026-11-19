@@ -95,6 +95,14 @@ jobs:
       - name: Allow unprivileged user namespaces
         run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
 
+      - name: Align the generated package versions with the release
+        # The archives this job uploads sit beside the trees in the same
+        # artifact, and their names must carry the release version.
+        working-directory: ${{ github.workspace }}
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: python3 tools/align-package-versions.py "${RELEASE_VERSION}"
+
       - name: Generate the Rust and TypeScript engine trees with the flake toolchain
         run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs && node tools/generate-engine-gen.mjs ts'
 
@@ -351,12 +359,15 @@ jobs:
               exit 1
             fi
           done
+          # Only this lane's artifacts are checked: the generated-trees artifact
+          # also carries archives from the manifests job, and their names do not
+          # belong to this lane's package set.
           while IFS= read -r -d '' tarball; do
             if [[ "$(basename "$tarball")" != *"-${RELEASE_VERSION}.tgz" ]]; then
               echo "::error::$(basename "$tarball") does not carry version ${RELEASE_VERSION}."
               exit 1
             fi
-          done < <(find packages -name '*.tgz' -print0)
+          done < <(find packages/main-package packages/binary-package-* -name '*.tgz' -print0)
 
       - name: Hold every precompute package to the npm publish contract
         # Each archive is inspected before any of them reaches the registry:
