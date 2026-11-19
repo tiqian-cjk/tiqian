@@ -184,7 +184,9 @@ jobs:
         run: |
           cargo build --manifest-path ../precompute/binding/Cargo.toml \
             --release --message-format=json-render-diagnostics > cargo.log
-          npx neon dist --name tiqian-precompute-neon < cargo.log
+          # The neon CLI is @neon-rs/cli; plain "npx neon" resolves the
+          # unrelated package of that name, which has no dist command.
+          npx --yes @neon-rs/cli@0.1.82 dist --name tiqian-precompute-neon < cargo.log
           test -f "platforms/${NEON_BUILD_PLATFORM}/index.node"
 
       - name: Smoke test through the npm loader
