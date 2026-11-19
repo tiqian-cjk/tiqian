@@ -135,7 +135,20 @@ jobs:
         run: |
           set -euo pipefail
           tarball="$(find "${TIQIAN_RELEASE_ARTIFACT_DIR}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
-          bash "${GITHUB_WORKSPACE}/tools/check-npm-package.sh" "${tarball}" --expect @tiqian/web-component --entry @tiqian/web-component
+          # @tiqian/core installs @tiqian/protocol and @tiqian/shared, which the
+          # release publishes from the pack matrix after this lane; the archives
+          # this lane generated for its manifest step stand in for them.
+          siblings=()
+          for bundle in protocol-ts shared-ts; do
+            path="$(find "engine-haxe/out/${bundle}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+            if [[ -z "${path}" ]]; then
+              echo "::error::the ${bundle} bundle wrote no archive"
+              exit 1
+            fi
+            siblings+=(--with "${path}")
+          done
+          bash "${GITHUB_WORKSPACE}/tools/check-npm-package.sh" "${tarball}" \
+            --expect @tiqian/web-component --entry @tiqian/web-component "${siblings[@]}"
 
       - name: Publish the verified tarball to alpha
         shell: bash

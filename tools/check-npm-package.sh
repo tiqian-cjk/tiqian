@@ -21,6 +21,10 @@
 #                 repeatable. The release publishes the siblings in dependency
 #                 order, so a lane that runs later finds them in the registry,
 #                 and a pre-release check supplies the archives instead.
+# --no-import     install the archive and check the manifest, but do not import
+#                 an entry. A package whose entry loads a native binary for one
+#                 platform can only be imported on that platform, so its lane
+#                 verifies resolvability instead of runtime loading.
 #
 # The scratch project lives under the caller's temporary directory and is
 # removed on exit. Exit status: 0 the archive is installable and loads,
@@ -31,11 +35,13 @@ tarball=""
 expect=""
 entries=()
 siblings=()
+skip_import=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --expect) expect="${2:-}"; shift 2 ;;
     --entry) entries+=("${2:-}"); shift 2 ;;
     --with) siblings+=("${2:-}"); shift 2 ;;
+    --no-import) skip_import=1; shift ;;
     -*) echo "unknown option: $1" >&2; exit 2 ;;
     *) tarball="$1"; shift ;;
   esac
@@ -95,7 +101,9 @@ if [ -z "$installed" ]; then
 fi
 echo "  installed: $installed"
 
-if [ "${#entries[@]}" -eq 0 ] && [ -n "$name" ]; then
+if [ "$skip_import" -eq 1 ]; then
+  entries=()
+elif [ "${#entries[@]}" -eq 0 ] && [ -n "$name" ]; then
   entries=("$name")
 fi
 for specifier in "${entries[@]}"; do

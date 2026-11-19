@@ -342,7 +342,18 @@ jobs:
             python3 "${GITHUB_WORKSPACE}/tools/publish-contract.py" --archive "${tarball}"
           done
           main="$(find packages/main-package -maxdepth 1 -type f -name '*.tgz' -print -quit)"
-          bash "${GITHUB_WORKSPACE}/tools/check-npm-package.sh" "${main}" --expect @tiqian/precompute --entry @tiqian/precompute
+          # The main package lists the platform packages as optional
+          # dependencies at this version; they are published after this check,
+          # so the archives from this run stand in for them. The entry loads a
+          # platform binary, so the check verifies resolvability rather than
+          # importing it.
+          siblings=()
+          for dir in packages/binary-package-*; do
+            path="$(find "${dir}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+            [[ -n "${path}" ]] && siblings+=(--with "${path}")
+          done
+          bash "${GITHUB_WORKSPACE}/tools/check-npm-package.sh" "${main}" \
+            --expect @tiqian/precompute --no-import "${siblings[@]}"
 
       # Platform packages first: the main package lists them as optional
       # dependencies at the same version.
