@@ -189,6 +189,14 @@ jobs:
           npx --yes @neon-rs/cli@0.1.82 dist --name tiqian-precompute-neon < cargo.log
           test -f "platforms/${NEON_BUILD_PLATFORM}/index.node"
 
+      - name: Build the packages the smoke test resolves
+        # The smoke test compiles this package, whose project references need
+        # the declarations of the web client packages; the test job never built
+        # them and the type check failed on the first real run.
+        run: |
+          ( cd platforms/web/client/core && npm run build )
+          ( cd platforms/web/client/web-component && npm run build )
+
       - name: Smoke test through the npm loader
         working-directory: platforms/web/server/core
         shell: bash
