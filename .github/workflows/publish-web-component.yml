@@ -135,7 +135,9 @@ jobs:
         # The build step above proves the tarball matches its own checks. This
         # step installs the archive into an empty project and imports the entry
         # a consumer uses, so a manifest or file-list defect fails here instead
-        # of at a registry.
+        # of at a registry. The job sets a package working directory, so this
+        # step names the workspace paths explicitly.
+        working-directory: ${{ github.workspace }}
         shell: bash
         env:
           TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-web-component-release
@@ -147,7 +149,7 @@ jobs:
           # this lane generated for its manifest step stand in for them.
           siblings=()
           for bundle in protocol-ts shared-ts; do
-            path="$(find "engine-haxe/out/${bundle}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+            path="$(find "${GITHUB_WORKSPACE}/engine-haxe/out/${bundle}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
             if [[ -z "${path}" ]]; then
               echo "::error::the ${bundle} bundle wrote no archive"
               exit 1
