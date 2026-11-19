@@ -28,7 +28,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: read
       id-token: write
     outputs:
       version: ${{ steps.release.outputs.version }}
@@ -142,34 +141,25 @@ jobs:
           tarball="$(find "${TIQIAN_RELEASE_ARTIFACT_DIR}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
           python3 "${GITHUB_WORKSPACE}/tools/publish-contract.py" --archive "${tarball}"
 
-      - name: Fetch the packed sibling archives
-        # @tiqian/core installs @tiqian/protocol and @tiqian/shared, which the
-        # release publishes from the pack matrix after this lane. The inspect
-        # step installs them from this run's pack artifacts instead of waiting
-        # for the registry, so the check runs before the publish, not after.
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: release-artifacts
-          path: ${{ runner.temp }}/pack-artifacts
-
       - name: Inspect the release package the way a consumer receives it
         # The build step above proves the tarball matches its own checks. This
-        # step installs the archive into an empty project beside the packed
-        # siblings and imports the entry a consumer uses, so a manifest or
-        # file-list defect fails here instead of at a registry.
+        # step installs the archive into an empty project beside the sibling
+        # archives this lane already generated for the manifest step, and
+        # imports the entry a consumer uses, so a manifest or file-list defect
+        # fails here instead of at a registry. The siblings come from this
+        # lane's own pack output: the release publishes them from the pack
+        # matrix later, so the registry does not have them yet at this point.
         shell: bash
         env:
           TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-core-release
-          TIQIAN_PACK_ARTIFACT_DIR: ${{ runner.temp }}/pack-artifacts
         run: |
           set -euo pipefail
           tarball="$(find "${TIQIAN_RELEASE_ARTIFACT_DIR}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
-          version="$(node -p "require('./platforms/web/client/core/package.json').version")"
           siblings=()
-          for name in "@tiqian-protocol-${version}.tgz" "@tiqian-shared-${version}.tgz"; do
-            path="${TIQIAN_PACK_ARTIFACT_DIR}/${name}"
-            if [[ ! -f "${path}" ]]; then
-              echo "::error::the pack artifacts are missing ${name}"
+          for bundle in protocol-ts shared-ts; do
+            path="$(find "engine-haxe/out/${bundle}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+            if [[ -z "${path}" ]]; then
+              echo "::error::the ${bundle} bundle wrote no archive"
               exit 1
             fi
             siblings+=(--with "${path}")
