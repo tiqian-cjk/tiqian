@@ -60,8 +60,10 @@ function artifactText(artifact: Uint8Array): string {
  * carries the native bytes, so the comparison drops those two derived fields.
  */
 function storedEntry<T>(entry: T): T {
-  const { html: _html, renderArtifactSha256: _digest, ...rest } = entry as Record<string, unknown>;
-  return rest as T;
+  const copy = { ...(entry as Record<string, unknown>) };
+  delete copy.html;
+  delete copy.renderArtifactSha256;
+  return copy as T;
 }
 
 test("submission bytes equal the JSON lane entry bytes", { skip: precompute === null }, async () => {
