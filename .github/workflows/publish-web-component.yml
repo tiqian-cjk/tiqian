@@ -98,6 +98,12 @@ jobs:
       - name: Generate the TypeScript engine tree with the flake toolchain
         working-directory: .
         run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs ts'
+      - name: Align the generated package versions with the release
+        # boring pack writes the placeholder version from boring.json, and the
+        # sibling archives the inspect step installs must carry the release
+        # version @tiqian/core depends on, so align before packing.
+        run: python3 tools/align-package-versions.py ${{ steps.release.outputs.version }}
+
       - name: Write the protocol and shared package manifests
         working-directory: .
         run: |
