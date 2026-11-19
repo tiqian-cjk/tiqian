@@ -412,14 +412,25 @@ jobs:
 
       # Platform packages first: the main package lists them as optional
       # dependencies at the same version.
-      - name: Publish each tarball
+      - name: Publish the platform packages
         shell: bash
         run: |
           set -euo pipefail
           for name in binary-package-darwin-arm64 binary-package-linux-arm64-gnu binary-package-linux-x64-gnu binary-package-win32-x64-msvc; do
             tarball="$(find "packages/$name" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
-              bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
+            bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
           done
+
+      - name: Publish the main package
+        # This package answers 404 from the registry while the platform
+        # packages publish from the same workflow, so its trusted publisher
+        # entry names a different workflow. A 404 here must not hold the
+        # registry write and the Maven lanes behind it; the step reports the
+        # refusal and the release continues.
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
           tarball="$(find packages/main-package -maxdepth 1 -type f -name '*.tgz' -print -quit)"
           bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
 
