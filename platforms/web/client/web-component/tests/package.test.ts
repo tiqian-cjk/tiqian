@@ -106,9 +106,8 @@ test("the ffi release workflow mirrors the web-component one for the engine pack
   assert.match(workflow, /working-directory: platforms\/web\/client\/engine-runtime/u);
   assert.match(workflow, /TIQIAN_RELEASE_ARTIFACT_DIR/u);
   assert.match(workflow, /tiqian-ffi-release/u);
-  assert.match(workflow, /npm publish "\$\{tarball\}" --ignore-scripts --access public --tag alpha/u);
-  assert.match(workflow, /npm dist-tag add "@tiqian\/ffi@\$\{RELEASE_VERSION\}" latest/u);
-  assert.match(workflow, /tags\.alpha !== version \|\| tags\.latest !== version/u);
+  assert.match(workflow, /tools\/npm-publish\.sh" "\$\{tarball\}" --tag alpha/u);
+  assert.match(workflow, /tools\/npm-dist-tag\.sh" --package @tiqian\/ffi --version "\$\{RELEASE_VERSION\}" --tag latest/u);
 });
 
 test("the release workflow publishes one verified artifact and synchronizes both dist-tags", async () => {
@@ -121,10 +120,9 @@ test("the release workflow publishes one verified artifact and synchronizes both
   assert.match(workflow, /workflow_call:/u);
   assert.match(workflow, /id-token: write/u);
   assert.match(workflow, /TIQIAN_RELEASE_ARTIFACT_DIR/u);
-  assert.match(workflow, /npm publish "\$\{tarball\}" --ignore-scripts --access public --tag alpha/u);
-  assert.match(workflow, /NODE_AUTH_TOKEN: \$\{\{ secrets\.NPM_DIST_TAG_TOKEN \}\}/u);
-  assert.match(workflow, /npm dist-tag add "@tiqian\/web-component@\$\{RELEASE_VERSION\}" latest/u);
-  assert.match(workflow, /tags\.alpha !== version \|\| tags\.latest !== version/u);
+  assert.match(workflow, /tools\/npm-publish\.sh" "\$\{tarball\}" --tag alpha/u);
+  assert.match(workflow, /id-token: write/u);
+  assert.match(workflow, /tools\/npm-dist-tag\.sh" --package @tiqian\/web-component --version "\$\{RELEASE_VERSION\}" --tag latest/u);
 });
 
 test("the release verifier accepts the verified package files", async () => {
