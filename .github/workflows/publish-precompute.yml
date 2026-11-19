@@ -192,10 +192,14 @@ jobs:
       - name: Build the packages the smoke test resolves
         # The smoke test compiles this package, whose project references need
         # the declarations of the web client packages; the test job never built
-        # them and the type check failed on the first real run.
+        # them and the type check failed on the first real run. The paths are
+        # absolute because the default shell on Windows keeps the directory of
+        # the first subshell.
+        shell: bash
         run: |
-          ( cd platforms/web/client/core && npm run build )
-          ( cd platforms/web/client/web-component && npm run build )
+          set -euo pipefail
+          ( cd "${GITHUB_WORKSPACE}/platforms/web/client/core" && npm run build )
+          ( cd "${GITHUB_WORKSPACE}/platforms/web/client/web-component" && npm run build )
 
       - name: Smoke test through the npm loader
         working-directory: platforms/web/server/core
@@ -264,6 +268,13 @@ jobs:
         # already in the downloaded tree, so no boring driver is needed here.
         working-directory: platforms/web/client/engine-runtime
         run: npm run build:runtime
+
+      - name: Build the packages the type check resolves
+        # This package's project references need the declarations of the web
+        # client packages, and this job never built them.
+        run: |
+          ( cd "${GITHUB_WORKSPACE}/platforms/web/client/core" && npm run build )
+          ( cd "${GITHUB_WORKSPACE}/platforms/web/client/web-component" && npm run build )
 
       - name: Lint, typecheck, and build the JS entry
         working-directory: platforms/web/server/core
