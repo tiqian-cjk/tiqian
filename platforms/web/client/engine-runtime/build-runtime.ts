@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
 
@@ -108,10 +108,12 @@ await mkdir(runtimeDirectory, { recursive: true });
 // import interfaces as value imports, which Node type stripping cannot link.
 // npm workspaces hoist typescript to the repository root, so the CLI is
 // located through module resolution instead of a fixed relative path.
-const typescriptBinary = require.resolve("typescript/lib/typescript.js").replace(
-  /lib\/typescript\.js$/u,
-  "bin/tsc",
-);
+// Windows resolves the module with backslashes, so name the compiler entry
+// through the directory instead of rewriting a POSIX suffix: a path that still
+// points at lib/typescript.js runs the library as a script and exits without
+// compiling anything.
+const typescriptLibrary = require.resolve("typescript/lib/typescript.js");
+const typescriptBinary = fileURLToPath(new URL("tsc.js", pathToFileURL(typescriptLibrary)));
 const tsc = spawnSync(process.execPath, [typescriptBinary, "-p", "tsconfig.engine-gen.json"], {
   cwd: fileURLToPath(new URL("./", import.meta.url)),
   stdio: "inherit",

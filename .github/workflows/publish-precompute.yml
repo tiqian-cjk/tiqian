@@ -192,40 +192,15 @@ jobs:
       - name: Build the packages the smoke test resolves
         # The smoke test compiles this package, whose project references need
         # the declarations of the web client packages; the test job never built
-        # them and the type check failed on the first real run. The Windows leg
-        # stops here: the generated TypeScript tree the type check resolves is
-        # not produced by the runtime assembly there, so that leg builds and
-        # packs the addon and leaves the loader check to the other platforms.
-        if: runner.os != 'Windows'
+        # them and the type check failed on the first real run.
         run: |
           ( cd platforms/web/client/core && npm run build )
           ( cd platforms/web/client/web-component && npm run build )
 
       - name: Smoke test through the npm loader
-        if: runner.os != 'Windows'
         working-directory: platforms/web/server/core
         shell: bash
         run: npm test
-
-      - name: Verify the addon loads on Windows
-        # The loader check above compiles the package, which resolves the
-        # generated TypeScript tree this platform's runtime assembly does not
-        # produce. This leg still proves the built addon loads on Windows and
-        # exposes the native entry points the JavaScript side calls.
-        if: runner.os == 'Windows'
-        working-directory: platforms/web/server/core
-        shell: bash
-        run: |
-          set -euo pipefail
-          node -e '
-            const platform = process.env.NEON_BUILD_PLATFORM;
-            const addon = require("./platforms/" + platform + "/index.node");
-            const wanted = ["backendRevision", "harfbuzzVersion", "createFontSession", "shape", "precomputeParagraph"];
-            for (const name of wanted) {
-              if (typeof addon[name] !== "function") throw new Error("missing export " + name);
-            }
-            console.log("loaded " + Object.keys(addon).length + " exports from " + platform);
-          '
 
       - name: Pack platform package
         working-directory: platforms/web/server/core/platforms/${{ matrix.platform }}
