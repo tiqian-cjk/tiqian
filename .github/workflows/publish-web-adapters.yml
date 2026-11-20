@@ -1,0 +1,134 @@
+name: Publish Web adapters
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  release-gate:
+    uses: ./.github/workflows/release-gate.yml
+
+  pack:
+    name: Build, test and pack the Web adapters
+    needs: [release-gate]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Use the release npm CLI
+        run: npm install --global npm@11.12.1
+
+      - uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Generate the TypeScript engine and workspace packages
+        env:
+          RELEASE_VERSION: ${{ needs.release-gate.outputs.version }}
+        run: |
+          python3 tools/align-package-versions.py "${RELEASE_VERSION}"
+          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
+          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
+          chmod +x "$BORING_PACKAGE_TSC"
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs ts && boring pack protocol-ts shared-ts --project boring.json'
+
+      - name: Install workspace dependencies
+        # The Astro and SvelteKit fixture projects share the root node_modules.
+        run: nix develop -c bun install --ignore-scripts --linker hoisted
+
+      - name: Build the Web runtime and precompute library
+        run: |
+          (cd platforms/web/client/engine-runtime && nix develop "${GITHUB_WORKSPACE}" -c npm run build:runtime)
+          (cd platforms/web/client/core && npm exec -- tsc -b)
+          (cd platforms/web/client/web-component && npm exec -- tsc -b --noCheck)
+          (cd platforms/web/server/core && npm run build)
+
+      - name: Supply the published Linux addon for the adapter tests
+        env:
+          RELEASE_VERSION: ${{ needs.release-gate.outputs.version }}
+        run: |
+          archive="$(npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP" "@tiqian/precompute-linux-x64-gnu@${RELEASE_VERSION}")"
+          tar -xOf "$RUNNER_TEMP/$archive" package/index.node > platforms/web/server/core/platforms/linux-x64-gnu/index.node
+          (
+            cd platforms/web/server/core
+            node --input-type=module -e '
+              import { renderSnapshotServerAssets } from "@tiqian/precompute/precompute-html";
+              renderSnapshotServerAssets({ id: "release-probe", initialStyle: "", inertTemplate: "", fontPreloads: [] });
+            '
+          )
+
+      - name: Pack and verify the adapter tarballs
+        env:
+          RELEASE_VERSION: ${{ needs.release-gate.outputs.version }}
+        run: |
+          bash tools/pack-web-adapters.sh "$RUNNER_TEMP/web-adapters" "${RELEASE_VERSION}"
+
+      - name: Upload the verified npm tarballs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: web-adapter-packages
+          path: ${{ runner.temp }}/web-adapters/*.tgz
+          if-no-files-found: error
+
+  publish:
+    name: Publish @tiqian/${{ matrix.adapter }}
+    needs: [release-gate, pack]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: publish-tiqian-${{ matrix.adapter }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        adapter: [astro, sveltekit, react]
+    env:
+      ADAPTER: ${{ matrix.adapter }}
+      RELEASE_VERSION: ${{ needs.release-gate.outputs.version }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: web-adapter-packages
+          path: ${{ runner.temp }}/web-adapters
+
+      - name: Publish the verified tarball to alpha
+        run: |
+          npm install --global npm@11.12.1
+          bash tools/npm-publish.sh "$RUNNER_TEMP/web-adapters/tiqian-${ADAPTER}-${RELEASE_VERSION}.tgz" --tag alpha
+
+      - name: Point latest at the published alpha
+        run: |
+          package="@tiqian/${ADAPTER}"
+          npm install --global npm@11.21.0
+          # npm publish leaves alpha at the new version. A rerun of an older
+          # release must not move latest past the current alpha.
+          for attempt in {1..12}; do
+            alpha="$(npm view "$package" dist-tags.alpha || true)"
+            if [[ "$alpha" == "$RELEASE_VERSION" ]]; then
+              bash tools/npm-dist-tag.sh --package "$package" --version "$RELEASE_VERSION" --tag latest
+              exit 0
+            fi
+            if [[ "$attempt" -lt 12 ]]; then sleep 5; fi
+          done
+          echo "::error::$package alpha points to $alpha, expected $RELEASE_VERSION"
+          exit 1

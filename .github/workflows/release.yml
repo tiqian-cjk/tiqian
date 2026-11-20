@@ -351,11 +351,22 @@ jobs:
     uses: ./.github/workflows/publish-precompute.yml
     secrets: inherit
 
+  npm-web-adapters:
+    # The consumer checks install the published precompute, protocol and shared
+    # packages at the same version as the adapter tarballs.
+    needs: [gate, npm-precompute, publish]
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    uses: ./.github/workflows/publish-web-adapters.yml
+    secrets: inherit
+
   maven:
     # See the publish job: the Central staging upload waits for the npm chain
     # so a version cannot accumulate staging deployments from a release that
     # never published its npm packages.
-    needs: [gate, npm-precompute]
+    needs: [gate, npm-web-adapters]
     permissions:
       contents: read
       actions: read
@@ -377,7 +388,7 @@ jobs:
     secrets: inherit
 
   registry:
-    needs: [gate, npm-precompute, npm-ffi, npm-core, npm-web-component, maven, publish]
+    needs: [gate, npm-precompute, npm-ffi, npm-core, npm-web-component, npm-web-adapters, maven, publish]
     permissions:
       contents: write
       actions: read
