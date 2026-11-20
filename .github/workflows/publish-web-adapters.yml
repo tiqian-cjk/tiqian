@@ -113,18 +113,22 @@ jobs:
 
       - name: Publish the verified tarball to alpha
         run: |
-          npm install --global npm@11.12.1
+          npm install --global npm@11.12.1 semver@7.8.6
+          export NODE_PATH="$(npm root --global)"
+          node tools/check-npm-release-order.cjs "@tiqian/${ADAPTER}" "$RELEASE_VERSION"
           bash tools/npm-publish.sh "$RUNNER_TEMP/web-adapters/tiqian-${ADAPTER}-${RELEASE_VERSION}.tgz" --tag alpha
 
       - name: Point latest at the published alpha
         run: |
           package="@tiqian/${ADAPTER}"
           npm install --global npm@11.21.0
+          export NODE_PATH="$(npm root --global)"
           # npm publish leaves alpha at the new version. A rerun of an older
           # release must not move latest past the current alpha.
           for attempt in {1..12}; do
             alpha="$(npm view "$package" dist-tags.alpha || true)"
             if [[ "$alpha" == "$RELEASE_VERSION" ]]; then
+              node tools/check-npm-release-order.cjs "$package" "$RELEASE_VERSION"
               bash tools/npm-dist-tag.sh --package "$package" --version "$RELEASE_VERSION" --tag latest
               exit 0
             fi
