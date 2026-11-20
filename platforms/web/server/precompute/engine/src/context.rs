@@ -121,6 +121,9 @@ pub fn context_fingerprint(typography: &SnapshotTypography, faces: &[FaceInfo]) 
     writer.str(0x07, FONT_SOURCE_POLICY.as_str());
     writer.str(0x08, HARFBUZZ_VERSION);
     writer.u32(0x09, u32::from(CANONICAL_VERSION));
+    // Invalidate snapshots produced with technical breaking for prose links.
+    writer.str(0x0a, "prose-link-word-shaping-v1");
+
     // Normalized typography, in declaration order.
     writer.tag(0x10);
     writer.bytes_str_list(&typography.font_families);

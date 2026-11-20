@@ -1128,6 +1128,10 @@ function buildLineBreakSpans(sourceSpans: DomSourceSpan[], projection: Whitespac
     if (tag !== "A" && tag !== "CODE") continue;
     const range = projectionRange(projection, span.start, span.end);
     if (!range) continue;
+    // Prose link labels retain word shaping; technical fallback can split a
+    // long label into unkerned characters even when normal word breaks fit.
+    if (tag === "A" && /[ \t\n\r\f]/u.test(projection.text.slice(range[0], range[1]))) continue;
+
     const key = range[0] + ":" + range[1] + ":ProgressiveTechnical";
     if (seen[key]) continue;
     seen[key] = true;
