@@ -71,6 +71,21 @@ npm 清单，`release-manifest.json` 中各发布单元与 `notInRelease` 列出
 
 ### npm 发布规则
 
+### trusted publisher 与 provenance
+
+可复用 workflow 由 `release.yml` 调用，npm 校验的是**调用方** `release.yml`，所以每个
+包都要有一条 `release.yml` 的 trusted publisher 配置；`publish-*.yml` 名字的条目不会被
+命中。配置为 `Pending validation` 时，第一次发布会把它转成有效；条目过期后发布返回
+404。发布前用 `https://www.npmjs.com/package/<包名>/access` 逐个核对文件名与状态。
+
+provenance 校验要求清单里的 `repository.url` 与仓库一致。打包器生成的 npm 清单不带该
+字段，`tools/embed-repository.py` 在 pack 之后把 `https://github.com/tiqian-cjk/tiqian.git`
+写入 `@tiqian/engine`、`@tiqian/protocol`、`@tiqian/shared` 三个归档，并同步刷新
+registry 元数据里的 `sha512`，否则 `check-registry-tree` 会因摘要不一致失败。
+
+dist-tag 写入后 registry 读取有延迟，`tools/npm-dist-tag.sh` 的收敛轮询允许五分钟；
+三个 npm 作业并发时一分钟窗口会误报未收敛。
+
 npm 目标在 `boring.json` 的 `package` 块里有两个名字：`name` 是自建 registry 的
 目录名（例如 `tiqian-engine`），`npmName` 是 registry.npmjs.org 上的包名（例如
 `@tiqian/engine`）。boring 的 `Config.ecosystemName` 让 ts 目标写 `npmName`，所以
