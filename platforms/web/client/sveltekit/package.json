@@ -32,19 +32,28 @@
   "engines": {
     "node": ">=22"
   },
+  "dependencies": {
+    "@tiqian/core": "0.1.0-alpha.9"
+  },
   "peerDependencies": {
-    "@sveltejs/kit": ">=2",
+    "@sveltejs/kit": "^2.0.0 || ^3.0.0",
     "@tiqian/precompute": "0.1.0-alpha.9",
     "@tiqian/web-component": "0.1.0-alpha.9",
     "svelte": ">=5"
   },
   "devDependencies": {
+    "@sveltejs/kit": "3.2.0",
     "@tiqian/precompute": "0.1.0-alpha.9",
     "@tiqian/web-component": "0.1.0-alpha.9",
-    "svelte": "5.56.7"
+    "svelte": "5.57.1"
   },
   "scripts": {
     "test": "node --test *.test.ts",
     "prepack": "tsc -p . && npm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tiqian-cjk/tiqian.git",
+    "directory": "platforms/web/client/sveltekit"
   }
 }

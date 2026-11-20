@@ -81,10 +81,12 @@ test("Svelte SSR omits a false disabled Boolean attribute", async () => {
 
 test("package manifest publishes only the component and server boundary", async () => {
   const manifest = JSON.parse(await readFile(new URL("./package.json", import.meta.url), "utf8"));
+  const coreManifest = JSON.parse(await readFile(new URL("../core/package.json", import.meta.url), "utf8"));
   const webComponentManifest = JSON.parse(await readFile(new URL("../web-component/package.json", import.meta.url), "utf8"));
   const precompute = JSON.parse(
     await readFile(new URL("../../../../platforms/web/server/core/package.json", import.meta.url), "utf8"),
   );
+  assert.equal(manifest.dependencies["@tiqian/core"], coreManifest.version);
   assert.equal(manifest.peerDependencies["@tiqian/web-component"], webComponentManifest.version);
   assert.equal(manifest.peerDependencies["@tiqian/precompute"], precompute.version);
   assert.equal(manifest.engines.node, webComponentManifest.engines.node);
@@ -352,19 +354,20 @@ test("component builds in a real SvelteKit application", { skip: webComponentWor
       path.join(root, "node_modules"),
       "dir",
     );
-    await writeFile(path.join(root, "svelte.config.js"), `
-      const adapter = { name: "fixture", async adapt() {} };
-      export default { kit: { adapter } };
-    `);
     await writeFile(path.join(root, "vite.config.js"), `
       import { sveltekit } from "@sveltejs/kit/vite";
-      export default { plugins: [sveltekit()] };
+      const adapter = {
+        name: "fixture",
+        async adapt(builder) { builder.writePrerendered("build"); },
+      };
+      export default { plugins: [sveltekit({ adapter })] };
     `);
     await writeFile(path.join(root, "src", "app.html"), `
       <!doctype html><html><head>%sveltekit.head%</head><body>
         <div style="display: contents">%sveltekit.body%</div>
       </body></html>
     `);
+    await writeFile(path.join(routes, "+page.js"), "export const prerender = true;\n");
     await writeFile(path.join(routes, "+page.svelte"), `
       <script>
         import TiqianProse from "@tiqian/sveltekit";
@@ -376,11 +379,8 @@ test("component builds in a real SvelteKit application", { skip: webComponentWor
       [fileURLToPath(new URL("../../../../node_modules/vite/bin/vite.js", import.meta.url)), "build"],
       { cwd: root },
     );
-    const serverManifest = await readFile(
-      path.join(root, ".svelte-kit", "output", "server", "manifest-full.js"),
-      "utf8",
-    );
-    assert.match(serverManifest, /id: "\/"/u);
+    const html = await readFile(path.join(root, "build", "index.html"), "utf8");
+    assert.match(html.replace(/<!--[\s\S]*?-->/gu, ""), /<tiqian-prose[^>]*><p>语义正文。<\/p><\/tiqian-prose>/u);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

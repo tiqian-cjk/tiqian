@@ -1,4 +1,4 @@
-import type { Handle } from "@sveltejs/kit";
+import type { sequence } from "@sveltejs/kit/hooks";
 import type {
   HtmlPrepareOptions,
   HtmlPreparer,
@@ -8,6 +8,9 @@ import type {
 } from "@tiqian/precompute/precompute-html";
 import type { SnapshotTableFileTransport } from "@tiqian/precompute/transport";
 import type { ClientSnapshotBundle } from "@tiqian/web-component/snapshot-client";
+
+// Both SvelteKit 2 and 3 expose the handle hook as an argument to sequence.
+type Handle = Parameters<typeof sequence>[number];
 
 export interface PreparedTiqianProse {
   readonly html: string;
