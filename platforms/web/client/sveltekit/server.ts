@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { fileURLToPath } from "node:url";
 
-import type { Handle } from "@sveltejs/kit";
+import type { sequence } from "@sveltejs/kit/hooks";
 import {
   createHtmlPreparer,
   renderSnapshotServerAssets,
@@ -17,6 +17,9 @@ import {
   type SnapshotTableFileTransport,
 } from "@tiqian/precompute/transport";
 import type { ClientSnapshotBundle } from "@tiqian/web-component/snapshot-client";
+
+// Both SvelteKit 2 and 3 expose the handle hook as an argument to sequence.
+type Handle = Parameters<typeof sequence>[number];
 
 const SNAPSHOT_REFERENCE = /<tiqian-prose\b[^>]*\bsnapshot-ref=(["'])([A-Za-z][A-Za-z0-9_-]*)\1[^>]*>/giu;
 

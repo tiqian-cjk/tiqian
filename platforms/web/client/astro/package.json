@@ -26,6 +26,9 @@
   "engines": {
     "node": ">=22"
   },
+  "dependencies": {
+    "@tiqian/core": "0.1.0-alpha.9"
+  },
   "peerDependencies": {
     "@tiqian/precompute": "0.1.0-alpha.9",
     "@tiqian/web-component": "0.1.0-alpha.9",
@@ -40,5 +43,10 @@
   "scripts": {
     "test": "node --test *.test.ts",
     "prepack": "tsc -p . && npm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tiqian-cjk/tiqian.git",
+    "directory": "platforms/web/client/astro"
   }
 }
