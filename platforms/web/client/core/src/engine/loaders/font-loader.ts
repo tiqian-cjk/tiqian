@@ -17,6 +17,7 @@ import {
   revalidateBrowserFontSession,
 } from "../../measurement/browser-fonts.js";
 import { globalServices } from "../../services/global-services.js";
+import { loadBrowserFontFaces } from "../../measurement/font-face-loader.js";
 import type { DiagnosisManager } from "../context/diagnosis-manager.js";
 
 export const DEFAULT_TYPOGRAPHY_FONT_WAIT_MS = 3_000;
@@ -69,7 +70,7 @@ export async function waitForTypographyFonts(
     // TypographyFontReadyGate: wait only for faces and unicode-range subsets
     // used by the prose instead of unrelated document fonts.
     return Promise.resolve()
-      .then(() => fonts.load(descriptor, Array.from(characters).join("")))
+      .then(() => loadBrowserFontFaces(fonts, descriptor, Array.from(characters).join("")))
       // A rejected face has settled on its CSS fallback. The fallback is a
       // stable layout input; only a still-pending load may race measurement.
       .catch(() => []);

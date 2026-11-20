@@ -25,6 +25,7 @@ import type { MarkedCompletionEvent } from "@tiqian/core/src/engine/enhance/even
 import { globalServices, initializeGlobalServices } from "@tiqian/core/src/services/global-services.js";
 import { prefetchSnapshotTables } from "@tiqian/core/src/sampler/snapshot/snapshot-tables.js";
 import { CoordinationService } from "@tiqian/core/src/engine/coordination/coordination-service.js";
+import type { BrowserFontFaceLoader } from "@tiqian/core/src/measurement/font-face-loader.js";
 
 const ELEMENT_NAME = "tiqian-prose";
 
@@ -143,6 +144,8 @@ declare global {
 
 /** Options for the explicit registration entry (wc-s5 scope item 2). */
 export interface RegisterTiqianProseOptions {
+  /** Optional host-managed fonts; native loading remains the fallback. */
+  readonly loadFontFaces?: BrowserFontFaceLoader;
   /** Custom element tag to define; defaults to "tiqian-prose". */
   readonly tagName?: string;
   /** Install the source-faithful copy interceptor on the document; default true. */
@@ -160,6 +163,9 @@ export interface RegisterTiqianProseOptions {
  */
 export function registerTiqianProse(options: RegisterTiqianProseOptions = {}): void {
   initializeGlobalServices();
+  if (options.loadFontFaces) {
+    globalServices().coordination.fonts.fontFaceLoader = options.loadFontFaces;
+  }
   const tagName = options.tagName ?? ELEMENT_NAME;
   const interceptCopy = options.interceptCopy ?? true;
   const prefetchTables = options.prefetchTables ?? true;
