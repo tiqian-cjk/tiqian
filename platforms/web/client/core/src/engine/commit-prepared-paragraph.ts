@@ -17,6 +17,7 @@
 // Ambient global declarations pulled in via import type from owner modules.
 import type { LoweredParagraph } from "./lowered-paragraph.js";
 import type { PrepareReadyResult } from "./prepare-paragraph-layout.js";
+import type { WorkerPreparedParagraph } from "./web-worker/worker-channel.js";
 import { renderPreparedParagraphInto } from "../sampler/snapshot/prepared-dom.js";
 import { PlanSchema } from "@tiqian/protocol/org/tiqian/protocol/PlanSchema";
 import type { EnhancedElementContext } from "./context/enhance-context.js";
@@ -31,7 +32,7 @@ import { prepareParagraphLayout } from "./prepare-paragraph-layout.js";
 // entries serialize it through PlanJson.encode, whose first two keys are the
 // producer constants PLAN_SCHEMA and PLAN_LAYOUT_REVISION
 // (engine-haxe/src/org/tiqian/protocol/PlanJson.hx:20-23). The structured
-// entries (toPlanWithDiagnostics for the snapshot font session and
+// entries (toPlanWithDiagnostics for main-thread layout and
 // PlanLowering.toPlan for the layout Worker) return the Plan struct, which
 // carries geometry only. The lowered-DOM gate rejects a plan whose
 // schema/layoutRevision do not match this build
@@ -77,7 +78,7 @@ interface CommitParagraphTarget {
 
 interface CommitWorkerPreparedParagraphArgument {
   paragraph: CommitParagraphTarget;
-  workerPlan: string;
+  workerPlan: string | WorkerPreparedParagraph;
   inlineObjectMetaJson: string;
   cjkStrongSemanticsJson: string;
 }
@@ -117,7 +118,7 @@ function isCanonicalPlain(lowered: LoweredParagraph): boolean {
 function renderWorkerPrepared(
   rawDomContext: EnhancedElementContext,
   host: Element,
-  recordJson: string,
+  workerPlan: string | WorkerPreparedParagraph,
   locale: string,
   sourceText: string,
   semanticElements: Element[],
@@ -125,7 +126,7 @@ function renderWorkerPrepared(
   inlineObjectMetaJson: string,
   cjkStrongSemanticsJson: string
 ): unknown {
-  const record = JSON.parse(recordJson);
+  const record: WorkerPreparedParagraph = typeof workerPlan === "string" ? JSON.parse(workerPlan) : workerPlan;
   const inlineObjects = Array.from(inlineObjectElements || []);
   const meta = JSON.parse(inlineObjectMetaJson || '[]');
   const inlineObjectsMetaPaired = meta.map(function (entry: Record<string, unknown>, index: number) {
@@ -139,12 +140,12 @@ function renderWorkerPrepared(
   return rawDomSuspendEngineWrites(rawDomContext, host, function () {
     return renderPreparedParagraphInto(
       host,
-      wirePlan(record.plan),
+      wirePlan(record.plan as Parameters<typeof renderPreparedParagraphInto>[1]),
       locale,
       {
         sourceText: sourceText,
         semanticReplay: record.semanticReplay || 'snapshot-safe',
-        semantics: record.semantics || [],
+        semantics: record.semantics,
         inlineBoxes: record.inlineBoxes || [],
         liveSemanticElements: Array.from(semanticElements || []),
         inlineObjects: inlineObjectsMetaPaired,

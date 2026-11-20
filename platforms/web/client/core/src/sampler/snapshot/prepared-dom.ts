@@ -20,6 +20,7 @@ import type {
   LiveSemanticSpan,
   SnapshotSemanticSpan,
 } from "./snapshot-source.js";
+import type { PlanCell, PlanEmphasisRange, PlanLine } from "@tiqian/ffi/engine-gen/org/tiqian/protocol/Plan.js";
 import { EvidenceDecorationKind } from "@tiqian/shared/org/tiqian/shared/prepared_dom/EvidenceDecorationKind";
 import { PreparedArtifact } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedArtifact";
 import { PreparedDom as GeneratedPreparedDom } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedDom";
@@ -127,13 +128,13 @@ interface BridgeCandidateShape {
 /** Style class mapper callback. */
 type StyleClassForFn = (declaration: string) => string;
 
-/** Snapshot semantic span option entry. */
+/** Semantic range received from either snapshot or live-source replay. */
 interface SnapshotSemanticOption {
   start: number;
   end: number;
-  sourceIndex: number;
+  sourceIndex?: number;
   tagName: string;
-  attributes: [string, string][];
+  attributes?: readonly (readonly [string, string])[];
   order?: number;
 }
 
@@ -166,7 +167,7 @@ interface PreparedSpacingResult {
   px: number;
 }
 
-/** Cell shape from the prepared layout plan JSON. */
+/** Cell properties read from snapshot JSON and the generated runtime plan. */
 interface PreparedLayoutPlanCell {
   rangeStart: number;
   rangeEnd: number;
@@ -177,6 +178,7 @@ interface PreparedLayoutPlanCell {
   shapingBoundary?: boolean;
   openTypeFeatures?: string[];
   style?: StyleDelta | null;
+  styleDelta?: PlanCell["styleDelta"];
   latin?: boolean;
   dashStrategy?: string | null;
   shapingLanguage?: string | null;
@@ -191,7 +193,7 @@ interface PreparedLayoutPlanCell {
   leadingLayoutAdvance?: number;
 }
 
-/** Line shape from the prepared layout plan JSON. */
+/** Line properties read from snapshot JSON and the generated runtime plan. */
 interface PreparedLayoutPlanLine {
   cells: PreparedLayoutPlanCell[];
   top: number;
@@ -200,7 +202,7 @@ interface PreparedLayoutPlanLine {
   indent: number;
   visualWidth: number;
   hyphenAdvance: number;
-  endReason: string;
+  endReason: string | PlanLine["endReason"];
   rangeStart: number;
   rangeEnd: number;
 }
@@ -215,13 +217,13 @@ interface PlanBopomofoZone extends BopomofoZone {
   baseRangeEnd: number;
 }
 
-/** The canonical prepared layout plan JSON shape. */
+/** The plan properties consumed by the prepared DOM renderer. */
 interface PreparedLayoutPlan {
   schema: number;
   layoutRevision: string;
   height: number;
   lines: PreparedLayoutPlanLine[];
-  emphasisRanges?: [number, number][];
+  emphasisRanges?: ([number, number] | PlanEmphasisRange)[];
   rubyDecisions?: PlanRubyAnnotation[];
   bopomofoDecisions?: PlanBopomofoZone[];
   inlineEdges?: InlineEdgeEntry[];
@@ -236,7 +238,7 @@ interface PreparedParagraphRenderOptions {
   styleClassFor?: StyleClassForFn | null;
   semanticReplay?: string;
   sourceText?: string;
-  semantics?: SnapshotSemanticOption[];
+  semantics?: readonly SnapshotSemanticOption[];
   liveSemanticElements?: Element[];
   renderTextSpans?: RenderTextSpanEntry[];
   cjkStrongSemantics?: CjkStrongSemanticEntry[];
@@ -506,7 +508,7 @@ export function releasePreparedStyleState(state: PreparedStyleState, context: En
 
 // --- Wire mapping into the generated lowering ---
 
-function toTypedStyleDelta(style: StyleDelta | null | undefined): GeneratedStyleDelta | null {
+function toTypedStyleDelta(style: StyleDelta | PlanCell["styleDelta"] | undefined): GeneratedStyleDelta | null {
   if (style == null) return null;
   return {
     fontSize: style.fontSize == null ? null : Number(style.fontSize),
@@ -516,6 +518,8 @@ function toTypedStyleDelta(style: StyleDelta | null | undefined): GeneratedStyle
 }
 
 function toTypedCell(cell: PreparedLayoutPlanCell): GeneratedPreparedPlanCell {
+  // PlanJson writes the generated styleDelta under the key style.
+  const style = cell.style ?? cell.styleDelta ?? null;
   return {
     rangeStart: Number(cell.rangeStart),
     rangeEnd: Number(cell.rangeEnd),
@@ -527,8 +531,8 @@ function toTypedCell(cell: PreparedLayoutPlanCell): GeneratedPreparedPlanCell {
     advance: cell.advance == null ? null : Number(cell.advance),
     shapingBoundary: cell.shapingBoundary === true,
     openTypeFeatures: cell.openTypeFeatures == null ? null : Array.from(cell.openTypeFeatures, String),
-    style: toTypedStyleDelta(cell.style),
-    styleSignature: JSON.stringify(cell.style ?? null),
+    style: toTypedStyleDelta(style),
+    styleSignature: JSON.stringify(style),
     punctuationSignature: JSON.stringify([
       cell.punctuationInkFloor ?? null,
       cell.punctuationBodyWidth ?? null,
@@ -547,6 +551,8 @@ function toTypedCell(cell: PreparedLayoutPlanCell): GeneratedPreparedPlanCell {
 }
 
 function toTypedLine(line: PreparedLayoutPlanLine): GeneratedPreparedPlanLine {
+  // The generated enum carries the same reason name in its kind field.
+  const reason = line.endReason;
   return {
     cells: line.cells.map(toTypedCell),
     top: Number(line.top),
@@ -555,7 +561,7 @@ function toTypedLine(line: PreparedLayoutPlanLine): GeneratedPreparedPlanLine {
     indent: Number(line.indent),
     visualWidth: Number(line.visualWidth),
     hyphenAdvance: Number(line.hyphenAdvance),
-    endReason: String(line.endReason),
+    endReason: typeof reason === "object" && reason != null ? reason.kind : String(reason),
     rangeStart: Number(line.rangeStart),
     rangeEnd: Number(line.rangeEnd),
   };
@@ -647,10 +653,8 @@ function toTypedPlan(plan: PreparedLayoutPlan): GeneratedPreparedPlan {
   return {
     height: Number(plan.height),
     lines: plan.lines.map(toTypedLine),
-    emphasisRanges: Array.from(plan.emphasisRanges ?? [], (range) => ({
-      start: Number(range[0]),
-      end: Number(range[1]),
-    })),
+    emphasisRanges: Array.from(plan.emphasisRanges ?? [], (range) =>
+      Array.isArray(range) ? { start: Number(range[0]), end: Number(range[1]) } : range),
     rubyDecisions,
     bopomofoDecisions,
     inlineEdges: Array.from(plan.inlineEdges ?? [], (edge) => ({
@@ -839,7 +843,7 @@ function restoreLiveSemanticElements(
   host: Element,
   sourceElements: Element[],
   expectedCount: number,
-  semantics: LiveSemanticSpan[] = [],
+  semantics: readonly SnapshotSemanticOption[] = [],
   cjkStrongSemantics: CjkStrongSemanticEntry[] = [],
 ) {
   if (expectedCount === 0) return;
@@ -956,7 +960,7 @@ export function renderPreparedParagraphInto(
               }
             }
           }
-          if (!selected) return null;
+          if (selected?.sourceIndex == null) return null;
           const element = options.liveSemanticElements![selected.sourceIndex];
           if (!element) return null;
           try {
@@ -996,7 +1000,7 @@ export function renderPreparedParagraphInto(
       host,
       Array.from(options.liveSemanticElements ?? []),
       lowered.liveSemanticCount,
-      Array.from(options.semantics ?? []),
+      options.semantics,
       Array.from(options.cjkStrongSemantics ?? []),
     );
   }

@@ -90,13 +90,23 @@ export interface WorkerLayoutRequestBody extends WorkerLayoutRequest {
   semantics: SemanticSpanWire[];
   renderInlineBoxes: RenderInlineBoxWire[];
   sourceTag: string;
-  [key: string]: unknown;
 }
 
 export interface PlanRecord {
   plan?: unknown;
   issue?: string;
 }
+
+export interface WorkerPreparedParagraph {
+  plan: unknown;
+  semanticReplay: SemanticReplayMode;
+  semantics: SemanticReplaySuccess["semantics"];
+  inlineBoxes: RenderInlineBoxWire[];
+}
+
+export type WorkerPlanLookup = { prepared: WorkerPreparedParagraph; issue?: never }
+  | { prepared?: never; issue: string }
+  | null;
 
 export type PendingResolveFn = (value: WorkerResponseEnvelope) => void;
 export type PendingRejectFn = (reason: Error) => void;
@@ -264,48 +274,46 @@ function semanticReplay(request: WorkerLayoutRequestBody): SemanticReplayResult 
   }
 }
 
+function lookupPreparedParagraph(sessionKey: string, request: WorkerLayoutRequestBody): WorkerPlanLookup {
+  const record = coord().plans.get(preparedPlanKey(sessionKey, request));
+  if (!record) return null;
+  if (record.issue) return { issue: record.issue };
+
+  // The cached plan depends on layout inputs. Replay the current DOM
+  // semantics and inline boxes even when the geometry comes from the cache.
+  const replay = semanticReplay(request);
+  if (replay.issue !== undefined) return { issue: replay.issue };
+  return { prepared: {
+    plan: record.plan,
+    semanticReplay: replay.mode,
+    semantics: replay.semantics,
+    inlineBoxes: request.renderInlineBoxes,
+  } };
+}
+
 function installBridge(): void {
-  const installedVersion = Number(globalServices().coordination.layoutWorker?.version);
-  const installedSemanticReplayRevision = Number(
-    globalServices().coordination.layoutWorker?.semanticReplayRevision ?? 0,
-  );
+  const installed = globalServices().coordination.layoutWorker;
+  const installedVersion = Number(installed?.version);
+  const installedSemanticReplayRevision = Number(installed?.semanticReplayRevision ?? 0);
   // MonotonicBridgeFeatureUpgrade: legacy v1 chunks return early for any v1
   // bridge. Keep that outer version so an old chunk cannot downgrade this
   // implementation, and use a feature revision to replace an older v1 closure.
   if (installedVersion > BRIDGE_VERSION ||
       (installedVersion === BRIDGE_VERSION &&
-       installedSemanticReplayRevision >= SEMANTIC_REPLAY_REVISION)) return;
+       (installedSemanticReplayRevision > SEMANTIC_REPLAY_REVISION ||
+        (installedSemanticReplayRevision === SEMANTIC_REPLAY_REVISION && installed?.lookup)))) return;
   globalServices().coordination.layoutWorker = Object.freeze({
       version: BRIDGE_VERSION,
       semanticReplayRevision: SEMANTIC_REPLAY_REVISION,
+      lookup: lookupPreparedParagraph,
       take(_element: Element | null | undefined, sessionKey: string, requestText: string): string | null {
         const request = parsedLayoutRequest(requestText);
-        if (!request) return null;
-        const c = coord();
-        const record = c.plans.get(preparedPlanKey(sessionKey, request));
-        if (!record || record.issue) return null;
-        const replay = semanticReplay(request);
-        if (replay.issue) return null;
-        return JSON.stringify({
-          plan: record.plan,
-          // LayoutPlanSemanticLateBinding: the Worker plan depends only on the
-          // immutable shaping/line-break fields above. DOM semantics and
-          // renderer-owned inline-box metadata are read again at commit time;
-          // including them in the cache key made harmless progressive DOM
-          // changes look like a missing plan for every later paragraph.
-          semanticReplay: replay.mode,
-          semantics: replay.semantics,
-          inlineBoxes: request.renderInlineBoxes,
-        });
+        const prepared = request && lookupPreparedParagraph(sessionKey, request)?.prepared;
+        return prepared ? JSON.stringify(prepared) : null;
       },
       issue(_element: Element | null | undefined, sessionKey: string, requestText: string): string | null {
         const request = parsedLayoutRequest(requestText);
-        if (!request) return null;
-        const c = coord();
-        const record = c.plans.get(preparedPlanKey(sessionKey, request));
-        if (!record) return null;
-        if (record.issue) return record.issue;
-        return semanticReplay(request).issue ?? null;
+        return request ? lookupPreparedParagraph(sessionKey, request)?.issue ?? null : null;
       },
       release(sessionKey?: string): boolean {
         const c = coord();
@@ -386,11 +394,8 @@ export async function createPrepareJob(
         if (dispatched > 0 && shouldYield()) return dispatched;
         let request: WorkerLayoutRequestBody | null = null;
         try {
-          // Serialization happens at the send boundary (R10): the pure builder
-          // answers a DTO, the wire body crosses through JSON exactly like
-          // process-paragraph's take/issue boundary.
-          const built = workerLayoutRequestForRoot(root, candidates[index].element, canonicalOptions);
-          if (built) request = parsedLayoutRequest(JSON.stringify(built));
+          // postMessage copies the request object into the Worker.
+          request = workerLayoutRequestForRoot(root, candidates[index].element, canonicalOptions);
         } catch {
           // ParagraphAtomicNativeRollback: an invalid candidate remains native
           // without preventing later independent paragraphs from being prepared.

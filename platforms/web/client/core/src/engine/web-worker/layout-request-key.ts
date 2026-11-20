@@ -10,5 +10,5 @@ import { LAYOUT_REQUEST_FIELDS } from "./assembly-record-fields.js";
  * those fields share one plan.
  */
 export function layoutRequestKey(request: WorkerLayoutRequestBody | null | undefined): string {
-  return JSON.stringify(LAYOUT_REQUEST_FIELDS.map((field) => request?.[field] ?? null));
+  return JSON.stringify(LAYOUT_REQUEST_FIELDS.map((field) => request?.[field as keyof WorkerLayoutRequestBody] ?? null));
 }

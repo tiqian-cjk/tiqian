@@ -69,10 +69,10 @@ import { LruWidthIndependentAnnotationCache } from "./engine-gen/org/tiqian/layo
  * return annotations shaped by the wrong session. The host shapeJson
  * function identity scopes the cache; a width-only relayout reuses the same
  * function and therefore hits the cache instead of re-shaping every
- * paragraph. The Map entry count is bounded by the number of concurrent
- * font sessions the host keeps, which is small.
+ * paragraph. Weak keys let the cache be collected when its host releases
+ * the font session or replaces the browser measurement bridge.
  */
-const annotationCacheStore = new Map();
+const annotationCacheStore = new WeakMap();
 
 function cachedAnnotationCache(shaperKey) {
   let entry = annotationCacheStore.get(shaperKey);

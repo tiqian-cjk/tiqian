@@ -201,23 +201,31 @@ interface ProcessInlineShapingDecisionResult {
     // branch is unreachable).
     const activeOptions: EnhanceOptions = options;
 
-    const workerRequestDto = workerLayoutRequest(
+    const workerRequest = workerLayoutRequest(
       paragraph,
       lowered,
       activeOptions
     );
-    const workerRequest = workerRequestDto ? JSON.stringify(workerRequestDto) : null;
     const sessionKey = conformingSnapshotFontSessionId(activeOptions);
     // The layout Worker channel is installed by the host page bundle and by
     // test worlds per test; an absent channel reads as no reusable plan, the
     // same tolerance the former Kotlin shims applied.
     const layoutWorker = globalServices().coordination.layoutWorker;
-    const workerPlan = workerRequest != null && sessionKey != null && layoutWorker != null
-      ? layoutWorker.take(paragraph, sessionKey, workerRequest)
-      : null;
-    const workerIssue = workerRequest != null && workerPlan == null && sessionKey != null && layoutWorker != null
-      ? layoutWorker.issue(paragraph, sessionKey, workerRequest)
-      : null;
+
+    // Older host bundles expose only the string form of the Worker bridge.
+    let workerPlan;
+    let workerIssue;
+    if (workerRequest != null && sessionKey != null && layoutWorker != null) {
+      if (layoutWorker.lookup) {
+        const result = layoutWorker.lookup(sessionKey, workerRequest);
+        workerPlan = result?.prepared;
+        workerIssue = result?.issue;
+      } else {
+        const requestText = JSON.stringify(workerRequest);
+        workerPlan = layoutWorker.take(paragraph, sessionKey, requestText);
+        if (workerPlan == null) workerIssue = layoutWorker.issue(paragraph, sessionKey, requestText);
+      }
+    }
 
     // WorkerIneligibleRichRunBrowserFallback: SSR and the exact Worker
     // still fail closed when a semantic run has no replayable font

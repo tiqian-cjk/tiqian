@@ -96,7 +96,7 @@ function browserMetricsEnv(): CanvasShapingEnv {
 
 // The {bridge} descriptor every TS layout path consumes. The inner bridge
 // adapts the canvas shaper and metrics resolver to the two JSON callbacks
-// of precomputeParagraphWithBrowserMetrics. Built once per root.
+// of precomputeParagraphWithDiagnostics. Built once per root.
 function buildBrowserFallbackDescriptor(resolved: ResolvedEnhanceOptions): BrowserFallbackDescriptor {
   const fontFamilies = resolved.fontFamilies;
   // buildFontFamiliesConfigJs renames the resolved monospace family to the
