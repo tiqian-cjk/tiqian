@@ -16,18 +16,18 @@
     "shared-ts": 14
   },
   "test": {
-    "kotlin-f32": 900,
-    "kotlin-f64": 900,
-    "protocol-kotlin": 420,
-    "swift-f32": 600,
-    "swift-f64": 600,
-    "protocol-swift": 420,
-    "engine-rust": 420,
-    "protocol-rust": 300,
-    "dart": 300,
-    "protocol-dart": 240,
-    "ts": 240,
-    "protocol-ts": 300,
-    "shared-ts": 200
+    "dart": 92,
+    "engine-rust": 433,
+    "kotlin-f32": 189,
+    "kotlin-f64": 142,
+    "protocol-dart": 7,
+    "protocol-kotlin": 27,
+    "protocol-rust": 43,
+    "protocol-swift": 95,
+    "protocol-ts": 11,
+    "shared-ts": 10,
+    "swift-f32": 431,
+    "swift-f64": 433,
+    "ts": 79
   }
 }
