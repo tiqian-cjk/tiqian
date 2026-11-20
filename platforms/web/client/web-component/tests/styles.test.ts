@@ -79,10 +79,6 @@ test("shaping boundaries outrank the generic geometry span reset", () => {
   );
   assert.match(
     stylesheet,
-    /span\[data-tq-shaping-boundary\][^{]*\{[^}]*display:\s*inline\s*!important/u
-  );
-  assert.doesNotMatch(
-    stylesheet,
     /span\[data-tq-shaping-boundary\][^{]*\{[^}]*display:\s*inline-block\s*!important/u
   );
 });

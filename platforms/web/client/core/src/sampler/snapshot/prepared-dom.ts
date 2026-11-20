@@ -334,6 +334,11 @@ const VALUE_STYLE_ELEMENT_ATTRIBUTE = GeneratedPreparedDom.VALUE_STYLE_ELEMENT_A
 const LIVE_SEMANTIC_INDEX_ATTRIBUTE = GeneratedPreparedDom.LIVE_SEMANTIC_INDEX_ATTRIBUTE;
 const SNAPSHOT_STYLE_OWNER = GeneratedPreparedDom.SNAPSHOT_STYLE_OWNER;
 
+// A single Latin letter or digit can lack a shaping boundary in a compact plan.
+const SINGLE_LATIN_CELL = /^[\p{Script=Latin}0-9]$/u;
+const LATIN_CELL_START = /^[\p{Script=Latin}0-9]/u;
+const LATIN_CELL_END = /[\p{Script=Latin}0-9]$/u;
+
 function preparedPlan(value: string | PreparedLayoutPlan): PreparedLayoutPlan {
   return typeof value === "string" ? JSON.parse(value) : value;
 }
@@ -517,9 +522,15 @@ function toTypedStyleDelta(style: StyleDelta | PlanCell["styleDelta"] | undefine
   };
 }
 
-function toTypedCell(cell: PreparedLayoutPlanCell): GeneratedPreparedPlanCell {
+function toTypedCell(cell: PreparedLayoutPlanCell, index: number, cells: PreparedLayoutPlanCell[]): GeneratedPreparedPlanCell {
   // PlanJson writes the generated styleDelta under the key style.
   const style = cell.style ?? cell.styleDelta ?? null;
+  // Keep adjacent letters and digits eligible for the shared run merger.
+  const previous = cells[index - 1];
+  const next = cells[index + 1];
+  const isolatedLatinCell = SINGLE_LATIN_CELL.test(cell.display) &&
+    !(previous?.rangeEnd === cell.rangeStart && LATIN_CELL_END.test(previous.display)) &&
+    !(next?.rangeStart === cell.rangeEnd && LATIN_CELL_START.test(next.display));
   return {
     rangeStart: Number(cell.rangeStart),
     rangeEnd: Number(cell.rangeEnd),
@@ -529,7 +540,7 @@ function toTypedCell(cell: PreparedLayoutPlanCell): GeneratedPreparedPlanCell {
     naturalWidth: Number(cell.naturalWidth),
     leadingLayoutAdvance: Number(cell.leadingLayoutAdvance),
     advance: cell.advance == null ? null : Number(cell.advance),
-    shapingBoundary: cell.shapingBoundary === true,
+    shapingBoundary: cell.shapingBoundary === true || isolatedLatinCell,
     openTypeFeatures: cell.openTypeFeatures == null ? null : Array.from(cell.openTypeFeatures, String),
     style: toTypedStyleDelta(style),
     styleSignature: JSON.stringify(style),
