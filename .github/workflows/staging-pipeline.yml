@@ -13,6 +13,12 @@ on:
   push:
     branches: ["main"]
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Pack every bundle in one job, or split the pack stage across runners"
+        type: choice
+        options: [single, sharded]
+        default: single
 
 permissions:
   contents: read
@@ -23,6 +29,7 @@ concurrency:
 
 jobs:
   staging:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.mode == 'sharded') }}
     name: Run the release pipeline to a staging version
     runs-on: ubuntu-latest
     # 240 minutes: the verify stage runs boring verify, which generates all 13
@@ -87,6 +94,179 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: staging-pipeline
+          path: |
+            ${{ runner.temp }}/tiqian-staging-*/logs
+            ${{ runner.temp }}/tiqian-staging-*/report.md
+            ${{ runner.temp }}/tiqian-staging-*/registry-tree
+          if-no-files-found: warn
+          retention-days: 7
+
+  plan:
+    name: Derive the bundle shards
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'sharded' }}
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.shards.outputs.shards }}
+      short: ${{ steps.shards.outputs.short }}
+      staging_version: ${{ steps.shards.outputs.staging_version }}
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Split the bundle list
+        id: shards
+        shell: bash
+        run: |
+          set -euo pipefail
+          short="${GITHUB_SHA::7}"
+          bundles="$(python3 tools/release-matrix.py --list-bundles | paste -sd' ' -)"
+          read -r -a ids <<< "$bundles"
+          shards="["
+          separator=""
+          for ((index = 0; index < 4; index++)); do
+            group=()
+            for ((i = index; i < ${#ids[@]}; i += 4)); do
+              group+=("${ids[$i]}")
+            done
+            shards+="${separator}{\"shard\":\"${index}\",\"bundles\":\"${group[*]}\"}"
+            separator=","
+          done
+          shards+="]"
+          echo "shards=${shards}" >> "$GITHUB_OUTPUT"
+          echo "short=${short}" >> "$GITHUB_OUTPUT"
+          echo "staging_version=0.0.0-staging.${short}" >> "$GITHUB_OUTPUT"
+          echo "bundles: ${bundles}"
+          echo "shards: ${shards}"
+
+  packs:
+    name: Pack ${{ matrix.shard }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'sharded' }}
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.shards) }}
+    env:
+      STAGING_VERSION: ${{ needs.plan.outputs.staging_version }}
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+
+      - name: Install CMake 4.3.2 for Android native font
+        run: |
+          python3 -m venv "$HOME/cmake-venv"
+          "$HOME/cmake-venv/bin/pip" install --quiet "cmake==4.3.2"
+          cmake_bin_dir="$("$HOME/cmake-venv/bin/python" -c 'import cmake, os; print(os.path.join(os.path.dirname(cmake.__file__), "data", "bin"))')"
+          echo "$cmake_bin_dir" >> "$GITHUB_PATH"
+          "$cmake_bin_dir/cmake" --version
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Stage the pinned generation inputs
+        shell: bash
+        run: |
+          nix develop -c bash -c "mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/"
+          ls -l tools/unicode-data
+
+      - name: Pack this shard
+        shell: bash
+        run: |
+          unset ANDROID_SDK_ROOT
+          export RUNNER_TEMP
+          nix develop -c bash tools/staging-pipeline.sh \
+            --stages 'align pack collect-artifacts' \
+            --bundles '${{ matrix.bundles }}'
+
+      - name: Upload the shard staging tree
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-packs-${{ matrix.shard }}
+          path: ${{ runner.temp }}/tiqian-staging-*/
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Upload the shard build outputs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-out-${{ matrix.shard }}
+          path: engine-haxe/out
+          if-no-files-found: warn
+          retention-days: 3
+
+  assemble:
+    name: Assemble and verify the staging set
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'sharded' }}
+    needs: [plan, packs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      STAGING_VERSION: ${{ needs.plan.outputs.staging_version }}
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Stage the pinned generation inputs
+        shell: bash
+        run: |
+          nix develop -c bash -c "mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/"
+          ls -l tools/unicode-data
+
+      - name: Download the shard staging trees
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-packs-*
+          merge-multiple: true
+          path: ${{ runner.temp }}
+
+      - name: Download the shard build outputs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-out-*
+          merge-multiple: true
+          path: engine-haxe/out
+
+      - name: Run the remaining stages
+        shell: bash
+        run: |
+          unset ANDROID_SDK_ROOT
+          export RUNNER_TEMP
+          nix develop -c bash tools/staging-pipeline.sh \
+            --stages 'collect-artifacts compile-bundles publish-contract registry-tree staging-isolation maven-artifact-ids cargo-consume maven-local-publish maven-local-repo verify summary'
+
+      - name: Upload the staging report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-report
           path: |
             ${{ runner.temp }}/tiqian-staging-*/logs
             ${{ runner.temp }}/tiqian-staging-*/report.md
