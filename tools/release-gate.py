@@ -462,6 +462,17 @@ def fetch_lane_run(repo: str, sha: str, lane_file: str, token: str | None) -> di
     payload = api_json(url, token)
     runs = payload.get("workflow_runs", []) if isinstance(payload, dict) else []
     runs = [run for run in runs if run.get("head_sha") == sha and run.get("event", "push") in ("push", "workflow_dispatch")]
+    # Every lane shares one concurrency group with cancel-in-progress, so a
+    # push and a manual dispatch on the same commit cancel each other. A
+    # completed success on the commit satisfies the lane; only when no run
+    # succeeded does the latest run decide the refusal reason.
+    successful = [
+        run
+        for run in runs
+        if run.get("status") == "completed" and run.get("conclusion") == "success"
+    ]
+    if successful:
+        return successful[0]
     return latest_run_for_lane(runs, lane_file)
 
 

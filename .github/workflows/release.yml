@@ -114,6 +114,19 @@ jobs:
         run: |
           unset ANDROID_SDK_ROOT
           nix develop -c bash -c 'python3 tools/compile-bundles.py --project boring.json'
+      - name: Embed the repository URL in the npm manifests
+        # npm validates the provenance bundle against the manifest and refuses
+        # a package whose "repository.url" is empty (422) before storing it.
+        # The bundler does not emit the field, so it is added to the archives
+        # the pack run wrote, and the registry metadata is refreshed with the
+        # new digests.
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          python3 tools/embed-repository.py --tree "${RUNNER_TEMP}/registry-tree" \
+            engine-haxe/out/*/@tiqian-*.tgz
+
       - name: Collect the artifacts
         shell: bash
         run: |
