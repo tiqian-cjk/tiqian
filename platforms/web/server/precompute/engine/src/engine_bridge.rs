@@ -2,7 +2,7 @@
 //! Slice C, cutover to the boring engine-rust bundle).
 //!
 //! The generated `ExplainableStubParagraphLayoutEngine` receives shaping and
-//! font metrics through the generated trait objects (`ITextShaper`,
+//! font metrics through the generated trait objects (`TextShaper`,
 //! `FontMetricsResolver`). This module presents a [`FontSession`] and its
 //! capture window as those components, the direct-Rust successor of the
 //! former C ABI vtable bridge, and runs one paragraph request through
@@ -15,6 +15,9 @@
 //! and `NativeFontBackendFontMetricsResolver` of the nativeMain shaper: one
 //! cluster, one glyph run and one shaping decision per backend shape call,
 //! and the five metric doubles mapped onto `RawFontMetrics`.
+
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use tiqian::engine::{Engine, EngineComponents};
 use tiqian::NamedError;
@@ -37,21 +40,22 @@ use tiqian_engine_gen::org::tiqian::core::shaping_decision_info::ShapingDecision
 use tiqian_engine_gen::org::tiqian::core::text_range::TextRange;
 use tiqian_engine_gen::org::tiqian::core::text_span::TextSpan;
 use tiqian_engine_gen::org::tiqian::core::text_style::TextStyle;
-use tiqian_engine_gen::org::tiqian::core::tiqian_illegal_argument_exception::TextRangeError;
 use tiqian_engine_gen::org::tiqian::core::tiqian_text_content::TiqianTextContent;
 use tiqian_engine_gen::org::tiqian::font::font_metric_source::FontMetricSource;
-use tiqian_engine_gen::org::tiqian::font::font_metrics::{FontMetricsRequest, FontMetricsResolver};
+use tiqian_engine_gen::org::tiqian::font::font_metrics::{
+    FontMetricsRequest, FontMetricsResolver, StubFontMetricsResolver,
+};
 use tiqian_engine_gen::org::tiqian::font::raw_font_metrics::RawFontMetrics;
 use tiqian_engine_gen::org::tiqian::layout::prepared_paragraph::PreparedParagraphFns;
 use tiqian_engine_gen::org::tiqian::shaping::text_shaper::{
-    ITextShaper, ShapingInput, ShapingResult, ShapingSource, TextShaperShapeFault,
+    TextShaper, ShapingInput, ShapingResult, ShapingSource, TextShaperShapeFault,
 };
 
 use crate::paragraph::{InlineBoxOuterSpacingCode, ParagraphRequest};
 use crate::session::{CaptureEvidence, FontSession, MetricsInput, ShapeInput};
 
 /// Presents one font session and its capture window to the engine as the
-/// `ITextShaper` and `FontMetricsResolver` implementations.
+/// `TextShaper` and `FontMetricsResolver` implementations.
 ///
 /// The struct erases the borrows into raw pointers because the generated
 /// trait objects require a `_static` type. The obligations that keep this
@@ -70,24 +74,35 @@ use crate::session::{CaptureEvidence, FontSession, MetricsInput, ShapeInput};
 struct SessionBackend {
     session: *const FontSession,
     evidence: *mut CaptureEvidence,
+    /// The most recent metrics-resolution failure the generated engine cannot
+    /// be told about. The generated `FontMetricsResolver::resolve` is
+    /// infallible (the Haxe contract has no throw there), so the fault is
+    /// parked here and `precompute_paragraph` fails the whole call after
+    /// layout: a plan built on a substituted metric never escapes. A further
+    /// failure overwrites the cell, so the reported message is the failure in
+    /// effect when layout finishes.
+    ///
+    /// No `Send`/`Sync` impls: these are P-1 interface handles
+    /// (`Rc<RefCell<dyn Trait>>`, target-semantic-policy:49-51) and the
+    /// policy's final boundary forbids smuggling Arc/Mutex in for a possible
+    /// future threaded host (target-semantic-policy:43-56).
+    fault: Rc<RefCell<Option<String>>>,
 }
-
-// SAFETY: the raw pointers target data that outlives the engine call (see
-// the obligation list above); the engine drives every access on the calling
-// thread, so the `Send`/`Sync` impls only satisfy the generated trait
-// bounds, they never enable cross-thread use.
-unsafe impl Send for SessionBackend {}
-unsafe impl Sync for SessionBackend {}
 
 impl SessionBackend {
     /// # Safety
     /// Both pointers must stay valid, and the pointees exclusively owned by
     /// this call, for as long as the built engine lives.
     /// `precompute_paragraph` guarantees both.
-    unsafe fn new(session: &FontSession, evidence: &mut CaptureEvidence) -> Self {
+    unsafe fn new(
+        session: &FontSession,
+        evidence: &mut CaptureEvidence,
+        fault: Rc<RefCell<Option<String>>>,
+    ) -> Self {
         Self {
             session: std::ptr::from_ref(session),
             evidence: std::ptr::from_mut(evidence),
+            fault,
         }
     }
 
@@ -153,7 +168,8 @@ impl SessionBackend {
                     None,
                 )
             })
-            .collect();
+            .collect::<Result<Vec<Glyph>, IllegalStateException>>()
+            .map_err(|error| error.message)?;
         let advance = record.advance;
         let key = input.font_decision.candidate.key.clone();
         let features = record.features.clone();
@@ -246,17 +262,18 @@ impl SessionBackend {
     }
 }
 
-impl ITextShaper for SessionBackend {
+impl TextShaper for SessionBackend {
     fn __haxe_type_name(&self) -> &'static str {
         "tiqian_precompute.engine_bridge.SessionBackend"
     }
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
-    fn clone_box(&self) -> Box<dyn ITextShaper> {
+    fn clone_box(&self) -> Box<dyn TextShaper> {
         Box::new(SessionBackend {
             session: self.session,
             evidence: self.evidence,
+            fault: Rc::clone(&self.fault),
         })
     }
     fn shape(&mut self, input: ShapingInput) -> Result<ShapingResult, TextShaperShapeFault> {
@@ -277,23 +294,29 @@ impl FontMetricsResolver for SessionBackend {
         Box::new(SessionBackend {
             session: self.session,
             evidence: self.evidence,
+            fault: Rc::clone(&self.fault),
         })
     }
-    fn resolve(&self, request: FontMetricsRequest) -> Result<RawFontMetrics, TextRangeError> {
-        let values = self
-            .resolve_metrics(&request)
-            .map_err(|message| TextRangeError::Message {
-                text: UString::from(message.as_str()),
-            })?;
-        let [ascent, descent, leading, typo_ascent, typo_descent] = values;
-        Ok(RawFontMetrics::new(
-            ascent,
-            descent,
-            Some(leading),
-            Some(FontMetricSource::RawTables),
-            typo_ascent.is_finite().then_some(typo_ascent),
-            typo_descent.is_finite().then_some(typo_descent),
-        ))
+    /// The generated contract has no failure channel here: `resolve` is
+    /// infallible. A resolution failure is parked in the shared `fault` cell
+    /// (and `precompute_paragraph` fails the call) while this returns the
+    /// engine's own stub metric, so the layout it must not keep stays
+    /// well-formed rather than dividing by a substituted zero.
+    fn resolve(&self, request: FontMetricsRequest) -> RawFontMetrics {
+        match self.resolve_metrics(&request) {
+            Ok([ascent, descent, leading, typo_ascent, typo_descent]) => RawFontMetrics::new(
+                ascent,
+                descent,
+                Some(leading),
+                Some(FontMetricSource::RawTables),
+                typo_ascent.is_finite().then_some(typo_ascent),
+                typo_descent.is_finite().then_some(typo_descent),
+            ),
+            Err(message) => {
+                *self.fault.borrow_mut() = Some(message);
+                StubFontMetricsResolver::new().borrow().resolve(request)
+            }
+        }
     }
 }
 /// Adapts the lane request into the generated engine input. The generated
@@ -422,19 +445,32 @@ pub fn precompute_paragraph(
     request.validate().map_err(|error| error.0)?;
     // SAFETY: `precompute_paragraph` holds both borrows across the engine
     // call; see the obligation list on `SessionBackend`.
+    let fault: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
     let mut engine = Engine::new(EngineComponents {
-        // The generated component slots share the shaper through
-        // `Arc<Mutex<dyn ITextShaper>>`; the metrics resolver stays a
-        // plain `Box`. Both point at the same session and capture window.
-        text_shaper: Some(std::sync::Arc::new(std::sync::Mutex::new(unsafe {
-            SessionBackend::new(session, evidence)
+        // Both slots are P-1 interface handles (`Rc<RefCell<dyn Trait>>`):
+        // the engine owns them for this call and never leaves the calling
+        // thread, and the policy's final boundary forbids smuggling Arc/Mutex
+        // in for a possible future threaded host (target-semantic-policy:43-56).
+        // The two components point at the same session, capture window and
+        // fault cell.
+        text_shaper: Some(Rc::new(RefCell::new(unsafe {
+            SessionBackend::new(session, evidence, Rc::clone(&fault))
         }))),
-        font_metrics_resolver: Some(Box::new(unsafe { SessionBackend::new(session, evidence) })),
+        font_metrics_resolver: Some(Rc::new(RefCell::new(unsafe {
+            SessionBackend::new(session, evidence, Rc::clone(&fault))
+        }))),
         ..EngineComponents::default()
     })
     .map_err(|error| error.0)?;
     let input = layout_input(request).map_err(|error| error.0)?;
-    let result = engine.layout(input).map_err(|error| error.0)?;
+    let layout = engine.layout(input).map_err(|error| error.0);
+    // A metrics-resolution failure cannot travel through the generated trait;
+    // report it as the call's error rather than hand back a plan built on the
+    // stub metric (a check that could not be measured is a failure).
+    if let Some(message) = fault.borrow_mut().take() {
+        return Err(message);
+    }
+    let result = layout?;
     // The prepared-paragraph form keeps the emitter's default of no render
     // evidence (PreparedParagraph.toPreparedParagraphJson default): the
     // oracle plan carries no renderEvidence-only fields and the entry's

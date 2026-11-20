@@ -93,40 +93,40 @@ class Justifier {
     public function progressiveTechnicalWhitespaceStretchCapacity(fontSize:Float):Float
         return progressiveTechnicalWhitespaceStretchMaxEm * fontSize;
 
-    public function justify(c:Array<Cluster>, roles:Array<FontRole>, edges:Array<EastAsianSpacingEdges>, r:IntRange, maxWidth:Float, fontSize:Float,
-            skip:Bool, ?skipReason:Null<String>, ?allowSinoWesternGapStretch:Bool = true, baseEm:Float, maxEm:Float, ?noStretch:Null<SortedSet<Int>>,
-            ?noStretchAfter:Null<SortedSet<Int>>, ?bracket:Null<SortedSet<Int>>, ?physical:Null<SortedSet<Int>>, ?virtual:Null<SortedMap<Int, Int>>,
-            ?virtualSino:Null<SortedSet<Int>>, ?uniformObject:Null<SortedSet<Int>>, ?preferred:Null<SortedMap<Int, InlineObjectPreferredStretch>>,
-            ?technical:Null<SortedMap<Int, ProgressiveBreakTier>>, ?emergency:Null<SortedMap<Int, String>>,
-            ?preferredEmergency:Null<SortedMap<Int, String>>):JustificationPlan {
-        final ns = noStretch == null ? SortedSet.builder().build() : noStretch;
-        final nsa = noStretchAfter == null ? SortedSet.builder().build() : noStretchAfter;
-        final br = bracket == null ? SortedSet.builder().build() : bracket;
-        final ph = physical == null ? SortedSet.builder().build() : physical;
-        final vi = virtual == null ? SortedMap.builder().build() : virtual;
-        final vs = virtualSino == null ? SortedSet.builder().build() : virtualSino;
-        final uo = uniformObject == null ? SortedSet.builder().build() : uniformObject;
-        final pref = preferred == null ? SortedMap.builder().build() : preferred;
-        final te = technical == null ? SortedMap.builder().build() : technical;
-        final emg = emergency == null ? SortedMap.builder().build() : emergency;
-        final pem = preferredEmergency == null ? SortedMap.builder().build() : preferredEmergency;
-        if (roles.length != c.length)
+    public function justify(adjustedClusters:Array<Cluster>, clusterRoles:Array<FontRole>, eastAsianSpacingEdges:Array<EastAsianSpacingEdges>, lineClusterRange:IntRange, maxWidth:Float, fontSize:Float,
+            skip:Bool, ?skipReason:Null<String>, ?allowSinoWesternGapStretch:Bool = true, cjkLatinSpaceBaseEm:Float, cjkLatinSpaceMaxEm:Float, ?noStretchBoundaryClusters:Null<SortedSet<Int>>,
+            ?noStretchBoundaryAfterClusters:Null<SortedSet<Int>>, ?westernBracketCjkInterCharBoundaryAfterClusters:Null<SortedSet<Int>>, ?attachedInlinePhysicalBoundaryAfterClusters:Null<SortedSet<Int>>, ?attachedInlineVirtualBoundaryAfterClusters:Null<SortedMap<Int, Int>>,
+            ?attachedInlineVirtualSinoWesternBoundaryAfterClusters:Null<SortedSet<Int>>, ?uniformInlineObjectBoundaryAfterClusters:Null<SortedSet<Int>>, ?preferredInlineObjectBoundaryAfterClusters:Null<SortedMap<Int, InlineObjectPreferredStretch>>,
+            ?technicalBoundaryAfterClusters:Null<SortedMap<Int, ProgressiveBreakTier>>, ?emergencyTrackingBoundaryAfterClusters:Null<SortedMap<Int, String>>,
+            ?preferredEmergencyTrackingBoundaryAfterClusters:Null<SortedMap<Int, String>>):JustificationPlan {
+        final ns = noStretchBoundaryClusters == null ? SortedSet.builder().build() : noStretchBoundaryClusters;
+        final nsa = noStretchBoundaryAfterClusters == null ? SortedSet.builder().build() : noStretchBoundaryAfterClusters;
+        final br = westernBracketCjkInterCharBoundaryAfterClusters == null ? SortedSet.builder().build() : westernBracketCjkInterCharBoundaryAfterClusters;
+        final ph = attachedInlinePhysicalBoundaryAfterClusters == null ? SortedSet.builder().build() : attachedInlinePhysicalBoundaryAfterClusters;
+        final vi = attachedInlineVirtualBoundaryAfterClusters == null ? SortedMap.builder().build() : attachedInlineVirtualBoundaryAfterClusters;
+        final vs = attachedInlineVirtualSinoWesternBoundaryAfterClusters == null ? SortedSet.builder().build() : attachedInlineVirtualSinoWesternBoundaryAfterClusters;
+        final uo = uniformInlineObjectBoundaryAfterClusters == null ? SortedSet.builder().build() : uniformInlineObjectBoundaryAfterClusters;
+        final pref = preferredInlineObjectBoundaryAfterClusters == null ? SortedMap.builder().build() : preferredInlineObjectBoundaryAfterClusters;
+        final te = technicalBoundaryAfterClusters == null ? SortedMap.builder().build() : technicalBoundaryAfterClusters;
+        final emg = emergencyTrackingBoundaryAfterClusters == null ? SortedMap.builder().build() : emergencyTrackingBoundaryAfterClusters;
+        final pem = preferredEmergencyTrackingBoundaryAfterClusters == null ? SortedMap.builder().build() : preferredEmergencyTrackingBoundaryAfterClusters;
+        if (clusterRoles.length != adjustedClusters.length)
             throw new org.tiqian.core.TiqianIllegalArgumentException(org.tiqian.core.TextRangeError.Message("clusterRoles must align with adjustedClusters."));
-        if (edges.length != c.length)
+        if (eastAsianSpacingEdges.length != adjustedClusters.length)
             throw new org.tiqian.core.TiqianIllegalArgumentException(org.tiqian.core.TextRangeError.Message("East_Asian_Spacing values must align with adjustedClusters."));
         // The reference accumulates the range in Double and narrows the
         // finished sum once, so a run of equal binary32 advances reaches its
         // exact total instead of rounding on every step.
         final widthTerms:Array<Float> = [];
-        var i = r.start;
-        while (i <= r.end) {
-            widthTerms.push(c[i].advance);
+        var i = lineClusterRange.start;
+        while (i <= lineClusterRange.end) {
+            widthTerms.push(adjustedClusters[i].advance);
             i++;
         }
         final width = AccurateSum.of(widthTerms);
         final deficit = Math.max(maxWidth - width, 0);
         if (skip || deficit <= 0)
-            return new JustificationPlan(r, [], deficit, deficit, skip ? skipReason : null);
+            return new JustificationPlan(lineClusterRange, [], deficit, deficit, skip ? skipReason : null);
         var remaining = deficit;
         final out:Array<JustificationAllocation> = [];
         function boundaryIsClosed(l:Int, x:Int):Bool
@@ -169,8 +169,8 @@ class Justifier {
             var a:Array<JustificationOpportunity> = [];
             if (cap <= 0)
                 return a;
-            var j = r.start;
-            while (j < r.end) {
+            var j = lineClusterRange.start;
+            while (j < lineClusterRange.end) {
                 if (p(j, j + 1))
                     a.push(new JustificationOpportunity(j, kind, priority, cap, reason));
                 j++;
@@ -178,21 +178,21 @@ class Justifier {
             return a;
         }
         function finish(fallback:Null<String>):JustificationPlan
-            return new JustificationPlan(r, out, deficit, Math.max(remaining, 0), fallback);
+            return new JustificationPlan(lineClusterRange, out, deficit, Math.max(remaining, 0), fallback);
         var ops = build(GlueKind.ProgressiveTechnical, ProgressiveBreakTier.Whitespace.priority(), progressiveTechnicalWhitespaceStretchCapacity(fontSize),
             "ProgressiveTechnicalWhitespaceStretch", function(l, x) {
                 var t = te.get(l);
-                return t == ProgressiveBreakTier.Whitespace && allWhitespace(c[l].text);
+                return t == ProgressiveBreakTier.Whitespace && allWhitespace(adjustedClusters[l].text);
         });
         alloc(ops, "ProgressiveTechnicalWhitespaceStretch");
         if (remaining <= 0)
             return finish(null);
         var ws:Array<JustificationOpportunity> = [];
-        i = r.start;
-        while (i <= r.end) {
-            if (wordSpaceBetweenNarrow(c, i, edges) && !spaceGapIsClosed(i)) {
-                var h = Math.max(wordSpaceMaxEm * fontSize - c[i].advance, 0);
-                if (c[i].advance > 0 && h > 0)
+        i = lineClusterRange.start;
+        while (i <= lineClusterRange.end) {
+            if (wordSpaceBetweenNarrow(adjustedClusters, i, eastAsianSpacingEdges) && !spaceGapIsClosed(i)) {
+                var h = Math.max(wordSpaceMaxEm * fontSize - adjustedClusters[i].advance, 0);
+                if (adjustedClusters[i].advance > 0 && h > 0)
                     ws.push(new JustificationOpportunity(i, GlueKind.WordSpace, 0, h, null));
             }
             i++;
@@ -202,19 +202,19 @@ class Justifier {
             return finish(null);
         var sino:Array<JustificationOpportunity> = [];
         if (allowSinoWesternGapStretch) {
-            sino = build(GlueKind.CjkLatinSpace, 1, Math.max((maxEm - baseEm) * fontSize, 0), null, function(l, x) {
-                return wideNarrowBoundary(l, x, edges) && !ph.has(l) && !boundaryIsClosed(l, x) && c[l].text.indexOf(" ") < 0 && c[x].text.indexOf(" ") != 0;
+            sino = build(GlueKind.CjkLatinSpace, 1, Math.max((cjkLatinSpaceMaxEm - cjkLatinSpaceBaseEm) * fontSize, 0), null, function(l, x) {
+                return wideNarrowBoundary(l, x, eastAsianSpacingEdges) && !ph.has(l) && !boundaryIsClosed(l, x) && adjustedClusters[l].text.indexOf(" ") < 0 && adjustedClusters[x].text.indexOf(" ") != 0;
             });
-            i = r.start;
-            while (i <= r.end) {
+            i = lineClusterRange.start;
+            while (i <= lineClusterRange.end) {
                 if (vs.has(i)) {
                     var prev = vi.get(i);
-                    if (prev != null && i >= r.start && i + 1 <= r.end && !ns.has(prev) && !ns.has(i + 1))
-                        sino.push(new JustificationOpportunity(i, GlueKind.CjkLatinSpace, 1, Math.max((maxEm - baseEm) * fontSize, 0),
+                    if (prev != null && i >= lineClusterRange.start && i + 1 <= lineClusterRange.end && !ns.has(prev) && !ns.has(i + 1))
+                        sino.push(new JustificationOpportunity(i, GlueKind.CjkLatinSpace, 1, Math.max((cjkLatinSpaceMaxEm - cjkLatinSpaceBaseEm) * fontSize, 0),
                             "AttachedInlineVirtualAutoSpace"));
                 }
-                if (wideNarrowTypedSpace(c, i, edges) && !spaceGapIsClosed(i) && c[i].advance > 0) {
-                    var h = Math.max(maxEm * fontSize - c[i].advance, 0);
+                if (wideNarrowTypedSpace(adjustedClusters, i, eastAsianSpacingEdges) && !spaceGapIsClosed(i) && adjustedClusters[i].advance > 0) {
+                    var h = Math.max(cjkLatinSpaceMaxEm * fontSize - adjustedClusters[i].advance, 0);
                     if (h > 0)
                         sino.push(new JustificationOpportunity(i, GlueKind.CjkLatinSpace, 1, h, null));
                 }
@@ -236,7 +236,7 @@ class Justifier {
             while (mi < pref.size()) {
                 var key = pref.keyAt(mi);
                 var pv = pref.get(key);
-                if (pv != null && pv.kind == kinds[ki] && key >= r.start && key < r.end && !boundaryIsClosed(key, key + 1))
+                if (pv != null && pv.kind == kinds[ki] && key >= lineClusterRange.start && key < lineClusterRange.end && !boundaryIsClosed(key, key + 1))
                     po.push(new JustificationOpportunity(key, glueKind(kinds[ki]), 2, pv.capacity, reason(kinds[ki])));
                 mi++;
             }
@@ -254,22 +254,22 @@ class Justifier {
         if (remaining <= 0)
             return finish(null);
         var hasCjk = false;
-        i = r.start;
-        while (i <= r.end) {
-            if (edges[i].containsWide)
+        i = lineClusterRange.start;
+        while (i <= lineClusterRange.end) {
+            if (eastAsianSpacingEdges[i].containsWide)
                 hasCjk = true;
             i++;
         }
         var hasU = false;
-        i = r.start;
-        while (i < r.end) {
+        i = lineClusterRange.start;
+        while (i < lineClusterRange.end) {
             if (uo.has(i) && !boundaryIsClosed(i, i + 1))
                 hasU = true;
             i++;
         }
         var hasE = false;
-        i = r.start;
-        while (i < r.end) {
+        i = lineClusterRange.start;
+        while (i < lineClusterRange.end) {
             if (emg.has(i))
                 hasE = true;
             i++;
@@ -278,12 +278,12 @@ class Justifier {
             return finish("WesternDominantLineNaturalSpacing");
         var all:Array<JustificationOpportunity> = [];
         var textOps = build(GlueKind.CjkInterChar, 3, remaining, null, function(l, x) {
-            var both = isCjk(roles[l]) && isCjk(roles[x]);
-            var pw = roles[l] == FontRole.CjkPunctuation
-                && edges[x].leading == EastAsianSpacingValue.Narrow
-                || edges[l].trailing == EastAsianSpacingValue.Narrow
-                && roles[x] == FontRole.CjkPunctuation;
-            var vw = allowSinoWesternGapStretch && wideNarrowBoundary(l, x, edges);
+            var both = isCjk(clusterRoles[l]) && isCjk(clusterRoles[x]);
+            var pw = clusterRoles[l] == FontRole.CjkPunctuation
+                && eastAsianSpacingEdges[x].leading == EastAsianSpacingValue.Narrow
+                || eastAsianSpacingEdges[l].trailing == EastAsianSpacingValue.Narrow
+                && clusterRoles[x] == FontRole.CjkPunctuation;
+            var vw = allowSinoWesternGapStretch && wideNarrowBoundary(l, x, eastAsianSpacingEdges);
             return (both || pw || vw) && !br.has(l) && !ph.has(l) && !vi.has(l) && !uo.has(l) && !boundaryIsClosed(l, x);
         });
         all = all.concat(textOps);
@@ -297,11 +297,11 @@ class Justifier {
         all = all.concat(build(GlueKind.InlineObjectBoundary, 3, remaining, null, function(l, x) {
             return uo.has(l) && !boundaryIsClosed(l, x);
         }));
-        i = r.start;
-        while (i <= r.end) {
-            if ((wordSpaceBetweenNarrow(c, i, edges) || (allowSinoWesternGapStretch && wideNarrowTypedSpace(c, i, edges)))
+        i = lineClusterRange.start;
+        while (i <= lineClusterRange.end) {
+            if ((wordSpaceBetweenNarrow(adjustedClusters, i, eastAsianSpacingEdges) || (allowSinoWesternGapStretch && wideNarrowTypedSpace(adjustedClusters, i, eastAsianSpacingEdges)))
                 && !spaceGapIsClosed(i)
-                && c[i].advance > 0)
+                && adjustedClusters[i].advance > 0)
                 all.push(new JustificationOpportunity(i, GlueKind.CjkInterChar, 3, remaining, null));
             i++;
         }
@@ -317,12 +317,12 @@ class Justifier {
         return finish(remaining > 0 && hasE ? "EmergencyTrackingNoOpenBoundary" : null);
     }
 
-    public function compress(surplus:Float, opps:Array<ShrinkOpportunity>):CompressionPlan {
+    public function compress(surplus:Float, shrinkOpportunities:Array<ShrinkOpportunity>):CompressionPlan {
         if (surplus <= 0)
             return new CompressionPlan([], 0, 0);
         var rem = surplus;
         var out:Array<PushInAllocation> = [];
-        final m = opps.filter(o -> o.capacity > 0).groupBy(o -> {key: o.tier, value: o});
+        final m = shrinkOpportunities.filter(o -> o.capacity > 0).groupBy(o -> {key: o.tier, value: o});
         var k = 0;
         while (k < m.size()) {
             if (rem <= 0)

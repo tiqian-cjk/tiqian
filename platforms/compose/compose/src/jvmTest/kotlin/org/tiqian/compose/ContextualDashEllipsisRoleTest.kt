@@ -6,7 +6,6 @@ import org.tiqian.core.LayoutResult
 import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.TextStyle
 import org.tiqian.core.TiqianTextContent
-import org.tiqian.core.ic
 import org.tiqian.font.FontRole
 import org.tiqian.layout.ExplainableStubParagraphLayoutEngine
 import org.tiqian.shaping.skia.SkiaFontMetricsResolver
@@ -32,7 +31,7 @@ class ContextualDashEllipsisRoleTest {
             assertEquals(FontRole.LatinText.name, decision.role, "index=$index $decision")
             assertEquals(decision.sourceText, decision.displayText, "index=$index $decision")
         }
-        assertTrue(result.debug.punctuationDecisions.none { it.char == '—' || it.char == '…' })
+        assertTrue(result.debug.punctuationDecisions.none { it.char == "—" || it.char == "…" })
         assertTrue(
             result.debug.shapingDecisions
                 .filter { it.sourceText.any { char -> char.isContextualDashOrEllipsis() } }
@@ -49,8 +48,8 @@ class ContextualDashEllipsisRoleTest {
         text.markIndices().forEach { index ->
             assertEquals(FontRole.CjkPunctuation.name, result.fontDecisionAt(index).role)
         }
-        assertTrue(result.debug.punctuationDecisions.any { it.char == '—' })
-        assertTrue(result.debug.punctuationDecisions.any { it.char == '…' || it.char == '⋯' })
+        assertTrue(result.debug.punctuationDecisions.any { it.char == "—" })
+        assertTrue(result.debug.punctuationDecisions.any { it.char == "…" || it.char == "⋯" })
         assertTrue(
             result.debug.shapingDecisions
                 .filter { it.sourceText.any { char -> char.isContextualDashOrEllipsis() } }
@@ -63,7 +62,7 @@ class ContextualDashEllipsisRoleTest {
         LayoutInput(
             content = TiqianTextContent(text),
             textStyle = TextStyle(locale = "zh-Hans"),
-            paragraphStyle = ParagraphStyle(firstLineIndent = 0.ic),
+            paragraphStyle = ParagraphStyle(firstLineIndent = org.tiqian.core.Ic(0f)),
             constraints = LayoutConstraints(maxWidth = 1000f),
         ),
     )

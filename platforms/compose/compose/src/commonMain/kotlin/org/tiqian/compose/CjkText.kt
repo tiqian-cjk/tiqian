@@ -27,7 +27,6 @@ import org.tiqian.core.LayoutConstraints
 import org.tiqian.core.LayoutResult
 import org.tiqian.core.LineLengthGrid
 import org.tiqian.core.ParagraphStyle
-import org.tiqian.core.ic
 import org.tiqian.core.TextStyle
 import kotlin.math.ceil
 import kotlin.math.max
@@ -423,7 +422,7 @@ internal fun autoListGutterEm(
             paragraphStyle = noGrid,
         ).size.width
     } ?: 0f
-    return max(1, ceil(widest / textStyle.fontSize).toInt()).ic
+    return Ic(max(1, ceil(widest / textStyle.fontSize).toInt()).toFloat())
 }
 
 /** Formats a list item's marker text (CLREQ 凸排 列表). */
@@ -479,10 +478,10 @@ sealed interface ParagraphIndent {
     data object Flush : ParagraphIndent
 
     /** 凸排：首行齐头、次行起缩 [indent]（对话/列表/法条）。 */
-    data class Hanging(val indent: Ic = 2.ic) : ParagraphIndent
+    data class Hanging(val indent: Ic = Ic(2f)) : ParagraphIndent
 
     /** 段落缩排：整段缩 [indent]（引用/诗词），首行再额外缩 [firstLine]。 */
-    data class Block(val indent: Ic = 2.ic, val firstLine: Ic = Ic.Zero) : ParagraphIndent
+    data class Block(val indent: Ic = Ic(2f), val firstLine: Ic = Ic.Zero) : ParagraphIndent
 
     /** → `(blockIndent, firstLineIndent)`; null firstLine = adaptive default. */
     fun resolve(base: Ic?): Pair<Ic, Ic?> = when (this) {

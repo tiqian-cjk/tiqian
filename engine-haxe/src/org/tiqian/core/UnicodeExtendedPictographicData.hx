@@ -2,7 +2,7 @@ package org.tiqian.core;
 
 /*
  * GENERATED from Unicode 17.0.0 emoji-data.txt by
- * tools/unicode-emoji/generate_emoji_presentation_data.py.
+ * tools/unicode-ranges/generate_unicode_ranges.py.
  * Source: https://www.unicode.org/Public/17.0.0/ucd/emoji/emoji-data.txt
  * SHA-256: 2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b
  * Copyright © 2025 Unicode, Inc.

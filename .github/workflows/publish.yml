@@ -1,6 +1,22 @@
 name: Stage Tiqian Maven release
 
+# Staged by .github/workflows/release.yml from the v*.*.* release tag, so one
+# version number covers Maven too. The Central Portal deployment still needs a
+# human to press publish in the Portal UI; staging and the preflight tests run
+# inside the release. The workflow can also be dispatched on a release tag to
+# re-stage a failed run.
 on:
+  workflow_call:
+    inputs:
+      version:
+        description: Release version without the v prefix
+        required: true
+        type: string
+      namespace:
+        description: Central Portal namespace
+        required: false
+        default: org.tiqian
+        type: string
   workflow_dispatch:
     inputs:
       version:
@@ -15,13 +31,18 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: stage-tiqian-maven-${{ inputs.version }}
   cancel-in-progress: false
 
 jobs:
+  release-gate:
+    uses: ./.github/workflows/release-gate.yml
+
   stage:
+    needs: [release-gate]
     runs-on: ubuntu-latest
     env:
       TIQIAN_VERSION: ${{ inputs.version }}
@@ -38,6 +59,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_call" ]]; then
+            if [[ "${GITHUB_REF_TYPE}" != "tag" || "${GITHUB_REF_NAME}" != v*.*.* ]]; then
+              echo "::error::The release workflow runs only from a v*.*.* release tag."
+              exit 1
+            fi
+            if [[ "${TIQIAN_VERSION}" == v* ]]; then
+              echo "::error::The caller must pass the version without the v prefix."
+              exit 1
+            fi
+            tag_version="${GITHUB_REF_NAME#v}"
+            if [[ "${TIQIAN_VERSION}" != "${tag_version}" ]]; then
+              echo "::error::Input version ${TIQIAN_VERSION} does not match the release tag ${GITHUB_REF_NAME}."
+              exit 1
+            fi
+          fi
           if [[ "$TIQIAN_VERSION" == *-SNAPSHOT ]]; then
             echo "Central staging requires an immutable non-SNAPSHOT version." >&2
             exit 1
@@ -66,21 +102,74 @@ jobs:
           echo "$cmake_bin_dir" >> "$GITHUB_PATH"
           "$cmake_bin_dir/cmake" --version
 
-      # :engine vendors the boring-generated Kotlin from engine-haxe (the sole
-      # active source); :engine:allTests verifies the exact artifacts this
-      # workflow publishes. Haxe-source regeneration (gates.sh) belongs to the
-      # development CI, not the Maven release.
-      - name: Verify the boring-generated engine and release artifacts
-        run: |
-          ./gradlew \
-            :engine:allTests \
-            assemble \
-            publishTiqianToMavenLocal \
-            -Dmaven.repo.local="$RUNNER_TEMP/tiqian-maven-preflight" \
-            --no-daemon
+      # engine-haxe is the only active engine source. boring generates the
+      # Kotlin tree from it, and the only Gradle project that compiles that tree
+      # is boring's publication project: settings.gradle.kts includes its
+      # :engine module as :boring:kotlin-f32. This build does not publish the
+      # nine tiqian-engine coordinates; the kotlin-f32 bundle's kmpPublication
+      # does that during pack.
+      #
+      # The generated Kotlin tree is not in git: .gitignore excludes
+      # /engine-haxe/out/, and gradle.properties names
+      # engine-haxe/out/kotlin-f32/gen as kotlinGenDir, the property the
+      # publication project reads for its commonMain source set. A clean
+      # checkout therefore has no sources, and settings.gradle.kts stops with
+      # the generation command instead of configuring an empty source set.
+      # Generate the tree in this job before Gradle runs; gates.sh remains the
+      # development CI entry point and is not used here.
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
 
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Generate the Kotlin engine sources
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring gen kotlin-f32 --project boring.json'
+
+      # The generated suite is not a JUnit suite: every case carries
+      # @boring.test.Test, and the driver's test lane compiles gen-tests through
+      # its kotlin launcher and exits non-zero when any case throws. It is not a
+      # tiqian Gradle task; it runs through the driver lane here.
+      - name: Run the generated Kotlin test suite
+        run: nix develop -c bash -c 'boring test kotlin-f32 --project boring.json'
+
+      # The Gradle steps run with the Android SDK the flake devShell exports,
+      # because the runner image's SDK cannot satisfy the Android modules.
+      # platforms/android/native-font/build.gradle.kts:19 pins
+      # ndkVersion 29.0.13599879-rc2 and :34 pins cmake version 3.22.1; the
+      # ubuntu-latest image preinstalls NDK 27.3.13750724, 29.0.14206865 and
+      # 30.0.16248370 only, and no sdkmanager call in this workflow installs
+      # the pinned one. flake.nix:50-59 composes exactly platforms;android-36,
+      # build-tools;36.0.0, cmake;3.22.1 and ndk;29.0.13599879-rc2, and
+      # flake.nix:100-101 exports that SDK as ANDROID_HOME.
+      # Gradle refuses to configure any Android project when ANDROID_HOME and
+      # ANDROID_SDK_ROOT name different roots ("Several environment variables
+      # and/or system properties contain different paths to the SDK"), and the
+      # image exports ANDROID_SDK_ROOT=/usr/local/lib/android/sdk, so that
+      # variable is dropped before the devShell starts, as in
+      # staging-pipeline.yml:77.
+      # The task set comes from tools/release-gradle-tasks.sh, the file
+      # tools/staging-pipeline.sh sources on every push to main. Adding a task
+      # to that file changes both runs at once, so the staging run verifies the
+      # whole release set instead of a copy that drifts from this one.
+      - name: Verify the engine and the release artifacts
+        shell: bash
+        run: |
+          unset ANDROID_SDK_ROOT
+          nix develop -c bash -c '
+            . tools/release-gradle-tasks.sh
+            ./gradlew "${RELEASE_GRADLE_TASKS[@]}" \
+              -Dmaven.repo.local="$RUNNER_TEMP/tiqian-maven-preflight" \
+              --no-daemon
+          '
+
+      # The Central upload publishes the same Android modules, so this step
+      # needs the same SDK and the same unset.
       - name: Upload Tiqian modules
-        run: ./gradlew publishTiqianToCentral --no-daemon
+        shell: bash
+        run: |
+          unset ANDROID_SDK_ROOT
+          nix develop -c bash -c './gradlew publishTiqianToCentral --no-daemon'
 
       - name: Create Central Portal deployment
         env:

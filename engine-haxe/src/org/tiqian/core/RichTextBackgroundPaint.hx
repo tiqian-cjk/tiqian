@@ -12,6 +12,9 @@ class RichTextBackgroundPaint {
     public final metricPolicy:RichTextBackgroundMetricPolicy;
     public final drawStyle:RichTextBackgroundDrawStyle;
 
+    /** The published no-argument default, used by RichTextPaint and RichTextSpan. */
+    public static final Default:RichTextBackgroundPaint = new RichTextBackgroundPaint(0.0, 0.0, 0.0, 0.0, RichTextBackgroundMetricPolicy.MarkedFaces, Fill.instance);
+
     public function new(?horizontalPadding:Null<Float>, ?verticalPadding:Null<Float>, ?cornerRadius:Null<Float>, ?continuationCornerRadius:Null<Float>,
             ?metricPolicy:Null<RichTextBackgroundMetricPolicy>, ?drawStyle:Null<RichTextBackgroundDrawStyle>) {
         this.horizontalPadding = horizontalPadding == null ? 0.0 : horizontalPadding;
@@ -68,3 +71,4 @@ class RichTextBackgroundPaint {
         return value == value && value != Math.POSITIVE_INFINITY && value != Math.NEGATIVE_INFINITY;
     }
 }
+

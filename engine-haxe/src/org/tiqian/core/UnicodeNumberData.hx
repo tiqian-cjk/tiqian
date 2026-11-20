@@ -2,7 +2,7 @@ package org.tiqian.core;
 
 /*
  * GENERATED from Unicode 17.0.0 DerivedGeneralCategory.txt by
- * tools/unicode-general-category/generate_word_character_data.py.
+ * tools/unicode-ranges/generate_unicode_ranges.py.
  * Source: https://www.unicode.org/Public/17.0.0/ucd/extracted/DerivedGeneralCategory.txt
  * SHA-256: d62e5bab70ca74f099343f71224fa051cb1fdd61a1ab45c0488c44cfc0b6102e
  * Copyright © 2025 Unicode, Inc.

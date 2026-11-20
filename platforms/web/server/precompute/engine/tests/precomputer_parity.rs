@@ -3,10 +3,12 @@
 //! `platforms/web/client/web-component/precompute.js` over the fixture font; every case dumps
 //! `stableStringify(entry)` (or `ERROR:<message>` for throws). The one exempt
 //! engine-identity field, `fontEvidence.harfbuzzVersion`, is aligned before
-//! the byte comparison. The engine engine runs in-process.
+//! the byte comparison. The engine engine runs in-process. The fixture font is
+//! vendored under `tests/fixtures` and embedded with `include_bytes!`, so the
+//! comparison runs on a bare runner without a font directory.
 
-
-use std::path::PathBuf;
+#[path = "support/font_fixture.rs"]
+mod font_fixture;
 
 use tiqian_precompute::font_record::{FontFaceSpec, FontWeightSpec};
 use tiqian_precompute::json::{parse_json, Json};
@@ -66,39 +68,30 @@ const CASES: &[(&str, &str, bool, &str)] = &[
     ),
 ];
 
-fn dela_gothic_path() -> Option<PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-    let path = PathBuf::from(home).join(".local/share/fonts/DelaGothicOne-Regular.ttf");
-    path.is_file().then_some(path)
-}
-
-fn fixture_precomputer() -> Option<Precomputer> {
-    let font_path = dela_gothic_path()?;
-    let bytes = std::fs::read(font_path).expect("fixture font reads");
-    Some(
-        create_precomputer(PrecomputerOptions::new(
-            TypographyInput {
-                font_families: Some(vec!["Dela Gothic One".to_string()]),
-                font_size_px: Some(18.0),
-                line_height_px: Some(27.0),
-                ..Default::default()
+fn fixture_precomputer() -> Precomputer {
+    let bytes = font_fixture::DELA_GOTHIC_ONE;
+    create_precomputer(PrecomputerOptions::new(
+        TypographyInput {
+            font_families: Some(vec![font_fixture::FAMILY.to_string()]),
+            font_size_px: Some(18.0),
+            line_height_px: Some(27.0),
+            ..Default::default()
+        },
+        vec![SessionFaceSpec {
+            spec: FontFaceSpec {
+                family: font_fixture::FAMILY,
+                public_url: font_fixture::PUBLIC_URL,
+                source: bytes,
+                face_index: None,
+                weight: FontWeightSpec::Single(Some(400.0)),
+                style: "normal",
+                unicode_range: None,
+                source_order: 0,
             },
-            vec![SessionFaceSpec {
-                spec: FontFaceSpec {
-                    family: "Dela Gothic One",
-                    public_url: "/fonts/DelaGothicOne-Regular.ttf",
-                    source: &bytes,
-                    face_index: None,
-                    weight: FontWeightSpec::Single(Some(400.0)),
-                    style: "normal",
-                    unicode_range: None,
-                    source_order: 0,
-                },
-                source_order: Some(0.0),
-            }],
-        ))
-        .expect("fixture precomputer builds"),
-    )
+            source_order: Some(0.0),
+        }],
+    ))
+    .expect("fixture precomputer builds")
 }
 
 fn run(
@@ -153,15 +146,7 @@ fn align_harfbuzz_version(entry: &mut Json, oracle: &Json) {
 
 #[test]
 fn precomputer_entries_match_the_js_oracle() {
-    let Some(mut precomputer) = fixture_precomputer() else {
-        eprintln!(
-            "skipped: DelaGothicOne-Regular.ttf absent at {}",
-            dela_gothic_path()
-                .map(|path| path.display().to_string())
-                .unwrap_or_default()
-        );
-        return;
-    };
+    let mut precomputer = fixture_precomputer();
     assert!(precomputer.session_id().starts_with("tq-build-font-"));
     assert_eq!(precomputer.render_font_families(), ["Dela Gothic One"]);
 
@@ -184,10 +169,7 @@ fn precomputer_entries_match_the_js_oracle() {
 
 #[test]
 fn close_is_idempotent() {
-    let Some(mut precomputer) = fixture_precomputer() else {
-        eprintln!("skipped: fixture font absent");
-        return;
-    };
+    let mut precomputer = fixture_precomputer();
     precomputer.close();
     precomputer.close();
     let result = run(&mut precomputer, PLAIN_INPUT, false);

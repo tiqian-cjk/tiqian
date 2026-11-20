@@ -59,7 +59,7 @@ class AndroidNativeFontBackendTest {
         if (Build.VERSION.SDK_INT < 31) return
         fun request(text: String) = org.tiqian.shaping.ReplayableFontFaceRequest(
             role = FontRole.CjkText,
-            preferredFamilies = emptyList(),
+            preferredFamilies = mutableListOf(),
             fontSize = 32f,
             weight = 400,
             italic = false,
@@ -93,7 +93,7 @@ class AndroidNativeFontBackendTest {
             context,
             org.tiqian.shaping.ReplayableFontFaceRequest(
                 role = role,
-                preferredFamilies = emptyList(),
+                preferredFamilies = mutableListOf(),
                 fontSize = 32f,
                 weight = 400,
                 italic = false,
@@ -127,7 +127,7 @@ class AndroidNativeFontBackendTest {
         for ((text, role) in candidates) {
             val request = org.tiqian.shaping.ReplayableFontFaceRequest(
                 role = role,
-                preferredFamilies = emptyList(),
+                preferredFamilies = mutableListOf(),
                 fontSize = 32f,
                 weight = 400,
                 italic = false,
@@ -153,7 +153,7 @@ class AndroidNativeFontBackendTest {
                 "$text degraded glyphs must not claim a retained native face",
             )
             assertEquals(
-                org.tiqian.shaping.PLATFORM_MULTI_FACE_STRING_DRAW_ISSUE,
+                org.tiqian.shaping.ShapingIssue.PLATFORM_MULTI_FACE_STRING_DRAW_ISSUE,
                 shaped.decisions.single().capabilityIssue,
                 text,
             )
@@ -170,7 +170,7 @@ class AndroidNativeFontBackendTest {
         TiqianAndroidFontBackend.resetDefaultCatalogForTesting(context)
         val request = org.tiqian.shaping.ReplayableFontFaceRequest(
             role = FontRole.CjkText,
-            preferredFamilies = emptyList(),
+            preferredFamilies = mutableListOf(),
             fontSize = 32f,
             weight = 400,
             italic = true,
@@ -212,7 +212,7 @@ class AndroidNativeFontBackendTest {
         TiqianAndroidFontBackend.resetDefaultCatalogForTesting(context)
         val request = org.tiqian.shaping.ReplayableFontFaceRequest(
             role = FontRole.LatinText,
-            preferredFamilies = emptyList(),
+            preferredFamilies = mutableListOf(),
             fontSize = 32f,
             weight = 700,
             italic = false,
@@ -251,7 +251,7 @@ class AndroidNativeFontBackendTest {
         TiqianAndroidFontBackend.resetDefaultCatalogForTesting(context)
         val request = org.tiqian.shaping.ReplayableFontFaceRequest(
             role = FontRole.CjkText,
-            preferredFamilies = emptyList(),
+            preferredFamilies = mutableListOf(),
             fontSize = 32f,
             weight = 400,
             italic = false,
@@ -334,7 +334,7 @@ class AndroidNativeFontBackendTest {
         TiqianAndroidFontBackend.resetDefaultCatalogForTesting(context)
         fun request(weight: Int) = org.tiqian.shaping.ReplayableFontFaceRequest(
             role = FontRole.CjkText,
-            preferredFamilies = emptyList(),
+            preferredFamilies = mutableListOf(),
             fontSize = 32f,
             weight = weight,
             italic = false,
@@ -495,8 +495,11 @@ class AndroidNativeFontBackendTest {
             lineBreaker = LookaheadLineBreaker(),
             textShaper = AndroidNativeTextShaper(context),
             fontMetricsResolver = AndroidNativeFontMetricsResolver(context),
-            clreqProfileResolver = { ClreqProfile.MainlandHorizontal },
-            hyphenator = EnglishHyphenation.enUs,
+            clreqProfileResolver = object : org.tiqian.clreq.ClreqProfileResolver {
+                override fun resolve(profileId: org.tiqian.core.LayoutProfileId): ClreqProfile =
+                    ClreqProfile.MainlandHorizontal
+            },
+            hyphenator = EnglishHyphenation.enUs(),
         )
         val paragraph = buildString {
             repeat(80) {

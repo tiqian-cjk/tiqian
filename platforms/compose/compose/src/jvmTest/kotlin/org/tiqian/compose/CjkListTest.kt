@@ -3,7 +3,6 @@ package org.tiqian.compose
 import org.tiqian.clreq.ClreqProfile
 import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.TextStyle
-import org.tiqian.core.ic
 import org.tiqian.layout.ExplainableStubParagraphLayoutEngine
 import org.tiqian.layout.LookaheadLineBreaker
 import org.tiqian.shaping.skia.SkiaFontMetricsResolver
@@ -19,7 +18,7 @@ class CjkListTest {
             lineBreaker = LookaheadLineBreaker(),
             textShaper = SkiaTextShaper(),
             fontMetricsResolver = SkiaFontMetricsResolver(),
-            clreqProfileResolver = { ClreqProfile.MainlandHorizontal },
+            clreqProfileResolver = object : org.tiqian.clreq.ClreqProfileResolver { override fun resolve(profileId: org.tiqian.core.LayoutProfileId): org.tiqian.clreq.ClreqProfile = ClreqProfile.MainlandHorizontal },
         ),
     )
 
@@ -46,14 +45,14 @@ class CjkListTest {
         fun gutter(count: Int) =
             autoListGutterEm(CjkBlock.List.ofStrings((1..count).map { "项" }, ListMarker.Decimal), ts, ps, measurer)
 
-        assertEquals(1.ic, gutter(9), "1.–9. fit one 字")
-        assertEquals(2.ic, gutter(10), "10. forces the whole列 to two 字")
+        assertEquals(org.tiqian.core.Ic(1f), gutter(9), "1.–9. fit one 字")
+        assertEquals(org.tiqian.core.Ic(2f), gutter(10), "10. forces the whole列 to two 字")
     }
 
     @Test
     fun explicitIndentOverridesAuto() {
         // The List carries the override; auto is only consulted when indent == null.
-        val list = CjkBlock.List.ofStrings(listOf("a", "b"), ListMarker.Decimal, indent = 3.ic)
-        assertEquals(3.ic, list.indent)
+        val list = CjkBlock.List.ofStrings(listOf("a", "b"), ListMarker.Decimal, indent = org.tiqian.core.Ic(3f))
+        assertEquals(org.tiqian.core.Ic(3f), list.indent)
     }
 }

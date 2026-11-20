@@ -1,7 +1,7 @@
 package org.tiqian.layout;
 
 import org.tiqian.core.*;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import org.tiqian.shaping.TextShaper.ShapingInput;
 import org.tiqian.shaping.TextShaper.ShapingResult;
 import org.tiqian.shaping.TextShaper.ExplainableStubTextShaper;
@@ -10,7 +10,7 @@ import org.tiqian.layout.ParagraphLayoutEngine.ExplainableStubParagraphLayoutEng
 import std.ReadOnlyArray;
 
 class LineAdjustmentStageCoverageTestSupport {
-    public static function engine(?shaper:ITextShaper, hyphenate:Bool):ExplainableStubParagraphLayoutEngine {
+    public static function engine(?shaper:TextShaper, hyphenate:Bool):ExplainableStubParagraphLayoutEngine {
         if (shaper != null)
             return new ExplainableStubParagraphLayoutEngine(null, null, null, null, null, null, null, null, null, null, shaper);
         if (hyphenate)
@@ -19,7 +19,7 @@ class LineAdjustmentStageCoverageTestSupport {
     }
 
     public static function layout(text:String, width:Float, ?spans:Array<TextSpan>, ?inlineObjects:Array<InlineObjectSpan>,
-            ?lineBreakSpans:Array<LineBreakSpan>, ?hyphenate:Bool, ?shaper:ITextShaper):LayoutResult {
+            ?lineBreakSpans:Array<LineBreakSpan>, ?hyphenate:Bool, ?shaper:TextShaper):LayoutResult {
         final resolvedSpans = spans == null ? [] : spans;
         final resolvedObjects = inlineObjects == null ? [] : inlineObjects;
         final resolvedBreaks = lineBreakSpans == null ? [] : lineBreakSpans;
@@ -160,7 +160,7 @@ class LineAdjustmentStageCoverageTestSupport {
     }
 }
 
-class ZeroSpaceShaper implements ITextShaper {
+class ZeroSpaceShaper implements TextShaper {
     final delegate:ExplainableStubTextShaper;
 
     public function new() {

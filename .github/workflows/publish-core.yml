@@ -1,0 +1,244 @@
+name: Publish core package
+
+# Release lane for @tiqian/core. The package is the dependency of
+# @tiqian/web-component, so it has to be on the registry before the web-component lane
+# publishes; the release entrypoint orders the two lanes that way.
+#
+# Every npm lane is callable only from the release entrypoint (or dispatched
+# on a v*.*.* tag), and each one runs the release gate before publishing.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: publish-tiqian-core
+  cancel-in-progress: false
+
+jobs:
+  release-gate:
+    uses: ./.github/workflows/release-gate.yml
+
+  publish-alpha:
+    name: Verify and publish alpha
+    needs: [release-gate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Check out the release commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Use an OIDC-capable npm CLI
+        run: npm install --global npm@11.12.1
+
+      - name: Validate the release ref
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" != "tag" || "${GITHUB_REF_NAME}" != v*.*.* ]]; then
+            echo "::error::This lane runs only from a v*.*.* release tag, received ${GITHUB_REF_NAME}."
+            exit 1
+          fi
+          if [[ "$(git cat-file -t "${GITHUB_REF_NAME}")" != "tag" ]]; then
+            echo "::error::Release tag must be annotated"
+            exit 1
+          fi
+          tag_commit="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
+          if [[ "${tag_commit}" != "${GITHUB_SHA}" ]]; then
+            echo "::error::Tag target ${tag_commit} does not match workflow commit ${GITHUB_SHA}"
+            exit 1
+          fi
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "${tag_commit}" refs/remotes/origin/main; then
+            echo "::error::Release tag must point to a commit on origin/main"
+            exit 1
+          fi
+          version="$(node -p "require('./platforms/web/client/core/package.json').version")"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      # The install resolves two generated, gitignored trees: tiqian-protocol
+      # and tiqian-shared are workspace:* members under
+      # engine-haxe/out/{protocol-ts,shared-ts}/gen whose package.json is
+      # written by boring pack, and @tiqian/core type-checks against the
+      # @tiqian/ffi runtime/ build product. npm cannot resolve the workspace
+      # protocol (EUNSUPPORTEDPROTOCOL), so this lane generates the trees, packs
+      # the member manifests, then installs with bun.
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: Generate the TypeScript engine tree with the flake toolchain
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs ts'
+      - name: Align the generated package versions with the release
+        # boring pack writes the placeholder version from boring.json, and the
+        # sibling archives the inspect step installs must carry the release
+        # version @tiqian/core depends on, so align before packing.
+        run: python3 tools/align-package-versions.py ${{ steps.release.outputs.version }}
+
+      - name: Write the protocol and shared package manifests
+        run: |
+          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
+          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
+          chmod +x "$BORING_PACKAGE_TSC"
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+      - name: Install workspace dependencies
+        working-directory: .
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and delete the manifest
+        # boring pack wrote; the runtime is assembled explicitly below.
+        run: nix develop -c bun install --ignore-scripts
+      - name: Assemble the @tiqian/ffi runtime with the flake toolchain
+        # @tiqian/core resolves @tiqian/ffi through its runtime/ declarations,
+        # which the skipped root postinstall used to assemble.
+        working-directory: platforms/web/client/engine-runtime
+        run: nix develop -c npm run build:runtime
+
+      - name: Verify the package contents
+        working-directory: platforms/web/client/core
+        run: npm run verify:package
+
+      - name: Resolve the workspace dependency ranges to the release version
+        working-directory: platforms/web/client/core
+        # npm copies a manifest as written and never rewrites the workspace
+        # protocol, so a tarball packed from the repository manifest hands the
+        # consumer a range its install cannot resolve. This lane publishes
+        # this package's version, and tools/publish-contract.py is the single
+        # writer for the rewrite; the check below refuses a tarball that still
+        # carries a workspace range.
+        run: python3 "$GITHUB_WORKSPACE/tools/publish-contract.py" --resolve . --version "${{ steps.release.outputs.version }}"
+
+      - name: Build and pack the release tarball
+        working-directory: platforms/web/client/core
+        env:
+          TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-core-release
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${TIQIAN_RELEASE_ARTIFACT_DIR}"
+          npm run build
+          npm pack --pack-destination "${TIQIAN_RELEASE_ARTIFACT_DIR}"
+          test "$(find "${TIQIAN_RELEASE_ARTIFACT_DIR}" -maxdepth 1 -name '*.tgz' | wc -l)" -eq 1
+
+      - name: Hold the release tarball to the npm publish contract
+        shell: bash
+        env:
+          TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-core-release
+        run: |
+          set -euo pipefail
+          tarball="$(find "${TIQIAN_RELEASE_ARTIFACT_DIR}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          python3 "${GITHUB_WORKSPACE}/tools/publish-contract.py" --archive "${tarball}"
+
+      - name: Inspect the release package the way a consumer receives it
+        # The build step above proves the tarball matches its own checks. This
+        # step installs the archive into an empty project beside the sibling
+        # archives this lane already generated for the manifest step, and
+        # imports the entry a consumer uses, so a manifest or file-list defect
+        # fails here instead of at a registry. The siblings come from this
+        # lane's own pack output: the release publishes them from the pack
+        # matrix later, so the registry does not have them yet at this point.
+        shell: bash
+        env:
+          TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-core-release
+        run: |
+          set -euo pipefail
+          tarball="$(find "${TIQIAN_RELEASE_ARTIFACT_DIR}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          siblings=()
+          for bundle in protocol-ts shared-ts; do
+            path="$(find "engine-haxe/out/${bundle}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+            if [[ -z "${path}" ]]; then
+              echo "::error::the ${bundle} bundle wrote no archive"
+              exit 1
+            fi
+            siblings+=(--with "${path}")
+          done
+          bash "${GITHUB_WORKSPACE}/tools/check-npm-package.sh" "${tarball}" \
+            --expect @tiqian/core --entry @tiqian/core/snapshot-schema "${siblings[@]}"
+
+      - name: Publish the verified tarball to alpha
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(find "${RUNNER_TEMP}/tiqian-core-release" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          if [[ -z "${tarball}" ]]; then
+            echo "::error::Verified release tarball is missing"
+            exit 1
+          fi
+          bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
+
+  sync-latest:
+    name: Synchronize latest dist-tag
+    needs: publish-alpha
+    # A trusted publisher whose connection lacks the dist-tag switch
+    # answers 403; the version is already published, so this job reports it
+    # without blocking the remaining lanes.
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Trusted publishing authenticates the dist-tag write; no token is read.
+      id-token: write
+    steps:
+      - name: Check out the release commit
+        # The dist-tag step runs tools/npm-dist-tag.sh from the repository, so
+        # this job needs the checkout the publish job has.
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Use the release npm CLI
+        run: npm install --global npm@11.12.1
+
+      - name: Point latest at the published alpha
+        env:
+          RELEASE_VERSION: ${{ needs.publish-alpha.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.21.0
+          bash "${GITHUB_WORKSPACE}/tools/npm-dist-tag.sh" --package @tiqian/core --version "${RELEASE_VERSION}" --tag latest
+
+      - name: Verify alpha and latest
+        env:
+          RELEASE_VERSION: ${{ needs.publish-alpha.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..12}; do
+            tags="$(npm view @tiqian/core dist-tags --json)"
+            if DIST_TAGS="${tags}" node --input-type=module -e '
+              const tags = JSON.parse(process.env.DIST_TAGS);
+              const version = process.env.RELEASE_VERSION;
+              if (tags.alpha !== version || tags.latest !== version) process.exit(1);
+            '; then
+              echo "alpha and latest both point to ${RELEASE_VERSION}"
+              exit 0
+            fi
+            if [[ "${attempt}" -lt 12 ]]; then sleep 5; fi
+          done
+          echo "::error::npm dist-tags did not converge on ${RELEASE_VERSION}"
+          exit 1

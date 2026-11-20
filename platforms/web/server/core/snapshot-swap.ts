@@ -33,7 +33,7 @@ const manifestPaths: readonly string[] = [
   join(root, "../../client/react/package.json"),
   join(root, "../../client/astro/package.json"),
   join(root, "../../client/sveltekit/package.json"),
-  join(root, "../../../../ffi/js/npm/package.json"),
+  join(root, "../../client/engine-runtime/package.json"),
 ];
 // Source roots whose text files may embed the rescope set below. node_modules
 // is excluded everywhere so the workspace symlinks into the client packages
@@ -45,7 +45,7 @@ const sourceRoots: readonly string[] = [
   join(root, "../../client/astro"),
   join(root, "../../client/sveltekit"),
   root,
-  join(root, "../../../../ffi/js/npm"),
+  join(root, "../../client/engine-runtime"),
 ];
 const excludedDirectories: readonly Set<string> = new Set(["node_modules", ".parcel-cache", ".git"]);
 const sourceExtensions: readonly string[] = [".js", ".cjs", ".mjs", ".ts", ".mts"];
@@ -55,7 +55,7 @@ const sourceExtensions: readonly string[] = [".js", ".cjs", ".mjs", ".ts", ".mts
 const rescopeSet: readonly string[] = [
   "@tiqian/ffi",
   "@tiqian/core",
-  "@tiqian/prose",
+  "@tiqian/web-component",
   "@tiqian/precompute",
 ];
 

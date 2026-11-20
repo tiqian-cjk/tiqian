@@ -60,8 +60,8 @@ class ParagraphDpLineBreakerTestSupport {
             ?progressive:SortedMap<Int, ProgressiveBreakOpportunity>, ?window:Int, ?cjk:Array<Int>, ?maxStretch:Null<Float>,
             ?forbidStart:Array<Int>):LineSolution {
         var x = new ParagraphDpLineBreaker(window == null ? 8 : window);
-        return x.breakLines(c, c, width, shrink, ranges, null, null, null, forbidStart == null ? null : ints(forbidStart), null, null,
-            ints(cjk == null ? [] : cjk), maxStretch == null ? Math.POSITIVE_INFINITY : maxStretch, null, null, push, null, ints(hard == null ? [] : hard),
+        return x.breakLines(c, c, width, shrink, ranges, 0.0, null, null, forbidStart == null ? null : ints(forbidStart), null, null,
+            ints(cjk == null ? [] : cjk), maxStretch == null ? Math.POSITIVE_INFINITY : maxStretch, null, 0.0, push, 1.0, ints(hard == null ? [] : hard),
             null, progressive);
     }
 

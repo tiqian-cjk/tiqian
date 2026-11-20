@@ -4,7 +4,7 @@ import org.tiqian.core.*;
 import org.tiqian.clreq.*;
 import org.tiqian.linebreak.EnglishHyphenation;
 import std.ReadOnlyArray;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import org.tiqian.shaping.TextShaper.ShapingInput;
 import org.tiqian.shaping.TextShaper.ShapingResult;
 import org.tiqian.test.trace.TestTrace;
@@ -15,7 +15,7 @@ import org.tiqian.layout.ParagraphLayoutEngine.ExplainableStubParagraphLayoutEng
 class EmergencyGraphemeTrackingTestSupport {
     public static final noIndent:ParagraphStyle = new ParagraphStyle(null, null, null, Ic.Zero, null, null, new LineLengthGrid(false));
 
-    public static function engine(?textShaper:ITextShaper, ?hyphenator:org.tiqian.linebreak.Hyphenator):ExplainableStubParagraphLayoutEngine {
+    public static function engine(?textShaper:TextShaper, ?hyphenator:org.tiqian.linebreak.Hyphenator):ExplainableStubParagraphLayoutEngine {
         return new ExplainableStubParagraphLayoutEngine(null, null, null, null, null, null, null, null, null, null, textShaper, hyphenator);
     }
 
@@ -53,7 +53,7 @@ class EmergencyGraphemeTrackingTestSupport {
             new LayoutConstraints(maxWidth)));
     }
 
-    public static function layoutWithShaper(text:String, maxWidth:Float, textShaper:ITextShaper, ?lineBreakSpans:Array<LineBreakSpan>):LayoutResult {
+    public static function layoutWithShaper(text:String, maxWidth:Float, textShaper:TextShaper, ?lineBreakSpans:Array<LineBreakSpan>):LayoutResult {
         return engine(textShaper,
             EnglishHyphenation.enUs()).layout(new LayoutInput(new TiqianTextContent(text, null, null, lineBreakSpans), null, noIndent,
             new LayoutConstraints(maxWidth)));
@@ -97,7 +97,7 @@ class EmergencyGraphemeTrackingTestSupport {
     }
 }
 
-class UniformAdvanceShaper implements ITextShaper {
+class UniformAdvanceShaper implements TextShaper {
     public function new() {}
 
     public function shape(input:ShapingInput):ShapingResult {

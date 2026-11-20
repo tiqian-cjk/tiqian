@@ -1,4 +1,5 @@
 package org.tiqian.layout;
+import org.tiqian.shaping.TextShaper.ShapingIssue;
 
 using org.tiqian.layout.ProgressiveBreakTierPriority;
 
@@ -606,7 +607,7 @@ class ParagraphShapingStage {
                 var hasMissing = false;
                 for (i in 0...shaped.decisions.length) {
                     final d = shaped.decisions[i];
-                    if (d.capabilityIssue == TextShaper.UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE_ISSUE) {
+                    if (d.capabilityIssue == ShapingIssue.UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE_ISSUE) {
                         hasUnverified = true;
                     }
                     if (d.missingGlyphs > 0) {

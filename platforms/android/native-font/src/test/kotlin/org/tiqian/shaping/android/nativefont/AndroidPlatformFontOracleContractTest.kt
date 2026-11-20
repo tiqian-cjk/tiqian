@@ -2,7 +2,6 @@ package org.tiqian.shaping.android.nativefont
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import org.tiqian.shaping.FontFaceId
 import org.tiqian.shaping.ReplayableFontFaceRequest
 import org.tiqian.font.FontRole
 
@@ -15,7 +14,7 @@ class AndroidPlatformFontOracleContractTest {
                 platformFaceProbeText(
                     ReplayableFontFaceRequest(
                         role = FontRole.CjkPunctuation,
-                        preferredFamilies = emptyList(),
+                        preferredFamilies = mutableListOf(),
                         fontSize = 32f,
                         weight = 400,
                         italic = false,
@@ -60,18 +59,18 @@ class AndroidPlatformFontOracleContractTest {
 
     @Test
     fun syntheticItalicIsPartOfTheReplayInstanceIdentity() {
-        val physical = FontFaceId("tiqian-font:sha256:abc:0:axes=")
+        val physical = "tiqian-font:sha256:abc:0:axes="
 
         assertEquals(
             physical,
             platformReplayFaceId(physical, syntheticBold = false, syntheticItalic = false),
         )
         assertEquals(
-            FontFaceId("tiqian-font:sha256:abc:0:axes=:syntheticItalic=-0.25"),
+            "tiqian-font:sha256:abc:0:axes=:syntheticItalic=-0.25",
             platformReplayFaceId(physical, syntheticBold = false, syntheticItalic = true),
         )
         assertEquals(
-            FontFaceId("tiqian-font:sha256:abc:0:axes=:syntheticBold=platform:syntheticItalic=-0.25"),
+            "tiqian-font:sha256:abc:0:axes=:syntheticBold=platform:syntheticItalic=-0.25",
             platformReplayFaceId(physical, syntheticBold = true, syntheticItalic = true),
         )
     }

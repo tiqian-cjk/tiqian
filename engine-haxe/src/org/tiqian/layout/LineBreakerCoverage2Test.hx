@@ -47,8 +47,8 @@ class LineBreakerCoverage2Test {
             LineBreakerCoverage2TestSupport.cluster(1, "A", 20.0),
             LineBreakerCoverage2TestSupport.cluster(2, "B", 20.0)
         ];
-        final solution = new LookaheadLineBreaker(2).breakLines(clusters, clusters, 25.0, null, null, null, null, null, null, null, null, null, null, null,
-            null, null, null, null, LineBreakerCoverage2TestSupport.ints([0]));
+        final solution = new LookaheadLineBreaker(2).breakLines(clusters, clusters, 25.0, null, null, 0.0, null, null, null, null, null, null, null, null,
+            0.0, false, 1.0, null, LineBreakerCoverage2TestSupport.ints([0]));
         TracedAssertions.assertTrue(solution.lines.length > 0);
         TracedAssertions.assertEqualsIntRange(new IntRange(0, 1), solution.lines[0].clusterRange);
     }
@@ -57,7 +57,7 @@ class LineBreakerCoverage2Test {
         final testTrace = new TestTraceRecorder("LineBreakerCoverage2Test");
         testTrace.section("testLookaheadHardBreakAtEndAndMiddle");
         final endSolution = new LookaheadLineBreaker(1).breakLines(LineBreakerCoverage2TestSupport.hanClusters(2),
-            LineBreakerCoverage2TestSupport.hanClusters(2), 20.0, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+            LineBreakerCoverage2TestSupport.hanClusters(2), 20.0, null, null, 0.0, null, null, null, null, null, null, null, null, 0.0, false, 1.0,
             LineBreakerCoverage2TestSupport.ints([1]));
         TracedAssertions.assertEqualsInt(2, endSolution.lines.length);
         TracedAssertions.assertEqualsIntRange(new IntRange(0, 1), endSolution.lines[0].clusterRange);
@@ -66,7 +66,7 @@ class LineBreakerCoverage2Test {
         TracedAssertions.assertEqualsEnum(LineEndReason.ParagraphEnd, endSolution.lines[1].endReason);
 
         final middleSolution = new LookaheadLineBreaker(1).breakLines(LineBreakerCoverage2TestSupport.hanClusters(3),
-            LineBreakerCoverage2TestSupport.hanClusters(3), 20.0, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+            LineBreakerCoverage2TestSupport.hanClusters(3), 20.0, null, null, 0.0, null, null, null, null, null, null, null, null, 0.0, false, 1.0,
             LineBreakerCoverage2TestSupport.ints([0]));
         TracedAssertions.assertEqualsInt(3, middleSolution.lines.length);
         TracedAssertions.assertEqualsIntRange(new IntRange(0, 0), middleSolution.lines[0].clusterRange);
@@ -76,8 +76,8 @@ class LineBreakerCoverage2Test {
             LineBreakerCoverage2TestSupport.cluster(0, "A", 50.0),
             LineBreakerCoverage2TestSupport.cluster(1, "B", 10.0)
         ];
-        final oversizedSolution = new LookaheadLineBreaker(1).breakLines(oversized, oversized, 20.0, null, null, null, null, null, null, null, null, null,
-            null, null, null, null, null, LineBreakerCoverage2TestSupport.ints([0]));
+        final oversizedSolution = new LookaheadLineBreaker(1).breakLines(oversized, oversized, 20.0, null, null, 0.0, null, null, null, null, null, null,
+            null, null, 0.0, false, 1.0, LineBreakerCoverage2TestSupport.ints([0]));
         TracedAssertions.assertEqualsInt(2, oversizedSolution.lines.length);
     }
 
@@ -122,7 +122,7 @@ class LineBreakerCoverage2Test {
         testTrace.section("testLookaheadOrphanAndSyntheticHyphenRuns");
         final clusters = LineBreakerCoverage2TestSupport.hanClusters(4, 20.0);
         final solution = new LookaheadLineBreaker(null,
-            2).breakLines(clusters, clusters, 25.0, null, null, null, null, null, null, null, LineBreakerCoverage2TestSupport.ints([1, 2, 3]));
+            2).breakLines(clusters, clusters, 25.0, null, null, 0.0, null, null, null, null, LineBreakerCoverage2TestSupport.ints([1, 2, 3]));
         TracedAssertions.assertEqualsInt(4, solution.lines.length);
     }
 
@@ -139,9 +139,9 @@ class LineBreakerCoverage2TestCustomBreaker implements LineBreaker {
     function get_strategyName():String
         return "custom";
 
-    public function breakLines(n:Array<Cluster>, a:Array<Cluster>, maxWidth:Float, ?s:Array<ShrinkOpportunity>, ?u:UnbreakableRanges, ?i:Float,
+    public function breakLines(n:Array<Cluster>, a:Array<Cluster>, maxWidth:Float, ?s:Array<ShrinkOpportunity>, ?u:UnbreakableRanges, i:Float = 0.0,
             ?h:SortedSet<Int>, ?e:Array<IntRange>, ?fs:Null<SortedSet<Int>>, ?fe:SortedSet<Int>, ?hy:SortedSet<Int>, ?cj:SortedSet<Int>, ?mc:Float,
-            ?sw:SortedSet<Int>, ?sc:Float, ?p:Bool, ?bias:Float, ?hb:SortedSet<Int>, ?nc:SortedSet<Int>,
+            ?sw:SortedSet<Int>, sc:Float = 0.0, p:Bool = false, bias:Float = 1.0, ?hb:SortedSet<Int>, ?nc:SortedSet<Int>,
             ?pr:SortedMap<Int, ProgressiveBreakOpportunity>):LineOptimization.LineSolution {
         return new LineOptimization.LineSolution([]);
     }

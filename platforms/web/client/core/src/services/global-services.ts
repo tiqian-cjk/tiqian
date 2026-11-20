@@ -41,7 +41,7 @@ type GlobalServicesRegistry = Record<symbol, GlobalServices | undefined>;
 
 export type GlobalServicesRestoreFn = () => void;
 
-const GLOBAL_SERVICES_KEY: unique symbol = Symbol.for("@tiqian/prose.global-services.v1");
+const GLOBAL_SERVICES_KEY: unique symbol = Symbol.for("@tiqian/web-component.global-services.v1");
 
 function createGlobalServices(): GlobalServices {
   return {

@@ -1,0 +1,180 @@
+{
+  "$schema": "./release-manifest.schema.json",
+  "schema": 1,
+  "release": {
+    "entrypoint": ".github/workflows/release.yml",
+    "tagPattern": "v*.*.*",
+    "versionSource": "tag",
+    "gate": ".github/workflows/release-gate.yml",
+    "requiredLanes": [
+      {
+        "workflow": ".github/workflows/ci-native-precompute.yml",
+        "name": "Native precompute CI"
+      },
+      {
+        "workflow": ".github/workflows/build-neon-precompute.yml",
+        "name": "Build Neon precompute"
+      },
+      {
+        "workflow": ".github/workflows/bundle-verification.yml",
+        "name": "Bundle verification"
+      }
+    ]
+  },
+  "units": [
+    {
+      "id": "npm-ffi",
+      "ecosystem": "npm",
+      "workflow": ".github/workflows/publish-ffi.yml",
+      "trigger": "release",
+      "packages": [
+        "@tiqian/ffi"
+      ],
+      "packageSource": {
+        "kind": "npm",
+        "files": [
+          "platforms/web/client/engine-runtime/package.json"
+        ]
+      },
+      "dependsOn": []
+    },
+    {
+      "id": "npm-core",
+      "ecosystem": "npm",
+      "workflow": ".github/workflows/publish-core.yml",
+      "trigger": "release",
+      "packages": [
+        "@tiqian/core"
+      ],
+      "packageSource": {
+        "kind": "npm",
+        "files": [
+          "platforms/web/client/core/package.json"
+        ]
+      },
+      "dependsOn": [
+        "npm-ffi"
+      ]
+    },
+    {
+      "id": "npm-web-component",
+      "ecosystem": "npm",
+      "workflow": ".github/workflows/publish-web-component.yml",
+      "trigger": "release",
+      "packages": [
+        "@tiqian/web-component"
+      ],
+      "packageSource": {
+        "kind": "npm",
+        "files": [
+          "platforms/web/client/web-component/package.json"
+        ]
+      },
+      "dependsOn": [
+        "npm-core"
+      ]
+    },
+    {
+      "id": "npm-precompute",
+      "ecosystem": "npm",
+      "workflow": ".github/workflows/publish-precompute.yml",
+      "trigger": "release",
+      "packages": [
+        "@tiqian/precompute",
+        "@tiqian/precompute-darwin-arm64",
+        "@tiqian/precompute-linux-arm64-gnu",
+        "@tiqian/precompute-linux-x64-gnu",
+        "@tiqian/precompute-win32-x64-msvc"
+      ],
+      "packageSource": {
+        "kind": "npm",
+        "files": [
+          "platforms/web/server/core/package.json",
+          "platforms/web/server/core/platforms/darwin-arm64/package.json",
+          "platforms/web/server/core/platforms/linux-arm64-gnu/package.json",
+          "platforms/web/server/core/platforms/linux-x64-gnu/package.json",
+          "platforms/web/server/core/platforms/win32-x64-msvc/package.json"
+        ]
+      },
+      "dependsOn": [
+        "npm-web-component"
+      ]
+    },
+    {
+      "id": "maven",
+      "ecosystem": "maven",
+      "workflow": ".github/workflows/publish.yml",
+      "trigger": "release",
+      "packages": [
+        "tiqian-jvm-skia",
+        "tiqian-android-shaping",
+        "tiqian-android-native-font",
+        "tiqian-android-rendering",
+        "tiqian-android-view",
+        "tiqian-compose",
+        "tiqian-compose-material3"
+      ],
+      "packageSource": {
+        "kind": "gradle",
+        "files": [
+          "build.gradle.kts"
+        ]
+      },
+      "dependsOn": [],
+      "manualStep": "The Central Portal deployment is published by a human in the Portal UI after staging."
+    },
+    {
+      "id": "registry",
+      "last": true,
+      "ecosystem": "registry",
+      "workflow": ".github/workflows/release-registry.yml",
+      "trigger": "release",
+      "packagesFrom": "boring.json",
+      "packageSource": {
+        "kind": "boring",
+        "files": [
+          "boring.json"
+        ]
+      },
+      "dependsOn": [
+        "npm-ffi",
+        "npm-core",
+        "npm-web-component",
+        "npm-precompute",
+        "maven"
+      ]
+    }
+  ],
+  "notInRelease": [
+    {
+      "package": "@tiqian/astro",
+      "file": "platforms/web/client/astro/package.json",
+      "reason": "framework integration, published only by the fork snapshot lane (snapshot-precompute.yml)"
+    },
+    {
+      "package": "@tiqian/sveltekit",
+      "file": "platforms/web/client/sveltekit/package.json",
+      "reason": "framework integration, published only by the fork snapshot lane (snapshot-precompute.yml)"
+    },
+    {
+      "package": "@tiqian/react",
+      "file": "platforms/web/client/react/package.json",
+      "reason": "manifest declares private: true, and npm publish refuses private packages"
+    },
+    {
+      "package": "tiqian-web-demo",
+      "file": "demo/web/package.json",
+      "reason": "demo application, private: true"
+    }
+  ],
+  "manualLanes": [
+    {
+      "workflow": ".github/workflows/publish-snapshots.yml",
+      "reason": "Maven SNAPSHOT versions are not part of a versioned release; the lane stays manual."
+    },
+    {
+      "workflow": ".github/workflows/snapshot-precompute.yml",
+      "reason": "fork-only GitHub Packages snapshots; the lane refuses to run under the canonical owner."
+    }
+  ]
+}

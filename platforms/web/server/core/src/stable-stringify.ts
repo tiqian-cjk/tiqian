@@ -9,7 +9,7 @@
 // The cross-gold test test/stable-stringify-cross-gold.test.ts pins one
 // artifact sha produced by the Rust renderer against this composition.
 
-import { Sha256 } from "./protocol-gen/haxe/crypto/Sha256.js";
+import { Sha256 } from "@tiqian/protocol/haxe/crypto/Sha256";
 
 const textEncoder = new TextEncoder();
 

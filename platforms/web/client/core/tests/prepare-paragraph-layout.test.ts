@@ -883,8 +883,8 @@ test("ready shape carries the envelope pieces on the happy exact path", () => {
       assert.equal(ready.plan.lines[0].rangeStart, 0);
       assert.equal(ready.plan.lines[ready.plan.lines.length - 1].rangeEnd, 5);
       assert.deepEqual(ready.diagnostics, { capabilityIssues: [], advanceSuspects: [] });
-      assert.equal(typeof ready.rawEnvelope, "string");
-      assert.equal(ready.planJson, ready.plan ? JSON.stringify(ready.plan) : null);
+      assert.equal(typeof ready.rawEnvelope, "object");
+      assert.deepEqual(ready.planJson, ready.plan);
     });
   } finally {
     backend.uninstall();

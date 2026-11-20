@@ -15,14 +15,22 @@ npm 需要可写的缓存目录，沙箱环境下加 `--cache <可写目录>`。
 
 ## cargo
 
-registry 提供稀疏索引，读 `config.json`：
+稀疏索引根是 `/cargo/index/`，条目路径按 crates.io 约定取包名前两个与次两个字符，
+例如 `tiqian-engine-f32` 对应 `ti/qi/tiqian-engine-f32`。
 
-```shell
-curl https://registry.tiqian.org/cargo/index/config.json
+```toml
+# .cargo/config.toml
+[registries.tiqian]
+index = "sparse+https://registry.tiqian.org/cargo/index/"
 ```
 
-在 `.cargo/config.toml` 中把 `tiqian` 的 source 指向该索引后，用 `cargo add` 或
-`cargo build` 解析依赖。
+```toml
+# Cargo.toml
+[dependencies]
+tiqian-engine-f32 = { version = "=0.1.0-alpha07", registry = "tiqian" }
+```
+
+下载走 `/cargo/dl/<crate>-<version>.crate`，cksum 与索引里的一致。
 
 ## pub
 
@@ -40,10 +48,28 @@ swift package resolve
 
 ## Maven
 
-当前未确认 registry 上 Maven 制品的实际路径：`/maven/org/tiqian/tiqian-engine-f32/`
-等路径全部返回 404，而 release 资产中确实存在 `tiqian-engine-f32-0.1.0-alpha06.pom`。
-在确认坐标之前，Maven 用户请直接引用 release 资产。
+仓库地址是 `https://registry.tiqian.org/maven`，groupId 与 artifactId 都是包名本身。
+
+```kotlin
+// build.gradle.kts
+repositories {
+    maven { url = uri("https://registry.tiqian.org/maven") }
+}
+dependencies {
+    implementation("tiqian-engine-f32:tiqian-engine-f32:0.1.0-alpha07")
+}
+```
+
+制品路径形如 `/maven/tiqian-engine-f32/tiqian-engine-f32/0.1.0-alpha07/tiqian-engine-f32-0.1.0-alpha07.jar`，
+返回 302 指向 GitHub release 资产；同名 `.pom` 可直接取，`.sha1` 与实算值一致。
 
 ## 版本号形式
 
-发布标签形如 `v0.1.0-alpha06`，各生态内的版本号形如 `0.1.0-alpha06`。两者不要混用。
+发布标签形如 `v0.1.0-alpha.8`，各生态内的版本号形如 `0.1.0-alpha.8`。两者不要混用。
+最后一段是纯数字且不带前导零：`0.1.0-alpha.9` 小于 `0.1.0-alpha.10`。
+
+两位补零的 `alphaNN` 形式（例如 `0.1.0-alpha07`）已经废弃，该版本的目录随
+`v0.1.0-alpha.8` 发布从自建 registry 删除（用户确认：该版本只有一个消费者）。这个形式与点分纯数字形式不可比较：
+`alpha` 是 `alpha07` 的前缀，短者优先，所以 `0.1.0-alpha.8` 小于
+`0.1.0-alpha07`。registry 站点的 `latest` 取包内最高版本，旧条目删除后
+指向 `0.1.0-alpha.8`。

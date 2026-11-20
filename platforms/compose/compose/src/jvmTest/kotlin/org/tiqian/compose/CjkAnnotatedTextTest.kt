@@ -174,13 +174,13 @@ class CjkAnnotatedTextTest {
         val spans = text.cjkRichTextSpans(adjacentSameStyleClearance = 1.5f)
 
         assertEquals(
-            RichTextRole.Background,
-            spans.first { it.role == RichTextRole.Background }.role,
+            org.tiqian.core.Background.instance,
+            spans.first { it.role == org.tiqian.core.Background.instance }.role,
         )
-        assertEquals(Color.Yellow.toArgb(), spans.first { it.role == RichTextRole.Background }.paint.argb)
-        assertEquals(Color.Blue.toArgb(), spans.first { it.role == RichTextRole.Underline }.paint.argb)
-        assertEquals(Color.Blue.toArgb(), spans.first { it.role == RichTextRole.LineThrough }.paint.argb)
-        assertEquals(TextRange(1, 3), spans.first { it.role == RichTextRole.Underline }.range)
+        assertEquals(Color.Yellow.toArgb(), spans.first { it.role == org.tiqian.core.Background.instance }.paint.argb)
+        assertEquals(Color.Blue.toArgb(), spans.first { it.role == org.tiqian.core.Underline.instance }.paint.argb)
+        assertEquals(Color.Blue.toArgb(), spans.first { it.role == org.tiqian.core.LineThrough.instance }.paint.argb)
+        assertEquals(TextRange(1, 3), spans.first { it.role == org.tiqian.core.Underline.instance }.range)
         assertTrue(spans.all { it.paint.adjacentSameStyleClearance == 1.5f })
     }
 
@@ -194,13 +194,13 @@ class CjkAnnotatedTextTest {
         }
 
         val rich = text.cjkRichTextSpans()
-        val link = rich.first { it.role is RichTextRole.Link }
-        val code = rich.first { it.role == RichTextRole.InlineCode }
+        val link = rich.first { it.role is org.tiqian.core.Link }
+        val code = rich.first { it.role == org.tiqian.core.InlineCode.instance }
         val style = text.cjkStyleSpans(TextStyle(), Density(1f)).first { it.range == code.range }
 
         assertEquals("读链接与code", text.text)
         assertEquals(TextRange(1, 3), link.range)
-        assertEquals(RichTextRole.Link("https://example.com"), link.role)
+        assertEquals(org.tiqian.core.Link("https://example.com"), link.role)
         assertEquals(TextRange(4, 8), code.range)
         assertEquals(listOf("monospace"), style.style.fontFamilies)
         assertEquals(14f, style.style.fontSize)
@@ -271,12 +271,12 @@ class CjkAnnotatedTextTest {
         }
 
         val rich = text.cjkRichTextSpans()
-        val technical = rich.single { it.role == RichTextRole.TechnicalInline }
-        val link = rich.single { it.role is RichTextRole.Link }
+        val technical = rich.single { it.role == org.tiqian.core.TechnicalInline.instance }
+        val link = rich.single { it.role is org.tiqian.core.Link }
 
         assertEquals(TextRange(1, 5), technical.range)
         assertEquals(TextRange(10, 16), link.range)
-        assertEquals(RichTextRole.Link("generic"), link.role)
+        assertEquals(org.tiqian.core.Link("generic"), link.role)
         assertTrue(technical.paint.background.horizontalPadding == 0f)
         assertTrue(rich.layoutInlineBoxes().isEmpty())
         // LinkAddressDisplayGate: the clickable's tag is not its visible text, so only
@@ -301,10 +301,10 @@ class CjkAnnotatedTextTest {
         ).toCore(Density(2f))
 
         assertEquals(TextRange(1, 3), span.range)
-        assertEquals(RichTextRole.Underline, span.role)
+        assertEquals(org.tiqian.core.Underline.instance, span.role)
         assertEquals(Color.Red.toArgb(), span.paint.argb)
         assertEquals(
-            RichTextLinePattern.Dashed(strokeWidth = 2f, dashLength = 12f, gapLength = 8f),
+            org.tiqian.core.Dashed(strokeWidth = 2f, dashLength = 12f, gapLength = 8f),
             span.paint.linePattern,
         )
         assertEquals(2f, span.paint.adjacentSameStyleClearance)
@@ -320,7 +320,7 @@ class CjkAnnotatedTextTest {
         ).toCore(Density(2f))
 
         assertEquals(TextRange(1, 4), span.range)
-        assertEquals(RichTextRole.Background, span.role)
+        assertEquals(org.tiqian.core.Background.instance, span.role)
         assertEquals(Color.Yellow.toArgb(), span.paint.argb)
         assertEquals(0f, span.paint.background.horizontalPadding)
         assertEquals(2f, span.paint.background.verticalPadding)
@@ -344,7 +344,7 @@ class CjkAnnotatedTextTest {
 
         assertEquals(8f, span.paint.background.horizontalPadding)
         assertEquals(
-            RichTextBackgroundDrawStyle.Border(strokeWidth = 2f),
+            org.tiqian.core.Border(strokeWidth = 2f),
             span.paint.background.drawStyle,
         )
     }
@@ -352,7 +352,7 @@ class CjkAnnotatedTextTest {
     @Test
     fun inlineCodeDefaultsReserveACompactRoundedBox() {
         val paint = defaultInlineCodePaint(Density(2f))
-        val span = RichTextSpan(TextRange(1, 5), RichTextRole.InlineCode, paint)
+        val span = RichTextSpan(TextRange(1, 5), org.tiqian.core.InlineCode.instance, paint)
 
         assertEquals(8f, paint.background.horizontalPadding)
         assertEquals(6f, paint.background.verticalPadding)
@@ -380,10 +380,10 @@ class CjkAnnotatedTextTest {
         ).toCore(Density(2f))
 
         assertEquals(TextRange(0, 5), span.range)
-        assertEquals(RichTextRole.Underline, span.role)
+        assertEquals(org.tiqian.core.Underline.instance, span.role)
         assertEquals(null, span.paint.argb)
         assertEquals(
-            RichTextLinePattern.Dotted(dotDiameter = 2f, gapLength = 4f),
+            org.tiqian.core.Dotted(dotDiameter = 2f, gapLength = 4f),
             span.paint.linePattern,
         )
         assertEquals(2f, span.paint.adjacentSameStyleClearance)

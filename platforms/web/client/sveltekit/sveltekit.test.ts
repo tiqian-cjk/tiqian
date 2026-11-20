@@ -22,7 +22,7 @@ const fixtureAssets = {
 };
 
 // SSR asset rendering goes through the native addon, and the fixture build
-// resolves the prose runtime artifact the bundler must find on disk. The
+// resolves the web-component runtime artifact the bundler must find on disk. The
 // suites for `@tiqian/precompute` and `@tiqian/astro` skip on the same
 // conditions.
 let addonBuildExists = false;
@@ -40,7 +40,7 @@ try {
 }
 // The workspace install hoists @tiqian/* as root node_modules symlinks; the
 // fixture build below resolves every dependency through that single root.
-const proseWorkspaceLinkExists = existsSync(new URL("../../../../node_modules/@tiqian/prose", import.meta.url));
+const webComponentWorkspaceLinkExists = existsSync(new URL("../../../../node_modules/@tiqian/web-component", import.meta.url));
 
 interface SpawnOptions {
   readonly cwd?: string;
@@ -81,13 +81,13 @@ test("Svelte SSR omits a false disabled Boolean attribute", async () => {
 
 test("package manifest publishes only the component and server boundary", async () => {
   const manifest = JSON.parse(await readFile(new URL("./package.json", import.meta.url), "utf8"));
-  const prose = JSON.parse(await readFile(new URL("../web-component/package.json", import.meta.url), "utf8"));
+  const webComponentManifest = JSON.parse(await readFile(new URL("../web-component/package.json", import.meta.url), "utf8"));
   const precompute = JSON.parse(
     await readFile(new URL("../../../../platforms/web/server/core/package.json", import.meta.url), "utf8"),
   );
-  assert.equal(manifest.peerDependencies["@tiqian/prose"], prose.version);
+  assert.equal(manifest.peerDependencies["@tiqian/web-component"], webComponentManifest.version);
   assert.equal(manifest.peerDependencies["@tiqian/precompute"], precompute.version);
-  assert.equal(manifest.engines.node, prose.engines.node);
+  assert.equal(manifest.engines.node, webComponentManifest.engines.node);
   assert.deepEqual(Object.keys(manifest.exports).sort(), [".", "./server"]);
   assert.ok(manifest.files.includes("TiqianProse.svelte"));
   assert.ok(manifest.files.includes("dist"));
@@ -342,7 +342,7 @@ test("concurrent requests cannot exchange assets that reuse an explicit id", { s
   await tiqian.close();
 });
 
-test("component builds in a real SvelteKit application", { skip: proseWorkspaceLinkExists ? false : "no @tiqian/prose workspace link" }, async () => {
+test("component builds in a real SvelteKit application", { skip: webComponentWorkspaceLinkExists ? false : "no @tiqian/web-component workspace link" }, async () => {
   const root = await mkdtemp(path.join(process.cwd(), ".sveltekit-fixture-"));
   try {
     const routes = path.join(root, "src", "routes");

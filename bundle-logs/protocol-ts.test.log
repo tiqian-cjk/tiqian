@@ -1,3 +1,0 @@
-[test] protocol-ts
-  $ bun test /home/losses/Development/tq-workspace/tiqian/.scratch/tasks/wb-t-mv4gfi00-ndqa/engine-haxe/out/protocol-ts/gen-tests
-bundle driver: ok

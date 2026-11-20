@@ -2,7 +2,7 @@ package org.tiqian.layout;
 
 import org.tiqian.clreq.*;
 import org.tiqian.core.*;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import org.tiqian.shaping.TextShaper.ShapingInput;
 import org.tiqian.shaping.TextShaper.ShapingResult;
 import org.tiqian.shaping.TextShaper.ExplainableStubTextShaper;
@@ -14,14 +14,14 @@ class LineAdjustmentStageJfTestSupport {
     public static function resolver(p:ClreqProfile):ClreqProfileResolver
         return new FixedClreqResolver(p);
 
-    public static function engine(?shaper:ITextShaper, hyphenate:Bool, p:Null<ClreqProfile>):ExplainableStubParagraphLayoutEngine {
+    public static function engine(?shaper:TextShaper, hyphenate:Bool, p:Null<ClreqProfile>):ExplainableStubParagraphLayoutEngine {
         final r = p == null ? null : resolver(p);
         return shaper != null ? new ExplainableStubParagraphLayoutEngine(null, null, r, null, null, null, null, null, null, null,
             shaper) : hyphenate ? new ExplainableStubParagraphLayoutEngine(null, null, r, null, null, null, null, null, null, null, null,
                 EnglishHyphenation.enUs()) : new ExplainableStubParagraphLayoutEngine(null, null, r);
     }
 
-    public static function layout(text:String, width:Float, ?objects:Array<InlineObjectSpan>, ?hyphenate:Bool = false, ?shaper:ITextShaper,
+    public static function layout(text:String, width:Float, ?objects:Array<InlineObjectSpan>, ?hyphenate:Bool = false, ?shaper:TextShaper,
             ?profile:ClreqProfile):LayoutResult {
         final e = LineAdjustmentStageJfTestSupport.engine(shaper, hyphenate, profile);
         return e.layout(new LayoutInput(new TiqianTextContent(text), null, new ParagraphStyle(null, null, null, Ic.Zero), new LayoutConstraints(width), null,
@@ -39,7 +39,7 @@ class FixedClreqResolver implements ClreqProfileResolver {
         return profile;
 }
 
-class DashBoundsShaper implements ITextShaper {
+class DashBoundsShaper implements TextShaper {
     final delegate:ExplainableStubTextShaper;
     final wide:Bool;
 

@@ -12,12 +12,12 @@ class LayoutResult {
     public final debug:LayoutDebugInfo;
 
     public function new(input:LayoutInput, size:Size, clusters:ReadOnlyArray<Cluster>, glyphRuns:ReadOnlyArray<GlyphRun>, lines:ReadOnlyArray<LineBox>,
-            debug:LayoutDebugInfo) {
+            ?debug:Null<LayoutDebugInfo>) {
         this.input = input;
         this.size = size;
         this.clusters = clusters;
         this.glyphRuns = glyphRuns;
         this.lines = lines;
-        this.debug = debug;
+        this.debug = debug == null ? LayoutDebugInfo.Default : debug;
     }
 }

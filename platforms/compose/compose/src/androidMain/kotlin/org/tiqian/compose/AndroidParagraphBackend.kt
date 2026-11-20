@@ -32,7 +32,7 @@ actual fun createPlatformParagraphMeasurer(
                 delegate = AndroidFontMetricsResolver(),
                 sharedCache = session?.metricsCache,
             ),
-            clreqProfileResolver = { profile },
+            clreqProfileResolver = object : org.tiqian.clreq.ClreqProfileResolver { override fun resolve(profileId: org.tiqian.core.LayoutProfileId): org.tiqian.clreq.ClreqProfile = profile },
         ),
     )
 }

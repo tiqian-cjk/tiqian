@@ -18,7 +18,7 @@ import type {
   LiveSemanticSpan,
   SnapshotSemanticSpan,
 } from "../../sampler/snapshot/snapshot-source.js";
-import { LAYOUT_REQUEST_FIELDS } from "./assembly-record-fields.js";
+import { layoutRequestKey } from "./layout-request-key.js";
 import type {
   PrepareFinishedCallback,
   PrepareJob,
@@ -59,7 +59,7 @@ export type WorkerRequestEnvelope =
 export interface WorkerSuccessEnvelope {
   id?: number;
   ok: true;
-  plan?: string;
+  plan?: unknown;
 }
 
 export interface WorkerErrorEnvelope {
@@ -94,7 +94,7 @@ export interface WorkerLayoutRequestBody extends WorkerLayoutRequest {
 }
 
 export interface PlanRecord {
-  plan?: string;
+  plan?: unknown;
   issue?: string;
 }
 
@@ -218,10 +218,6 @@ function distanceFromViewport(element: Element): number {
   const height = globalThis.innerHeight || document.documentElement.clientHeight || 0;
   if (rect.bottom >= 0 && rect.top <= height) return 0;
   return rect.bottom < 0 ? -rect.bottom : rect.top - height;
-}
-
-function layoutRequestKey(request: WorkerLayoutRequestBody | null | undefined): string {
-  return JSON.stringify(LAYOUT_REQUEST_FIELDS.map((field) => request?.[field] ?? null));
 }
 
 function preparedPlanKey(sessionKey: string, request: WorkerLayoutRequestBody | null | undefined): string {

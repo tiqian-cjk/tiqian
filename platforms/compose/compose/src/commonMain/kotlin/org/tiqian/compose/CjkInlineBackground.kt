@@ -60,7 +60,7 @@ sealed interface CjkInlineBackgroundDrawStyle {
 
 internal fun CjkInlineBackground.toCore(density: Density): RichTextSpan = RichTextSpan(
     range = org.tiqian.core.TextRange(range.start, range.end),
-    role = RichTextRole.Background,
+    role = org.tiqian.core.Background.instance,
     paint = RichTextPaint(
         argb = color.toArgb(),
         background = RichTextBackgroundPaint(
@@ -75,8 +75,8 @@ internal fun CjkInlineBackground.toCore(density: Density): RichTextSpan = RichTe
                     RichTextBackgroundMetricPolicy.UniformParagraphStyle
             },
             drawStyle = when (val style = drawStyle) {
-                CjkInlineBackgroundDrawStyle.Fill -> RichTextBackgroundDrawStyle.Fill
-                is CjkInlineBackgroundDrawStyle.Border -> RichTextBackgroundDrawStyle.Border(
+                CjkInlineBackgroundDrawStyle.Fill -> org.tiqian.core.Fill.instance
+                is CjkInlineBackgroundDrawStyle.Border -> org.tiqian.core.Border(
                     strokeWidth = with(density) { style.strokeWidth.toPx() },
                 )
             },

@@ -36,7 +36,7 @@ import org.tiqian.android.rendering.AndroidParagraphMeasurer
 import org.tiqian.android.rendering.AndroidParagraphMeasurementSession
 import org.tiqian.clreq.ClreqProfile
 import org.tiqian.core.InlineObjectSpan
-import org.tiqian.core.RichTextRole
+import org.tiqian.core.Link
 import org.tiqian.core.RichTextSpan
 import org.tiqian.core.TextRange
 import org.tiqian.core.TextStyle
@@ -189,7 +189,7 @@ class CjkTextViewInstrumentedTest {
         val content = CjkTextContent(
             content = org.tiqian.core.TiqianTextContent(source),
             textStyle = TextStyle(fontSize = 32f),
-            richTextSpans = listOf(RichTextSpan(linkRange, RichTextRole.Link("tiqian://link"))),
+            richTextSpans = listOf(RichTextSpan(linkRange, Link("tiqian://link"))),
             inlineObjects = listOf(InlineObjectSpan(objectRange, advance = 24f, ascent = 18f, descent = 6f)),
         )
         launchView(content) { view ->
@@ -636,7 +636,7 @@ class CjkTextViewInstrumentedTest {
         val content = CjkTextContent(
             content = org.tiqian.core.TiqianTextContent(source),
             textStyle = TextStyle(fontSize = 32f),
-            richTextSpans = listOf(RichTextSpan(linkRange, RichTextRole.Link("tiqian://scroll"))),
+            richTextSpans = listOf(RichTextSpan(linkRange, Link("tiqian://scroll"))),
             inlineObjects = listOf(InlineObjectSpan(objectRange, advance = 24f, ascent = 18f, descent = 6f)),
         )
         launchView(content) { view ->

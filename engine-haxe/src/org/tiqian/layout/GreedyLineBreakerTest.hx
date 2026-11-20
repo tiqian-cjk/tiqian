@@ -227,7 +227,7 @@ class GreedyLineBreakerTest {
             GreedyLineBreakerTestSupport.cluster(3, 4, "d", 16),
             GreedyLineBreakerTestSupport.cluster(4, 5, "\u3002", 16)
         ];
-        final solution = new GreedyLineBreaker().breakLines(clusters, clusters, 64, null, null, null, GreedyLineBreakerTestSupport.setInts([4]));
+        final solution = new GreedyLineBreaker().breakLines(clusters, clusters, 64, null, null, 0.0, GreedyLineBreakerTestSupport.setInts([4]));
         TracedAssertions.assertEquals(1, solution.lines.length);
         final line = solution.lines[0];
         TracedAssertions.assertEqualsIntRange(new IntRange(0, 4), line.clusterRange);
@@ -271,7 +271,7 @@ class GreedyLineBreakerTest {
             GreedyLineBreakerTestSupport.cluster(2, 3, "c", 16),
             GreedyLineBreakerTestSupport.cluster(3, 4, "\u3002", 16)
         ];
-        final solution = new GreedyLineBreaker().breakLines(clusters, clusters, 60, [new ShrinkOpportunity(3, 6, 8, ShrinkChannel.TrailingGlue)], null, null,
+        final solution = new GreedyLineBreaker().breakLines(clusters, clusters, 60, [new ShrinkOpportunity(3, 6, 8, ShrinkChannel.TrailingGlue)], null, 0.0,
             GreedyLineBreakerTestSupport.setInts([3]));
         TracedAssertions.assertEquals(1, solution.lines.length);
         TracedAssertions.assertEqualsNullableInt(null, solution.lines[0].hangingClusterIndex);
@@ -287,7 +287,7 @@ class GreedyLineBreakerTest {
             GreedyLineBreakerTestSupport.cluster(3, 4, "\u4E2D", 16),
             GreedyLineBreakerTestSupport.cluster(4, 5, "\u4E2D", 16)
         ];
-        final solution = new GreedyLineBreaker().breakLines(clusters, clusters, 48, null, null, null, null, null, null,
+        final solution = new GreedyLineBreaker().breakLines(clusters, clusters, 48, null, null, 0.0, null, null, null,
             GreedyLineBreakerTestSupport.setInts([2]));
         TracedAssertions.assertEquals(2, solution.lines.length);
         TracedAssertions.assertEqualsIntRange(new IntRange(0, 1), solution.lines[0].clusterRange);
@@ -304,7 +304,7 @@ class GreedyLineBreakerTest {
             GreedyLineBreakerTestSupport.cluster(1, 2, "\u4E2D", 16),
             GreedyLineBreakerTestSupport.cluster(2, 3, "\u4E2D", 16)
         ];
-        final solution = new GreedyLineBreaker().breakLines(clusters, clusters, 16, null, null, null, null, null, null,
+        final solution = new GreedyLineBreaker().breakLines(clusters, clusters, 16, null, null, 0.0, null, null, null,
             GreedyLineBreakerTestSupport.setInts([0]));
         TracedAssertions.assertEqualsIntRange(new IntRange(0, 0), solution.lines[0].clusterRange);
         TracedAssertions.assertEqualsRendered("-", GreedyLineBreakerTestSupport.repairKind(solution.lines[0].repair));
@@ -316,8 +316,8 @@ class GreedyLineBreakerTest {
             GreedyLineBreakerTestSupport.cluster(0, 1, "\u4E2D", 16),
             GreedyLineBreakerTestSupport.cluster(1, 2, "\n", 0, "")
         ];
-        final solution = new GreedyLineBreaker().breakLines(clusters, clusters, 160, null, null, null, null, null, null, null, null, null, null, null, null,
-            null, null, GreedyLineBreakerTestSupport.setInts([1]));
+        final solution = new GreedyLineBreaker().breakLines(clusters, clusters, 160, null, null, 0.0, null, null, null, null, null, null, null, null, 0.0,
+            false, 1.0, GreedyLineBreakerTestSupport.setInts([1]));
         TracedAssertions.assertEquals(2, solution.lines.length);
         TracedAssertions.assertEqualsIntRange(new IntRange(0, 1), solution.lines[0].clusterRange);
         TracedAssertions.assertEqualsRendered("MandatoryBreak", Std.string(solution.lines[0].endReason));
@@ -332,8 +332,8 @@ class GreedyLineBreakerTest {
             GreedyLineBreakerTestSupport.cluster(1, 2, "\n", 0, ""),
             GreedyLineBreakerTestSupport.cluster(2, 3, "\u3002", 16)
         ];
-        final solution = new GreedyLineBreaker().breakLines(clusters, clusters, 160, null, null, null, null, null, null, null, null, null, null, null, null,
-            null, null, GreedyLineBreakerTestSupport.setInts([1]));
+        final solution = new GreedyLineBreaker().breakLines(clusters, clusters, 160, null, null, 0.0, null, null, null, null, null, null, null, null, 0.0,
+            false, 1.0, GreedyLineBreakerTestSupport.setInts([1]));
         TracedAssertions.assertEquals(2, solution.lines.length);
         TracedAssertions.assertEqualsIntRange(new IntRange(0, 1), solution.lines[0].clusterRange);
         TracedAssertions.assertEqualsIntRange(new IntRange(2, 2), solution.lines[1].clusterRange);

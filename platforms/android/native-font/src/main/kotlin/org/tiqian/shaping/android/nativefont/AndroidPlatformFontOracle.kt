@@ -99,7 +99,7 @@ internal object AndroidPlatformFontOracle {
             role to select(
                 ReplayableFontFaceRequest(
                     role = role,
-                    preferredFamilies = emptyList(),
+                    preferredFamilies = mutableListOf(),
                     fontSize = 32f,
                     weight = 400,
                     italic = false,
@@ -137,7 +137,7 @@ internal object AndroidPlatformFontOracle {
             (100..900 step 100).flatMap { weight ->
                 listOf(false, true).mapNotNull { italic ->
                     val selection = select(ReplayableFontFaceRequest(
-                        role = role, preferredFamilies = listOf("sans-serif"), fontSize = 32f,
+                        role = role, preferredFamilies = mutableListOf("sans-serif"), fontSize = 32f,
                         weight = weight, italic = italic, locale = "zh-Hans", selectionText = probe,
                     ))
                     if (selection.syntheticBold || selection.syntheticItalic || selection.spansMultipleFaces) return@mapNotNull null

@@ -1,5 +1,6 @@
 package org.tiqian.android.view
 
+import org.tiqian.core.IntRange
 import org.tiqian.core.LineBox
 import org.tiqian.core.Rect
 import org.tiqian.core.TextRange
@@ -92,7 +93,7 @@ class CjkNativeSelectionGeometryTest {
         indent: Float = 0f,
     ): LineBox = LineBox(
         range = TextRange(0, 1),
-        clusterRange = 0..0,
+        clusterRange = IntRange(0, 0),
         baseline = bottom - 4f,
         top = top,
         bottom = bottom,

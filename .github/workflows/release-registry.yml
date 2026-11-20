@@ -1,135 +1,77 @@
 name: Release to Registry
+
+# The registry write is the last job of .github/workflows/release.yml. The pack
+# job already produced the artifacts and the metadata tree, so this workflow
+# downloads them, checks the tree against the artifacts, commits the tree and
+# deploys the site. The release page is published separately by
+# release-assets.yml, which depends on the pack job alone: a failed registry
+# lane must not keep the release page off the tag. Every step needs the artifacts
+# of that release run, so the workflow has no dispatch trigger of its own: a
+# failed release is retried with "Re-run failed jobs" on the release run.
 on:
-  push:
-    tags: ["v*.*.*"]
+  workflow_call:
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
   group: release-registry-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  R2_ENDPOINT: https://91a3e85bc149574f96f64f55aa2c900e.r2.cloudflarestorage.com
-  R2_BUCKET: tiqian-registry
   REGISTRY_REPO: tiqian-cjk/registry
 
 jobs:
-  pack-and-publish:
+  release-gate:
+    uses: ./.github/workflows/release-gate.yml
+
+  write-registry:
+    needs: [release-gate]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout tiqian
         uses: actions/checkout@v4
 
-      - name: Set up bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Install the TypeScript compiler
-        # The ts and protocol-ts bundles compile their package shell with tsc.
-        run: bun add -g "typescript@^5.9.0"
-
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v17
-
-      - name: Allow unprivileged user namespaces
-        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
-
-      - name: Stage the pinned generation inputs
-        # Two inputs live outside git and are read at compile time:
-        #   tools/unicode-data/            (.gitignore:63) read by reflaxe.unicode.GraphemeData
-        #   engine-haxe/baseline-goldens/  (.gitignore:47) read by GoldenDataMacros.init()
-        # The Unicode files come from the pinned boring checkout. The golden
-        # directories are byte-identical to the tracked Kotlin recordings under
-        # engine/src/jvmTest/resources/golden, so they are copied from there.
+      - name: Validate the release ref
+        shell: bash
         run: |
-          nix develop -c bash -c 'mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/'
-          mkdir -p engine-haxe/baseline-goldens
-          cp -a engine/src/jvmTest/resources/golden/. engine-haxe/baseline-goldens/
-          ls -l tools/unicode-data
-          ls engine-haxe/baseline-goldens
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" != "tag" || "${GITHUB_REF_NAME}" != v*.*.* ]]; then
+            echo "::error::The registry lane runs only from a v*.*.* release tag, received ${GITHUB_REF_NAME}."
+            exit 1
+          fi
 
-      - name: Align the package versions with the release
-        # The registry names every artifact <package>-<version> from the tag,
-        # so the packed manifests have to carry that version, not the 0.1.0
-        # placeholder in the project file.
-        run: python3 tools/align-package-versions.py "${GITHUB_REF_NAME#v}"
-
-      - name: Build packages via boring
-        # Only the bundles that declare package metadata can be packed; the five
-        # app-facing targets still need names and versions declared in boring.json.
-        run: nix develop -c bash -c "boring pack protocol-rust protocol-ts protocol-kotlin engine-rust-f32 engine-rust-f64 ts kotlin-f32 kotlin-f64 swift-f32 swift-f64 dart"
-
-      - name: Collect artifacts
-        run: |
-          mkdir -p release-artifacts
-          # Prefix every artifact with its bundle id: engine-rust-f32 and
-          # engine-rust-f64 both emit tiqian-engine-gen-0.1.0.crate, and a plain
-          # copy would silently keep only one of them.
-          find engine-haxe/out \( -name "*.tgz" -o -name "*.tar.gz" -o -name "*.jar" -o -name "*.crate" -o -name "*.zip" -o -name "*.pom" \) | while read -r f; do
-            bundle=$(echo "$f" | sed -E 's#^engine-haxe/out/([^/]+)/.*#\1#')
-            cp "$f" "release-artifacts/$(basename "$f")"
-          done
-          test -n "$(ls -A release-artifacts)" || { echo "no pack artifacts were produced"; exit 1; }
-          # Every packed bundle must appear in the artifact set. A rename or a
-          # duplicate package name would otherwise drop one bundle without
-          # making the job fail.
-          python3 tools/registry-metadata.py --list-packages --project boring.json | while read -r pkg; do
-            ls release-artifacts | grep -q "^${pkg}-" || { echo "no artifact for package $pkg"; exit 1; }
-          done
-          ls -la release-artifacts/
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Download the release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          files: release-artifacts/*
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: release-artifacts
+          path: release-artifacts
 
-      - name: Upload the Swift archives to the registry storage
-        # The Swift index points at <archive-base>/swift/<scope>/<name>/<version>.zip,
-        # so the archive has to exist there before the metadata references it.
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          python3 -m pip install --quiet awscli
-          # Archives are named <package>-<version>.zip, so the package name is the
-          # file name without its version suffix. Matching a "swift-" prefix
-          # silently skipped the upload once the names changed, leaving a stale
-          # archive in the bucket whose digest no longer matched the metadata.
-          for zip in release-artifacts/*.zip; do
-            [ -f "$zip" ] || continue
-            name=$(basename "$zip" | sed -E 's/-[0-9]+\.[0-9]+\.[0-9]+.*\.zip$//')
-            aws s3 cp "$zip" "s3://${{ env.R2_BUCKET }}/swift/tiqian/$name/$VERSION.zip" \
-              --endpoint-url "${{ env.R2_ENDPOINT }}"
-          done
+      - name: Download the registry tree
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: registry-tree
+          path: ${{ runner.temp }}/registry-tree
 
-      - name: Write registry metadata
-        # The registry tool accepts one package per version and platform
-        # (packages/registry/src/registry/Core.hx:280), so each package owns a
-        # repository layer and the tree path is <owner>/<package>/<version>/<platform>.
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          python3 tools/registry-metadata.py \
-            --project boring.json \
-            --artifacts release-artifacts \
-            --version "$VERSION" \
-            --owner "${{ github.repository_owner }}" \
-            --repo "${{ github.event.repository.name }}" \
-            --asset-base "${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.ref_name }}" \
-            --out "$RUNNER_TEMP/registry-tree"
+      - name: Check the registry tree against the artifacts
+        # Every metadata.json must name an artifact this pack run produced with
+        # the digest it records, and every artifact must be named by the tree,
+        # so a tree entry without an uploaded asset cannot pass.
+        run: python3 tools/check-registry-tree.py --tree "$RUNNER_TEMP/registry-tree" --artifacts release-artifacts
 
       - name: Commit metadata to registry repo
         run: |
           git clone https://x-access-token:${{ secrets.REGISTRY_REPO_TOKEN }}@github.com/${{ env.REGISTRY_REPO }}.git /tmp/registry
           VERSION=${GITHUB_REF_NAME#v}
           OWNER="${{ github.repository_owner }}"
-          rm -rf "/tmp/registry/$OWNER"
-          cp -a "$RUNNER_TEMP/registry-tree/$OWNER" "/tmp/registry/$OWNER"
+          # Merge the released versions into the clone instead of replacing the
+          # owner directory: earlier versions stay published, and a re-run of a
+          # release rewrites that version directory with the same bytes. The
+          # pre-dotted alphaNN version is retired here: its only consumer has
+          # been notified, and it outranks 0.1.0-alpha.8, so the registry site
+          # would otherwise keep pointing latest at it.
+          python3 tools/merge-registry-tree.py --tree "$RUNNER_TEMP/registry-tree" --owner "$OWNER" --registry /tmp/registry --retire 0.1.0-alpha07
           cd /tmp/registry
           git config user.name "Release Bot"
           git config user.email "release@tiqian.dev"
@@ -154,16 +96,3 @@ jobs:
             exit 0
           fi
           curl -fsS -X POST "$PAGES_DEPLOY_HOOK" | head -c 200
-
-      - name: Sync compiled registry tool to registry repo
-        run: |
-          if [ -d packages/registry/gen ]; then
-            cd /tmp/registry
-            rm -rf tool
-            mkdir -p tool
-            cp -r $GITHUB_WORKSPACE/packages/registry/gen/* tool/
-            cp $GITHUB_WORKSPACE/packages/registry/run.ts tool/
-            git add tool
-            git diff --cached --quiet || git commit -m 'sync: registry tool'
-            git push origin main
-          fi

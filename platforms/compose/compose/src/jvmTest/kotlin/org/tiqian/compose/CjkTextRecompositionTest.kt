@@ -152,7 +152,7 @@ class CjkTextRecompositionTest {
         val measuredBoundaries = mutableListOf<Set<Int>>()
         ImageComposeScene(width = 240, height = 120) {
             val layoutCallback = remember {
-                { result: LayoutResult -> measuredBoundaries += result.input.content.sourceBoundaries }
+                { result: LayoutResult -> measuredBoundaries += result.input.content.sourceBoundaries.toSet() }
             }
             Box(Modifier.fillMaxSize().background(Color.White)) {
                 CjkTextLayout(

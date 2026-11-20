@@ -13,17 +13,17 @@
         "swift-system": "swift-system"
       },
       "locked": {
-        "lastModified": 1794004825,
-        "narHash": "sha256-+m3Xzc1SPj5mD/bQhv4MFTtjFH6Zk4tTsa0i12tX6a0=",
+        "lastModified": 1794992573,
+        "narHash": "sha256-Ji/E2JWs9mxAQe4AWThbvIBuoVXwNMTtd94hP2zRvLw=",
         "owner": "Losses",
         "repo": "boring",
-        "rev": "0a1c3d8a6e7f85b7a42f30fe7812ddb19e89c308",
+        "rev": "bf0eb1480b6172d03fd9ffc2fe8f7328fa900c05",
         "type": "github"
       },
       "original": {
         "owner": "Losses",
-        "ref": "0a1c3d8a6",
         "repo": "boring",
+        "rev": "bf0eb1480b6172d03fd9ffc2fe8f7328fa900c05",
         "type": "github"
       }
     },

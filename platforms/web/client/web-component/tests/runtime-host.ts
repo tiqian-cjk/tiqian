@@ -1559,16 +1559,22 @@ function inlineStartOffset(node: FakeNode): number {
   return (isInline ? inlineStartOffset(parentElement) + margin("margin-left") : 0) + offset;
 }
 
+function* attributeTuples(map: Map<string, string>): Generator<AttributeTuple> {
+  for (const [k, v] of Map.prototype.entries.call(map) as IterableIterator<[string, string]>) {
+    const tuple: [string, string] = [k, v];
+    yield Object.assign(tuple, { name: k, value: v });
+  }
+}
+
 export class FakeAttributesMap extends Map<string, string> {
-  override *[Symbol.iterator](): IterableIterator<AttributeTuple> {
-    for (const [k, v] of super[Symbol.iterator]()) {
-      const tuple: [string, string] = [k, v];
-      const item: AttributeTuple = Object.assign(tuple, { name: k, value: v });
-      yield item;
-    }
+  // A DOM attribute list yields tuples that carry name and value beside the
+  // pair; the Map signature is what every consumer here reads, so the richer
+  // iterator is cast to it and the extra properties stay a run-time detail.
+  override [Symbol.iterator](): MapIterator<[string, string]> {
+    return attributeTuples(this) as unknown as MapIterator<[string, string]>;
   }
 
-  override entries(): IterableIterator<AttributeTuple> {
+  override entries(): MapIterator<[string, string]> {
     return this[Symbol.iterator]();
   }
 }

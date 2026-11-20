@@ -1,6 +1,9 @@
 package org.tiqian.core;
 
 using std.Functional;
+using org.tiqian.core.LayoutResultFns;
+using org.tiqian.core.LayoutResultLineFns;
+using org.tiqian.core.IntRangeFns;
 
 import org.tiqian.core.RichTextRole.Background;
 import org.tiqian.core.RichTextRole.Underline;
@@ -109,6 +112,56 @@ class LayoutQueries {
         }
         insertionSortAnnotations(annotations);
 
+        final output:StringBuf = new StringBuf();
+        var cursor:Int = start;
+        index = 0;
+        while (index < annotations.length) {
+            final annotation:CopyAnnotation = annotations[index];
+            if (annotation.end >= cursor && annotation.end <= end) {
+                output.add(source.substring(cursor, annotation.end));
+                output.add("\uFF08");
+                output.add(annotation.text);
+                output.add("\uFF09");
+                cursor = annotation.end;
+            }
+            index += 1;
+        }
+        output.add(source.substring(cursor, end));
+        return output.toString();
+    }
+
+    /**
+     * Plain-text clipboard projection for [range] over a logical document that
+     * outlives its layout. Mirrors the Web frontend's annotation contract: a
+     * fully selected ruby reading follows its base in full-width parentheses.
+     */
+    @:topLevel
+    public static function projectTextForCopy(source:String, range:TextRange, rubySpans:Array<RubySpan>):String {
+        final start:Int = range.start < 0 ? 0 : (range.start > source.length ? source.length : range.start);
+        final end:Int = range.end < start ? start : (range.end > source.length ? source.length : range.end);
+        if (start == end) {
+            return "";
+        }
+        final annotations:Array<CopyAnnotation> = [];
+        var index:Int = 0;
+        while (index < rubySpans.length) {
+            final span:RubySpan = rubySpans[index];
+            if (span.baseRange.start >= start && span.baseRange.end <= end)
+                annotations.push({end: span.baseRange.end, text: span.text});
+            index += 1;
+        }
+        // Stable insertion sort by end offset, matching insertionSortAnnotations.
+        index = 1;
+        while (index < annotations.length) {
+            final value:CopyAnnotation = annotations[index];
+            var cursor:Int = index - 1;
+            while (cursor >= 0 && annotations[cursor].end > value.end) {
+                annotations[cursor + 1] = annotations[cursor];
+                cursor -= 1;
+            }
+            annotations[cursor + 1] = value;
+            index += 1;
+        }
         final output:StringBuf = new StringBuf();
         var cursor:Int = start;
         index = 0;
@@ -448,11 +501,20 @@ class LayoutQueries {
     }
 
     public static function coerceSelectionOffset(result:LayoutResult, offset:Int, bias:SourceBoundaryBias):Int {
-        final text:String = result.input.content.text;
-        final clamped:Int = clampInt(offset, 0, text.length);
+        return coerceTextSelectionOffset(result.input.content.text, result.input.inlineObjects, offset, bias);
+    }
+
+    /**
+     * Safe source-boundary coercion for logical documents that outlive their
+     * attached layout. This is the receiver-free form of
+     * [coerceSelectionOffset].
+     */
+    @:topLevel
+    public static function coerceTextSelectionOffset(text:String, inlineObjects:ReadOnlyArray<InlineObjectSpan>, offset:Int, bias:SourceBoundaryBias):Int {
+        final clamped:Int = offset < 0 ? 0 : (offset > text.length ? text.length : offset);
         var index:Int = 0;
-        while (index < result.input.inlineObjects.length) {
-            final inlineObject:InlineObjectSpan = result.input.inlineObjects[index];
+        while (index < inlineObjects.length) {
+            final inlineObject:InlineObjectSpan = inlineObjects[index];
             if (clamped > inlineObject.range.start && clamped < inlineObject.range.end) {
                 var snapped:Int = inlineObject.range.start;
                 switch (bias) {

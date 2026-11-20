@@ -263,17 +263,17 @@ private fun drawSkiaRichTextBackgrounds(
 ) {
     for (seg in segments) {
         val argb = when (seg.span.role) {
-            RichTextRole.Background -> seg.span.paint.argb
-            RichTextRole.InlineCode -> seg.span.paint.argb ?: INLINE_CODE_BACKGROUND_COLOR
+            org.tiqian.core.Background.instance -> seg.span.paint.argb
+            org.tiqian.core.InlineCode.instance -> seg.span.paint.argb ?: INLINE_CODE_BACKGROUND_COLOR
             else -> null
         } ?: continue
         paint.color = argb
         val inset = when (val drawStyle = seg.span.paint.background.drawStyle) {
-            RichTextBackgroundDrawStyle.Fill -> {
+            is org.tiqian.core.Fill -> {
                 paint.mode = PaintMode.FILL
                 0f
             }
-            is RichTextBackgroundDrawStyle.Border -> {
+            is org.tiqian.core.Border -> {
                 paint.mode = PaintMode.STROKE
                 paint.strokeWidth = drawStyle.strokeWidth
                 drawStyle.strokeWidth / 2f
@@ -322,14 +322,14 @@ private fun drawSkiaRichTextLines(
     paint.mode = PaintMode.STROKE
     for (seg in segments) {
         val role = seg.span.role
-        if (role != RichTextRole.Underline && role != RichTextRole.LineThrough) continue
+        if (role != org.tiqian.core.Underline.instance && role != org.tiqian.core.LineThrough.instance) continue
         when (val pattern = seg.span.paint.linePattern) {
-            RichTextLinePattern.Solid -> {
+            is org.tiqian.core.Solid -> {
                 paint.strokeWidth = (result.input.textStyle.fontSize / 16f).coerceAtLeast(1f)
                 paint.pathEffect = null
                 paint.strokeCap = PaintStrokeCap.BUTT
             }
-            is RichTextLinePattern.Dashed -> {
+            is org.tiqian.core.Dashed -> {
                 paint.strokeWidth = pattern.strokeWidth
                 paint.strokeCap = PaintStrokeCap.ROUND
                 paint.pathEffect = PathEffect.makeDash(
@@ -337,7 +337,7 @@ private fun drawSkiaRichTextLines(
                     0f,
                 )
             }
-            is RichTextLinePattern.Dotted -> {
+            is org.tiqian.core.Dotted -> {
                 paint.strokeWidth = pattern.dotDiameter
                 paint.strokeCap = PaintStrokeCap.BUTT
                 paint.pathEffect = null
@@ -348,7 +348,7 @@ private fun drawSkiaRichTextLines(
             ?: result.input.textStyle
         val lineY = result.richTextDecorationLineY(seg, paint.strokeWidth)
         paint.color = seg.span.paint.argb ?: colorAt(seg.range.start, color, colorSpans)
-        if (role == RichTextRole.Underline) {
+        if (role == org.tiqian.core.Underline.instance) {
             drawSkiaStraightInterlinearLine(
                 canvas = canvas,
                 result = result,
@@ -386,7 +386,7 @@ private fun drawSkiaStraightInterlinearLine(
     paint: Paint,
     skipBandPad: Float,
     skipClearance: Float,
-    linePattern: RichTextLinePattern = RichTextLinePattern.Solid,
+    linePattern: RichTextLinePattern = org.tiqian.core.Solid.instance,
     spans: List<TextSpan>,
     cjkFont: Font,
     latinFont: Font,
@@ -420,8 +420,8 @@ private fun drawSkiaStraightInterlinearLine(
     )
     keptIntervals(left, right, skips, skipClearance) { x0, x1 ->
         when (linePattern) {
-            RichTextLinePattern.Solid -> canvas.drawLine(x0, lineY, x1, lineY, paint)
-            is RichTextLinePattern.Dashed -> {
+            is org.tiqian.core.Solid -> canvas.drawLine(x0, lineY, x1, lineY, paint)
+            is org.tiqian.core.Dashed -> {
                 paint.pathEffect = null
                 val saveCount = canvas.save()
                 canvas.clipRect(x0, lineY - paint.strokeWidth, x1, lineY + paint.strokeWidth, false)
@@ -449,7 +449,7 @@ private fun drawSkiaStraightInterlinearLine(
                 }
                 canvas.restoreToCount(saveCount)
             }
-            is RichTextLinePattern.Dotted -> {
+            is org.tiqian.core.Dotted -> {
                 paint.mode = PaintMode.FILL
                 fittedDottedLineCenters(
                     spanLeft = left,

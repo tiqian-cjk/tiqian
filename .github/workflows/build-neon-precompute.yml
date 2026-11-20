@@ -4,6 +4,12 @@ name: Build Neon precompute
 # release lane: it builds every supported platform, smokes the addon through
 # the npm loader, packs the npm packages, and uploads them as artifacts.
 # Nothing here publishes.
+# The self-hosted macOS runner is opt-in. Only workflow_dispatch (or a
+# workflow_call that explicitly passes runner: self-hosted) selects the
+# tiqian-mac-arm64 label; push, pull_request, and every other trigger keep
+# using GitHub-hosted runners. A pull request from a fork therefore never
+# reaches the self-hosted runner, because pull_request has no way to set the
+# runner input and its macos leg stays on macos-latest.
 on:
   workflow_call:
     inputs:
@@ -11,20 +17,37 @@ on:
         description: "The branch, tag, or SHA to check out"
         required: true
         type: string
+      # workflow_call takes a string because choice inputs exist only for
+      # workflow_dispatch. Any value other than self-hosted falls back to
+      # macos-latest, so existing callers keep the previous behaviour.
+      runner:
+        description: "Runner label set for the macOS addon leg: github-hosted for macos-latest, self-hosted for tiqian-mac-arm64"
+        required: false
+        type: string
+        default: github-hosted
   pull_request:
     paths:
       - 'platforms/web/server/precompute/**'
       - 'platforms/web/server/core/**'
-      - 'ffi/rust/engine-gen/**'
+      - 'platforms/web/server/precompute/engine-gen/**'
       - '.github/workflows/build-neon-precompute.yml'
   push:
     branches: [main]
     paths:
       - 'platforms/web/server/precompute/**'
       - 'platforms/web/server/core/**'
-      - 'ffi/rust/engine-gen/**'
+      - 'platforms/web/server/precompute/engine-gen/**'
       - '.github/workflows/build-neon-precompute.yml'
   workflow_dispatch:
+    inputs:
+      runner:
+        description: "Runner label set for the macOS addon leg"
+        required: false
+        type: choice
+        options:
+          - github-hosted
+          - self-hosted
+        default: github-hosted
 
 concurrency:
   group: build-neon-${{ github.ref }}
@@ -36,6 +59,7 @@ permissions:
 jobs:
   matrix:
     name: Generate build matrix
+    needs: [engine-gen]
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.result }}
@@ -48,11 +72,26 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
-      - name: Install npm dependencies
-        working-directory: platforms/web/server/core
-        # npm install, not npm ci: the platform binary packages are not on the
-        # registry yet, so no lockfile can carry entries for them.
-        run: npm install --no-audit --no-fund
+      # The install resolves workspace:* members tiqian-protocol and
+      # tiqian-shared, whose generated trees and boring pack manifests come from
+      # the engine-gen job; npm refuses the workspace protocol with
+      # EUNSUPPORTEDPROTOCOL, so install with bun. The root install covers the
+      # server/core member this job queries.
+      - name: Download the generated trees and package manifests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: generated-trees
+          path: .
+      - name: Use a bun CLI for the workspace install
+        # The pinned bun lives in the flake devShell; this job has no Nix.
+        run: npm install --global bun@1.3.13
+      - name: Install workspace dependencies
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and delete the manifest
+        # boring pack wrote.
+        run: bun install --ignore-scripts
       - name: Look up matrix data
         id: matrixData
         working-directory: platforms/web/server/core
@@ -71,6 +110,12 @@ jobs:
       - name: Compute matrix
         id: matrix
         uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        env:
+          # workflow_dispatch declares runner as a choice input, workflow_call
+          # as a string, and every other trigger leaves inputs.runner empty.
+          # Read the value through the environment so a caller-supplied string
+          # cannot alter the generated script.
+          RUNNER_INPUT: ${{ inputs.runner }}
         with:
           script: |
             const rawJson = `${{ steps.matrixData.outputs.json }}`;
@@ -85,10 +130,17 @@ jobs:
               core.setFailed(`Failed to parse matrix data JSON: ${e.message}`);
               return;
             }
+            // The macOS leg is the only one that can move to the self-hosted
+            // ARM64 runner. Any value other than self-hosted keeps the
+            // GitHub-hosted label, so pull_request and push never change.
+            const requestedRunner = (process.env.RUNNER_INPUT || '').trim();
+            const macosRunner = requestedRunner === 'self-hosted'
+              ? 'tiqian-mac-arm64'
+              : 'macos-latest';
             const matrix = [];
             if (platforms?.macOS) {
               matrix.push(...platforms.macOS.map(platform => ({
-                os: "macos-latest", platform
+                os: macosRunner, platform
               })));
             }
             if (platforms?.Windows) {
@@ -108,9 +160,70 @@ jobs:
             }
             return matrix;
 
+  # The precompute crates read `tiqian-engine-gen` from the gitignored
+  # engine-gen/ tree, and the boring driver reads tools/unicode-data/ at
+  # compile time. The driver only exists in the flake devShell, and the
+  # Windows runner has no Nix, so generate the tree once here and hand it
+  # to every platform leg.
+  engine-gen:
+    name: Generate the Rust engine tree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: Generate the precompute engine tree with the flake toolchain
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs'
+      - name: Generate the TypeScript engine tree with the flake toolchain
+        # tiqian-protocol and tiqian-shared are workspace:* members under
+        # engine-haxe/out/{protocol-ts,shared-ts}/gen whose package.json is
+        # written by boring pack, and engine-gen/ feeds the @tiqian/ffi
+        # runtime. The matrix spans Windows and macOS runners with no Nix, so
+        # generate the trees once here and hand every leg the result.
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs ts'
+      - name: Write the protocol and shared package manifests
+        run: |
+          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
+          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
+          chmod +x "$BORING_PACKAGE_TSC"
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+      - name: Upload the generated TypeScript workspace
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: generated-trees
+          path: |
+            engine-haxe/out/protocol-ts
+            engine-haxe/out/shared-ts
+            platforms/web/client/engine-runtime/engine-gen
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload the generated engine tree
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: engine-gen
+          path: platforms/web/server/precompute/engine-gen
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload the generated protocol tree
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: protocol-gen
+          path: platforms/web/server/precompute/protocol-gen
+          if-no-files-found: error
+          retention-days: 7
+
   binaries:
     name: Build addon (${{ matrix.cfg.platform }})
-    needs: [matrix]
+    needs: [matrix, engine-gen]
     strategy:
       fail-fast: false
       matrix:
@@ -120,37 +233,66 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: ${{ inputs.ref || github.ref }}
+      - name: Download the generated engine tree
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: engine-gen
+          path: platforms/web/server/precompute/engine-gen
+      - name: Download the generated protocol tree
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: protocol-gen
+          path: platforms/web/server/precompute/protocol-gen
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
       - name: Set up Node.js 24
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24"
           package-manager-cache: false
-      # The smoke test resolves `@tiqian/prose` and `@tiqian/core` from
+      # The smoke test resolves `@tiqian/web-component` and `@tiqian/core` from
       # this checkout: the registry alpha predates the `./prepared-dom`
       # subpath the precompute sources import, and the emitted declarations
       # are not tracked. This lane has no Gradle step, so the ffi
       # declarations a full type check would need are absent; emit the
       # packages and the suite without checks (the Native precompute CI runs
       # the full checks over the same sources).
-      # Workspace install (root npm ci) hoists @tiqian/* packages as symlinks;
-      # the matrix spans Windows runners, whose default pwsh shell has no
-      # rm -rf and cannot execute the extensionless .bin shims; run every
-      # step of this block under bash like the build steps below.
+      - name: Download the generated trees and package manifests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: generated-trees
+          path: .
+      - name: Use a bun CLI for the workspace install
+        shell: bash
+        # The pinned bun lives in the flake devShell; the matrix spans Windows
+        # and macOS runners with no Nix, so install the same version from npm.
+        run: npm install --global bun@1.3.13
+      # Workspace install hoists @tiqian/* packages as symlinks; the matrix
+      # spans Windows runners, whose default pwsh shell has no rm -rf and cannot
+      # execute the extensionless .bin shims; run every step of this block under
+      # bash like the build steps below.
       - name: Install workspace dependencies
         working-directory: .
-        # npm install, not npm ci: the platform binary optional deps of the
-        # precompute member are not on the registry, so no lockfile can carry
-        # resolved entries for them and npm ci (npm >= 11) rejects the gap.
-        run: npm install --no-audit --no-fund
-      - name: Emit the prose packages
+        shell: bash
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and delete the manifest
+        # boring pack wrote. The root install covers server/core as a workspace
+        # member, so the former server/core-local install is gone; it walked up
+        # to the workspace root and failed with the same protocol error.
+        run: bun install --ignore-scripts
+      - name: Emit the web-component packages
         working-directory: platforms/web/client/web-component
         shell: bash
-        run: npx tsc -b --noCheck
-      - name: Install npm dependencies
-        working-directory: platforms/web/server/core
-        shell: bash
-        run: npm install --no-audit --no-fund
+        # Run the workspace TypeScript directly. npx looks for an extensionless
+        # node_modules/.bin/tsc to decide whether the command is installed, and
+        # bun writes only tsc.exe plus tsc.bunx on Windows, so npx falls back to
+        # installing the unrelated registry `tsc` package. Resolving the
+        # package through node keeps the installed compiler and fails this step
+        # when the workspace does not contain it.
+        run: |
+          TSC="$(node -p "require('node:path').join(require('node:path').dirname(require.resolve('typescript/package.json')), 'bin', 'tsc')")"
+          node "$TSC" -b --noCheck
       - name: Build addon and place platform binary
         working-directory: platforms/web/server/core
         shell: bash
@@ -159,13 +301,19 @@ jobs:
         run: |
           cargo build --manifest-path ../precompute/binding/Cargo.toml \
             --release --message-format=json-render-diagnostics > cargo.log
-          npx neon dist --name tiqian-precompute-neon < cargo.log
+          # The local bin entry is neon.exe on Windows, which npx does not
+          # recognize as an installed command and replaces with the unrelated
+          # registry `neon` package (the Neon cloud CLI); resolve @neon-rs/cli
+          # and run its entry through node instead.
+          NEON="$(node -p "require.resolve('@neon-rs/cli')")"
+          node "$NEON" dist --name tiqian-precompute-neon < cargo.log
           test -f "platforms/${NEON_BUILD_PLATFORM}/index.node"
       - name: Smoke test through the npm loader
         working-directory: platforms/web/server/core
         shell: bash
         run: |
-          npx tsc -p tsconfig.build.json --noCheck
+          TSC="$(node -p "require('node:path').join(require('node:path').dirname(require.resolve('typescript/package.json')), 'bin', 'tsc')")"
+          node "$TSC" -p tsconfig.build.json --noCheck
           node --test "test/**/*.test.ts"
       - name: Pack platform package
         working-directory: platforms/web/server/core/platforms/${{ matrix.cfg.platform }}
@@ -190,7 +338,7 @@ jobs:
 
   main-package:
     name: Pack main package
-    needs: [matrix]
+    needs: [matrix, engine-gen]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -207,23 +355,38 @@ jobs:
       # full type check would need are absent; build without checks and drop
       # the typecheck script (the Native precompute CI runs the full checks
       # over the same sources).
+      - name: Download the generated trees and package manifests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: generated-trees
+          path: .
+      - name: Use a bun CLI for the workspace install
+        # The pinned bun lives in the flake devShell; this job has no Nix.
+        run: npm install --global bun@1.3.13
       - name: Install workspace dependencies
         working-directory: .
-        # npm install, not npm ci: the platform binary optional deps of the
-        # precompute member are not on the registry, so no lockfile can carry
-        # resolved entries for them and npm ci (npm >= 11) rejects the gap.
-        run: npm install --no-audit --no-fund
-      - name: Emit the prose packages
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and delete the manifest
+        # boring pack wrote. The root install covers server/core as a workspace
+        # member, so the former server/core-local install is gone; it walked up
+        # to the workspace root and failed with the same protocol error.
+        run: bun install --ignore-scripts
+      - name: Emit the web-component packages
         working-directory: platforms/web/client/web-component
-        run: npx tsc -b --noCheck
-      - name: Install npm dependencies
-        working-directory: platforms/web/server/core
-        run: npm install --no-audit --no-fund
+        # Same resolution as the binaries job: run the workspace TypeScript
+        # through node, so a missing install fails the step instead of letting
+        # npx fetch the unrelated registry `tsc` package.
+        run: |
+          TSC="$(node -p "require('node:path').join(require('node:path').dirname(require.resolve('typescript/package.json')), 'bin', 'tsc')")"
+          node "$TSC" -b --noCheck
       - name: Lint and build the JS entry
         working-directory: platforms/web/server/core
         run: |
           npm run lint
-          npx tsc -p tsconfig.build.json --noCheck
+          TSC="$(node -p "require('node:path').join(require('node:path').dirname(require.resolve('typescript/package.json')), 'bin', 'tsc')")"
+          node "$TSC" -p tsconfig.build.json --noCheck
       - name: Pack
         working-directory: platforms/web/server/core
         shell: bash

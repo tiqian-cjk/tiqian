@@ -5,7 +5,7 @@ import org.tiqian.clreq.*;
 import org.tiqian.test.trace.*;
 import org.tiqian.layout.ParagraphLayoutEngine.ExplainableStubParagraphLayoutEngine;
 import org.tiqian.shaping.TextShaper.ShapingInput;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import org.tiqian.shaping.TextShaper.ShapingResult;
 import org.tiqian.linebreak.Hyphenator.NoHyphenator;
 
@@ -50,7 +50,7 @@ class Fixed implements ClreqProfileResolver {
         return p;
 }
 
-class PositionedPairShaper implements ITextShaper {
+class PositionedPairShaper implements TextShaper {
     public function new() {}
 
     public function shape(input:ShapingInput):ShapingResult {

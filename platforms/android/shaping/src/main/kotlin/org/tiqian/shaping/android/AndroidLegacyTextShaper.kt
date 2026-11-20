@@ -42,7 +42,7 @@ class AndroidLegacyTextShaper(
         } else {
             listOf(
                 Glyph(
-                    id = 0u,
+                    id = 0,
                     clusterRange = input.range,
                     advance = measured.advance,
                     bounds = measured.bounds,

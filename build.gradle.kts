@@ -6,8 +6,6 @@ import org.gradle.jvm.tasks.Jar
 import org.gradle.plugins.signing.SigningExtension
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
-import org.jetbrains.kotlin.gradle.targets.js.yarn.YarnPlugin
-import org.jetbrains.kotlin.gradle.targets.js.yarn.YarnRootExtension
 
 plugins {
     kotlin("multiplatform") version "2.3.20" apply false
@@ -31,15 +29,15 @@ data class PublishedModule(
     val description: String,
 )
 
+// The engine is not published from this build: boring owns the nine tiqian-engine
+// Maven coordinates through the kotlin-f32 bundle's kmpPublication. This map
+// lists only the platform modules that still carry their own publication.
 val publishedModules = mapOf(
-    ":engine" to PublishedModule(
-        "tiqian-engine",
-        "Tiqian Engine",
-        "The Tiqian CJK paragraph layout engine: document and layout data types, font " +
-            "and shaping contracts, line breaking, and Chinese composition rules.",
+    ":platforms:compose:skia-jvm" to PublishedModule(
+        "tiqian-jvm-skia",
+        "Tiqian Skia Shaping",
+        "Skia shaping and glyph replay support for Tiqian Compose on the JVM.",
     ),
-    ":platforms:jvm:shaping" to PublishedModule("tiqian-jvm-shaping", "Tiqian JVM Shaping", "JVM shaping support for Tiqian."),
-    ":platforms:jvm:skia" to PublishedModule("tiqian-jvm-skia", "Tiqian Skia Shaping", "Skia shaping and glyph replay support for Tiqian."),
     ":platforms:android:shaping" to PublishedModule(
         "tiqian-android-shaping",
         "Tiqian Android Shaping",
@@ -190,21 +188,39 @@ fun Project.configureMavenPublishing(module: PublishedModule) {
             }
         }
     }
-}
 
-// Kotlin/JS compilation is confined to :ffi:js and its engine and test-support
-// dependencies, so the shared yarn lock lives in that module instead of the
-// repository root. YarnPlugin applies to the root project once any Kotlin/JS
-// target exists; the directory must be fixed before the lock tasks realize.
-plugins.withType<YarnPlugin>() {
-    extensions.configure<YarnRootExtension>("kotlinYarn") {
-        lockFileDirectory = rootProject.layout.projectDirectory.dir("ffi/js/kotlin-js-store").asFile
+    val publishedProject = this
+    gradle.projectsEvaluated {
+        publishedProject.extensions.configure<PublishingExtension>("publishing") {
+            publications.withType(MavenPublication::class.java).configureEach {
+                val suffix = when (name) {
+                    "kotlinMultiplatform" -> ""
+                    "jvm" -> "-jvm"
+                    "android" -> "-android"
+                    // A com.android.library with singleVariant("release") has
+                    // exactly one publication and its name is the build type,
+                    // not a target. It carries the module coordinate itself, so
+                    // it must not append a variant suffix.
+                    "release" -> ""
+                    else -> "-" + name.lowercase()
+                }
+                artifactId = module.artifactId + suffix
+            }
+        }
     }
 }
 
 subprojects {
     group = rootProject.group
     version = rootProject.version
+
+    // The included project is a staged copy of boring's publication project; its
+    // outputs belong to this build, not to the staging directory the devShell
+    // replaces when the boring pin changes. The driver redirects the same way
+    // with -PbuildRoot on a pack run.
+    if (path == ":boring-kotlin-f32") {
+        layout.buildDirectory.set(rootProject.layout.projectDirectory.dir("build/boring-kotlin-f32"))
+    }
 
     plugins.withId("org.jetbrains.kotlin.multiplatform") {
         extensions.configure<KotlinMultiplatformExtension>("kotlin") {

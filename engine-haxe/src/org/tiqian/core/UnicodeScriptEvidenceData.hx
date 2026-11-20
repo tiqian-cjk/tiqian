@@ -2,7 +2,7 @@ package org.tiqian.core;
 
 /*
  * GENERATED from Unicode 17.0.0 Scripts.txt by
- * tools/unicode-script/generate_script_evidence_data.py.
+ * tools/unicode-ranges/generate_unicode_ranges.py.
  * Source: https://www.unicode.org/Public/17.0.0/ucd/Scripts.txt
  * SHA-256: 9f5e50d3abaee7d6ce09480f325c706f485ae3240912527e651954d2d6b035bf
  * Copyright © 2025 Unicode, Inc.

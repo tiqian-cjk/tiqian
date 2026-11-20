@@ -3,7 +3,7 @@ package org.tiqian.layout;
 import org.tiqian.core.*;
 import org.tiqian.linebreak.Hyphenator.NoHyphenator;
 import org.tiqian.shaping.TextShaper;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import org.tiqian.shaping.TextShaper.ShapingInput;
 import org.tiqian.shaping.TextShaper.ShapingResult;
 import org.tiqian.font.FontRole;
@@ -48,12 +48,12 @@ class ExplainableStubParagraphLayoutEngineTestSupport {
         return s + "]";
     }
 
-    public static function input(text:String, width:Float, ?style:ParagraphStyle, ?shaper:ITextShaper, ?textStyle:TextStyle):LayoutInput {
+    public static function input(text:String, width:Float, ?style:ParagraphStyle, ?shaper:TextShaper, ?textStyle:TextStyle):LayoutInput {
         return new LayoutInput(new TiqianTextContent(text), textStyle, style == null ? new ParagraphStyle(null, null, null, Ic.Zero) : style,
             new LayoutConstraints(width));
     }
 
-    public static function engine(?shaper:ITextShaper, ?breaker:LineBreaker):ParagraphLayoutEngine.ExplainableStubParagraphLayoutEngine {
+    public static function engine(?shaper:TextShaper, ?breaker:LineBreaker):ParagraphLayoutEngine.ExplainableStubParagraphLayoutEngine {
         return new ParagraphLayoutEngine.ExplainableStubParagraphLayoutEngine(null, null, null, null, null, null, null, null, breaker, null, shaper,
             new NoHyphenator());
     }
@@ -69,14 +69,14 @@ class ExplainableStubParagraphLayoutEngineTestSupport {
     }
 }
 
-class EmptyTextShaper implements ITextShaper {
+class EmptyTextShaper implements TextShaper {
     public function new() {}
 
     public function shape(input:ShapingInput):ShapingResult
         return new ShapingResult([], []);
 }
 
-class FixedBoundsTextShaper implements ITextShaper {
+class FixedBoundsTextShaper implements TextShaper {
     public function new() {}
 
     public function shape(input:ShapingInput):ShapingResult {

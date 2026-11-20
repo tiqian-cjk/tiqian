@@ -169,8 +169,8 @@ class LookaheadLineBreakerTest {
         }
 
         final noPenalty = new LookaheadLineBreaker(null, null, null, null, null, null, null,
-            0.0).breakLines(clusters, clusters, 30.0, null, null, null, null, null, null, null, LookaheadLineBreakerTestSupport.ints([3, 6]));
-        final withPenalty = new LookaheadLineBreaker().breakLines(clusters, clusters, 30.0, null, null, null, null, null, null, null,
+            0.0).breakLines(clusters, clusters, 30.0, null, null, 0.0, null, null, null, null, LookaheadLineBreakerTestSupport.ints([3, 6]));
+        final withPenalty = new LookaheadLineBreaker().breakLines(clusters, clusters, 30.0, null, null, 0.0, null, null, null, null,
             LookaheadLineBreakerTestSupport.ints([3, 6]));
 
         // With no demerit, two perfectly full synthetic-hyphen lines win:
@@ -202,8 +202,8 @@ class LookaheadLineBreakerTest {
             LookaheadLineBreakerTestSupport.cluster(8, 9, "。", 16.0)
         ];
 
-        final solution = new LookaheadLineBreaker(2).breakLines(clusters, clusters, 64.0, null, new UnbreakableRanges([new IntRange(6, 7)]), null, null, null,
-            LookaheadLineBreakerTestSupport.ints([8]), null, null, null, null, null, null, false);
+        final solution = new LookaheadLineBreaker(2).breakLines(clusters, clusters, 64.0, null, new UnbreakableRanges([new IntRange(6, 7)]), 0.0, null, null,
+            LookaheadLineBreakerTestSupport.ints([8]), null, null, null, null, null, 0.0, false);
 
         TracedAssertions.assertEqualsInt(3, solution.lines.length);
         TracedAssertions.assertEqualsIntRange(new IntRange(0, 1), solution.lines[0].clusterRange);

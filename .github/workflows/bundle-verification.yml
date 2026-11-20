@@ -1,0 +1,78 @@
+name: Bundle verification
+
+# The release gate requires this lane on the release commit
+# (release-manifest.json release.requiredLanes). Before it existed only
+# kotlin-f32's generated suite ran in a release lane (publish.yml:133), and no
+# lane ran a cross-target comparison. It runs the two checks that no lane ran:
+#
+#   boring verify   generates every bundle in boring.json, runs every bundle's
+#                   generated test suite and compares every bundle that
+#                   declares compare=true against the project baseline
+#                   (driver Main.hx actionVerify; docs/cross-target-alignment.md
+#                   line 33 names this command as the entry point).
+#   compile-bundles compiles the generated tree of every bundle whose target
+#                   compiler the pack action does not run (Swift, Dart, Rust),
+#                   one verdict per bundle.
+#
+# The project-file check runs first: the bundle driver accepts whole-line //
+# comments anywhere in boring.json, while the staging pipeline parses the text
+# from the first brace as strict JSON (tools/project-file.py states both rules).
+# A comment inside the object body therefore passes every driver lane here and
+# fails only in the staging lane, after the release is already packed, so this
+# lane rejects it before verify spends the generation time.
+#
+# The step order matters: the project-file check runs before verification,
+# verify generates the trees, then compile-bundles compiles them. The compile
+# step still runs when verify is red, so one red bundle does not hide the
+# compile verdicts of the others.
+on:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bundle-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Compile every bundle and check cross-target consistency
+    runs-on: ubuntu-latest
+    # boring verify generates 13 bundles and runs 13 generated suites, and one
+    # suite carries per-test budgets of 600000 ms (boring.json run.env).
+    timeout-minutes: 240
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Stage the pinned generation inputs
+        shell: bash
+        run: |
+          nix develop -c bash -c "mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/"
+          ls -l tools/unicode-data
+
+      - name: Check the project file parses as strict JSON after the first brace
+        run: python3 tools/project-file.py --check --project boring.json
+
+      - name: Generate, test and compare every bundle
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring verify --project boring.json'
+
+      - name: Compile every bundle that the pack action does not compile
+        if: always()
+        run: nix develop -c bash -c 'python3 tools/compile-bundles.py --project boring.json'

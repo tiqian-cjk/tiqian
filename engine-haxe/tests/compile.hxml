@@ -10,5 +10,4 @@
 -D boring_oracle
 -D float-precision=f32
 --macro Intercept.run(['engine-haxe/src'])
---macro GoldenDataMacros.init()
 --macro haxe.macro.Compiler.addGlobalMetadata('org.tiqian', '@:build(std.RecordMember.build())')

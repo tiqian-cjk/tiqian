@@ -2,10 +2,14 @@
 //! canonical-encode, submit, decode and compute chain must produce entry
 //! bytes identical to `prepare_paragraph` / `prepare_font_contract` over the
 //! same input, and the layered cache must serve the recorded artifact back
-//! through the hash-only marker. The engine archive must be linked.
+//! through the hash-only marker. The engine archive must be linked. The
+//! fixture font is vendored under `tests/fixtures` and embedded with
+//! `include_bytes!`, so the lanes run on a bare runner without a font
+//! directory.
 
+#[path = "support/font_fixture.rs"]
+mod font_fixture;
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use tiqian_precompute::canonical::{self, digest};
@@ -18,28 +22,21 @@ use tiqian_precompute::precomputer::{
 use tiqian_precompute::session::SessionFaceSpec;
 use tiqian_precompute::submission::{SubmissionItem, SubmissionOutcome};
 
-fn dela_gothic_path() -> Option<PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-    let path = PathBuf::from(home).join(".local/share/fonts/DelaGothicOne-Regular.ttf");
-    path.is_file().then_some(path)
-}
-
-fn fixture_precomputer() -> Option<Arc<Precomputer>> {
-    let font_path = dela_gothic_path()?;
-    let bytes = std::fs::read(font_path).expect("fixture font reads");
-    Some(Arc::new(
+fn fixture_precomputer() -> Arc<Precomputer> {
+    let bytes = font_fixture::DELA_GOTHIC_ONE;
+    Arc::new(
         create_precomputer(PrecomputerOptions::new(
             TypographyInput {
-                font_families: Some(vec!["Dela Gothic One".to_string()]),
+                font_families: Some(vec![font_fixture::FAMILY.to_string()]),
                 font_size_px: Some(18.0),
                 line_height_px: Some(27.0),
                 ..Default::default()
             },
             vec![SessionFaceSpec {
                 spec: FontFaceSpec {
-                    family: "Dela Gothic One",
-                    public_url: "/fonts/DelaGothicOne-Regular.ttf",
-                    source: &bytes,
+                    family: font_fixture::FAMILY,
+                    public_url: font_fixture::PUBLIC_URL,
+                    source: bytes,
                     face_index: None,
                     weight: FontWeightSpec::Single(Some(400.0)),
                     style: "normal",
@@ -50,7 +47,7 @@ fn fixture_precomputer() -> Option<Arc<Precomputer>> {
             }],
         ))
         .expect("fixture precomputer builds"),
-    ))
+    )
 }
 
 fn submission_item(input_json: &str, kind: u8) -> SubmissionItem {
@@ -107,9 +104,7 @@ const CASES: &[(&str, &str, bool)] = &[
 
 #[test]
 fn submission_bytes_match_the_low_level_lanes() {
-    let Some(precomputer) = fixture_precomputer() else {
-        return;
-    };
+    let precomputer = fixture_precomputer();
     for (name, input, contract) in CASES {
         let kind = if *contract {
             canonical::KIND_CONTRACT
@@ -136,9 +131,7 @@ fn submission_bytes_match_the_low_level_lanes() {
 
 #[test]
 fn second_submission_hits_with_the_recorded_digest() {
-    let Some(precomputer) = fixture_precomputer() else {
-        return;
-    };
+    let precomputer = fixture_precomputer();
     let input = r#"{"key":"p-1","text":"中文文字排版段落","maxWidthPx":144}"#;
     let item = submission_item(input, canonical::KIND_SNAPSHOT);
     let outcomes = precomputer
@@ -176,9 +169,7 @@ fn second_submission_hits_with_the_recorded_digest() {
 
 #[test]
 fn drained_records_prefetch_into_a_fresh_precomputer() {
-    let Some(precomputer) = fixture_precomputer() else {
-        return;
-    };
+    let precomputer = fixture_precomputer();
     let input = r#"{"key":"fc-1","text":"中文合同段落"}"#;
     let item = submission_item(input, canonical::KIND_CONTRACT);
     precomputer
@@ -189,9 +180,7 @@ fn drained_records_prefetch_into_a_fresh_precomputer() {
     // A fresh precomputer over the same configuration derives the same
     // context, so the drained records prefetch and the hash-only lane hits
     // without any computation.
-    let Some(fresh) = fixture_precomputer() else {
-        return;
-    };
+    let fresh = fixture_precomputer();
     let accepted = fresh
         .cache_store()
         .prefetch(drained)
@@ -213,9 +202,7 @@ fn drained_records_prefetch_into_a_fresh_precomputer() {
 
 #[test]
 fn a_mismatched_digest_claim_is_a_named_error() {
-    let Some(precomputer) = fixture_precomputer() else {
-        return;
-    };
+    let precomputer = fixture_precomputer();
     let mut item = submission_item(
         r#"{"key":"p-1","text":"中文","maxWidthPx":144}"#,
         canonical::KIND_SNAPSHOT,

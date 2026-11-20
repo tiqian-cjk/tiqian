@@ -13,10 +13,10 @@ class RichTextSpan {
     public final role:RichTextRole;
     public final paint:RichTextPaint;
 
-    public function new(range:TextRange, role:RichTextRole, paint:RichTextPaint) {
+    public function new(range:TextRange, role:RichTextRole, ?paint:Null<RichTextPaint>) {
         this.range = range;
         this.role = role;
-        this.paint = paint;
+        this.paint = paint == null ? RichTextPaint.Default : paint;
     }
 
     @:allow(org.tiqian.core.LayoutQueries)
@@ -34,3 +34,4 @@ class RichTextSpan {
         return Std.isOfType(a, InlineCode) && Std.isOfType(b, InlineCode);
     }
 }
+

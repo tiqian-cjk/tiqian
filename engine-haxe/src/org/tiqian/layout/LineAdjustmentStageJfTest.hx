@@ -4,7 +4,7 @@ import org.tiqian.core.*;
 import org.tiqian.clreq.*;
 import org.tiqian.test.trace.*;
 import org.tiqian.layout.LineAdjustmentStageJfTestSupport.DashBoundsShaper;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 
 class LineAdjustmentStageJfTest {
     @:test public static function dashInkCenteringWithShapedBounds():Void {

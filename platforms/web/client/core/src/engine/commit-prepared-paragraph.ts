@@ -18,6 +18,7 @@
 import type { LoweredParagraph } from "./lowered-paragraph.js";
 import type { PrepareReadyResult } from "./prepare-paragraph-layout.js";
 import { renderPreparedParagraphInto } from "../sampler/snapshot/prepared-dom.js";
+import { PlanSchema } from "@tiqian/protocol/org/tiqian/protocol/PlanSchema";
 import type { EnhancedElementContext } from "./context/enhance-context.js";
 import {
   rawDomStampRendered,
@@ -25,6 +26,30 @@ import {
 } from "./raw-dom.js";
 import { effectiveLineMeasure, sourceParagraphWidth } from "./responsive-measure.js";
 import { prepareParagraphLayout } from "./prepare-paragraph-layout.js";
+
+// PreparedPlanWireShape: the engine emits a plan in two forms. The JSON
+// entries serialize it through PlanJson.encode, whose first two keys are the
+// producer constants PLAN_SCHEMA and PLAN_LAYOUT_REVISION
+// (engine-haxe/src/org/tiqian/protocol/PlanJson.hx:20-23). The structured
+// entries (toPlanWithDiagnostics for the snapshot font session and
+// PlanLowering.toPlan for the layout Worker) return the Plan struct, which
+// carries geometry only. The lowered-DOM gate rejects a plan whose
+// schema/layoutRevision do not match this build
+// (sampler/snapshot/prepared-dom.ts:713), so the structured form is stamped
+// here, immediately before it crosses that gate, with the same two
+// constants. Nothing else stamps: the snapshot loader and the server build
+// hand stored plan JSON straight to the renderer, so a stored plan that lost
+// the fields still fails the gate exactly as before.
+const PLAN_WIRE_SCHEMA = PlanSchema.PLAN_SCHEMA;
+const PLAN_WIRE_LAYOUT_REVISION = PlanSchema.PLAN_LAYOUT_REVISION;
+
+function wirePlan(planOrJson: Parameters<typeof renderPreparedParagraphInto>[1]): Parameters<typeof renderPreparedParagraphInto>[1] {
+  if (typeof planOrJson === "string" || planOrJson == null) return planOrJson;
+  const plan = planOrJson as unknown as Record<string, unknown>;
+  const schema = plan.schema == null ? PLAN_WIRE_SCHEMA : plan.schema;
+  const layoutRevision = plan.layoutRevision == null ? PLAN_WIRE_LAYOUT_REVISION : plan.layoutRevision;
+  return { ...plan, schema: schema, layoutRevision: layoutRevision } as Parameters<typeof renderPreparedParagraphInto>[1];
+}
 
 // The commit verdict is a discriminated union on kind. Every original
 // construction site sets the fields of its own member only.
@@ -114,7 +139,7 @@ function renderWorkerPrepared(
   return rawDomSuspendEngineWrites(rawDomContext, host, function () {
     return renderPreparedParagraphInto(
       host,
-      record.plan,
+      wirePlan(record.plan),
       locale,
       {
         sourceText: sourceText,
@@ -135,7 +160,7 @@ function renderWorkerPrepared(
 function renderPrepared(
   rawDomContext: EnhancedElementContext,
   host: Element,
-  planJson: string,
+  planJson: Parameters<typeof renderPreparedParagraphInto>[1],
   locale: string,
   sourceText: string,
   semanticElements: Element[],
@@ -167,7 +192,7 @@ function renderPrepared(
     } : undefined;
     return renderPreparedParagraphInto(
       host,
-      planJson,
+      wirePlan(planJson),
       locale,
       options,
       rawDomContext
@@ -269,7 +294,7 @@ export function commitPreparedParagraph(rawDomContext: EnhancedElementContext, a
   renderPrepared(
     rawDomContext,
     source,
-    preparation.planJson!,
+    preparation.planJson as Parameters<typeof renderPreparedParagraphInto>[1],
     lowered.textStyle.locale,
     lowered.text,
     sourceSpansElements,

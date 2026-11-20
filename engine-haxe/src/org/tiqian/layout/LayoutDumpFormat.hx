@@ -4,7 +4,7 @@ import org.tiqian.core.*;
 import org.tiqian.test.LayoutFixtures.LayoutFixture;
 import org.tiqian.font.FontMetrics.StubFontMetricsResolver;
 import org.tiqian.font.FontMetrics.FontMetricsResolver;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import org.tiqian.shaping.TextShaper.ExplainableStubTextShaper;
 import org.tiqian.linebreak.Hyphenator.NoHyphenator;
 import org.tiqian.linebreak.EnglishHyphenation;
@@ -15,6 +15,7 @@ import org.tiqian.clreq.ClreqProfile;
 import org.tiqian.clreq.KinsokuMode;
 import org.tiqian.layout.ParagraphLayoutEngine.ExplainableStubParagraphLayoutEngine;
 
+@:mainOnly
 class LayoutDumpFormat {
     static function joinInts(a:std.ReadOnlyArray<Int>):String {
         final b = [];
@@ -66,7 +67,7 @@ class LayoutDumpFormat {
         return out.toString();
     }
 
-    public static function layoutFixtureDump(f:LayoutFixture, ?textShaper:Null<ITextShaper>, ?fontMetricsResolver:Null<FontMetricsResolver>):String {
+    public static function layoutFixtureDump(f:LayoutFixture, ?textShaper:Null<TextShaper>, ?fontMetricsResolver:Null<FontMetricsResolver>):String {
         final out = new StringBuf();
         out.add("fixture: ");
         out.add(f.id);
@@ -75,7 +76,7 @@ class LayoutDumpFormat {
         out.add("\nmaxWidth: ");
         out.add(dumpFmt(f.constraints.maxWidth));
         out.add("\n");
-        final shaper:ITextShaper = textShaper == null ? new ExplainableStubTextShaper() : textShaper;
+        final shaper:TextShaper = textShaper == null ? new ExplainableStubTextShaper() : textShaper;
         for (n in 0...3) {
             final breaker:LineBreaker = n == 0 ? new GreedyLineBreaker() : n == 1 ? new LookaheadLineBreaker() : new ParagraphDpLineBreaker();
             final hyphenator = f.useEnglishHyphenation ? EnglishHyphenation.enUs() : new NoHyphenator();

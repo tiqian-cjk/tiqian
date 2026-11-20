@@ -285,7 +285,7 @@ internal fun AnnotatedString.cjkRichTextSpans(
         if (style.background != Color.Unspecified) {
             out += RichTextSpan(
                 range = range,
-                role = RichTextRole.Background,
+                role = org.tiqian.core.Background.instance,
                 paint = RichTextPaint(
                     argb = style.background.toArgb(),
                     adjacentSameStyleClearance = adjacentSameStyleClearance,
@@ -299,10 +299,10 @@ internal fun AnnotatedString.cjkRichTextSpans(
                 adjacentSameStyleClearance = adjacentSameStyleClearance,
             )
             if (TextDecoration.Underline in decoration) {
-                out += RichTextSpan(range, RichTextRole.Underline, linePaint)
+                out += RichTextSpan(range, org.tiqian.core.Underline.instance, linePaint)
             }
             if (TextDecoration.LineThrough in decoration) {
-                out += RichTextSpan(range, RichTextRole.LineThrough, linePaint)
+                out += RichTextSpan(range, org.tiqian.core.LineThrough.instance, linePaint)
             }
         }
     }
@@ -315,15 +315,15 @@ internal fun AnnotatedString.cjkRichTextSpans(
             is LinkAnnotation.Clickable -> item.tag
             else -> continue
         }
-        out += RichTextSpan(TextRange(link.start, link.end), RichTextRole.Link(target))
+        out += RichTextSpan(TextRange(link.start, link.end), org.tiqian.core.Link(target))
     }
     for (role in getStringAnnotations(CjkRichTextTag, 0, length)) {
         when (role.item) {
             InlineCodeRoleItem -> out += RichTextSpan(
-                TextRange(role.start, role.end), RichTextRole.InlineCode, inlineCodePaint,
+                TextRange(role.start, role.end), org.tiqian.core.InlineCode.instance, inlineCodePaint,
             )
             TechnicalInlineRoleItem -> out += RichTextSpan(
-                TextRange(role.start, role.end), RichTextRole.TechnicalInline,
+                TextRange(role.start, role.end), org.tiqian.core.TechnicalInline.instance,
             )
         }
     }
@@ -503,7 +503,7 @@ fun ParagraphMeasurer.measureWithInlineContent(
             content = TiqianTextContent(
                 text = renderText.text,
                 spans = renderText.cjkStyleSpans(core, density),
-                sourceBoundaries = sourceBoundaries,
+                sourceBoundaries = sourceBoundaries.toList(),
                 lineBreakSpans = richTextSpans.layoutLineBreakSpans(renderText.text),
                 autoSpaceSuppressedRanges = richTextSpans.layoutAutoSpaceSuppressedRanges(),
             ),

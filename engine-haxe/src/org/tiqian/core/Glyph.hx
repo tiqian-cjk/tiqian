@@ -14,6 +14,7 @@ class Glyph {
 
     public function new(id:Int, clusterRange:TextRange, advance:Float, ?x:Null<Float>, ?y:Null<Float>, ?renderFontKey:Null<String>, ?bounds:Null<Rect>,
             ?haltAdvance:Null<Float>, ?haltPlacementX:Null<Float>) {
+        if (id < 0 || id > 65535) throw new IllegalStateException("Glyph id outside the OpenType uint16 range: " + id);
         this.id = id;
         this.clusterRange = clusterRange;
         this.advance = advance;

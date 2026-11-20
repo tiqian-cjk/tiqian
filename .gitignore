@@ -17,7 +17,6 @@ layout/src/jvmTest/resources/lit-zh-corpus.txt
 .claude/launch.json
 
 # Rust
-ffi/rust/target/
 platforms/web/server/precompute/target/
 
 # Agent working artifacts (specs, reports, logs, baselines; kept on disk, never committed)
@@ -43,14 +42,12 @@ demo/web-history/*.tsbuildinfo
 
 # Haxe engine module: generated outputs and local baselines, never committed
 /engine-haxe/out/
-/engine-haxe/targets/classes.hxml
-/engine-haxe/baseline-goldens
 /engine-haxe/smoke/
 
-# Locally generated trace goldens (Haxe port contract); regenerate with
-# TIQIAN_UPDATE_GOLDEN=1 ./gradlew :engine:jvmTest
-engine/src/jvmTest/resources/golden/test-traces/
-engine/src/jvmTest/resources/golden/process-traces/
+# Build-time generated Rust engine tree (tools/generate-engine-gen.mjs).
+/platforms/web/server/precompute/engine-gen/
+# Build-time generated Rust protocol tree (tools/generate-engine-gen.mjs).
+/platforms/web/server/precompute/protocol-gen/
 
 # Regenerated into the source tree by porting/instrument_tests.py
 engine/src/commonTest/kotlin/org/tiqian/test/trace/TracedTestManifest.kt
@@ -67,3 +64,13 @@ engine/src/commonTest/kotlin/org/tiqian/test/trace/TracedTestManifest.kt
 .cargo-home/
 
 .workspace-board-scratch-lock-*/
+
+# 12-bundle matrix logs: absolute host paths and task ids; kept on disk, never committed
+bundle-logs/
+
+# local caches and scratch bundle configs (regenerated on demand; never committed)
+.nix-cache/
+.scratch-tools/
+boring.scratch.json
+/platforms/web/client/engine-runtime/engine-gen/
+platforms/web/**/*-gen/

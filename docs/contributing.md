@@ -26,6 +26,7 @@ Chrome 或 Chromium。
 - [roadmap](roadmap.md) 记录当前正在推进和已经完成的工作，可以用来了解项目方向。
 - [当前架构](architecture.md) 说明 pipeline、模块边界与平台接入方式。
 - [ADR 索引](adr/README.md) 记录已经确定的架构和排版取舍。
+- [发布流程](release-pipeline.md) 记录版本发布与 registry 部署的完整步骤。
 
 roadmap 不是贡献许可清单。修复明确的 bug、增加测试或改善文档，不需要先创建 Slice；
 只有在开启一项需要持续跟踪的新工作时，才需要补充 roadmap。
@@ -43,6 +44,8 @@ roadmap 不是贡献许可清单。修复明确的 bug、增加测试或改善�
 - 平台测量与绘制应使用同一套字体和字形数据，避免布局结果与实际上屏几何分叉。
 
 不确定改动应放在哪里时，可以先查看相关 ADR，或在 issue 中附上最小复现再讨论实现位置。
+
+新增可执行文件放在 `tools/`；入库的数据放在 `engine-haxe/data/`，手册放在 `docs/`。见 [ADR 0063](adr/0063-single-tools-directory.md)。
 
 ## 验证改动
 
@@ -62,7 +65,7 @@ roadmap 不是贡献许可清单。修复明确的 bug、增加测试或改善�
 ```
 
 该命令会重建 browser 与 precompute Kotlin/JS runtime、运行 npm 测试，再把 tarball 安装到临时 consumer
-验证 `@tiqian/prose` 的公开 exports；它不会执行 `npm publish`。
+验证 `@tiqian/web-component` 的公开 exports；它不会执行 `npm publish`。
 
 如果改动会影响断行、标点空间、字体选择或行内几何，还需要运行 layout golden test
 并生成诊断报告：

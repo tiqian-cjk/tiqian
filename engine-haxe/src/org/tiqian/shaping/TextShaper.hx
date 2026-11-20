@@ -2,6 +2,7 @@ package org.tiqian.shaping;
 
 using std.Functional;
 
+import std.ReadOnlyArray;
 import org.tiqian.core.Cluster;
 import org.tiqian.core.Glyph;
 import org.tiqian.core.GlyphRun;
@@ -19,9 +20,9 @@ class ShapingInput {
     public final style:TextStyle;
     public final fontDecision:FontDecision;
     public final displayText:String;
-    public final openTypeFeatures:Array<String>;
+    public final openTypeFeatures:ReadOnlyArray<String>;
 
-    public function new(text:String, range:TextRange, style:TextStyle, fontDecision:FontDecision, ?displayText:Null<String>, ?openTypeFeatures:Array<String>) {
+    public function new(text:String, range:TextRange, style:TextStyle, fontDecision:FontDecision, ?displayText:Null<String>, ?openTypeFeatures:ReadOnlyArray<String>) {
         this.text = text;
         this.range = range;
         this.style = style;
@@ -33,23 +34,23 @@ class ShapingInput {
 
 @:dataClass
 class ShapingResult {
-    public final clusters:Array<Cluster>;
-    public final glyphRuns:Array<GlyphRun>;
-    public final decisions:Array<ShapingDecisionInfo>;
+    public final clusters:ReadOnlyArray<Cluster>;
+    public final glyphRuns:ReadOnlyArray<GlyphRun>;
+    public final decisions:ReadOnlyArray<ShapingDecisionInfo>;
 
-    public function new(clusters:Array<Cluster>, glyphRuns:Array<GlyphRun>, ?decisions:Array<ShapingDecisionInfo>) {
+    public function new(clusters:ReadOnlyArray<Cluster>, glyphRuns:ReadOnlyArray<GlyphRun>, ?decisions:ReadOnlyArray<ShapingDecisionInfo>) {
         this.clusters = clusters;
         this.glyphRuns = glyphRuns;
         this.decisions = decisions == null ? [] : decisions;
     }
 }
 
-class TextShaper {
+class ShapingIssue {
     public static final UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE_ISSUE:String = "UnverifiedDisplaySubstitutionCoverage";
     public static final PLATFORM_MULTI_FACE_STRING_DRAW_ISSUE:String = "PlatformMultiFaceStringDraw";
 }
 
-interface ITextShaper {
+interface TextShaper {
     function shape(input:ShapingInput):ShapingResult;
 }
 
@@ -62,7 +63,7 @@ enum ShapingSource {
     CoreText;
 }
 
-class ExplainableStubTextShaper implements ITextShaper {
+class ExplainableStubTextShaper implements TextShaper {
     public function new() {}
 
     public function shape(input:ShapingInput):ShapingResult {
@@ -128,7 +129,7 @@ class ExplainableStubTextShaper implements ITextShaper {
     }
 }
 
-class UnimplementedTextShaper implements ITextShaper {
+class UnimplementedTextShaper implements TextShaper {
     public function new() {}
 
     public function shape(input:ShapingInput):ShapingResult {

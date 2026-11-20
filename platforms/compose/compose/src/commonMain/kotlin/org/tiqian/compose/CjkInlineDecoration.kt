@@ -60,10 +60,10 @@ sealed interface CjkInlineDecorationStyle {
 internal fun CjkInlineDecoration.toCore(density: Density): RichTextSpan = when (val value = style) {
     is CjkInlineDecorationStyle.DashedUnderline -> RichTextSpan(
         range = org.tiqian.core.TextRange(range.start, range.end),
-        role = RichTextRole.Underline,
+        role = org.tiqian.core.Underline.instance,
         paint = RichTextPaint(
             argb = value.color.toArgb(),
-            linePattern = RichTextLinePattern.Dashed(
+            linePattern = org.tiqian.core.Dashed(
                 strokeWidth = with(density) { value.strokeWidth.toPx() },
                 dashLength = with(density) { value.dashLength.toPx() },
                 gapLength = with(density) { value.gapLength.toPx() },
@@ -73,10 +73,10 @@ internal fun CjkInlineDecoration.toCore(density: Density): RichTextSpan = when (
     )
     is CjkInlineDecorationStyle.DottedUnderline -> RichTextSpan(
         range = org.tiqian.core.TextRange(range.start, range.end),
-        role = RichTextRole.Underline,
+        role = org.tiqian.core.Underline.instance,
         paint = RichTextPaint(
             argb = value.color.takeUnless { it == Color.Unspecified }?.toArgb(),
-            linePattern = RichTextLinePattern.Dotted(
+            linePattern = org.tiqian.core.Dotted(
                 dotDiameter = with(density) { value.dotDiameter.toPx() },
                 gapLength = with(density) { value.gapLength.toPx() },
             ),

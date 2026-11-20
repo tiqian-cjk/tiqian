@@ -41,7 +41,7 @@ class ParagraphMeasurer(
             content = TiqianTextContent(
                 text = text,
                 spans = spans,
-                sourceBoundaries = sourceBoundaries,
+                sourceBoundaries = sourceBoundaries.toList(),
                 lineBreakSpans = lineBreakSpans,
                 autoSpaceSuppressedRanges = autoSpaceSuppressedRanges,
             ),

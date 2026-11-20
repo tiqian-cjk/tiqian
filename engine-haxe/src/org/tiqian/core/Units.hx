@@ -14,6 +14,7 @@ package org.tiqian.core;
 // Author-facing literals are `40.ic` and `2.ic`.
 
 /** Haxe spelling of the Kotlin Float.ic extension. */
+@:mainOnly
 class FloatIc {
     public static function ic(value:Float):Ic {
         return new Ic(value);

@@ -1,12 +1,10 @@
 <h1>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/tiqian_wordmark_with_pinyin_and_logo_white.svg">
-    <img src="docs/images/tiqian_wordmark_with_pinyin_and_logo_black.svg" alt="提椠 Tíqiàn" height="48">
-  </picture>
+  <img src="docs/images/tiqian_wordmark_with_pinyin_and_logo_white.svg#gh-dark-mode-only" alt="提椠 Tíqiàn" height="48">
+  <img src="docs/images/tiqian_wordmark_with_pinyin_and_logo_black.svg#gh-light-mode-only" alt="提椠 Tíqiàn" height="48">
 </h1>
 
 [![Maven Central](https://img.shields.io/maven-central/v/org.tiqian/tiqian-compose?label=maven)](https://central.sonatype.com/artifact/org.tiqian/tiqian-compose)
-[![npm version](https://img.shields.io/npm/v/%40tiqian%2Fprose?label=npm)](https://www.npmjs.com/package/@tiqian/prose)
+[![npm version](https://img.shields.io/npm/v/%40tiqian%2Fweb-component?label=npm)](https://www.npmjs.com/package/@tiqian/web-component)
 [![Telegram Link](https://img.shields.io/badge/Telegram-@tiqian__cjk-blue?logo=telegram&logoColor=fff)](https://t.me/tiqian_cjk)
 
 提椠是一个中日韩段落书写器。
@@ -14,10 +12,10 @@
 它在各平台的字体与绘制能力之上，统一处理中文正文里的字体选择、
 断行、避头尾、标点空间、两端对齐、行内空间分配与行间注。
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/sample-paragraph-white.svg">
-  <img src="docs/images/sample-paragraph-black.svg" alt="提椠简体中文横排样张，包含拼音行间注与着重号">
-</picture>
+<p>
+  <img src="docs/images/sample-paragraph-white.svg#gh-dark-mode-only" alt="提椠简体中文横排样张，包含拼音行间注与着重号">
+  <img src="docs/images/sample-paragraph-black.svg#gh-light-mode-only" alt="提椠简体中文横排样张，包含拼音行间注与着重号">
+</p>
 
 ## 当前状态
 
@@ -99,7 +97,7 @@ val paragraph = CjkTextView(context).apply {
 
 ## Web
 
-`@tiqian/prose` 渐进增强服务器已经输出的正文 HTML。没有 JavaScript、加载失败或遇到暂不支持的
+`@tiqian/web-component` 渐进增强服务器已经输出的正文 HTML。没有 JavaScript、加载失败或遇到暂不支持的
 内容时，原文仍由浏览器排版；网站原有的字体、颜色、链接、选择与复制语义继续生效。
 
 静态博客和 SSR 网站可以把现有正文放进 `<tiqian-prose>`，再导入自定义元素入口：
@@ -114,24 +112,23 @@ val paragraph = CjkTextView(context).apply {
 </style>
 
 <script type="module">
-  import "@tiqian/prose/element";
+  import "@tiqian/web-component/element";
 </script>
 ```
 
 安装、命令式 API、构建期预排与运行环境见
-[`@tiqian/prose` 使用文档](platforms/web/client/web-component/README.md)。
+[`@tiqian/web-component` 使用文档](platforms/web/client/web-component/README.md)。
 
-## 引擎源码（Legacy 声明）
+## 引擎源码
 
-> **Legacy 弃用声明**：engine/（Kotlin 手写引擎）已标记为 Legacy，仅作为
-> Kotlin 平台（JVM / Android / Apple / Compose）当前的消费面保留。新的引擎
-> 开发请转向 engine-haxe/——它是唯一活跃源码，boring 编译器从它生成
-> Kotlin / Swift / Dart / JS / Rust 五种目标。不要在 engine/ 里新增代码。
+engine-haxe/src/ 是引擎的 Haxe 源码。boring 编译器从它生成 Kotlin、Swift、
+Dart、JS、Rust 五个目标的代码；编译生成 Kotlin 的 Gradle 工程由 boring 提供，
+settings.gradle.kts 以 :boring-kotlin-f32 引入它的 :engine 模块，commonMain 指向
+engine-haxe/out/kotlin-f32/gen（由 gradle.properties 的 kotlinGenDir 指定）。
 
-迁移指引：
-- 引擎行为改动 → 改 engine-haxe/src/（Haxe 源码），经 boring 生成各目标。
-- 五目标的生成 / 编译 / 测试见 engine-haxe/README.md。
-- Kotlin 平台的 boring 生成接入（Phase 2）与 engine/ 删除（Phase 3）为后续独立任务。
+- 五个目标的生成、编译与测试见 engine-haxe/README.md。
+- Kotlin 平台的行为改动落在 engine-haxe/src/ 的 Haxe 源码，生成物不入库。
+- 生成 Kotlin 的构建配置只存在于 boring 的发布工程，tiqian 不再维护副本。
 
 ## 体验与构建
 
@@ -151,9 +148,47 @@ demo 覆盖 Compose density，例如 Plasma 的 150% 缩放使用：
 
 该属性同时缩放 demo 中的 `dp`、`sp`、Compose 控件与 `CjkText`；未设置时保留系统报告的 density。
 
+### Web 引擎包
+
+`platforms/web/client/engine-runtime` 的 `engine-gen/` 与 `runtime/` 都是构建产物，不入库。
+在仓库根目录执行 `bun install` 时，install 钩子按以下顺序补齐：
+
+| 安装钩子步骤 | 作用 | 取消条件 |
+| --- | --- | --- |
+| 把 `.haxelib/boring/git/tools/unicode-data/` 拷到 `tools/unicode-data/` | `reflaxe.unicode.GraphemeData` 按 cwd 读取该目录 | boring 不再按 cwd 读取 `tools/unicode-data`（`t-mwcxehpz-fict`） |
+| 用 `boring` 生成 `engine-gen/` | Web 引擎包的 TypeScript 产物 | 发布流程与本地开发都不再依赖 install 钩子生成 `engine-gen/` |
+| 用 `tsc` 编译出 `runtime/` | Web 引擎包的运行时 | 发布流程与本地开发都不再依赖 install 钩子生成 `runtime/` |
+
+`tiqian-protocol` 与 `tiqian-shared` 是根 `package.json` 的两个 workspace 成员，成员目录为
+`engine-haxe/out/protocol-ts/gen` 与 `engine-haxe/out/shared-ts/gen`；消费方
+`platforms/web/client/core` 与 `platforms/web/server/core` 用 `workspace:*` 依赖它们。成员目录的
+`package.json` 由 `boring pack` 写出，`boring gen` 只写源码，两个目录不入库，所以干净检出按下面
+的顺序执行：
+
+```shell
+nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+nix develop -c bun install --ignore-scripts
+```
+
+`workspace:*` 是 npm 不支持的协议，根目录安装用 `bun install`。上面两条命令之后由
+`nix develop -c npm run build:runtime` 生成 `engine-runtime/engine-gen/` 与
+`engine-runtime/runtime/`。`--ignore-scripts` 跳过根 postinstall。该钩子与 `boring pack` 都写
+`engine-haxe/out/protocol-ts/gen/package.json`：钩子在 `engine-gen/` 缺失时重新生成该目录，删除
+`package.json`。两个生产者对同一文件的所有权冲突，命令顺序只能规避它，不能消除它。
+
+Unicode 数据的来源在仓库内：`.haxelib/boring/git/tools/unicode-data/` 来自 flake 固定的
+boring 检出。`boring` 生成需要 flake 提供的驱动：
+
+```shell
+nix develop -c bun install
+nix develop -c npm test --workspace @tiqian/ffi
+```
+
+缺少 `boring` 时 install 直接失败并打印下一步，不会留下无法运行的安装结果。
+
 ## 文档
 
-- [`@tiqian/prose` 使用文档](platforms/web/client/web-component/README.md) 说明 Web 安装、接入方式与构建期预排。
+- [`@tiqian/web-component` 使用文档](platforms/web/client/web-component/README.md) 说明 Web 安装、接入方式与构建期预排。
 - [Roadmap](docs/roadmap.md) 记录当前进度、已完成的 Slice 与下一步工作。
 - [当前架构](docs/architecture.md) 说明 pipeline、模块边界与平台接入方式。
 - [ADR 索引](docs/adr/README.md) 记录已经确定的架构和排版取舍。

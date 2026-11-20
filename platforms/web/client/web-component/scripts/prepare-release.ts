@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const packageRoot: string = fileURLToPath(new URL("../", import.meta.url));
 const repositoryRoot: string = fileURLToPath(new URL("../../../..", import.meta.url));
-const PACKAGE_NAME: string = "@tiqian/prose";
+const PACKAGE_NAME: string = "@tiqian/web-component";
 const RELEASE_VERSION: RegExp = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/u;
 
 export function normalizeReleaseVersion(input: string | null | undefined): string {

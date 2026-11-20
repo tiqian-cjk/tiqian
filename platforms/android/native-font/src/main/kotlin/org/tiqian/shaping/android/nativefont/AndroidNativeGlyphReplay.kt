@@ -149,7 +149,7 @@ object AndroidNativeGlyphReplay : AndroidGlyphReplay {
     private fun scaledOutline(
         faceId: String,
         face: NativeFontFace,
-        glyphId: UInt,
+        glyphId: Int,
         fontSize: Float,
         syntheticItalic: Boolean,
     ): Path? {
@@ -194,7 +194,7 @@ object AndroidNativeGlyphReplay : AndroidGlyphReplay {
 
     private data class OutlineKey(
         val faceId: String,
-        val glyphId: UInt,
+        val glyphId: Int,
         val fontSizeBits: Int,
     )
 

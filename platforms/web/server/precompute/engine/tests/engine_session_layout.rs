@@ -1,23 +1,17 @@
 //! The session-backed engine bridge against a real font file (ADR 0050
-//! Slice C). The fixture font is the system font the session parity harness
-//! uses; the test skips with a reason when the file is absent.
+//! Slice C). The fixture font is vendored under `tests/fixtures` and embedded
+//! with `include_bytes!`, so the test runs on a bare runner without a font
+//! directory.
 
-
-use std::path::PathBuf;
+#[path = "support/font_fixture.rs"]
+mod font_fixture;
 
 use tiqian_precompute::engine_bridge;
 use tiqian_precompute::font_record::{FontFaceSpec, FontWeightSpec};
 use tiqian_precompute::paragraph::ParagraphRequest;
-use tiqian_precompute::plan::Plan;
 use tiqian_precompute::session::{
     create_font_session, CaptureEvidence, SessionFaceSpec, SessionOptions,
 };
-
-fn dela_gothic_path() -> Option<PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-    let path = PathBuf::from(home).join(".local/share/fonts/DelaGothicOne-Regular.ttf");
-    path.is_file().then_some(path)
-}
 
 /// 「中文文字排版段落」 keeps every code point inside the coverage of the
 /// fixture font, so the run exercises real glyph ids and advances.
@@ -43,19 +37,12 @@ fn request(session_id: &str) -> ParagraphRequest {
 
 #[test]
 fn session_lends_the_engine_a_real_font_backend() {
-    let Some(font_path) = dela_gothic_path() else {
-        eprintln!(
-            "skipped: DelaGothicOne-Regular.ttf absent at {}",
-            font_path_by_home().display()
-        );
-        return;
-    };
-    let bytes = std::fs::read(&font_path).expect("fixture font reads");
+    let bytes = font_fixture::DELA_GOTHIC_ONE;
     let specs = vec![SessionFaceSpec {
         spec: FontFaceSpec {
-            family: "Dela Gothic One",
-            public_url: "/fonts/DelaGothicOne-Regular.ttf",
-            source: &bytes,
+            family: font_fixture::FAMILY,
+            public_url: font_fixture::PUBLIC_URL,
+            source: bytes,
             face_index: None,
             weight: FontWeightSpec::Single(Some(400.0)),
             style: "normal",
@@ -95,9 +82,4 @@ fn session_lends_the_engine_a_real_font_backend() {
             .all(|shape| !shape.glyphs.is_empty()),
         "a replayed shape carries no glyphs"
     );
-}
-
-fn font_path_by_home() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_default();
-    PathBuf::from(home).join(".local/share/fonts/DelaGothicOne-Regular.ttf")
 }

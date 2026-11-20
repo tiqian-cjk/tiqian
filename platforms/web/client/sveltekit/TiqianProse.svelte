@@ -8,7 +8,7 @@
   import type { Snippet } from "svelte";
 
   import "@tiqian/core/styles.css";
-  import { registerSnapshotBundle } from "@tiqian/prose/snapshot-client";
+  import { registerSnapshotBundle } from "@tiqian/web-component/snapshot-client";
 
   import type { PreparedTiqianProse } from "./server.js";
 
@@ -59,7 +59,7 @@
   if (browser && !lifecycleRegistered) {
     lifecycleRegistered = true;
     afterNavigate(() => {
-      void import("@tiqian/prose/element");
+      void import("@tiqian/web-component/element");
     });
   }
 </script>

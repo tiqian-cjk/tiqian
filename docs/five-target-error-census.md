@@ -6,6 +6,11 @@ Dart）下的编译错误，作为跨目标行为对齐（见
 普查对象是 engine-haxe/out/ 下由 boring 从 Haxe 源码翻译出的目标语言代码目录。
 原生 `engine` 模块的 `./gradlew :engine:jvmTest` 无失败，不在本文范围内。
 
+本文是 2026-09 的测量记录。文中提到的生成入口与按这些入口写出的命令属于当时的
+检出，已在任务 `refactor/boring-json-single-entry` 中删除；现在的生成入口只有仓库根的
+`boring.json`，命令见 [engine-haxe/README.md](../engine-haxe/README.md#生成与测试)。
+本文的命令与计数保持原样，用来对照当时的检出，不按当前入口重写。
+
 当前状态（2026-09-10 傍晚，基线 tiqian `3f609c0f` 加 boring `a2f2bdc2`，主树直接复测）：八个生成命令退出码全部为 0。kotlin f32 176 条 / f64 187 条；ts 337 条；rust f32 3402 条 / f64 3174 条；swift gen 侧 f32 0 条 / f64 1 条、tests 侧 f64 41 条；dart 317 条（生成侧 269 条、测试侧 48 条）。两日累计：总错误 6546 降至 4394（kotlin 减半、dart tests 减 88%、ts 减半）。已解决并复测确认的修复项自 2026-09-07 起从第 11 节清单删除，只留第 12 节进度行。
 
 ## 1 更新规则
@@ -44,17 +49,17 @@ Dart）下的编译错误，作为跨目标行为对齐（见
 
 ```shell
 # 前置：vendored 副本指向要测的 boring 提交
-cd /home/losses/Development/tiqian/.haxelib/boring/git && git fetch origin && git checkout <提交号>
+cd <repo>/.haxelib/boring/git && git fetch origin && git checkout <提交号>
 
 # 从 tiqian 仓库根目录重新生成两个 Kotlin 目录。每次 haxe 前在同一个
 # nix shell 里重写 .dev（.dev 损坏时 haxe 报 Type not found : Intercept，
 # 所以每次生成前都重写一次）
-nix develop -c bash -c 'printf "%s" /home/losses/Development/tiqian/.haxelib/boring/git > .haxelib/boring/.dev; haxe engine-haxe/targets/kotlin-f32.hxml'  # f32
-nix develop -c bash -c 'printf "%s" /home/losses/Development/tiqian/.haxelib/boring/git > .haxelib/boring/.dev; haxe engine-haxe/targets/kotlin-f64.hxml'  # f64
+nix develop -c bash -c 'printf "%s" <repo>/.haxelib/boring/git > .haxelib/boring/.dev; haxe engine-haxe/targets/kotlin-f32.hxml'  # f32
+nix develop -c bash -c 'printf "%s" <repo>/.haxelib/boring/git > .haxelib/boring/.dev; haxe engine-haxe/targets/kotlin-f64.hxml'  # f64
 
 # 编译普查。kotlinc 不在默认 PATH，必须用绝对路径；退出码 1 是预期，
 # 错误计数来自日志
-cd /home/losses/Development/tiqian
+cd <repo>
 nix develop -c bash -c '
 KOTLINC=/nix/store/rqx09a40a82di944xi6ydjyzx632av28-kotlin-2.4.10/bin/kotlinc
 $KOTLINC -Xallow-kotlin-package \

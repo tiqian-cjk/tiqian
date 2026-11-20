@@ -1,0 +1,95 @@
+name: Staging pipeline
+
+# The release entrypoints run only on a v*.*.* tag (release.yml,
+# release-registry.yml) or a published release (publish.yml), so every step
+# they drive stays unverified until the first real release. This workflow runs
+# the same steps on every push to main with a staging version, writes every
+# output below one staging directory and publishes nothing: no tag, no push to
+# an official registry, no R2 upload and no Central deployment.
+#
+# The work lives in tools/staging-pipeline.sh so the same commands also run
+# in a developer checkout.
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-pipeline-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    name: Run the release pipeline to a staging version
+    runs-on: ubuntu-latest
+    # 240 minutes: the verify stage runs boring verify, which generates all 13
+    # bundles, runs all 13 generated test suites and compares the comparable
+    # ones; one suite carries per-test budgets of 600000 ms (boring.json
+    # run.env). The other stages keep their previous cost.
+    timeout-minutes: 240
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+
+      - name: Install CMake 4.3.2 for Android native font
+        run: |
+          python3 -m venv "$HOME/cmake-venv"
+          "$HOME/cmake-venv/bin/pip" install --quiet "cmake==4.3.2"
+          cmake_bin_dir="$("$HOME/cmake-venv/bin/python" -c 'import cmake, os; print(os.path.join(os.path.dirname(cmake.__file__), "data", "bin"))')"
+          echo "$cmake_bin_dir" >> "$GITHUB_PATH"
+          "$cmake_bin_dir/cmake" --version
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Stage the pinned generation inputs
+        shell: bash
+        run: |
+          nix develop -c bash -c "mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/"
+          ls -l tools/unicode-data
+
+      # Gradle refuses to configure any Android project when ANDROID_HOME and
+      # ANDROID_SDK_ROOT name different SDK roots ("Several environment
+      # variables and/or system properties contain different paths to the
+      # SDK"). Two writers set them here: the ubuntu-latest image exports
+      # ANDROID_SDK_ROOT=/usr/local/lib/android/sdk, and the flake devShell
+      # (flake.nix:100) exports ANDROID_HOME=<nix store>/libexec/android-sdk,
+      # which carries platforms;android-36, build-tools;36.0.0 and
+      # NDK 29.0.13599879-rc2. The Android modules pin exactly those three
+      # (platforms/android/native-font/build.gradle.kts:18-19 and :34), so the
+      # devShell SDK is the one Gradle must resolve and the runner variable is
+      # dropped before the devShell starts. Removing the unset brings back
+      # maven-local-publish rc=1 on every run.
+      - name: Run the staging pipeline
+        shell: bash
+        run: |
+          unset ANDROID_SDK_ROOT
+          export STAGING_VERSION="0.0.0-staging.${GITHUB_SHA::7}"
+          nix develop -c bash tools/staging-pipeline.sh
+
+      - name: Upload the staging report and registry tree
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-pipeline
+          path: |
+            ${{ runner.temp }}/tiqian-staging-*/logs
+            ${{ runner.temp }}/tiqian-staging-*/report.md
+            ${{ runner.temp }}/tiqian-staging-*/registry-tree
+          if-no-files-found: warn
+          retention-days: 7

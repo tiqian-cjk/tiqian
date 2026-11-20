@@ -1,0 +1,12 @@
+# ADR 0050: direct Rust consumption of the generated layout engine. The
+# generated crate comes from the boring engine-rust bundle and is not
+# committed; run `node tools/generate-engine-gen.mjs --target rust` inside
+# `nix develop` before building this crate.
+[package]
+name = "tiqian"
+description = "Direct Rust consumption of the generated Tiqian CJK paragraph layout engine"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tiqian-engine-gen = { path = "../engine-gen" }

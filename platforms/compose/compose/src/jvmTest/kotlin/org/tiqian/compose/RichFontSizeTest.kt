@@ -24,7 +24,7 @@ class RichFontSizeTest {
             lineBreaker = LookaheadLineBreaker(),
             textShaper = SkiaTextShaper(),
             fontMetricsResolver = SkiaFontMetricsResolver(),
-            clreqProfileResolver = { ClreqProfile.MainlandHorizontal },
+            clreqProfileResolver = object : org.tiqian.clreq.ClreqProfileResolver { override fun resolve(profileId: org.tiqian.core.LayoutProfileId): org.tiqian.clreq.ClreqProfile = ClreqProfile.MainlandHorizontal },
         ),
     )
 

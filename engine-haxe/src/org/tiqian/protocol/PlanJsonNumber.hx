@@ -13,8 +13,10 @@ typedef PlanJsonDecomposed = {mantissa:String, exp2:Int};
 typedef PlanJsonF32Decomposed = {mant24:Int, exp2:Int};
 
 class PlanJsonNumber {
-    private static var fivePowers:Null<Array<String>> = null;
-    private static var twoPowers:Null<Array<String>> = null;
+    // Rust has no representation for a nullable container static, so the caches
+    // start empty and are filled lazily; an empty array means "not built yet".
+    private static var fivePowers:Array<String> = [];
+    private static var twoPowers:Array<String> = [];
 
     public static function ecmaJsonNumber(floatValue:Float):String {
         #if tiqian_ts
@@ -148,34 +150,45 @@ class PlanJsonNumber {
     }
 
 
+    // The Rust target guards each static access with its own lock instead of
+    // holding one lock across a fill, so the former append-as-you-grow loops
+    // let two threads interleave appends: the entries stopped matching their
+    // indices, and every number formatted afterwards took the wrong power and
+    // shifted its decimal point (a plan width of 144 serialized as 0.009216
+    // once a concurrent fill had raced). Each table is now built to a fixed
+    // length and published in one assignment, so a reader sees either the old
+    // complete table or the new complete table, and the length never changes
+    // between the length check and the index read. The size covers every
+    // reachable exponent: the f32 decomposition bottoms out at exp2 = -149 and
+    // the 16-digit extension lowers that by at most 29 more.
+    private static inline var POWER_CACHE_ENTRIES:Int = 200;
+
     private static function fiveToThe(k:Int):String {
-        if (fivePowers == null)
-            fivePowers = ["1"];
+        if (fivePowers.length == 0)
+            fivePowers = powerTable(5, POWER_CACHE_ENTRIES);
         if (k < fivePowers.length)
             return fivePowers[k];
-        var digits = fivePowers[fivePowers.length - 1];
-        var i = fivePowers.length - 1;
-        while (i < k) {
-            digits = timesSmall(digits, 5);
-            i++;
-            fivePowers.push(digits);
-        }
-        return digits;
+        return powerTable(5, k + 1)[k];
     }
 
     private static function twoToThe(k:Int):String {
-        if (twoPowers == null)
-            twoPowers = ["1"];
+        if (twoPowers.length == 0)
+            twoPowers = powerTable(2, POWER_CACHE_ENTRIES);
         if (k < twoPowers.length)
             return twoPowers[k];
-        var digits = twoPowers[twoPowers.length - 1];
-        var i = twoPowers.length - 1;
-        while (i < k) {
-            digits = timesSmall(digits, 2);
+        return powerTable(2, k + 1)[k];
+    }
+
+    private static function powerTable(base:Int, entries:Int):Array<String> {
+        final table = ["1"];
+        var digits = "1";
+        var i = 1;
+        while (i < entries) {
+            digits = timesSmall(digits, base);
+            table.push(digits);
             i++;
-            twoPowers.push(digits);
         }
-        return digits;
+        return table;
     }
 
 

@@ -37,7 +37,7 @@ import type {
 const repoRoot: string = fileURLToPath(new URL("../../..", import.meta.url));
 const npmDir: string = join(repoRoot, "platforms/web/client/web-component");
 const npmCoreDir: string = join(repoRoot, "platforms/web/client/core");
-const ffiRuntimeDir: string = join(repoRoot, "ffi/js/npm/runtime");
+const ffiRuntimeDir: string = join(repoRoot, "platforms/web/client/engine-runtime/runtime");
 
 const demoPort: number = 8994;
 const cdpPort: number = 9984;
@@ -127,7 +127,7 @@ function startFixtureServer(): Promise<Server> {
         if (file === join(npmCoreDir, "layout-worker.js")) {
           const source: string = data.toString("utf8");
           if (source.includes('from "@tiqian/ffi"')) {
-            send(source.replace('from "@tiqian/ffi"', 'from "/npm-ffi/Tiqian-tiqian-ffi-js.mjs"'), type);
+            send(source.replace('from "@tiqian/ffi"', 'from "/npm-engine-runtime/Tiqian-tiqian-ffi-js.mjs"'), type);
             return;
           }
         }
@@ -152,10 +152,10 @@ function startFixtureServer(): Promise<Server> {
 <script type="importmap">
 {
   "imports": {
-    "@tiqian/prose/element": "/npm/element.js",
-    "@tiqian/prose/": "/npm/",
+    "@tiqian/web-component/element": "/npm/element.js",
+    "@tiqian/web-component/": "/npm/",
     "@tiqian/core/": "/core/",
-    "@tiqian/ffi": "/npm-ffi/Tiqian-tiqian-ffi-js.mjs"
+    "@tiqian/ffi": "/npm-engine-runtime/Tiqian-tiqian-ffi-js.mjs"
   }
 }
 </script>
@@ -171,8 +171,8 @@ function startFixtureServer(): Promise<Server> {
         send(PAGE_DRIVER, "text/javascript");
         return;
       }
-      if (path.startsWith("/npm-ffi/")) {
-        const rest: string = path.slice("/npm-ffi/".length);
+      if (path.startsWith("/npm-engine-runtime/")) {
+        const rest: string = path.slice("/npm-engine-runtime/".length);
         await sendFile(join(ffiRuntimeDir, rest), "text/javascript");
         return;
       }
@@ -200,7 +200,7 @@ function startFixtureServer(): Promise<Server> {
 }
 
 const PAGE_DRIVER: string = `
-  import { registerTiqianProse } from "@tiqian/prose/element";
+  import { registerTiqianProse } from "@tiqian/web-component/element";
   registerTiqianProse();
 
   const stage = document.getElementById("stage");

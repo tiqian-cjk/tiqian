@@ -47,7 +47,7 @@ android {
 }
 
 dependencies {
-    api(project(":engine"))
+    api(project(":boring-kotlin-f32"))
     implementation(project(":platforms:android:shaping"))
 
     testImplementation(kotlin("test-junit"))

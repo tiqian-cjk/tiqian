@@ -7,7 +7,7 @@ import type {
   SnapshotServerAssets,
 } from "@tiqian/precompute/precompute-html";
 import type { SnapshotTableFileTransport } from "@tiqian/precompute/transport";
-import type { ClientSnapshotBundle } from "@tiqian/prose/snapshot-client";
+import type { ClientSnapshotBundle } from "@tiqian/web-component/snapshot-client";
 
 export interface PreparedTiqianProse {
   readonly html: string;

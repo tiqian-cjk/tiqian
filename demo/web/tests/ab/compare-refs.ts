@@ -3,14 +3,14 @@
 // manual "checkout base, rebuild, swap artifacts, eyeball" workflow as a
 // repeatable tool. Each ref builds inside its own git worktree, so the
 // working tree is never touched and each side's artifact cannot leak into
-// the other (the artifact under ffi/js/npm/runtime/Tiqian-tiqian-ffi-js.mjs is
-// git-ignored, which made manual swapping produce a false green once).
+// the other (the artifact under platforms/web/client/engine-runtime/runtime/facade.mjs
+// is git-ignored, which made manual swapping produce a false green once).
 //
 // Usage (from demo/web, inside nix develop):
 //   node tests/ab/compare-refs.ts --base <git-ref> [--head <git-ref>]
 //
 // --head defaults to the current working tree, uncommitted changes included.
-// Both refs must know the :ffi:js:assembleNpmPackage task. The demo
+// Both refs must know the platforms/web/client/engine-runtime package. The demo
 // page, viewport, fonts, and capture plan are identical constants for both
 // sides, so the only variable is the engine build.
 //
@@ -378,7 +378,7 @@ function compareScreenshots(a: Buffer, b: Buffer): ScreenshotComparison {
 }
 
 // Serves the current demo page with an import map that resolves
-// @tiqian/prose inside the given package directory, so the page chrome is a
+// @tiqian/web-component inside the given package directory, so the page chrome is a
 // constant and the engine build is the only variable.
 function startDemoServer(port: number, pkgDir: string, label: string): Promise<Server> {
   const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
@@ -387,7 +387,7 @@ function startDemoServer(port: number, pkgDir: string, label: string): Promise<S
       if (urlPath === "/") {
         const html: string = (await readFile(join(webDemoDir, "index.html"), "utf8")).replace(
           "</head>",
-          `<script type="importmap">{"imports":{"@tiqian/prose/element":"/platforms/web/client/web-component/element.js","@tiqian/prose/":"/platforms/web/client/web-component/","@tiqian/prose":"/platforms/web/client/web-component/element.js"}}</script></head>`,
+          `<script type="importmap">{"imports":{"@tiqian/web-component/element":"/platforms/web/client/web-component/element.js","@tiqian/web-component/":"/platforms/web/client/web-component/","@tiqian/web-component":"/platforms/web/client/web-component/element.js"}}</script></head>`,
         );
         res.setHeader("content-type", "text/html; charset=utf-8");
         res.end(html);
@@ -610,12 +610,12 @@ async function captureSide(options: CaptureSideOptions): Promise<CaptureSideResu
 }
 
 async function buildSide(label: string, sideDir: string): Promise<BuildSideResult> {
-  console.log(`[${label}] building :ffi:js:assembleNpmPackage in ${sideDir}`);
+  console.log(`[${label}] building the ffi runtime in ${sideDir}`);
   await new Promise<void>((resolve: BuildSideResolver, reject: BuildSideRejecter): void => {
-    const proc: ChildProcess = spawn("./gradlew", [
-      ":ffi:js:assembleNpmPackage",
-      "--no-build-cache",
-    ], { cwd: sideDir, stdio: ["ignore", "pipe", "pipe"] });
+    const proc: ChildProcess = spawn("npm", [
+      "run",
+      "build:runtime",
+    ], { cwd: join(sideDir, "platforms/web/client/engine-runtime"), stdio: ["ignore", "pipe", "pipe"] });
     let stderr: string = "";
     const stdoutHandler: BufferDataHandler = (d: Buffer): void => {
       process.stdout.write(`[${label}] ${d.toString()}`);
@@ -637,7 +637,7 @@ async function buildSide(label: string, sideDir: string): Promise<BuildSideResul
     };
     proc.on("exit", exitHandler);
   });
-  const artifact: string = join(sideDir, "ffi/js/npm/runtime/Tiqian-tiqian-ffi-js.mjs");
+  const artifact: string = join(sideDir, "platforms/web/client/engine-runtime/runtime/facade.mjs");
   const info: Stats = await stat(artifact);
   const bytes: Buffer = await readFile(artifact);
   const hash: string = createHash("md5").update(bytes).digest("hex");

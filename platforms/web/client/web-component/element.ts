@@ -176,7 +176,7 @@ export function registerTiqianProse(options: RegisterTiqianProseOptions = {}): v
 }
 
 // The /element entry exports the registration function and types. Consumers
-// who want zero-config auto-registration import from @tiqian/prose/auto.
+// who want zero-config auto-registration import from @tiqian/web-component/auto.
 // Explicit, parameterized registration calls registerTiqianProse() directly.
 
 export { TiqianProseElement, CoordinationService };

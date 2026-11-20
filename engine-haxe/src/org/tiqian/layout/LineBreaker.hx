@@ -28,10 +28,10 @@ import std.SortedMap;
 interface LineBreaker {
     var strategyName(get, never):String;
     function breakLines(naturalClusters:Array<Cluster>, adjustedClusters:Array<Cluster>, maxWidth:Float, ?shrinkOpportunities:Array<ShrinkOpportunity>,
-        ?unbreakableRanges:UnbreakableRanges, ?firstLineIndent:Float, ?hangableClusters:SortedSet<Int>, ?extendableHangRanges:Array<IntRange>,
+        ?unbreakableRanges:UnbreakableRanges, firstLineIndent:Float = 0.0, ?hangableClusters:SortedSet<Int>, ?extendableHangRanges:Array<IntRange>,
         ?forbiddenLineStartClusters:Null<SortedSet<Int>>, ?forbiddenLineEndClusters:SortedSet<Int>, ?hyphenBreakClusters:SortedSet<Int>,
-        ?cjkInterCharBoundaries:SortedSet<Int>, ?maxCjkStretchPerGap:Float, ?sinoWesternBoundaries:SortedSet<Int>, ?sinoWesternStretchCap:Float,
-        ?lineAdjustmentPushIn:Bool, ?lineAdjustmentCompressBias:Float, ?hardBreakAfterClusters:SortedSet<Int>, ?nonRenderingControlClusters:SortedSet<Int>,
+        ?cjkInterCharBoundaries:SortedSet<Int>, ?maxCjkStretchPerGap:Float, ?sinoWesternBoundaries:SortedSet<Int>, sinoWesternStretchCap:Float = 0.0,
+        lineAdjustmentPushIn:Bool = false, lineAdjustmentCompressBias:Float = 1.0, ?hardBreakAfterClusters:SortedSet<Int>, ?nonRenderingControlClusters:SortedSet<Int>,
         ?progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>):LineSolution;
 }
 
@@ -47,23 +47,14 @@ class GreedyLineBreaker implements LineBreaker {
     var carryPreviousPenalty:Int;
     var leaveRaggedPenalty:Int;
 
-    public function new(?kinsoku:KinsokuRule, ?pushInPenalty:Int, ?carryPreviousPenalty:Int, ?leaveRaggedPenalty:Int) {
+    public function new(?kinsoku:KinsokuRule, pushInPenalty:Int = 2, carryPreviousPenalty:Int = 10, leaveRaggedPenalty:Int = 20) {
         if (kinsoku == null)
             this.kinsoku = new ClreqKinsokuRule();
         else
             this.kinsoku = kinsoku;
-        if (pushInPenalty == null)
-            this.pushInPenalty = 2;
-        else
-            this.pushInPenalty = pushInPenalty;
-        if (carryPreviousPenalty == null)
-            this.carryPreviousPenalty = 10;
-        else
-            this.carryPreviousPenalty = carryPreviousPenalty;
-        if (leaveRaggedPenalty == null)
-            this.leaveRaggedPenalty = 20;
-        else
-            this.leaveRaggedPenalty = leaveRaggedPenalty;
+        this.pushInPenalty = pushInPenalty;
+        this.carryPreviousPenalty = carryPreviousPenalty;
+        this.leaveRaggedPenalty = leaveRaggedPenalty;
     }
 
     public var strategyName(get, never):String;
@@ -72,10 +63,10 @@ class GreedyLineBreaker implements LineBreaker {
         return "greedy";
 
     public function breakLines(n:Array<Cluster>, a:Array<Cluster>, maxWidth:Float, ?shrinkOpportunities:Array<ShrinkOpportunity>,
-            ?unbreakableRanges:UnbreakableRanges, ?firstLineIndent:Float, ?hangableClusters:SortedSet<Int>, ?extendableHangRanges:Array<IntRange>,
+            ?unbreakableRanges:UnbreakableRanges, firstLineIndent:Float = 0.0, ?hangableClusters:SortedSet<Int>, ?extendableHangRanges:Array<IntRange>,
             ?forbiddenLineStartClusters:Null<SortedSet<Int>>, ?forbiddenLineEndClusters:SortedSet<Int>, ?hyphenBreakClusters:SortedSet<Int>,
-            ?cjkInterCharBoundaries:SortedSet<Int>, ?maxCjkStretchPerGap:Float, ?sinoWesternBoundaries:SortedSet<Int>, ?sinoWesternStretchCap:Float,
-            ?lineAdjustmentPushIn:Bool, ?lineAdjustmentCompressBias:Float, ?hardBreakAfterClusters:SortedSet<Int>,
+            ?cjkInterCharBoundaries:SortedSet<Int>, ?maxCjkStretchPerGap:Float, ?sinoWesternBoundaries:SortedSet<Int>, sinoWesternStretchCap:Float = 0.0,
+            lineAdjustmentPushIn:Bool = false, lineAdjustmentCompressBias:Float = 1.0, ?hardBreakAfterClusters:SortedSet<Int>,
             ?nonRenderingControlClusters:SortedSet<Int>, ?progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>):LineSolution {
         if (a.length == 0)
             return new LineSolution([]);
@@ -83,7 +74,7 @@ class GreedyLineBreaker implements LineBreaker {
             throw new TiqianIllegalArgumentException(Message("naturalClusters and adjustedClusters must align cluster-for-cluster."));
         final shrinkOps = shrinkOpportunities == null ? [] : shrinkOpportunities;
         final ranges = unbreakableRanges == null ? UnbreakableRanges.Empty : unbreakableRanges;
-        final indent = firstLineIndent == null ? 0 : firstLineIndent;
+        final indent = firstLineIndent;
         final hangables = hangableClusters == null ? LineBreakerLines.emptyIntSet() : hangableClusters;
         final extendables = extendableHangRanges == null ? [] : extendableHangRanges;
         final forbidEnd = forbiddenLineEndClusters == null ? LineBreakerLines.emptyIntSet() : forbiddenLineEndClusters;
@@ -91,7 +82,7 @@ class GreedyLineBreaker implements LineBreaker {
         final cjk = cjkInterCharBoundaries == null ? LineBreakerLines.emptyIntSet() : cjkInterCharBoundaries;
         final maxStretch = maxCjkStretchPerGap == null ? Math.POSITIVE_INFINITY : maxCjkStretchPerGap;
         final sino = sinoWesternBoundaries == null ? LineBreakerLines.emptyIntSet() : sinoWesternBoundaries;
-        final sinoCap = sinoWesternStretchCap == null ? 0 : sinoWesternStretchCap;
+        final sinoCap = sinoWesternStretchCap;
         final hard = hardBreakAfterClusters == null ? LineBreakerLines.emptyIntSet() : hardBreakAfterClusters;
         final controls = nonRenderingControlClusters == null ? LineBreakerLines.emptyIntSet() : nonRenderingControlClusters;
         final progressive = progressiveBreakOpportunities == null ? LineBreakerLines.emptyProgressiveMap() : progressiveBreakOpportunities;
@@ -110,8 +101,8 @@ class GreedyLineBreaker implements LineBreaker {
             si++;
         }
         final gapBoundaries = gapBuilder.build();
-        final pushIn = lineAdjustmentPushIn == null ? false : lineAdjustmentPushIn;
-        final compressBias = lineAdjustmentCompressBias == null ? 1.0 : lineAdjustmentCompressBias;
+        final pushIn = lineAdjustmentPushIn;
+        final compressBias = lineAdjustmentCompressBias;
         return LineRepair.withFillPushIn(repaired, pushIn, n, a, maxWidth, shrinkOps, indent, compressBias, forbiddenLineStartClusters, forbidEnd, ranges,
             pushInPenalty, gapBoundaries, progressive);
     }
@@ -198,10 +189,10 @@ class LookaheadLineBreaker implements LineBreaker {
         return "lookahead";
 
     public function breakLines(naturalClusters:Array<Cluster>, adjustedClusters:Array<Cluster>, maxWidth:Float, ?shrinkOpportunities:Array<ShrinkOpportunity>,
-            ?unbreakableRanges:UnbreakableRanges, ?firstLineIndent:Float, ?hangableClusters:SortedSet<Int>, ?extendableHangRanges:Array<IntRange>,
+            ?unbreakableRanges:UnbreakableRanges, firstLineIndent:Float = 0.0, ?hangableClusters:SortedSet<Int>, ?extendableHangRanges:Array<IntRange>,
             ?forbiddenLineStartClusters:Null<SortedSet<Int>>, ?forbiddenLineEndClusters:SortedSet<Int>, ?hyphenBreakClusters:SortedSet<Int>,
-            ?cjkInterCharBoundaries:SortedSet<Int>, ?maxCjkStretchPerGap:Float, ?sinoWesternBoundaries:SortedSet<Int>, ?sinoWesternStretchCap:Float,
-            ?lineAdjustmentPushIn:Bool, ?lineAdjustmentCompressBias:Float, ?hardBreakAfterClusters:SortedSet<Int>,
+            ?cjkInterCharBoundaries:SortedSet<Int>, ?maxCjkStretchPerGap:Float, ?sinoWesternBoundaries:SortedSet<Int>, sinoWesternStretchCap:Float = 0.0,
+            lineAdjustmentPushIn:Bool = false, lineAdjustmentCompressBias:Float = 1.0, ?hardBreakAfterClusters:SortedSet<Int>,
             ?nonRenderingControlClusters:SortedSet<Int>, ?progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>):LineSolution {
         if (adjustedClusters.length == 0)
             return new LineSolution([]);
@@ -214,7 +205,7 @@ class LookaheadLineBreaker implements LineBreaker {
 
         final shrinkOps = shrinkOpportunities == null ? [] : shrinkOpportunities;
         final ranges = unbreakableRanges == null ? UnbreakableRanges.Empty : unbreakableRanges;
-        final indent = firstLineIndent == null ? 0.0 : firstLineIndent;
+        final indent = firstLineIndent;
         final hangables = hangableClusters == null ? LineBreakerLines.emptyIntSet() : hangableClusters;
         final extendables = extendableHangRanges == null ? [] : extendableHangRanges;
         final forbidEnd = forbiddenLineEndClusters == null ? LineBreakerLines.emptyIntSet() : forbiddenLineEndClusters;
@@ -222,9 +213,9 @@ class LookaheadLineBreaker implements LineBreaker {
         final cjk = cjkInterCharBoundaries == null ? LineBreakerLines.emptyIntSet() : cjkInterCharBoundaries;
         final maxStretch = maxCjkStretchPerGap == null ? Math.POSITIVE_INFINITY : maxCjkStretchPerGap;
         final sino = sinoWesternBoundaries == null ? LineBreakerLines.emptyIntSet() : sinoWesternBoundaries;
-        final sinoCap = sinoWesternStretchCap == null ? 0.0 : sinoWesternStretchCap;
-        final pushIn = lineAdjustmentPushIn == null ? false : lineAdjustmentPushIn;
-        final compressBias = lineAdjustmentCompressBias == null ? 1.0 : lineAdjustmentCompressBias;
+        final sinoCap = sinoWesternStretchCap;
+        final pushIn = lineAdjustmentPushIn;
+        final compressBias = lineAdjustmentCompressBias;
         final hard = hardBreakAfterClusters == null ? LineBreakerLines.emptyIntSet() : hardBreakAfterClusters;
         final controls = nonRenderingControlClusters == null ? LineBreakerLines.emptyIntSet() : nonRenderingControlClusters;
         final progressive = progressiveBreakOpportunities == null ? LineBreakerLines.emptyProgressiveMap() : progressiveBreakOpportunities;
@@ -515,6 +506,7 @@ class LineBreakerLines {
             && opportunities.get(candidate.clusterRange.end + 1) != null;
     }
 
+    @:topLevel
     public static function lineGapCount(range:IntRange, gapBoundaries:SortedSet<Int>):Int {
         if (range.isEmpty)
             return 0;
@@ -528,6 +520,7 @@ class LineBreakerLines {
         return n;
     }
 
+    @:topLevel
     public static function lineAdjustmentDensity(line:LineCandidate, limit:Float, isLast:Bool, gapBoundaries:SortedSet<Int>):Float {
         if (isLast || line.endReason != LineEndReason.AutoWrap)
             return 0.0;

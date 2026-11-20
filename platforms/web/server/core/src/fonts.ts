@@ -1,6 +1,6 @@
 // The unified font session over the native addon (ADR 0050). The session
 // surface matches `createFontSession` from the former
-// `@tiqian/prose/precompute-fonts` module; shape and metrics are session
+// `@tiqian/web-component/precompute-fonts` module; shape and metrics are session
 // methods here because the native world has no global WASM backend handle
 // protocol.
 

@@ -2,13 +2,13 @@ package org.tiqian.layout;
 
 import org.tiqian.core.*;
 import org.tiqian.clreq.*;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import org.tiqian.shaping.TextShaper.ShapingInput;
 import org.tiqian.shaping.TextShaper.ShapingResult;
 import org.tiqian.shaping.TextShaper.ExplainableStubTextShaper;
 
 class InterpunctShrinkOpportunityTestSupport {
-    public static function haltInkShaper():ITextShaper
+    public static function haltInkShaper():TextShaper
         return new InterpunctHaltShaper();
 
     public static function preserveResolver():ClreqProfileResolver
@@ -24,7 +24,7 @@ class InterpunctPreserveResolver implements ClreqProfileResolver {
     }
 }
 
-class InterpunctHaltShaper implements ITextShaper {
+class InterpunctHaltShaper implements TextShaper {
     final delegate:ExplainableStubTextShaper;
 
     public function new()

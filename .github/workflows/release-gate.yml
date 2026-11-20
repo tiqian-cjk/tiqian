@@ -1,0 +1,52 @@
+name: Release gate
+
+# The single pre-publish gate. Every publishing lane calls this workflow
+# before it uploads anything, and the release entrypoint calls it once more
+# at the top, so a red lane refuses the release no matter which entrypoint
+# started the run. tools/release-gate.py holds the decision: every package
+# that can be published must be declared in release-manifest.json, and every
+# lane under release.requiredLanes must have a completed success on the
+# release commit.
+on:
+  workflow_call:
+    outputs:
+      version:
+        description: Release version without the v prefix
+        value: ${{ jobs.gate.outputs.version }}
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  gate:
+    name: Verify required lanes on the release commit
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Check out the release commit
+        uses: actions/checkout@v4
+
+      - name: Resolve the release version
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" != "tag" || "${GITHUB_REF_NAME}" != v*.*.* ]]; then
+            echo "::error::The release gate runs only from a v*.*.* release tag, received ${GITHUB_REF_NAME}."
+            exit 1
+          fi
+          echo "version=${GITHUB_REF_NAME#v}" >> "${GITHUB_OUTPUT}"
+
+      - name: Require the npm package versions to match the tag
+        run: python3 tools/align-package-versions.py --check "${GITHUB_REF_NAME#v}"
+
+      - name: Evaluate the release gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 tools/release-gate.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --sha "$GITHUB_SHA" \
+            --token "$GH_TOKEN"

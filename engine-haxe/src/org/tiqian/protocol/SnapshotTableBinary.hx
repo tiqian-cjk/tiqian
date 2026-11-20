@@ -25,6 +25,7 @@ import haxe.io.FPHelper;
  * the revision tail ride as pre-serialized text; JSON production and parsing
  * stay in the platform shells.
  */
+@:mainOnly
 class SnapshotTableBinary {
     public static inline var MAGIC:String = "TIQTBL03";
     public static inline var HEADER_U32_COUNT:Int = 12;

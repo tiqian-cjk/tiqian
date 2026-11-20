@@ -7,7 +7,6 @@ import org.tiqian.core.LayoutResult
 import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.TextStyle
 import org.tiqian.core.TiqianTextContent
-import org.tiqian.core.ic
 import org.tiqian.core.positionedClusters
 import org.tiqian.layout.ExplainableStubParagraphLayoutEngine
 import org.tiqian.layout.LookaheadLineBreaker
@@ -29,7 +28,7 @@ class SlashLedRunGeometryTest {
         lineBreaker = LookaheadLineBreaker(),
         textShaper = SkiaTextShaper(),
         fontMetricsResolver = SkiaFontMetricsResolver(),
-        clreqProfileResolver = { ClreqProfile.MainlandHorizontal },
+        clreqProfileResolver = object : org.tiqian.clreq.ClreqProfileResolver { override fun resolve(profileId: org.tiqian.core.LayoutProfileId): org.tiqian.clreq.ClreqProfile = ClreqProfile.MainlandHorizontal },
     )
 
     private val text = "支持生物本质主义/恐跨/TERFism，然后继续写中文把这一行凑满整整一整行的样子。"
@@ -39,7 +38,7 @@ class SlashLedRunGeometryTest {
         LayoutInput(
             content = TiqianTextContent(text),
             textStyle = TextStyle(fontSize = fontSize, locale = "zh-Hans"),
-            paragraphStyle = ParagraphStyle(firstLineIndent = 0.ic),
+            paragraphStyle = ParagraphStyle(firstLineIndent = org.tiqian.core.Ic(0f)),
             constraints = LayoutConstraints(maxWidth = width),
         ),
     )

@@ -4,8 +4,8 @@ import org.tiqian.android.view.CjkTextContent
 import org.tiqian.core.ColorSpan
 import org.tiqian.core.DecorationKind
 import org.tiqian.core.DecorationSpan
+import org.tiqian.core.Ic
 import org.tiqian.core.ParagraphStyle
-import org.tiqian.core.RichTextRole
 import org.tiqian.core.RichTextSpan
 import org.tiqian.core.RubyKind
 import org.tiqian.core.RubySpan
@@ -13,7 +13,7 @@ import org.tiqian.core.TextRange
 import org.tiqian.core.TextSpan
 import org.tiqian.core.TextStyle
 import org.tiqian.core.TiqianTextContent
-import org.tiqian.core.ic
+import org.tiqian.core.Underline
 
 private const val SHOWCASE_TEXT_COLOR = 0xFF202124.toInt()
 private const val SHOWCASE_ACCENT_RED = 0xFFB00020.toInt()
@@ -24,7 +24,7 @@ internal fun tiqianViewShowcaseUnderlineSample(textSize: Float): CjkTextContent 
     ShowcaseParagraphBuilder(TextStyle(fontSize = textSize)).apply {
         underlined("“开标点与句末标点。”")
         append(" 下划线只画字身，不吃首尾标点 glue。")
-    }.toContent(ParagraphStyle().copy(firstLineIndent = 0.ic))
+    }.toContent(ParagraphStyle().copy(firstLineIndent = Ic.Zero))
 
 /**
  * The Compose demo essay, restated through the View frontend's typed content model. Outer lists
@@ -33,10 +33,13 @@ internal fun tiqianViewShowcaseUnderlineSample(textSize: Float): CjkTextContent 
 internal fun tiqianViewShowcaseSections(textSize: Float): List<List<CjkTextContent>> {
     val base = TextStyle(fontSize = textSize)
     val style = ParagraphStyle()
-    val flush = style.copy(firstLineIndent = 0.ic)
+    val flush = style.copy(firstLineIndent = Ic.Zero)
     // 凸排：块缩进 + 等量负段首缩进，续行悬挂在 marker 之后。
     fun hanging(markerWidth: Int) =
-        style.copy(blockIndent = markerWidth.ic, firstLineIndent = (-markerWidth).ic)
+        style.copy(
+            blockIndent = Ic(markerWidth.toFloat()),
+            firstLineIndent = Ic((-markerWidth).toFloat()),
+        )
     fun paragraph(
         paragraphStyle: ParagraphStyle = style,
         build: ShowcaseParagraphBuilder.() -> Unit,
@@ -102,7 +105,7 @@ internal fun tiqianViewShowcaseSections(textSize: Float): List<List<CjkTextConte
             },
         ),
         listOf(
-            paragraph(style.copy(firstLineIndent = 0.ic, blockIndent = 2.ic)) {
+            paragraph(style.copy(firstLineIndent = Ic.Zero, blockIndent = Ic(2f))) {
                 append("我奉")
                 decorated("CLREQ", DecorationKind.ProperNoun)
                 append("——也就是")
@@ -156,7 +159,7 @@ private class ShowcaseParagraphBuilder(private val base: TextStyle) {
     }
 
     fun underlined(value: String) {
-        richTextSpans += RichTextSpan(appendRange(value), RichTextRole.Underline)
+        richTextSpans += RichTextSpan(appendRange(value), Underline.instance)
     }
 
     fun emphasis(value: String) = decorated(value, DecorationKind.Emphasis)

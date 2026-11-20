@@ -20,7 +20,10 @@ import android.text.style.UnderlineSpan
 import org.tiqian.core.ColorSpan
 import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.RichTextPaint
-import org.tiqian.core.RichTextRole
+import org.tiqian.core.Background
+import org.tiqian.core.LineThrough
+import org.tiqian.core.Link
+import org.tiqian.core.Underline
 import org.tiqian.core.RichTextSpan
 import org.tiqian.core.TextRange
 import org.tiqian.core.TextSpan
@@ -118,11 +121,11 @@ fun CjkTextContent(
             is ForegroundColorSpan -> colorSpans += ColorSpan(start, end, span.foregroundColor)
             is BackgroundColorSpan -> richTextSpans += RichTextSpan(
                 range,
-                RichTextRole.Background,
+                Background.instance,
                 RichTextPaint(argb = span.backgroundColor),
             )
-            is UnderlineSpan -> richTextSpans += RichTextSpan(range, RichTextRole.Underline)
-            is StrikethroughSpan -> richTextSpans += RichTextSpan(range, RichTextRole.LineThrough)
+            is UnderlineSpan -> richTextSpans += RichTextSpan(range, Underline.instance)
+            is StrikethroughSpan -> richTextSpans += RichTextSpan(range, LineThrough.instance)
             is RelativeSizeSpan -> {
                 val proportion = span.sizeChange
                 styleEdits += range to { it.copy(fontSize = it.fontSize * proportion) }
@@ -134,8 +137,8 @@ fun CjkTextContent(
             is URLSpan -> {
                 // Underline carries the platform link affordance; glyph color stays the host's
                 // text color until the host authors an explicit ColorSpan.
-                richTextSpans += RichTextSpan(range, RichTextRole.Link(span.url))
-                richTextSpans += RichTextSpan(range, RichTextRole.Underline)
+                richTextSpans += RichTextSpan(range, Link(span.url))
+                richTextSpans += RichTextSpan(range, Underline.instance)
             }
         }
     }

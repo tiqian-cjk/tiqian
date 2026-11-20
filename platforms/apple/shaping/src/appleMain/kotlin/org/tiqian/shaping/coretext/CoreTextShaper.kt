@@ -132,7 +132,7 @@ class CoreTextShaper(
             source = ShapingSource.CoreText.name,
             reason = "CoreTextShaper:$family",
             glyphsWithoutInkBounds = glyphs.count { it.bounds == null },
-            missingGlyphs = shaped.glyphIds.count { it == 0u },
+            missingGlyphs = shaped.glyphIds.count { it == 0 },
             language = input.style.locale,
             featureEvidence = appliedFeatures.takeIf { it.isNotEmpty() }
                 ?.let { "CoreTextFontDescriptor:${it.joinToString(",")}" },
@@ -142,7 +142,7 @@ class CoreTextShaper(
     }
 
     private class Shaped(
-        val glyphIds: List<UInt>,
+        val glyphIds: List<Int>,
         val xs: List<Float>,
         val ys: List<Float>,
         val bounds: List<Rect?>,
@@ -171,7 +171,7 @@ class CoreTextShaper(
             openTypeFeatures = openTypeFeatures,
         ) ?: return null
         val advance = CTLineGetTypographicBounds(line, null, null, null).toFloat()
-        val glyphIds = mutableListOf<UInt>()
+        val glyphIds = mutableListOf<Int>()
         val xs = mutableListOf<Float>()
         val ys = mutableListOf<Float>()
         val bounds = mutableListOf<Rect?>()
@@ -187,7 +187,7 @@ class CoreTextShaper(
     private fun collectRun(
         run: CTRunRef,
         fallbackFont: CTFontRef,
-        glyphIds: MutableList<UInt>,
+        glyphIds: MutableList<Int>,
         xs: MutableList<Float>,
         ys: MutableList<Float>,
         bounds: MutableList<Rect?>,
@@ -203,7 +203,7 @@ class CoreTextShaper(
             CTRunGetPositions(run, CoreTextSupport.cfRange(0, 0), pbuf)
             CTFontGetBoundingRectsForGlyphs(runFont, kCTFontOrientationHorizontal, gbuf, rbuf, gcount.convert())
             for (i in 0 until gcount) {
-                glyphIds += gbuf[i].toUInt()
+                glyphIds += gbuf[i].toInt()
                 xs += pbuf[i].x.toFloat()
                 ys += -pbuf[i].y.toFloat()
                 bounds += rbuf[i].toGlyphLocalRect()
@@ -234,7 +234,13 @@ class CoreTextShaper(
         openTypeFeatures: List<String> = emptyList(),
         capabilityIssue: String? = null,
     ): ShapingResult {
-        val cluster = Cluster(input.range, sourceText, displayText, fontKey, 0f)
+        val cluster = Cluster(
+            range = input.range,
+            text = sourceText,
+            fontKey = fontKey,
+            advance = 0f,
+            displayText = displayText,
+        )
         val run = GlyphRun(input.range, fontKey, emptyList(), 0f, openTypeFeatures)
         val decision = ShapingDecisionInfo(
             range = input.range,

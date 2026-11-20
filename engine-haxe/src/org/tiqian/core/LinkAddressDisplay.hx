@@ -1,6 +1,7 @@
 package org.tiqian.core;
 
 // `LinkAddressDisplayGate`: whether a link's visible text is its own address — identical to
+@:mainOnly
 class LinkAddressDisplay {
     public static function displaysAddress(display:String, target:String):Bool {
         if (display.length == 0 || target.length == 0) {

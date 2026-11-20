@@ -97,4 +97,14 @@ class ParseTexHyphenationPatterns {
         }
         return new ParsedTexHyphenation(pb.build(), eb.build());
     }
+
+    /**
+     * Top-level alias of parse under the name the handwritten engine
+     * published. The published signature returned a Kotlin Pair of maps; the
+     * port represents the same data as ParsedTexHyphenation. The published
+     * function was public but had no platform consumer (疑似内部细节).
+     */
+    @:topLevel
+    public static function parseTexHyphenationPatterns(tex:String):ParsedTexHyphenation
+        return parse(tex);
 }

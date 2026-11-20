@@ -30,7 +30,6 @@ import org.tiqian.core.LineBox
 import org.tiqian.core.LayoutResult
 import org.tiqian.core.Size
 import org.tiqian.core.TextRange
-import org.tiqian.core.ic
 import org.tiqian.core.legalHangingPunctuationClipEdge
 import org.tiqian.layout.ParagraphLayoutEngine
 import org.jetbrains.skia.EncodedImageFormat
@@ -89,12 +88,12 @@ class CjkTextRenderTest {
         val blocks = listOf(
             CjkBlock.Paragraph(
                 "张三说道：今天天气不错，咱们出去走走吧，顺便买点咖啡豆回来配下午茶。",
-                ParagraphIndent.Hanging(2.ic),
+                ParagraphIndent.Hanging(org.tiqian.core.Ic(2f)),
             ),
             CjkBlock.Section,
             CjkBlock.Paragraph(
                 "他引用一句诗：采菊东篱下，悠然见南山，此中有真意，欲辨已忘言。",
-                ParagraphIndent.Block(2.ic),
+                ParagraphIndent.Block(org.tiqian.core.Ic(2f)),
             ),
             CjkBlock.Paragraph(
                 "回到正文，咖啡馆比咖啡更早地改变了城里人的作息与谈吐与往来。",
@@ -167,7 +166,7 @@ class CjkTextRenderTest {
                         lines = listOf(
                             LineBox(
                                 range = TextRange(0, text.length),
-                                clusterRange = clusters.indices,
+                                clusterRange = org.tiqian.core.IntRange(0, clusters.size - 1),
                                 baseline = 18f,
                                 top = 0f,
                                 bottom = 24f,
@@ -222,7 +221,7 @@ class CjkTextRenderTest {
             lines = listOf(
                 LineBox(
                     range = TextRange(0, source.length),
-                    clusterRange = IntRange.EMPTY,
+                    clusterRange = org.tiqian.core.IntRange(0, -1),
                     baseline = 18f,
                     top = 0f,
                     bottom = 24f,
@@ -262,7 +261,7 @@ class CjkTextRenderTest {
     fun hangingPunctuationClipUsesItsFinalVisualEdgeOnlyWhenExplicitlyAuthorized() {
         val hanging = LineBox(
             range = TextRange(0, 2),
-            clusterRange = 0..1,
+            clusterRange = org.tiqian.core.IntRange(0, 1),
             baseline = 18f,
             top = 0f,
             bottom = 24f,

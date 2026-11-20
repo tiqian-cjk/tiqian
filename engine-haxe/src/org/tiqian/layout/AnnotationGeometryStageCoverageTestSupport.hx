@@ -5,11 +5,11 @@ import org.tiqian.core.Glyph;
 import org.tiqian.core.GlyphRun;
 import org.tiqian.core.Rect;
 import org.tiqian.shaping.TextShaper.ExplainableStubTextShaper;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import org.tiqian.shaping.TextShaper.ShapingInput;
 import org.tiqian.shaping.TextShaper.ShapingResult;
 
-class InkBoundsTextShaper implements ITextShaper {
+class InkBoundsTextShaper implements TextShaper {
     final delegate:ExplainableStubTextShaper;
 
     public function new(?delegate:ExplainableStubTextShaper) {
@@ -35,7 +35,7 @@ class InkBoundsTextShaper implements ITextShaper {
     }
 }
 
-class MultiGlyphMinMaxShaper implements ITextShaper {
+class MultiGlyphMinMaxShaper implements TextShaper {
     final delegate:ExplainableStubTextShaper;
 
     public function new() {
@@ -56,7 +56,7 @@ class MultiGlyphMinMaxShaper implements ITextShaper {
     }
 }
 
-class MultiGlyphBoundsShaper implements ITextShaper {
+class MultiGlyphBoundsShaper implements TextShaper {
     public var callCount:Int;
 
     public function new() {

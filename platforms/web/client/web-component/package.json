@@ -1,6 +1,6 @@
 {
-  "name": "@tiqian/prose",
-  "version": "0.1.0-alpha.6",
+  "name": "@tiqian/web-component",
+  "version": "0.1.0-alpha.9",
   "description": "Progressively enhance Chinese prose with Tiqian's CJK paragraph layout engine.",
   "keywords": [
     "cjk",
@@ -77,7 +77,7 @@
     }
   },
   "dependencies": {
-    "@tiqian/core": "0.1.0-alpha.6"
+    "@tiqian/core": "0.1.0-alpha.9"
   },
   "sideEffects": [
     "./auto.js",

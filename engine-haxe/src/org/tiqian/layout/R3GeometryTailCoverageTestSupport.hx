@@ -1,7 +1,7 @@
 package org.tiqian.layout;
 
 import org.tiqian.core.*;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import org.tiqian.shaping.TextShaper.ShapingInput;
 import org.tiqian.shaping.TextShaper.ShapingResult;
 import org.tiqian.shaping.TextShaper.ExplainableStubTextShaper;
@@ -9,7 +9,7 @@ import org.tiqian.layout.ParagraphLayoutEngine.ExplainableStubParagraphLayoutEng
 
 class R3GeometryTailCoverageTestSupport {
     public static function layout(text:String, ?maxWidth:Float, ?maxLines:Int, ?spans:Array<TextSpan>, ?rubySpans:Array<RubySpan>,
-            ?shaper:ITextShaper):LayoutResult {
+            ?shaper:TextShaper):LayoutResult {
         final width = maxWidth == null ? 320.0 : maxWidth;
         final lines = maxLines == null ? 2147483647 : maxLines;
         final ss = spans == null ? [] : spans;
@@ -18,11 +18,11 @@ class R3GeometryTailCoverageTestSupport {
         return engine.layout(new LayoutInput(new TiqianTextContent(text, ss), null, null, new LayoutConstraints(width, null, lines), null, null, rr));
     }
 
-    public static function centeredInkShaper():ITextShaper
+    public static function centeredInkShaper():TextShaper
         return new CenteredInkShaper();
 }
 
-class CenteredInkShaper implements ITextShaper {
+class CenteredInkShaper implements TextShaper {
     public function new() {}
 
     public function shape(input:ShapingInput):ShapingResult {

@@ -5,21 +5,28 @@ name: Publish precompute packages
 # platforms/web/server/precompute/binding, which consumes the boring
 # engine-rust bundle; the legacy Kotlin/Native C ABI engine archive is
 # retired with the Stage1 cutover.
+# Called by .github/workflows/release.yml from the v*.*.* release tag, after
+# the web-component lane published the @tiqian/web-component version this package pins, and
+# gated before publishing.
 on:
-  push:
-    tags:
-      - "@tiqian/precompute@*"
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: publish-tiqian-precompute
   cancel-in-progress: false
 
 jobs:
+  release-gate:
+    uses: ./.github/workflows/release-gate.yml
+
   validate:
     name: Validate release tag
+    needs: [release-gate]
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.release.outputs.version }}
@@ -40,12 +47,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="$(node -p "require('./platforms/web/server/core/package.json').version")"
-          expected_tag="@tiqian/precompute@${version}"
-          if [[ "${GITHUB_REF_NAME}" != "${expected_tag}" ]]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match package version ${version}"
+          if [[ "${GITHUB_REF_TYPE}" != "tag" || "${GITHUB_REF_NAME}" != v*.*.* ]]; then
+            echo "::error::This lane runs only from a v*.*.* release tag, received ${GITHUB_REF_NAME}."
             exit 1
           fi
+          version="$(node -p "require('./platforms/web/server/core/package.json').version")"
           if [[ "$(git cat-file -t "${GITHUB_REF_NAME}")" != "tag" ]]; then
             echo "::error::Release tag must be annotated"
             exit 1
@@ -70,9 +76,62 @@ jobs:
           done
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
+  # The install resolves generated, gitignored trees that need the flake
+  # driver: the Rust engine and protocol crates the addon links, the
+  # tiqian-protocol and tiqian-shared workspace members (their package.json is
+  # written by boring pack), and the @tiqian/ffi engine-gen/ tree. The Windows
+  # and macOS legs have no Nix, so generate once here and hand every leg the
+  # result.
+  manifests:
+    name: Generate the trees and package manifests
+    needs: [validate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Align the generated package versions with the release
+        # The archives this job uploads sit beside the trees in the same
+        # artifact, and their names must carry the release version.
+        working-directory: ${{ github.workspace }}
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: python3 tools/align-package-versions.py "${RELEASE_VERSION}"
+
+      - name: Generate the Rust and TypeScript engine trees with the flake toolchain
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs && node tools/generate-engine-gen.mjs ts'
+
+      - name: Write the protocol and shared package manifests
+        # boring pack writes the package.json that makes engine-haxe/out/
+        # {protocol-ts,shared-ts}/gen resolvable workspace members; its
+        # package-tsc step runs the pinned TypeScript through the devShell bun.
+        run: |
+          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
+          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
+          chmod +x "$BORING_PACKAGE_TSC"
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+
+      - name: Upload the generated trees and manifests
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: generated-trees
+          path: |
+            engine-haxe/out/protocol-ts
+            engine-haxe/out/shared-ts
+            platforms/web/server/precompute/engine-gen
+            platforms/web/server/precompute/protocol-gen
+            platforms/web/client/engine-runtime/engine-gen
+          if-no-files-found: error
+          retention-days: 7
+
   binaries:
     name: Build addon (${{ matrix.platform }})
-    needs: [validate]
+    needs: [validate, manifests]
     strategy:
       fail-fast: false
       matrix:
@@ -98,12 +157,32 @@ jobs:
           node-version: "24"
           package-manager-cache: false
 
+      - name: Download the generated trees and package manifests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: generated-trees
+          path: .
+
+      - name: Use a bun CLI for the workspace install
+        # The pinned bun lives in the flake devShell; the Windows and macOS
+        # legs have no Nix, so install the same version from npm.
+        run: npm install --global bun@1.3.13
+
       - name: Install workspace dependencies
         working-directory: .
-        # npm install, not npm ci: the platform binary optional deps of the
-        # precompute member are not on the registry, so no lockfile can carry
-        # resolved entries for them and npm ci (npm >= 11) rejects the gap.
-        run: npm install --no-audit --no-fund
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and delete the manifest
+        # boring pack wrote; the generated trees come from the manifests job.
+        run: bun install --ignore-scripts
+
+      - name: Assemble the @tiqian/ffi runtime
+        # The skipped install hook used to compile the @tiqian/ffi runtime/
+        # declarations this smoke test resolves; engine-gen/ is already in the
+        # downloaded tree, so no boring driver is needed here.
+        working-directory: platforms/web/client/engine-runtime
+        run: npm run build:runtime
 
       - name: Build addon and place platform binary
         working-directory: platforms/web/server/core
@@ -113,8 +192,22 @@ jobs:
         run: |
           cargo build --manifest-path ../precompute/binding/Cargo.toml \
             --release --message-format=json-render-diagnostics > cargo.log
-          npx neon dist --name tiqian-precompute-neon < cargo.log
+          # The neon CLI is @neon-rs/cli; plain "npx neon" resolves the
+          # unrelated package of that name, which has no dist command.
+          npx --yes @neon-rs/cli@0.1.82 dist --name tiqian-precompute-neon < cargo.log
           test -f "platforms/${NEON_BUILD_PLATFORM}/index.node"
+
+      - name: Build the packages the smoke test resolves
+        # The smoke test compiles this package, whose project references need
+        # the declarations of the web client packages; the test job never built
+        # them and the type check failed on the first real run. The paths are
+        # absolute because the default shell on Windows keeps the directory of
+        # the first subshell.
+        shell: bash
+        run: |
+          set -euo pipefail
+          ( cd "${GITHUB_WORKSPACE}/platforms/web/client/core" && npm run build )
+          ( cd "${GITHUB_WORKSPACE}/platforms/web/client/web-component" && npm run build )
 
       - name: Smoke test through the npm loader
         working-directory: platforms/web/server/core
@@ -145,7 +238,7 @@ jobs:
 
   main-package:
     name: Pack main package
-    needs: [validate]
+    needs: [validate, manifests]
     runs-on: ubuntu-latest
     steps:
       - name: Check out the tagged commit
@@ -157,12 +250,39 @@ jobs:
           node-version: "24"
           package-manager-cache: false
 
+      - name: Download the generated trees and package manifests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: generated-trees
+          path: .
+
+      - name: Use a bun CLI for the workspace install
+        # The pinned bun lives in the flake devShell; this job keeps its Node
+        # 24 from setup-node for the lint and typecheck steps below.
+        run: npm install --global bun@1.3.13
+
       - name: Install workspace dependencies
         working-directory: .
-        # npm install, not npm ci: the platform binary optional deps of the
-        # precompute member are not on the registry, so no lockfile can carry
-        # resolved entries for them and npm ci (npm >= 11) rejects the gap.
-        run: npm install --no-audit --no-fund
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and delete the manifest
+        # boring pack wrote; the generated trees come from the manifests job.
+        run: bun install --ignore-scripts
+
+      - name: Assemble the @tiqian/ffi runtime
+        # The skipped install hook used to compile the @tiqian/ffi runtime/
+        # declarations the server/core type check resolves; engine-gen/ is
+        # already in the downloaded tree, so no boring driver is needed here.
+        working-directory: platforms/web/client/engine-runtime
+        run: npm run build:runtime
+
+      - name: Build the packages the type check resolves
+        # This package's project references need the declarations of the web
+        # client packages, and this job never built them.
+        run: |
+          ( cd "${GITHUB_WORKSPACE}/platforms/web/client/core" && npm run build )
+          ( cd "${GITHUB_WORKSPACE}/platforms/web/client/web-component" && npm run build )
 
       - name: Lint, typecheck, and build the JS entry
         working-directory: platforms/web/server/core
@@ -170,6 +290,17 @@ jobs:
           npm run lint
           npm run build
           npm run typecheck
+
+      - name: Resolve the workspace ranges in the published manifest
+        # The package lists @tiqian/protocol and @tiqian/shared as workspace:*,
+        # which npm refuses outside the workspace; the published manifest must
+        # name the release version instead.
+        working-directory: platforms/web/server/core
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          python3 "${GITHUB_WORKSPACE}/tools/publish-contract.py" --resolve . --version "${RELEASE_VERSION}"
+          python3 "${GITHUB_WORKSPACE}/tools/publish-contract.py" --package . --version "${RELEASE_VERSION}"
 
       - name: Pack
         working-directory: platforms/web/server/core
@@ -202,6 +333,13 @@ jobs:
     env:
       RELEASE_VERSION: ${{ needs.validate.outputs.version }}
     steps:
+      # The contract and inspect steps run the repository tools, and the job
+      # only downloaded artifacts before this point.
+      - name: Check out the release commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
       - name: Set up Node.js 24
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
@@ -228,35 +366,95 @@ jobs:
               exit 1
             fi
           done
+          # Only this lane's artifacts are checked: the generated-trees artifact
+          # also carries archives from the manifests job, and their names do not
+          # belong to this lane's package set.
           while IFS= read -r -d '' tarball; do
             if [[ "$(basename "$tarball")" != *"-${RELEASE_VERSION}.tgz" ]]; then
               echo "::error::$(basename "$tarball") does not carry version ${RELEASE_VERSION}."
               exit 1
             fi
-          done < <(find packages -name '*.tgz' -print0)
+          done < <(find packages/main-package packages/binary-package-* -name '*.tgz' -print0)
+
+      - name: Hold every precompute package to the npm publish contract
+        # Each archive is inspected before any of them reaches the registry:
+        # the manifest name, the version and a workspace range are contract
+        # violations, and the main package is installed so its entry loads.
+        # The platform packages carry a native binary, so they get the manifest
+        # and contents checks rather than an import that only works on the
+        # matching platform.
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          for tarball in $(find packages -maxdepth 2 -type f -name '*.tgz' | sort); do
+            python3 "${GITHUB_WORKSPACE}/tools/publish-contract.py" --archive "${tarball}"
+          done
+          main="$(find packages/main-package -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          # The main package lists the platform packages as optional
+          # dependencies at this version; they are published after this check,
+          # so the archives from this run stand in for them. The entry loads a
+          # platform binary, so the check verifies resolvability rather than
+          # importing it.
+          siblings=()
+          for dir in packages/binary-package-*; do
+            path="$(find "${dir}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+            [[ -n "${path}" ]] && siblings+=(--with "${path}")
+          done
+          # The registry does not have @tiqian/protocol or @tiqian/shared yet
+          # (the pack matrix publishes them after this lane), so an install of
+          # the main package cannot resolve its siblings here. The binaries job
+          # already ran the loader test against the built addon on every
+          # platform; this step holds the published manifest and file list.
+          bash "${GITHUB_WORKSPACE}/tools/check-npm-package.sh" "${main}" \
+            --expect @tiqian/precompute --manifest-only
 
       # Platform packages first: the main package lists them as optional
       # dependencies at the same version.
-      - name: Publish each tarball
+      - name: Publish the platform packages
         shell: bash
         run: |
           set -euo pipefail
           for name in binary-package-darwin-arm64 binary-package-linux-arm64-gnu binary-package-linux-x64-gnu binary-package-win32-x64-msvc; do
             tarball="$(find "packages/$name" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
-            npm publish "${tarball}" --ignore-scripts --access public --tag alpha
+            bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
           done
+
+      - name: Publish the main package
+        # This package answers 404 from the registry while the platform
+        # packages publish from the same workflow, so its trusted publisher
+        # entry names a different workflow. A 404 here must not hold the
+        # registry write and the Maven lanes behind it; the step reports the
+        # refusal and the release continues.
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
           tarball="$(find packages/main-package -maxdepth 1 -type f -name '*.tgz' -print -quit)"
-          npm publish "${tarball}" --ignore-scripts --access public --tag alpha
+          bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
 
   sync-latest:
     name: Synchronize latest dist-tags
+    # A trusted publisher whose connection lacks the dist-tag switch answers
+    # 403; the version is already published, so this job reports it without
+    # blocking the remaining lanes.
+    continue-on-error: true
     needs: [validate, publish]
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Trusted publishing authenticates the dist-tag writes; no token is read.
+      id-token: write
     env:
       RELEASE_VERSION: ${{ needs.validate.outputs.version }}
     steps:
+      - name: Check out the release commit
+        # The dist-tag step runs tools/npm-dist-tag.sh from the repository, so
+        # this job needs the checkout the publish job has.
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
       - name: Set up Node.js 24
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
@@ -269,21 +467,19 @@ jobs:
 
       - name: Point latest at the published alpha
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_DIST_TAG_TOKEN }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "${NODE_AUTH_TOKEN}" ]]; then
-            echo "::error::NPM_DIST_TAG_TOKEN is not configured"
-            exit 1
-          fi
+          # 11.21.0 is the first CLI that manages dist-tags through trusted publishing.
+          npm install --global npm@11.21.0
           for package in \
             @tiqian/precompute \
             @tiqian/precompute-darwin-arm64 \
             @tiqian/precompute-linux-arm64-gnu \
             @tiqian/precompute-linux-x64-gnu \
             @tiqian/precompute-win32-x64-msvc; do
-            npm dist-tag add "${package}@${RELEASE_VERSION}" latest
+            bash "${GITHUB_WORKSPACE}/tools/npm-dist-tag.sh" --package "${package}" --version "${RELEASE_VERSION}" --tag latest
           done
 
       - name: Verify alpha and latest

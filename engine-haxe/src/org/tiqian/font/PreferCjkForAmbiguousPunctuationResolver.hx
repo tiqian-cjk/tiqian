@@ -5,6 +5,7 @@ import org.tiqian.font.FontPolicy.FontRequest;
 import org.tiqian.font.FontPolicy.FontCandidate;
 import org.tiqian.font.FontPolicy.FontDecision;
 
+@:mainOnly
 class PreferCjkForAmbiguousPunctuationResolver implements FallbackResolver {
     final cjkFontKey:String;
     final latinFontKey:String;

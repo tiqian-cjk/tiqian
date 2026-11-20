@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-08
-- Amended: 2026-08-20（macosX64 处置状态表述修正，决定不变）
+- Amended: 2026-08-20（macosX64 处置状态表述修正，决定不变）；2026-11-12（Kotlin 割接删除了 `LayoutDumpGoldenTest` 与 golden 机制，见 ADR 0059）
 - Refines: [ADR 0001](0001-core-pipeline-and-platform-boundary.md)（核心 pipeline 与平台边界）
 
 ## Context

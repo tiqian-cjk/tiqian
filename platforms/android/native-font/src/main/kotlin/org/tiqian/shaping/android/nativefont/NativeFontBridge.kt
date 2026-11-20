@@ -152,7 +152,7 @@ internal class NativeFontFace(
         return result
     }
 
-    fun outline(glyphId: UInt): FloatArray? = NativeFontBridge.nativeOutline(handle, glyphId.toInt())
+    fun outline(glyphId: Int): FloatArray? = NativeFontBridge.nativeOutline(handle, glyphId)
 
     /** Declared min..max of a variation axis, or null when the face lacks it. */
     fun axisRange(tag: String): ClosedFloatingPointRange<Float>? {

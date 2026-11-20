@@ -21,9 +21,9 @@ import type {
   SnapshotParagraphInput,
 } from "./precompute.js";
 import type { CacheBridge, CacheRecord, SubmissionItem } from "./cache.js";
-import { backfillRenderFields } from "./precompute.js";
 import { packRecords, submissionItem, unpackRecords } from "./cache.js";
 import { KIND_CONTRACT, KIND_SNAPSHOT, type CanonicalKind } from "./canonical.js";
+import { backfillRenderFields } from "./precompute.js";
 
 /**
  * One host-owned address-to-bytes store. Addresses and record bytes are
@@ -174,9 +174,12 @@ function artifactSha(artifact: Uint8Array): Buffer {
 }
 
 function parseEntry(artifact: Uint8Array): PreparedEntry {
-  const entry = JSON.parse(Buffer.from(artifact).toString("utf8")) as PreparedEntry;
-  // Native cache bytes retain their digest; snapshot render fields belong to the TS adapter.
-  return backfillRenderFields(entry);
+  // A stored artifact carries the native entry; the render fields are derived
+  // by the shared renderer, so every lane adds them back exactly as the direct
+  // prepare calls do.
+  return backfillRenderFields(
+    JSON.parse(Buffer.from(artifact).toString("utf8")) as PreparedEntry,
+  );
 }
 
 /** One store blob holds exactly one record. */

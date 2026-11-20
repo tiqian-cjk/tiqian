@@ -12,7 +12,7 @@ import org.tiqian.core.LayoutInput
 import org.tiqian.core.LayoutResult
 import org.tiqian.core.RubyKind
 import org.tiqian.core.RubySpan
-import org.tiqian.core.RichTextRole
+import org.tiqian.core.Link
 import org.tiqian.core.RichTextSpan
 import org.tiqian.core.TextRange
 import org.tiqian.core.TextSpan
@@ -161,7 +161,7 @@ class CoreTextLayoutRendererTest {
             glyphRuns = emptyList(),
             debug = result.debug.copy(
                 rubyDecisions = emptyList(),
-                bopomofoDecisions = listOf(decision.copy(placements = listOf(tone))),
+                bopomofoDecisions = listOf(decision.copy(placements = mutableListOf(tone))),
                 decorationDecisions = emptyList(),
                 decorationSegments = emptyList(),
             ),
@@ -248,7 +248,7 @@ class CoreTextLayoutRendererTest {
                 glyphRuns = emptyList(),
                 debug = result.debug.copy(
                     rubyDecisions = emptyList(),
-                    bopomofoDecisions = listOf(decision.copy(placements = listOf(placement))),
+                    bopomofoDecisions = listOf(decision.copy(placements = mutableListOf(placement))),
                     decorationDecisions = emptyList(),
                     decorationSegments = emptyList(),
                 ),
@@ -315,7 +315,7 @@ class CoreTextLayoutRendererTest {
         // text stays the context's (black) fill. Red ink appears only when the span is applied.
         val result = appleParagraphEngine().layout(
             LayoutInput(
-                content = TiqianTextContent("红", sourceBoundaries = setOf(0, 1)),
+                content = TiqianTextContent("红", sourceBoundaries = listOf(0, 1)),
                 textStyle = TextStyle(fontSize = 44f),
                 constraints = LayoutConstraints(maxWidth = 200f),
             ),
@@ -331,12 +331,12 @@ class CoreTextLayoutRendererTest {
     fun nativeLinkRoleDrawsItsFrontendUnderline() {
         val result = appleParagraphEngine().layout(
             LayoutInput(
-                content = TiqianTextContent("链接", sourceBoundaries = setOf(0, 2)),
+                content = TiqianTextContent("链接", sourceBoundaries = listOf(0, 2)),
                 textStyle = TextStyle(fontSize = 44f),
                 constraints = LayoutConstraints(maxWidth = 200f),
             ),
         )
-        val link = RichTextSpan(TextRange(0, 2), RichTextRole.Link("https://example.com"))
+        val link = RichTextSpan(TextRange(0, 2), Link("https://example.com"))
 
         val plainInk = renderInkBands(result, width = 120, bands = 1)[0]
         val linkedInk = renderInkBands(result, width = 120, bands = 1, richTextSpans = listOf(link))[0]
@@ -404,7 +404,7 @@ class CoreTextLayoutRendererTest {
                 content = TiqianTextContent(
                     "永",
                     spans = listOf(TextSpan(TextRange(0, 1), TextStyle(fontSize = 64f, italic = true))),
-                    sourceBoundaries = setOf(0, 1),
+                    sourceBoundaries = listOf(0, 1),
                 ),
                 textStyle = style,
                 constraints = constraints,

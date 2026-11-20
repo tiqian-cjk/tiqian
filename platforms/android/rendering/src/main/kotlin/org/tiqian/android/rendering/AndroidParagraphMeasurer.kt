@@ -1,7 +1,9 @@
 package org.tiqian.android.rendering
 
 import org.tiqian.clreq.ClreqProfile
+import org.tiqian.clreq.ClreqProfileResolver
 import org.tiqian.core.LayoutInput
+import org.tiqian.core.LayoutProfileId
 import org.tiqian.core.LayoutResult
 import org.tiqian.font.FontMetricsRequest
 import org.tiqian.font.FontMetricsResolver
@@ -69,7 +71,9 @@ class AndroidParagraphMeasurer @JvmOverloads constructor(
             cache = session?.metricsCache
                 ?: SynchronizedBoundedCache(DEFAULT_ANDROID_METRICS_CACHE_ENTRIES),
         ),
-        clreqProfileResolver = { profile },
+        clreqProfileResolver = object : ClreqProfileResolver {
+            override fun resolve(profileId: LayoutProfileId): ClreqProfile = profile
+        },
     )
 
     fun measure(input: LayoutInput): LayoutResult = engine.layout(input)

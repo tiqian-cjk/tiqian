@@ -71,7 +71,10 @@ class AndroidGlyphReplayRendererTest {
                 lineBreaker = LookaheadLineBreaker(),
                 textShaper = AndroidNativeTextShaper(context),
                 fontMetricsResolver = AndroidNativeFontMetricsResolver(context),
-                clreqProfileResolver = { ClreqProfile.MainlandHorizontal },
+                clreqProfileResolver = object : org.tiqian.clreq.ClreqProfileResolver {
+                    override fun resolve(profileId: org.tiqian.core.LayoutProfileId): ClreqProfile =
+                        ClreqProfile.MainlandHorizontal
+                },
             )
             val result = engine.layout(
                 LayoutInput(

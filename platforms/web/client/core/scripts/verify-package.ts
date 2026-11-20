@@ -35,7 +35,7 @@ export async function verifyPackage(packageRoot: URL = new URL("../", import.met
   const manifest: PackageManifest = JSON.parse(await readFile(new URL("package.json", packageRoot), "utf8"));
   if (manifest.name !== EXPECTED_NAME) fail(`expected ${EXPECTED_NAME}, found ${manifest.name}`);
   if (manifest.license !== "MPL-2.0") fail("manifest must declare MPL-2.0");
-  if (manifest.dependencies?.["@tiqian/prose"]) {
+  if (manifest.dependencies?.["@tiqian/web-component"]) {
     fail("core package must not depend on the web-component package");
   }
   if (!manifest.dependencies?.["@tiqian/ffi"]) {

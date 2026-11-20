@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { precomputeParagraphWithDiagnostics, type PrepareParagraphRequest } from "@tiqian/ffi";
+import { precomputeParagraphPlan, precomputeParagraphWithDiagnostics, type PrepareParagraphRequest } from "@tiqian/ffi";
 import { createProbeBootstrapFontSession } from "../src/engine/web-worker/session-bootstrap.js";
 import { prepareParagraphRequestWire } from "../src/engine/wire-construction.js";
 import { initializeGlobalServices } from "../src/services/global-services.js";
@@ -288,13 +288,13 @@ test("probe bootstrap plan matches the canvas model plan end to end", async () =
   try {
     const { shapeJson, metricsJson } = probeSession;
     const request: PrepareParagraphRequest = buildTestRequest();
-    const envelope: string = precomputeParagraphWithDiagnostics(
+    const envelope = precomputeParagraphWithDiagnostics(
       request,
       0.0,
       shapeJson,
       metricsJson,
     );
-    planA = JSON.parse(JSON.parse(envelope).plan);
+    planA = envelope.plan;
   } finally {
     probeSession.close();
   }
@@ -305,13 +305,13 @@ test("probe bootstrap plan matches the canvas model plan end to end", async () =
   let planB: unknown;
   try {
     const request: PrepareParagraphRequest = buildTestRequest();
-    const envelope: string = precomputeParagraphWithDiagnostics(
+    const envelope = precomputeParagraphWithDiagnostics(
       request,
       0.0,
       scriptedShapeJson,
       scriptedMetricsJson,
     );
-    planB = JSON.parse(JSON.parse(envelope).plan);
+    planB = envelope.plan;
   } finally {
     // no globals to restore
   }
@@ -325,5 +325,17 @@ test("probe bootstrap plan matches the canvas model plan end to end", async () =
   console.log(
     "tolerance-hit field paths:",
     toleranceHits.length === 0 ? "(none)" : JSON.stringify(toleranceHits),
+  );
+});
+
+test("the plan-only entry matches the diagnostics entry byte for byte", () => {
+  const { shapeJson, metricsJson } = makeScriptedCanvasModelCallbacks();
+  const request = buildTestRequest();
+  const planOnly = precomputeParagraphPlan(request, 0.0, shapeJson, metricsJson);
+  const structured = precomputeParagraphWithDiagnostics(request, 0.0, shapeJson, metricsJson);
+  assert.equal(
+    JSON.stringify(planOnly),
+    JSON.stringify(structured.plan),
+    "the worker entry and the main-thread entry serialize the same plan",
   );
 });

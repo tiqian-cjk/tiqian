@@ -1,3 +1,0 @@
-package = org.tiqian.shaping.backend
-headers = tiqian_font_backend.h
-headerFilter = tiqian_font_backend.h

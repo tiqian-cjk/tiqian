@@ -57,7 +57,7 @@ let tableCounter = 0;
 let currentTable: CurrentTableInfo | null = null;
 const tableBytesByUrl = new Map<string, Uint8Array>();
 const chainFetch = globalThis.fetch;
-globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
   const bytes = tableBytesByUrl.get(url);
   if (bytes != null) {
@@ -65,7 +65,7 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
     return new Response(new Blob([new Uint8Array(arrayBuffer)]), { status: 200, statusText: "OK" });
   }
   return chainFetch(input, init);
-};
+}) as typeof fetch;
 
 export function getCurrentTable(): CurrentTableInfo | null {
   return currentTable;

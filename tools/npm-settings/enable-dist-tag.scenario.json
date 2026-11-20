@@ -1,0 +1,86 @@
+{
+  "note": "Template for mcp__rea__capture_browser_scenario. Replace <package> and <otp>. The scenario navigates at start, so the one-time code must be supplied in the same run; a second run loses the pending save.",
+  "browser": {
+    "mode": "connect",
+    "cdp_endpoint": "http://127.0.0.1:9222",
+    "target_id": "<target id of the npm tab>"
+  },
+  "start_url": {
+    "url": "https://www.npmjs.com/package/<package>/access"
+  },
+  "actions": [
+    {
+      "step_id": "open-edit",
+      "action": "click",
+      "locator": {
+        "kind": "role",
+        "role": "button",
+        "name": "Edit"
+      },
+      "timeout_ms": 15000
+    },
+    {
+      "step_id": "wait-dist-tag",
+      "action": "wait_for",
+      "locator": {
+        "kind": "role",
+        "role": "checkbox",
+        "name": "Allow npm dist-tag"
+      },
+      "state": "visible",
+      "timeout_ms": 15000
+    },
+    {
+      "step_id": "check-dist-tag",
+      "action": "check",
+      "locator": {
+        "kind": "role",
+        "role": "checkbox",
+        "name": "Allow npm dist-tag"
+      },
+      "timeout_ms": 15000
+    },
+    {
+      "step_id": "save",
+      "action": "click",
+      "locator": {
+        "kind": "role",
+        "role": "button",
+        "name": "Save changes to trusted publisher connection"
+      },
+      "timeout_ms": 15000
+    },
+    {
+      "step_id": "wait-otp",
+      "action": "wait_for_timeout",
+      "duration_ms": 2500
+    },
+    {
+      "step_id": "fill-otp",
+      "action": "fill",
+      "locator": {
+        "kind": "css",
+        "selector": "input[autocomplete='one-time-code'], input[name='otp']"
+      },
+      "value": {
+        "source": "literal",
+        "value": "<otp>"
+      },
+      "timeout_ms": 15000
+    },
+    {
+      "step_id": "submit-otp",
+      "action": "click",
+      "locator": {
+        "kind": "css",
+        "selector": "button[type='submit']"
+      },
+      "timeout_ms": 15000
+    },
+    {
+      "step_id": "settle",
+      "action": "wait_for_timeout",
+      "duration_ms": 3000
+    }
+  ]
+}

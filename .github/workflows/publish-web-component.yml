@@ -1,0 +1,230 @@
+name: Publish web-component package
+
+# Called by .github/workflows/release.yml from the v*.*.* release tag, after
+# the core lane published @tiqian/core, and gated before publishing.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: publish-tiqian-web-component
+  cancel-in-progress: false
+
+jobs:
+  release-gate:
+    uses: ./.github/workflows/release-gate.yml
+
+  publish-alpha:
+    name: Verify and publish alpha
+    needs: [release-gate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+    defaults:
+      run:
+        working-directory: platforms/web/client/web-component
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Use an OIDC-capable npm CLI
+        run: npm install --global npm@11.12.1
+
+      - name: Validate release tag
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" != "tag" || "${GITHUB_REF_NAME}" != v*.*.* ]]; then
+            echo "::error::This lane runs only from a v*.*.* release tag, received ${GITHUB_REF_NAME}."
+            exit 1
+          fi
+          version="$(node -p "require('./package.json').version")"
+          if [[ "$(git cat-file -t "${GITHUB_REF_NAME}")" != "tag" ]]; then
+            echo "::error::Release tag must be annotated"
+            exit 1
+          fi
+          tag_commit="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
+          if [[ "${tag_commit}" != "${GITHUB_SHA}" ]]; then
+            echo "::error::Tag target ${tag_commit} does not match workflow commit ${GITHUB_SHA}"
+            exit 1
+          fi
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "${tag_commit}" refs/remotes/origin/main; then
+            echo "::error::Release tag must point to a commit on origin/main"
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Accept Android SDK licenses
+        shell: bash
+        run: yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      # The install resolves two generated, gitignored trees: tiqian-protocol
+      # and tiqian-shared are workspace:* members under
+      # engine-haxe/out/{protocol-ts,shared-ts}/gen whose package.json is
+      # written by boring pack, and @tiqian/core type-checks against the
+      # @tiqian/ffi runtime/ build product. npm cannot resolve the workspace
+      # protocol (EUNSUPPORTEDPROTOCOL), so this lane generates the trees, packs
+      # the member manifests, then installs with bun. The job defaults run to
+      # platforms/web/client/web-component, so the generation steps set the
+      # repository root explicitly.
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: Generate the TypeScript engine tree with the flake toolchain
+        working-directory: .
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs ts'
+      - name: Align the generated package versions with the release
+        working-directory: ${{ github.workspace }}
+        # boring pack writes the placeholder version from boring.json, and the
+        # sibling archives the inspect step installs must carry the release
+        # version @tiqian/core depends on, so align before packing.
+        run: python3 tools/align-package-versions.py ${{ steps.release.outputs.version }}
+
+      - name: Write the protocol and shared package manifests
+        working-directory: .
+        run: |
+          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
+          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
+          chmod +x "$BORING_PACKAGE_TSC"
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+      - name: Install workspace dependencies
+        working-directory: .
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and delete the manifest
+        # boring pack wrote; the runtime is assembled explicitly below.
+        run: nix develop -c bun install --ignore-scripts
+      - name: Assemble the @tiqian/ffi runtime with the flake toolchain
+        # @tiqian/core resolves @tiqian/ffi through its runtime/ declarations,
+        # which the skipped root postinstall used to assemble.
+        working-directory: platforms/web/client/engine-runtime
+        run: nix develop -c npm run build:runtime
+
+      - name: Build and verify the release tarball
+        env:
+          TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-web-component-release
+        run: npm run verify:release --workspace @tiqian/web-component
+
+      - name: Inspect the release package the way a consumer receives it
+        # The build step above proves the tarball matches its own checks. This
+        # step installs the archive into an empty project and imports the entry
+        # a consumer uses, so a manifest or file-list defect fails here instead
+        # of at a registry. The job sets a package working directory, so this
+        # step names the workspace paths explicitly.
+        working-directory: ${{ github.workspace }}
+        shell: bash
+        env:
+          TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-web-component-release
+        run: |
+          set -euo pipefail
+          tarball="$(find "${TIQIAN_RELEASE_ARTIFACT_DIR}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          # @tiqian/core installs @tiqian/protocol and @tiqian/shared, which the
+          # release publishes from the pack matrix after this lane; the archives
+          # this lane generated for its manifest step stand in for them.
+          siblings=()
+          for bundle in protocol-ts shared-ts; do
+            path="$(find "${GITHUB_WORKSPACE}/engine-haxe/out/${bundle}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+            if [[ -z "${path}" ]]; then
+              echo "::error::the ${bundle} bundle wrote no archive"
+              exit 1
+            fi
+            siblings+=(--with "${path}")
+          done
+          bash "${GITHUB_WORKSPACE}/tools/check-npm-package.sh" "${tarball}" \
+            --expect @tiqian/web-component --entry @tiqian/web-component "${siblings[@]}"
+
+      - name: Publish the verified tarball to alpha
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(find "${RUNNER_TEMP}/tiqian-web-component-release" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          if [[ -z "${tarball}" ]]; then
+            echo "::error::Verified release tarball is missing"
+            exit 1
+          fi
+          bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
+
+  sync-latest:
+    name: Synchronize latest dist-tag
+    needs: publish-alpha
+    # A trusted publisher whose connection lacks the dist-tag switch
+    # answers 403; the version is already published, so this job reports it
+    # without blocking the remaining lanes.
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Trusted publishing authenticates the dist-tag write; no token is read.
+      id-token: write
+    steps:
+      - name: Check out the release commit
+        # The dist-tag step runs tools/npm-dist-tag.sh from the repository, so
+        # this job needs the checkout the publish job has.
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Use the release npm CLI
+        run: npm install --global npm@11.12.1
+
+      - name: Point latest at the published alpha
+        env:
+          RELEASE_VERSION: ${{ needs.publish-alpha.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.21.0
+          bash "${GITHUB_WORKSPACE}/tools/npm-dist-tag.sh" --package @tiqian/web-component --version "${RELEASE_VERSION}" --tag latest
+
+      - name: Verify alpha and latest
+        env:
+          RELEASE_VERSION: ${{ needs.publish-alpha.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..12}; do
+            tags="$(npm view @tiqian/web-component dist-tags --json)"
+            if DIST_TAGS="${tags}" node --input-type=module -e '
+              const tags = JSON.parse(process.env.DIST_TAGS);
+              const version = process.env.RELEASE_VERSION;
+              if (tags.alpha !== version || tags.latest !== version) process.exit(1);
+            '; then
+              echo "alpha and latest both point to ${RELEASE_VERSION}"
+              exit 0
+            fi
+            if [[ "${attempt}" -lt 12 ]]; then sleep 5; fi
+          done
+          echo "::error::npm dist-tags did not converge on ${RELEASE_VERSION}"
+          exit 1
