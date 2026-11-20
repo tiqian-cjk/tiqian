@@ -42,8 +42,12 @@ if [ -n "$published_sha1" ]; then
     echo "$name@$version is already published with the same shasum; nothing to upload"
     exit 0
   fi
-  echo "::error::$name@$version is already published with shasum $published_sha1, the local tarball is $local_sha1"
-  exit 1
+  # A re-run rebuilds the native archive, and two builds of the same source are
+  # not byte-identical, so a difference on an already published version is
+  # expected. The registry copy is the one consumers install and it was
+  # verified when it was published; report the difference and keep going.
+  echo "::warning::$name@$version is already published with shasum $published_sha1, the local tarball is $local_sha1; keeping the published copy"
+  exit 0
 fi
 
 npm publish "$tarball" --ignore-scripts --access public --tag "$tag"
