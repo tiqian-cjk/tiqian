@@ -454,6 +454,22 @@ step_verify() {
   in_devshell "boring verify --project boring.json"
 }
 
+# The test phase of verify for one shard of bundles. The generated trees come
+# from the pack run, so this only runs the suites and writes their results; the
+# comparison needs every shard's results and runs in step_verify_compare.
+step_verify_test() {
+  local ids="${BUNDLES_OVERRIDE:-}"
+  if [ -z "$ids" ]; then
+    echo "verify-test needs --bundles; the comparison stage covers the whole set" >&2
+    return 2
+  fi
+  in_devshell "boring test $ids --project boring.json"
+}
+
+step_verify_compare() {
+  in_devshell "boring compare --project boring.json"
+}
+
 step_summary() {
   local report="$ROOT/report.md"
   {
@@ -488,6 +504,8 @@ run_named_step() {
     maven-local-publish) run_step maven-local-publish step_maven_publish ;;
     maven-local-repo) run_step maven-local-repo step_maven_local_repo ;;
     verify) run_step verify step_verify ;;
+    verify-test) run_step verify-test step_verify_test ;;
+    verify-compare) run_step verify-compare step_verify_compare ;;
     summary) run_step summary step_summary ;;
     *) echo "unknown stage: $1" >&2; exit 2 ;;
   esac
