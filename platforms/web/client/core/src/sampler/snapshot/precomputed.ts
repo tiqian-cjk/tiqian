@@ -994,7 +994,7 @@ function openTypeFeatureContract(features: string[] | null | undefined): OpenTyp
   const fontVariantNumeric = numeric.fontVariantNumeric ?? "normal";
   const roleFeatures = numeric.roleFeatures;
   const roleSignature = roleFeatures.join(",");
-  if (roleSignature !== "" && !(roleSignature === "fwid" && numeric.fontVariantNumeric != null) &&
+  if (roleSignature !== "" && roleSignature !== "fwid" &&
     roleSignature !== PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE) {
     return null;
   }
