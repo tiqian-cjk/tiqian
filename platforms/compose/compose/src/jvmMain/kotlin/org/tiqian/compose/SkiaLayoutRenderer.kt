@@ -343,7 +343,10 @@ private fun drawSkiaRichTextLines(
                 paint.pathEffect = null
             }
         }
-        val skipBandPad = paint.strokeWidth.coerceAtLeast(1f)
+        val skipBandPad = when (val pattern = seg.span.paint.linePattern) {
+            is RichTextLinePattern.Dotted -> pattern.dotDiameter / 2f
+            else -> paint.strokeWidth.coerceAtLeast(1f)
+        }
         val style = spans.lastOrNull { seg.range.start >= it.range.start && seg.range.start < it.range.end }?.style
             ?: result.input.textStyle
         val lineY = result.richTextDecorationLineY(seg, paint.strokeWidth)
