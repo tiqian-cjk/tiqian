@@ -1109,10 +1109,12 @@ function generatedGeometryIssue(element: Element, paragraph: Element): string | 
     return null;
   }
   if (shapingBoundary) {
+    // New fragment boxes carry their own one-em line height.
+    const boxedBoundary = style.display === "inline-block";
+    if (boxedBoundary && style.lineHeight !== style.fontSize) return "Boundary:lineHeight";
+
     const contract = {
-      // NativeSelectionBoundaryFlow: prepared shaping runs stay inline so
-      // browser selection remains character-continuous across adjacent runs.
-      display: "inline",
+      display: boxedBoundary ? "inline-block" : "inline",
       whiteSpace: "pre",
       verticalAlign: "baseline",
       direction: "ltr",
@@ -1133,6 +1135,7 @@ function generatedGeometryIssue(element: Element, paragraph: Element): string | 
       // against the real border-box immediately below, so inherited equality
       // would reject correct engine geometry without adding protection.
       .filter((property) => property !== "letterSpacing" &&
+        (!boxedBoundary || property !== "lineHeight") &&
         (!projectedRenderFont || property !== "fontFamily"));
     const inheritedMismatch = inheritedProperties.find((property) =>
       String(style[property as keyof CSSStyleDeclaration] ?? "") !==
@@ -1504,7 +1507,10 @@ function computedTypographyIssue(
   if ((style.textRendering || "auto") !== "auto") return "textRendering";
   if (!new Set(["start", "left"]).has(style.textAlign || "start")) return "textAlign";
   if (!new Set(["auto", "start"]).has(style.textAlignLast || "auto")) return "textAlignLast";
-  if ((style.textJustify || "auto") !== "auto") return "textJustify";
+  // Prepared flow can explicitly disable justification. The default also
+  // leaves it inactive because the paragraph already requires start alignment.
+  const textJustify = style.textJustify || "auto";
+  if (textJustify !== "auto" && !(canonicalPreparedFlow && textJustify === "none")) return "textJustify";
   if ((style.direction || "ltr") !== "ltr") return "direction";
   if ((style.writingMode || "horizontal-tb") !== "horizontal-tb") return "writingMode";
   if (!ancestorFragmentationIsSafe(paragraph)) return "ancestorFragmentation";
