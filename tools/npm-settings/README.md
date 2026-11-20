@@ -35,6 +35,6 @@ for them, so they are changed through the Chromium MCP with
 
 ## Current state
 
-`packages.json` lists the eleven packages the `release.yml` entrypoint
+`packages.json` lists the fourteen packages the `release.yml` entrypoint
 publishes. A connection shows "Pending validation" until its first successful
 publish; validation is not the same as the allowed-actions switches.
