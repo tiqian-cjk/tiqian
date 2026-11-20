@@ -48,13 +48,16 @@ fi
 echo "current dist-tags: $current"
 npm dist-tag add "$package@$version" "$tag"
 
-for attempt in $(seq 1 12); do
+# Registry reads lag the write, so the poll is generous: the publish matrix
+# runs three npm jobs at once and a one-minute window reported a failure while
+# the tags were already correct a few seconds later.
+for attempt in $(seq 1 30); do
   current="$(npm view "$package" dist-tags --json 2>/dev/null || echo '{}')"
   if converged "$current"; then
     echo "$package dist-tags converged: $current"
     exit 0
   fi
-  [ "$attempt" -lt 12 ] && sleep 5
+  [ "$attempt" -lt 30 ] && sleep 10
 done
 echo "::error::$package dist-tags did not converge on $version (last: $current)"
 exit 1
