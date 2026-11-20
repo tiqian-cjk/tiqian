@@ -215,7 +215,8 @@ class PreparedArtifact {
                 final container = semanticContainerFor(state, child.semanticPath);
                 if (child.kind == "run") {
                     final run:PreparedRunTyped = child.run;
-                    container.push(PreparedDom.renderRun(run, styleClassFor));
+                    final spacingBoundary = run.spacing.kind == "trailing-letter" ? endingTags(run) : "";
+                    container.push(PreparedDom.renderRun(run, styleClassFor, spacingBoundary));
                 } else if (child.kind == "inlineObject") {
                     final cell:PreparedRunTyped = child.cell;
                     container.push(Evidence.inlineObjectPlaceholder(cell, child.carrierMargin, styleClassFor));
@@ -471,6 +472,15 @@ class PreparedArtifact {
             index += 1;
         }
         return matches;
+    }
+
+    /** Keep the wrapper order in the spacing marker for nested semantics. */
+    private static function endingTags(run:PreparedRunTyped):String {
+        final tags:Array<String> = [];
+        for (span in run.semanticPath) {
+            if (span.end == run.rangeEnd) tags.push(span.tagName);
+        }
+        return tags.join(" ");
     }
 
     /** Semantics strictly crossing the line boundary (prepared-dom.ts:729). */

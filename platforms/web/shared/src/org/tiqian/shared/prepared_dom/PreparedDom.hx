@@ -128,7 +128,8 @@ class PreparedDom {
      * renderedContainer). Returns a MarkupNode whose html and artifact match the
      * TS oracle byte-for-byte.
      */
-    public static function renderRun(input:PreparedRunRenderInput, styleClassFor:Null<StyleClassResolver>):MarkupNode {
+    public static function renderRun(input:PreparedRunRenderInput, styleClassFor:Null<StyleClassResolver>,
+        spacingBoundary:String = ""):MarkupNode {
         final featureSignature = preparedFeatureSignature(input.openTypeFeatures);
         final renderFontFamilies = input.renderFontFamilies;
         final needsElement = input.shapingBoundary || featureSignature != ""
@@ -232,6 +233,11 @@ class PreparedDom {
                 { name: "data-tq-geometry", value: "true" },
                 { name: "data-tq-spacing-carrier", value: "true" },
             ];
+            if (spacingBoundary != "") {
+                Markup.setAttribute(carrierEntries, "data-tq-spacing-boundary", spacingBoundary);
+            }
+
+            // The marker lets host decoration stop without changing the gap.
             final carrierStyles:Array<String> = [
                 "display:inline-block!important",
                 "inline-size:" + Markup.px(input.spacing.px) + "!important",

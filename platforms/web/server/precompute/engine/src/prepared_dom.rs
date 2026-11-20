@@ -539,6 +539,25 @@ impl Semantics {
         self.indices(|span_start, span_end| offset > span_start && offset < span_end)
     }
 
+    /// Keep the wrapper order in the spacing marker for nested semantics.
+    fn ending_tags(&self, path: &[usize], offset: i32) -> String {
+        let offset = i64::from(offset);
+        let mut tags = String::new();
+        for &index in path {
+            let (end, tag) = match self {
+                Self::Snapshot(spans) => (spans[index].end, &spans[index].tag_name),
+                Self::Live(spans) => (spans[index].end, &spans[index].tag_name),
+            };
+            if end == offset {
+                if !tags.is_empty() {
+                    tags.push(' ');
+                }
+                tags.push_str(tag);
+            }
+        }
+        tags
+    }
+
     fn indices(&self, covers: impl Fn(i64, i64) -> bool) -> Vec<usize> {
         let bounds: Vec<(i64, i64)> = match self {
             Semantics::Snapshot(spans) => spans.iter().map(|span| (span.start, span.end)).collect(),
@@ -1304,7 +1323,7 @@ fn render_line(
     for child in &children {
         let path = child.semantic_path().to_vec();
         let node = match child {
-            LineChild::Run(run) => render_run(draft, run, style_class_for)?,
+            LineChild::Run(run) => render_run(draft, run, semantics, style_class_for)?,
             LineChild::InlineObject {
                 cell,
                 carrier_margin,
@@ -1570,6 +1589,7 @@ fn render_font_families_for(
 fn render_run(
     draft: &mut Draft,
     run: &CellRun,
+    semantics: &Semantics,
     style_class_for: &mut Option<&mut dyn FnMut(&str) -> String>,
 ) -> Result<usize, NamedError> {
     let feature_signature = feature_signature(run);
@@ -1715,6 +1735,16 @@ fn render_run(
                 Some("true".to_string()),
             ),
         ];
+        let boundary = semantics.ending_tags(&run.semantic_path, run.range_end);
+        if !boundary.is_empty() {
+            set_attribute(
+                &mut carrier_attributes,
+                "data-tq-spacing-boundary",
+                Some(boundary),
+            );
+        }
+
+        // Host decoration can stop at the semantic boundary without changing the gap.
         apply_dynamic_styles(
             &mut carrier_attributes,
             &[
