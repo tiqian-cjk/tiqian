@@ -22,6 +22,43 @@ class PreparedArtifactTest {
     }
 
     @:test
+    public static function smallGapsAreKeptWhenLineWidthNeedsThem():Void {
+        final plan = PreparedArtifactTestSupport.planPlainMerge();
+        final line = plan.lines[0];
+        final gap = 0.00006103515625;
+        final cellCount = 200;
+
+        // Build a line where each gap is below 1e-4 but their sum exceeds 0.01 px.
+        line.cells = [];
+        for (index in 0...cellCount) {
+            line.cells.push({
+                rangeStart: index, rangeEnd: index + 1, source: "字", display: "字",
+                drawX: index * (2.0 + gap), naturalWidth: 2.0, leadingLayoutAdvance: 0, advance: null,
+                shapingBoundary: false, openTypeFeatures: null, style: null, styleSignature: "null",
+                punctuationSignature: "[null,null]", latin: false, dashStrategy: null, shapingLanguage: null,
+                resolvedFace: null, glyphIds: null, shapingEvidence: null, punctuationInkFloor: null,
+                punctuationBodyWidth: null, renderFontFamily: null, inlineObject: null
+            });
+        }
+
+        // Check that the retry preserves the flow width and renders the spacing.
+        line.rangeEnd = cellCount;
+        line.visualWidth = 2.0 * cellCount + gap * (cellCount - 1);
+        final options = PreparedArtifactTestSupport.optionsPlainMerge();
+        final result = PreparedArtifact.renderPreparedParagraphArtifact(plan, "zh-Hans", options);
+        TracedAssertions.assertTrue(result.html.indexOf('data-tq-line-flow-width="400.01214599609375"') >= 0, "line flow width");
+        TracedAssertions.assertTrue(result.html.indexOf("letter-spacing:0.00006px!important") >= 0, "retained letter spacing");
+
+        // The same gap can still be omitted when the accumulated loss is small.
+        line.cells.splice(3, cellCount - 3);
+        line.rangeEnd = 3;
+        line.visualWidth = 6.0 + 2.0 * gap;
+        final shortResult = PreparedArtifact.renderPreparedParagraphArtifact(plan, "zh-Hans", options);
+        TracedAssertions.assertTrue(shortResult.html.indexOf('data-tq-line-flow-width="6"') >= 0, "short line flow width");
+        TracedAssertions.assertTrue(shortResult.html.indexOf("letter-spacing:") < 0, "omitted short line spacing");
+    }
+
+    @:test
     public static function trailingLetterCarrierMatchesCorpus():Void {
         final plan = PreparedArtifactTestSupport.planTrailingLetterCarrier();
         final options = PreparedArtifactTestSupport.optionsTrailingLetterCarrier();
