@@ -175,6 +175,7 @@ step_pack() {
   local out_root
   out_root="$(boring_out_root)"
   for id in $ids; do
+    local started=$SECONDS
     echo "--- pack $id ---"
     # A repeated run with a new staging version would otherwise leave the
     # previous version's artifacts beside the output tree, and both the pack
@@ -185,6 +186,7 @@ step_pack() {
       echo "--- pack $id FAILED ---"
       rc=1
     fi
+    echo "shard timing pack $id $((SECONDS - started))"
   done
   return "$rc"
 }
@@ -479,8 +481,13 @@ step_verify_shard() {
     echo "verify-shard needs --bundles; every bundle runs in one shard of the matrix" >&2
     return 2
   fi
-  in_devshell "boring gen $ids --project boring.json" || return $?
-  in_devshell "boring test $ids --project boring.json"
+  local id started
+  for id in $ids; do
+    started=$SECONDS
+    in_devshell "boring gen $id --project boring.json" || return $?
+    in_devshell "boring test $id --project boring.json" || return $?
+    echo "shard timing test $id $((SECONDS - started))"
+  done
 }
 
 step_summary() {

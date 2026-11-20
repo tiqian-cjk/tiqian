@@ -26,7 +26,8 @@ jobs:
     name: Derive the bundle shards
     runs-on: ubuntu-latest
     outputs:
-      shards: ${{ steps.shards.outputs.shards }}
+      pack_shards: ${{ steps.shards.outputs.pack_shards }}
+      test_shards: ${{ steps.shards.outputs.test_shards }}
       short: ${{ steps.shards.outputs.short }}
       staging_version: ${{ steps.shards.outputs.staging_version }}
     steps:
@@ -40,23 +41,14 @@ jobs:
           set -euo pipefail
           short="${GITHUB_SHA::7}"
           bundles="$(python3 tools/release-matrix.py --list-bundles | paste -sd' ' -)"
-          read -r -a ids <<< "$bundles"
-          shards="["
-          separator=""
-          for ((index = 0; index < 4; index++)); do
-            group=()
-            for ((i = index; i < ${#ids[@]}; i += 4)); do
-              group+=("${ids[$i]}")
-            done
-            shards+="${separator}{\"shard\":\"${index}\",\"bundles\":\"${group[*]}\"}"
-            separator=","
-          done
-          shards+="]"
-          echo "shards=${shards}" >> "$GITHUB_OUTPUT"
+          pack_shards="$(python3 tools/shard-bundles.py --bundles "$bundles" --phase pack --json)"
+          test_shards="$(python3 tools/shard-bundles.py --bundles "$bundles" --phase test --json)"
+          echo "pack_shards=${pack_shards}" >> "$GITHUB_OUTPUT"
+          echo "test_shards=${test_shards}" >> "$GITHUB_OUTPUT"
           echo "short=${short}" >> "$GITHUB_OUTPUT"
           echo "staging_version=0.0.0-staging.${short}" >> "$GITHUB_OUTPUT"
-          echo "bundles: ${bundles}"
-          echo "shards: ${shards}"
+          python3 tools/shard-bundles.py --bundles "$bundles" --phase pack
+          python3 tools/shard-bundles.py --bundles "$bundles" --phase test
 
   packs:
     name: Pack ${{ matrix.shard }}
@@ -66,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.plan.outputs.shards) }}
+        include: ${{ fromJSON(needs.plan.outputs.pack_shards) }}
     env:
       STAGING_VERSION: ${{ needs.plan.outputs.staging_version }}
     steps:
@@ -155,7 +147,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.plan.outputs.shards) }}
+        include: ${{ fromJSON(needs.plan.outputs.test_shards) }}
     env:
       STAGING_VERSION: ${{ needs.plan.outputs.staging_version }}
     steps:
