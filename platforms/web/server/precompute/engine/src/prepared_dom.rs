@@ -32,7 +32,8 @@ const SPACING_EPSILON: f64 = 0.01;
 // thousandths of a pixel per cluster boundary; zeroing those breaks the line
 // flow identity once they accumulate. Only arithmetic dust zeroes here.
 // SPACING_EPSILON still gates merge tolerance and carrier visibility.
-const SPACING_DUST_EPSILON: f64 = 1e-6;
+// Subtracting float32 plan coordinates can leave a tiny gap in CSS pixels.
+const SPACING_DUST_EPSILON: f64 = 1e-4;
 const RENDER_FLOW_EPSILON_PX: f64 = 0.01;
 const LIVE_SEMANTIC_INDEX_ATTRIBUTE: &str = "data-tq-live-semantic-index";
 /// Fallback annotation ascent ratio, mirroring the Kotlin no-metrics branch.
