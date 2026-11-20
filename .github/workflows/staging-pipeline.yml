@@ -7,8 +7,10 @@ name: Staging pipeline
 # output below one staging directory and publishes nothing: no tag, no push to
 # an official registry, no R2 upload and no Central deployment.
 #
-# The work lives in tools/staging-pipeline.sh so the same commands also run
-# in a developer checkout.
+# The pack stage builds every bundle with its own target toolchain and writes
+# each bundle into its own output directory, so the bundles are packed on
+# separate runners and one assembly job runs the stages that have to see the
+# whole set (contract checks, registry metadata, consumers, verify).
 on:
   push:
     branches: ["main"]
@@ -21,15 +23,59 @@ concurrency:
   group: staging-pipeline-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  STAGING_VERSION: 0.0.0-staging.${{ github.sha }}
+
 jobs:
-  staging:
-    name: Run the release pipeline to a staging version
+  plan:
+    name: Derive the bundle shards
     runs-on: ubuntu-latest
-    # 240 minutes: the verify stage runs boring verify, which generates all 13
-    # bundles, runs all 13 generated test suites and compares the comparable
-    # ones; one suite carries per-test budgets of 600000 ms (boring.json
-    # run.env). The other stages keep their previous cost.
+    outputs:
+      shards: ${{ steps.shards.outputs.shards }}
+      short: ${{ steps.shards.outputs.short }}
+      staging_version: ${{ steps.shards.outputs.staging_version }}
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Split the bundle list
+        id: shards
+        shell: bash
+        run: |
+          set -euo pipefail
+          short="${GITHUB_SHA::7}"
+          bundles="$(python3 tools/release-matrix.py --list-bundles | paste -sd' ' -)"
+          read -r -a ids <<< "$bundles"
+          shard_count=4
+          shards="["
+          separator=""
+          for ((index = 0; index < shard_count; index++)); do
+            group=()
+            for ((i = index; i < ${#ids[@]}; i += shard_count)); do
+              group+=("${ids[$i]}")
+            done
+            joined="${group[*]}"
+            shards+="${separator}{\"shard\":\"${index}\",\"bundles\":\"${joined}\"}"
+            separator=","
+          done
+          shards+="]"
+          echo "shards=${shards}" >> "$GITHUB_OUTPUT"
+          echo "short=${short}" >> "$GITHUB_OUTPUT"
+          echo "staging_version=0.0.0-staging.${short}" >> "$GITHUB_OUTPUT"
+          echo "bundles: ${bundles}"
+          echo "shards: ${shards}"
+
+  packs:
+    name: Pack ${{ matrix.shard }}
+    needs: plan
+    runs-on: ubuntu-latest
     timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.shards) }}
+    env:
+      STAGING_VERSION: ${{ needs.plan.outputs.staging_version }}
     steps:
       - name: Check out the commit
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -63,30 +109,73 @@ jobs:
           nix develop -c bash -c "mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/"
           ls -l tools/unicode-data
 
-      # Gradle refuses to configure any Android project when ANDROID_HOME and
-      # ANDROID_SDK_ROOT name different SDK roots ("Several environment
-      # variables and/or system properties contain different paths to the
-      # SDK"). Two writers set them here: the ubuntu-latest image exports
-      # ANDROID_SDK_ROOT=/usr/local/lib/android/sdk, and the flake devShell
-      # (flake.nix:100) exports ANDROID_HOME=<nix store>/libexec/android-sdk,
-      # which carries platforms;android-36, build-tools;36.0.0 and
-      # NDK 29.0.13599879-rc2. The Android modules pin exactly those three
-      # (platforms/android/native-font/build.gradle.kts:18-19 and :34), so the
-      # devShell SDK is the one Gradle must resolve and the runner variable is
-      # dropped before the devShell starts. Removing the unset brings back
-      # maven-local-publish rc=1 on every run.
-      - name: Run the staging pipeline
+      - name: Pack this shard
         shell: bash
         run: |
           unset ANDROID_SDK_ROOT
-          export STAGING_VERSION="0.0.0-staging.${GITHUB_SHA::7}"
-          nix develop -c bash tools/staging-pipeline.sh
+          export RUNNER_TEMP
+          nix develop -c bash tools/staging-pipeline.sh \
+            --stages 'align pack collect-artifacts' \
+            --bundles '${{ matrix.bundles }}'
 
-      - name: Upload the staging report and registry tree
+      - name: Upload the shard tree
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: staging-pipeline
+          name: staging-packs-${{ matrix.shard }}
+          path: ${{ runner.temp }}/tiqian-staging-*/
+          if-no-files-found: warn
+          retention-days: 3
+
+  assemble:
+    name: Assemble and verify the staging set
+    needs: [plan, packs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      STAGING_VERSION: ${{ needs.plan.outputs.staging_version }}
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Stage the pinned generation inputs
+        shell: bash
+        run: |
+          nix develop -c bash -c "mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/"
+          ls -l tools/unicode-data
+
+      - name: Download the packed shards
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-packs-*
+          merge-multiple: true
+          path: ${{ runner.temp }}
+
+      - name: Run the remaining stages
+        shell: bash
+        run: |
+          unset ANDROID_SDK_ROOT
+          export RUNNER_TEMP
+          nix develop -c bash tools/staging-pipeline.sh \
+            --stages 'compile-bundles publish-contract registry-tree staging-isolation maven-artifact-ids cargo-consume maven-local-publish maven-local-repo verify summary'
+
+      - name: Upload the staging report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-report
           path: |
             ${{ runner.temp }}/tiqian-staging-*/logs
             ${{ runner.temp }}/tiqian-staging-*/report.md
