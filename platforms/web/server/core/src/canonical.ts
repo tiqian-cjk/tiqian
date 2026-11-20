@@ -74,7 +74,22 @@ export function encodeCanonicalInput(
   if (result.kind === "CErr") {
     throw new Error(result.issue);
   }
-  return Buffer.from(result.bytes);
+  const base = Buffer.from(result.bytes);
+  const spans = memberOf(input, "textSpans");
+  if (!Array.isArray(spans)) return base;
+  const numeric = spans.map((span: unknown) => {
+    const value = memberOf(span, "fontVariantNumeric") ?? null;
+    if (value !== null && typeof value !== "string") throw new Error("UnsupportedFontVariantNumeric");
+    return value;
+  });
+
+  // Preserve the upstream byte form for existing inputs. Numeric overrides
+  // use an optional trailer that participates in both cache hashes and transport.
+  if (numeric.every((value) => value === null)) return base;
+  const payload = Buffer.from(JSON.stringify(numeric));
+  const length = Buffer.alloc(4);
+  length.writeUInt32LE(payload.length);
+  return Buffer.concat([base, Buffer.from("TQNV"), length, payload]);
 }
 
 /** Raw SHA-256 digest, the cache-layer content hash of the canonical bytes. */

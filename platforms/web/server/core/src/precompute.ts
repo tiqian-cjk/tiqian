@@ -237,6 +237,8 @@ export interface SnapshotTextSpan {
   readonly fontWeight?: number;
   readonly italic?: boolean;
   readonly baselineShiftPx?: number;
+  /** Complete CSS numeric variant for this run, replacing paragraph defaults. */
+  readonly fontVariantNumeric?: string;
 }
 
 export interface SnapshotInlineBox {

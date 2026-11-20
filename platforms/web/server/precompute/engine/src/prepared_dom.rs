@@ -1606,12 +1606,9 @@ fn render_run(
         attributes.push(("data-tq-shaping-boundary".to_string(), Some(String::new())));
     }
     if !feature_signature.is_empty() {
-        // The renderer replays exactly the feature sets the engine emits:
-        // Latin curly quotes shape proportional (pwid,palt), CJK-context
-        // curly quotes shape full-width (fwid,
-        // CjkContextCurlyQuoteFullWidthVariant). Any other signature has no
-        // CSS replay rule and must not be silently painted.
-        if feature_signature != "pwid,palt" && feature_signature != "fwid" {
+        // Numeric overrides and contextual punctuation must have exact CSS replay.
+        // Reject unknown feature sets instead of painting different glyph advances.
+        if crate::numeric::prepared_variant(&run.open_type_features).is_err() {
             return Err(NamedError(format!(
                 "UnsupportedPreparedOpenTypeFeatures: {feature_signature}"
             )));
@@ -1658,7 +1655,7 @@ fn render_run(
             ));
         }
     }
-    let mut styles = Vec::new();
+    let mut styles = crate::numeric::prepared_styles(&run.open_type_features)?;
     if !render_font_families.is_empty() || run.evidence_render_font_family.is_some() {
         attributes.push((
             "data-tq-render-font-projection".to_string(),

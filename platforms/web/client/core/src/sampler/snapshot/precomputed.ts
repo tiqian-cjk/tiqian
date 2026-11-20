@@ -1,3 +1,4 @@
+import { numericFeatureContract } from "./numeric-features.js";
 import { loadBrowserFontFaces } from "../../measurement/font-face-loader.js";
 type SchedulerPostTaskCallback = () => void;
 type SchedulerPostTaskOptions = { priority: string };
@@ -972,6 +973,7 @@ const BOUNDARY_STYLE_PROPERTIES = [
 const FEATURE_OVERRIDABLE_BOUNDARY_STYLE_PROPERTIES = new Set([
   "fontFeatureSettings",
   "fontVariantEastAsian",
+  "fontVariantNumeric",
 ]);
 
 function openTypeFeatureContract(features: string[] | null | undefined): OpenTypeFeatureContract | null {
@@ -987,18 +989,25 @@ function openTypeFeatureContract(features: string[] | null | undefined): OpenTyp
     return null;
   }
   if (new Set(features).size !== features.length) return null;
-  const fontVariantNumeric = features[0] === "lnum" ? "lining-nums" : "normal";
-  const roleFeatures = fontVariantNumeric === "lining-nums" ? features.slice(1) : features;
+  const numeric = numericFeatureContract(features);
+  if (!numeric) return null;
+  const fontVariantNumeric = numeric.fontVariantNumeric ?? "normal";
+  const roleFeatures = numeric.roleFeatures;
   const roleSignature = roleFeatures.join(",");
-  if (roleSignature !== "" && roleSignature !== PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE) {
+  if (roleSignature !== "" && !(roleSignature === "fwid" && numeric.fontVariantNumeric != null) &&
+    roleSignature !== PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE) {
     return null;
   }
   return Object.freeze({
     signature: features.join(","),
-    fontFeatureSettings: roleSignature
+    fontFeatureSettings: roleSignature === PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE
       ? PROPORTIONAL_CURLY_QUOTE_FEATURE_SETTINGS
-      : ENGINE_PUNCTUATION_FEATURE_SETTINGS,
-    fontVariantEastAsian: roleSignature ? "proportional-width" : "normal",
+      : roleSignature === "fwid"
+        ? `${ENGINE_PUNCTUATION_FEATURE_SETTINGS}, "fwid" 1`
+        : ENGINE_PUNCTUATION_FEATURE_SETTINGS,
+    // Full-width probes are emitted by the engine for punctuation shaping.
+    fontVariantEastAsian: roleSignature === "fwid" ? "full-width"
+      : roleSignature ? "proportional-width" : "normal",
     fontVariantNumeric,
   });
 }
@@ -1038,10 +1047,17 @@ function boundaryOpenTypeFeatureIssue(
 ): string | null {
   if (!contract) return "Boundary:openTypeFeatures";
   if (!contract.signature) return null;
+  const numericOverride = numericFeatureContract(contract.signature.split(","))?.fontVariantNumeric;
+  if (numericOverride != null && style.fontVariantNumeric !== numericOverride) {
+    return "Boundary:fontVariantNumeric";
+  }
   if (style.fontVariantEastAsian !== contract.fontVariantEastAsian) {
     return "Boundary:fontVariantEastAsian";
   }
-  if (!canonicalEnginePunctuationFeatureSettings(style.fontFeatureSettings, true)) {
+  const actual = parsedOpenTypeFeatureSettings(style.fontFeatureSettings);
+  const expected = parsedOpenTypeFeatureSettings(contract.fontFeatureSettings)!;
+  if (!actual || actual.size !== expected.size ||
+    [...expected].some(([tag, value]) => actual.get(tag) !== value)) {
     return "Boundary:fontFeatureSettings";
   }
   return null;
@@ -1108,7 +1124,9 @@ function generatedGeometryIssue(element: Element, paragraph: Element): string | 
     const featureContract = boundaryOpenTypeFeatureContract(element);
     const inheritedProperties = (featureContract?.signature
       ? BOUNDARY_STYLE_PROPERTIES.filter((property) =>
-        !FEATURE_OVERRIDABLE_BOUNDARY_STYLE_PROPERTIES.has(property))
+        !FEATURE_OVERRIDABLE_BOUNDARY_STYLE_PROPERTIES.has(property) ||
+        (property === "fontVariantNumeric" &&
+          numericFeatureContract(featureContract.signature.split(","))?.fontVariantNumeric == null))
       : BOUNDARY_STYLE_PROPERTIES)
       // EngineOwnedBoundaryLetterSpacing: multi-character shaping runs can
       // also carry layout adjustment. Their serialized advance is checked

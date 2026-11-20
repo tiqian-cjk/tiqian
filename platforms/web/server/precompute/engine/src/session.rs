@@ -486,6 +486,16 @@ impl FontSession {
         evidence: &mut CaptureEvidence,
         input: &ShapeInput,
     ) -> Result<ShapeRecordResult, String> {
+        self.shape_with_numeric_into(evidence, input, None)
+    }
+
+    /// Shape a span with its complete numeric override instead of session defaults.
+    pub(crate) fn shape_with_numeric_into(
+        &self,
+        evidence: &mut CaptureEvidence,
+        input: &ShapeInput,
+        numeric: Option<&[String]>,
+    ) -> Result<ShapeRecordResult, String> {
         let families = input.font_families;
         let display_chars: Vec<char> = input.display_text.chars().collect();
         let source_text = input.source_text.unwrap_or(input.display_text);
@@ -506,9 +516,18 @@ impl FontSession {
                 input.font_weight,
                 input.locale,
                 input.role,
-                &self.base_features,
+                numeric.unwrap_or(&self.base_features),
             )
             .map_err(|error| error.0)?;
+        // The plan records span overrides so the browser paints the same glyphs.
+        // An explicit reset remains visible even when no numeric feature is enabled.
+        if let Some(features) = numeric {
+            if features.is_empty() {
+                result.features.insert(0, "lnum=0".to_string());
+            } else {
+                result.features.splice(0..0, features.iter().cloned());
+            }
+        }
         if !display_covered {
             // The exact CSS face contract rejected the display codepoint even
             // if the raw sfnt happens to retain an unreachable glyph; the
@@ -571,7 +590,11 @@ impl FontSession {
             probe_language: input.locale.to_string(),
             probe_features: result.probe_features.clone(),
         };
-        evidence.store_shape_replay(replay_key, replay_entry, input.font_size);
+        // Browser relayout measures numeric leaves as DOM objects. Keep their
+        // face probes, but do not overwrite the default text-shaping replay key.
+        if numeric.is_none() {
+            evidence.store_shape_replay(replay_key, replay_entry, input.font_size);
+        }
         if missing_glyph {
             return Ok(result);
         }
