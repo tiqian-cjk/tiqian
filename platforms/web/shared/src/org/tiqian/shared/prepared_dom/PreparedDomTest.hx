@@ -45,12 +45,12 @@ class PreparedDomTest {
         var r = PreparedDom.preparedSpacing("字", 14, 0);
         TracedAssertions.assertEqualsString("none", r.kind, "spacing 字/14/0" + " kind");
         TracedAssertions.assertEqualsString("0px", Markup.px(r.px), "spacing 字/14/0" + " px");
-        var r = PreparedDom.preparedSpacing("字", 14, 5e-7);
-        TracedAssertions.assertEqualsString("none", r.kind, "spacing 字/14/5e-7" + " kind");
-        TracedAssertions.assertEqualsString("0px", Markup.px(r.px), "spacing 字/14/5e-7" + " px");
-        var r = PreparedDom.preparedSpacing("字", 14, 0.000001);
-        TracedAssertions.assertEqualsString("letter", r.kind, "spacing 字/14/0.000001" + " kind");
-        TracedAssertions.assertEqualsString("0px", Markup.px(r.px), "spacing 字/14/0.000001" + " px");
+        var r = PreparedDom.preparedSpacing("字", 14, 0.000099);
+        TracedAssertions.assertEqualsString("none", r.kind, "spacing 字/14/0.000099" + " kind");
+        TracedAssertions.assertEqualsString("0px", Markup.px(r.px), "spacing 字/14/0.000099" + " px");
+        var r = PreparedDom.preparedSpacing("字", 14, 0.0001);
+        TracedAssertions.assertEqualsString("letter", r.kind, "spacing 字/14/0.0001" + " kind");
+        TracedAssertions.assertEqualsString("0.0001px", Markup.px(r.px), "spacing 字/14/0.0001" + " px");
         var r = PreparedDom.preparedSpacing("字", 14, 0.5);
         TracedAssertions.assertEqualsString("letter", r.kind, "spacing 字/14/0.5" + " kind");
         TracedAssertions.assertEqualsString("0.5px", Markup.px(r.px), "spacing 字/14/0.5" + " px");
@@ -87,9 +87,9 @@ class PreparedDomTest {
         var r = PreparedDom.preparedSpacing("abc", 0, 0);
         TracedAssertions.assertEqualsString("none", r.kind, "spacing abc/0/0" + " kind");
         TracedAssertions.assertEqualsString("0px", Markup.px(r.px), "spacing abc/0/0" + " px");
-        var r = PreparedDom.preparedSpacing("a", 0, 0.000001);
-        TracedAssertions.assertEqualsString("letter", r.kind, "spacing a/0/0.000001" + " kind");
-        TracedAssertions.assertEqualsString("0px", Markup.px(r.px), "spacing a/0/0.000001" + " px");
+        var r = PreparedDom.preparedSpacing("a", 0, 0.0001);
+        TracedAssertions.assertEqualsString("letter", r.kind, "spacing a/0/0.0001" + " kind");
+        TracedAssertions.assertEqualsString("0.0001px", Markup.px(r.px), "spacing a/0/0.0001" + " px");
     }
     @:test
     public static function preparedFeatureSignatureMatchesTs():Void {

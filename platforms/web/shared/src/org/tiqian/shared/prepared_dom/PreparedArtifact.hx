@@ -33,6 +33,7 @@ class PreparedArtifact {
         final state = newArtifactState(options.cjkStrongSemantics, options.liveSource);
         final styleClassFor = options.styleClassFor;
         var inlineObjectCount = 0;
+        var dustEpsilon = PreparedDom.SPACING_DUST_EPSILON;
         var lineIndex = 0;
         while (lineIndex < plan.lines.length) {
             final line = plan.lines[lineIndex];
@@ -55,7 +56,7 @@ class PreparedArtifact {
                     : line.hyphenAdvance > 0
                         ? 0.0
                         : line.indent + line.visualWidth - cell.drawX - cell.naturalWidth - trailingInlineEdge;
-                final layoutTrailingGap = Math.abs(rawTrailingGap) < PreparedDom.SPACING_DUST_EPSILON ? 0.0 : rawTrailingGap;
+                final layoutTrailingGap = Math.abs(rawTrailingGap) < dustEpsilon ? 0.0 : rawTrailingGap;
                 final bopomofoHere = bopomofoAt(plan.bopomofoDecisions, cell.rangeEnd);
                 final hasBopomofo = bopomofoHere.length > 0;
                 final naturalAdvance:Float = cell.advance != null ? cell.advance : cell.naturalWidth;
@@ -77,7 +78,7 @@ class PreparedArtifact {
                     openTypeFeatures: cell.openTypeFeatures,
                     renderFontFamilies: renderFontFamiliesFor(renderTextSpans, cell.rangeStart, cell.rangeEnd),
                     trailingGap: trailingGap,
-                    spacing: PreparedDom.preparedSpacing(cell.display, cell.naturalWidth, trailingGap),
+                    spacing: PreparedDom.preparedSpacing(cell.display, cell.naturalWidth, trailingGap, dustEpsilon),
                     semanticPath: semanticsFor(semantics, cell.rangeStart, cell.rangeEnd),
                     styleDelta: cell.style,
                     italicEffect: styleItalic || (cell.latin && rangeContains(emphasisRanges, cell.rangeStart)),
@@ -114,7 +115,6 @@ class PreparedArtifact {
                         pending = null;
                     }
                     children.push(inlineObjectChild(cell));
-                    inlineObjectCount += 1;
                     childIndex += 1;
                     continue;
                 }
@@ -179,8 +179,14 @@ class PreparedArtifact {
             final expectedFlowWidth = flowStart + inlineEdgeWidth + childFlow + hyphenLeadingGap + line.hyphenAdvance;
             final coreLineWidth = line.indent + line.visualWidth + line.hyphenAdvance;
             if (Math.abs(expectedFlowWidth - coreLineWidth) > PreparedDom.RENDER_FLOW_EPSILON_PX) {
+                // Rebuild the same line before adding any nodes to the paragraph.
+                if (dustEpsilon == PreparedDom.SPACING_DUST_EPSILON) {
+                    dustEpsilon = PreparedDom.FALLBACK_SPACING_DUST_EPSILON;
+                    continue;
+                }
                 throw new PreparedDomException(SnapshotRenderFlowMismatch("line=" + lineIndex));
             }
+            dustEpsilon = PreparedDom.SPACING_DUST_EPSILON;
             final markerStyles:Array<String> = [
                 "--tq-line-height:" + Markup.px(height) + "!important",
                 "--tq-line-baseline-offset:" + Markup.px(-(line.bottom - line.baseline)) + "!important"
@@ -220,6 +226,7 @@ class PreparedArtifact {
                 } else if (child.kind == "inlineObject") {
                     final cell:PreparedRunTyped = child.cell;
                     container.push(Evidence.inlineObjectPlaceholder(cell, child.carrierMargin, styleClassFor));
+                    inlineObjectCount += 1;
                 } else if (child.kind == "ruby") {
                     final ruby:PlanRubyAnnotation = child.ruby;
                     container.push(Evidence.rubyAnnotationSpan(ruby, child.lineTop, styleClassFor));

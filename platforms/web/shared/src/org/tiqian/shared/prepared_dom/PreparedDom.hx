@@ -28,9 +28,10 @@ class PreparedDom {
 
     /** Merge tolerance / carrier visibility gate (prepared-dom.ts:303). */
     public static var SPACING_EPSILON:Float = 0.01;
-    /** Arithmetic-dust zeroing threshold (prepared-dom.ts:308). */
-    // Subtracting float32 plan coordinates can leave a tiny gap in CSS pixels.
+    /** Ignore small gaps left by subtracting float32 plan coordinates. */
     public static var SPACING_DUST_EPSILON:Float = 1e-4;
+    /** Preserve small gaps when the wider threshold would break line flow. */
+    public static var FALLBACK_SPACING_DUST_EPSILON:Float = 1e-6;
     /** Render flow epsilon (prepared-dom.ts:309). */
     public static var RENDER_FLOW_EPSILON_PX:Float = 0.01;
 
@@ -49,8 +50,9 @@ class PreparedDom {
      * Byte-critical: the kind string drives data-tq-advance / margin-right
      * lowering in renderRun, and px feeds the px() serializer.
      */
-    public static function preparedSpacing(display:String, naturalWidth:Float, trailingGap:Float):PreparedSpacingResult {
-        if (Math.abs(trailingGap) < SPACING_DUST_EPSILON) return { kind: "none", px: 0.0 };
+    public static function preparedSpacing(display:String, naturalWidth:Float, trailingGap:Float, ?dustEpsilon:Float):PreparedSpacingResult {
+        final epsilon = dustEpsilon != null ? dustEpsilon : SPACING_DUST_EPSILON;
+        if (Math.abs(trailingGap) < epsilon) return { kind: "none", px: 0.0 };
         if (display.length == 1 && naturalWidth + trailingGap >= 0) {
             return { kind: "letter", px: trailingGap };
         }
