@@ -159,8 +159,25 @@
               printf '%s\n' "${boring}" > "$boring_git/.boring-flake-source"
               haxelib dev boring "$boring_git" >/dev/null
               haxelib dev reflaxe "${boring.inputs.reflaxe}" >/dev/null
-              haxelib install format 3.8.0 >/dev/null
-              haxelib install formatter 1.18.0 >/dev/null
+              install_haxelib() {
+                local name="$1" version="$2" attempt
+                for attempt in 1 2 3; do
+                  if haxelib install "$name" "$version" >/dev/null 2>&1; then
+                    return 0
+                  fi
+                  echo "tiqian devShell: haxelib install $name $version failed (attempt $attempt)" >&2
+                  sleep 5
+                done
+                return 1
+              }
+              if [ ! -d "$HAXELIB_PATH/format/3,8,0" ] && ! install_haxelib format 3.8.0; then
+                echo "tiqian devShell: failed to install haxelib format 3.8.0" >&2
+                exit 1
+              fi
+              if [ ! -d "$HAXELIB_PATH/formatter/1,18,0" ] && ! install_haxelib formatter 1.18.0; then
+                echo "tiqian devShell: failed to install haxelib formatter 1.18.0" >&2
+                exit 1
+              fi
             '';
           };
         }
