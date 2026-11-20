@@ -1398,7 +1398,7 @@ test("snapshot adoption requires the engine-owned punctuation feature lock", asy
     const { root, paragraph, originalText } = fixture();
     assert.deepEqual(await tryAdoptPrecomputedSnapshot(root as FakeElementAsHTMLElement, contextFor(root), root.ownerDocument!), {
       adopted: false,
-      reason: "SnapshotAdoptionFailed:RenderedSnapshotHostContractMismatch",
+      reason: "SnapshotAdoptionFailed:RenderedSnapshotHostContractMismatch:fontFeatureSettings",
     });
     assert.strictEqual(paragraph.firstChild, originalText);
   } finally {
