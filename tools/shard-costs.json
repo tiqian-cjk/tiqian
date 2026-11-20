@@ -1,19 +1,19 @@
 {
   "_comment": "Per-bundle seconds for one runner, seeded from the toolchain each bundle drives. tools/shard-bundles.py balances shards on these values; refresh them from the 'shard timing' lines the staging pipeline prints.",
   "pack": {
-    "kotlin-f32": 900,
-    "kotlin-f64": 900,
-    "protocol-kotlin": 700,
-    "swift-f32": 420,
-    "swift-f64": 420,
-    "protocol-swift": 380,
-    "engine-rust": 360,
-    "protocol-rust": 300,
-    "dart": 140,
-    "protocol-dart": 140,
-    "ts": 180,
-    "protocol-ts": 150,
-    "shared-ts": 150
+    "kotlin-f32": 377,
+    "kotlin-f64": 92,
+    "protocol-kotlin": 31,
+    "swift-f32": 66,
+    "swift-f64": 86,
+    "protocol-swift": 12,
+    "engine-rust": 384,
+    "protocol-rust": 26,
+    "dart": 48,
+    "protocol-dart": 11,
+    "ts": 51,
+    "protocol-ts": 10,
+    "shared-ts": 14
   },
   "test": {
     "kotlin-f32": 900,
