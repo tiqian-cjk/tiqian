@@ -51,8 +51,9 @@ GitHub Actions 的运行记录与 npm 仓库的查询结果如下：
 - npm 包继续使用各自 `package.json` 的版本：`@tiqian/ffi` 为 0.1.0-alpha.1，
   `@tiqian/core` 与 `@tiqian/prose` 为 0.1.0-alpha.6，`@tiqian/precompute`
   为 0.1.0-alpha.3。本次不改变版本策略，发布顺序按依赖关系固定。
-- `@tiqian/astro` 与 `@tiqian/sveltekit` 继续只由 fork 快照 workflow 发布，
-  `@tiqian/react` 与 `tiqian-web-demo` 声明 `private: true`；四者在
-  `release-manifest.json` 的 `notInRelease` 中列出。
+- `publish-web-adapters.yml` 在同版本的依赖发布后构建并测试
+  `@tiqian/astro`、`@tiqian/sveltekit` 与 `@tiqian/react`，检查安装结果，
+  并将三个包发布到 npm 公共仓库。`snapshot-precompute.yml` 继续发布 fork 的测试版本。
+  `release-manifest.json` 的 `notInRelease` 保留声明 `private: true` 的 `tiqian-web-demo`。
 - 发版失败后的重跑使用 GitHub 的 "Re-run failed jobs"；npm 拒绝覆盖已经发布的
   版本号。

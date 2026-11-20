@@ -12,8 +12,11 @@ CI 打包五个目标生态的产物，写入 registry 仓库并部署站点。�
 记录时，全部发布 job 都不会开始。
 
 检查通过后，`release.yml` 按依赖顺序调用 `publish-ffi.yml`、`publish-core.yml`、
-`publish-web-component.yml`、`publish-precompute.yml`、`publish.yml`、
-`release-assets.yml` 与 `release-registry.yml`。
+`publish-web-component.yml`、`publish-precompute.yml`、`publish-web-adapters.yml`、
+`publish.yml`、`release-assets.yml` 与 `release-registry.yml`。
+`publish-web-adapters.yml` 等待同版本的预计算包和生成的 TypeScript 包发布，再构建并测试
+`@tiqian/astro`、`@tiqian/sveltekit` 和 `@tiqian/react`。工作流在空项目中安装每个压缩包并
+加载 JavaScript 入口，随后将压缩包发布到 npm 公共仓库的 `alpha` 和 `latest` 标签。
 
 GitHub Release 页面由 `release-assets.yml` 维护，只依赖 gate 与 pack：pack 一绿就把
 本次制品与自动生成的说明放到标签上，npm、Maven 或 registry 任一步骤失败都不影响它。
@@ -77,6 +80,15 @@ npm 清单，`release-manifest.json` 中各发布单元与 `notInRelease` 列出
 包都要有一条 `release.yml` 的 trusted publisher 配置；`publish-*.yml` 名字的条目不会被
 命中。配置为 `Pending validation` 时，第一次发布会把它转成有效；条目过期后发布返回
 404。发布前用 `https://www.npmjs.com/package/<包名>/access` 逐个核对文件名与状态。
+
+首次发布新包时，npm 要求包名先存在，维护者才能配置可信发布者。如果同版本的依赖已在
+npm 公共仓库，维护者可在推送发布标签前用 `tools/pack-web-adapters.sh` 打包验证，并用具备
+`@tiqian` 发布权限的身份发布压缩包。维护者也可以使用首次发布运行的 `web-adapter-packages`
+构建产物。两种方式都将包发布到 `alpha` 标签，并将 `latest` 指向同一版本。
+重跑失败的发布作业时，作业会识别已发布的版本和标签。下一个新版本发布前，维护者为该包
+配置 `tiqian-cjk/tiqian` 的 `release.yml`，允许发布和更新标签。npm 要求该配置在创建后
+两天内完成首次可信发布。
+[设置信任关系的要求见 npm 文档](https://docs.npmjs.com/cli/commands/npm-trust/)。
 
 provenance 校验要求清单里的 `repository.url` 与仓库一致。打包器生成的 npm 清单不带该
 字段，`tools/embed-repository.py` 在 pack 之后把 `https://github.com/tiqian-cjk/tiqian.git`
