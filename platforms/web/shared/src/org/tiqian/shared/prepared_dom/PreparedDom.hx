@@ -29,7 +29,8 @@ class PreparedDom {
     /** Merge tolerance / carrier visibility gate (prepared-dom.ts:303). */
     public static var SPACING_EPSILON:Float = 0.01;
     /** Arithmetic-dust zeroing threshold (prepared-dom.ts:308). */
-    public static var SPACING_DUST_EPSILON:Float = 1e-6;
+    // Subtracting float32 plan coordinates can leave a tiny gap in CSS pixels.
+    public static var SPACING_DUST_EPSILON:Float = 1e-4;
     /** Render flow epsilon (prepared-dom.ts:309). */
     public static var RENDER_FLOW_EPSILON_PX:Float = 0.01;
 
