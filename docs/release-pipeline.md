@@ -17,6 +17,7 @@ CI 打包五个目标生态的产物，写入 registry 仓库并部署站点。�
 `publish-web-adapters.yml` 等待同版本的预计算包和生成的 TypeScript 包发布，再构建并测试
 `@tiqian/astro`、`@tiqian/sveltekit` 和 `@tiqian/react`。工作流在空项目中安装每个压缩包并
 加载 JavaScript 入口，随后将压缩包发布到 npm 公共仓库的 `alpha` 和 `latest` 标签。
+工作流在上传和更新 `latest` 前读取两个标签。如果任一标签指向更高版本，当前发布作业会停止。
 
 GitHub Release 页面由 `release-assets.yml` 维护，只依赖 gate 与 pack：pack 一绿就把
 本次制品与自动生成的说明放到标签上，npm、Maven 或 registry 任一步骤失败都不影响它。
