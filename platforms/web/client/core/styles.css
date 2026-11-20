@@ -234,10 +234,11 @@ tiqian-prose [data-tq-rendered="true"] {
   font-feature-settings: "halt" 0, "chws" 0, "palt" 0, "fwid" 1 !important;
 }
 
+/* Keep first-line resets on paragraph boxes to avoid invalidating fragment
+   layout when the host animates decoration color. */
 [data-tq-rendered="true"]::first-letter,
 [data-tq-rendered="true"]::first-line,
-[data-tq-rendered="true"] [data-tq-shaping-boundary]::first-letter,
-[data-tq-rendered="true"] [data-tq-shaping-boundary]::first-line {
+[data-tq-rendered="true"] [data-tq-shaping-boundary]::first-letter {
   all: unset !important;
   font: inherit !important;
   font-feature-settings: inherit !important;
