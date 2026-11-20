@@ -101,6 +101,28 @@
       ]
     },
     {
+      "id": "npm-web-adapters",
+      "ecosystem": "npm",
+      "workflow": ".github/workflows/publish-web-adapters.yml",
+      "trigger": "release",
+      "packages": [
+        "@tiqian/astro",
+        "@tiqian/sveltekit",
+        "@tiqian/react"
+      ],
+      "packageSource": {
+        "kind": "npm",
+        "files": [
+          "platforms/web/client/astro/package.json",
+          "platforms/web/client/sveltekit/package.json",
+          "platforms/web/client/react/package.json"
+        ]
+      },
+      "dependsOn": [
+        "npm-precompute"
+      ]
+    },
+    {
       "id": "maven",
       "ecosystem": "maven",
       "workflow": ".github/workflows/publish.yml",
@@ -120,7 +142,9 @@
           "build.gradle.kts"
         ]
       },
-      "dependsOn": [],
+      "dependsOn": [
+        "npm-web-adapters"
+      ],
       "manualStep": "The Central Portal deployment is published by a human in the Portal UI after staging."
     },
     {
@@ -141,26 +165,12 @@
         "npm-core",
         "npm-web-component",
         "npm-precompute",
+        "npm-web-adapters",
         "maven"
       ]
     }
   ],
   "notInRelease": [
-    {
-      "package": "@tiqian/astro",
-      "file": "platforms/web/client/astro/package.json",
-      "reason": "framework integration, published only by the fork snapshot lane (snapshot-precompute.yml)"
-    },
-    {
-      "package": "@tiqian/sveltekit",
-      "file": "platforms/web/client/sveltekit/package.json",
-      "reason": "framework integration, published only by the fork snapshot lane (snapshot-precompute.yml)"
-    },
-    {
-      "package": "@tiqian/react",
-      "file": "platforms/web/client/react/package.json",
-      "reason": "manifest declares private: true, and npm publish refuses private packages"
-    },
     {
       "package": "tiqian-web-demo",
       "file": "demo/web/package.json",

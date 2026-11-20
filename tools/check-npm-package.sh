@@ -37,6 +37,7 @@ set -uo pipefail
 
 tarball=""
 expect=""
+require_entry=0
 entries=()
 siblings=()
 skip_import=0
@@ -44,7 +45,7 @@ manifest_only=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --expect) expect="${2:-}"; shift 2 ;;
-    --entry) entries+=("${2:-}"); shift 2 ;;
+    --entry) entries+=("${2:?--entry needs a package specifier}"); require_entry=1; shift 2 ;;
     --with) siblings+=("${2:-}"); shift 2 ;;
     --no-import) skip_import=1; shift ;;
     --manifest-only) manifest_only=1; shift ;;
@@ -99,7 +100,7 @@ fi
 
 printf '{"name":"package-check","version":"1.0.0","private":true,"type":"module"}\n' >"$work/project/package.json"
 install_args=("$absolute")
-for sibling in "${siblings[@]}"; do
+for sibling in "${siblings[@]:-}"; do
   [ -n "$sibling" ] || continue
   install_args+=("$(cd "$(dirname "$sibling")" && pwd)/$(basename "$sibling")")
 done
@@ -117,17 +118,17 @@ echo "  installed: $installed"
 
 if [ "$skip_import" -eq 1 ]; then
   entries=()
-elif [ "${#entries[@]}" -eq 0 ] && [ -n "$name" ]; then
+elif [ "$require_entry" -eq 0 ] && [ -n "$name" ]; then
   entries=("$name")
 fi
-for specifier in "${entries[@]}"; do
+for specifier in "${entries[@]:-}"; do
   [ -n "$specifier" ] || continue
   if (cd "$work/project" && node --input-type=module -e 'await import(process.argv[1])' "$specifier" >/dev/null 2>&1); then
     count="$(cd "$work/project" && node --input-type=module -e 'const m=await import(process.argv[1]);console.log(Object.keys(m).length)' "$specifier" 2>/dev/null)"
     echo "  import $specifier: ok, exports ${count:-0}"
   else
     reason="$(cd "$work/project" && node --input-type=module -e 'await import(process.argv[1])' "$specifier" 2>&1 | grep -oE "ERR_[A-Z_]+" | head -1)"
-    if [ "$reason" = "ERR_PACKAGE_PATH_NOT_EXPORTED" ]; then
+    if [ "$require_entry" -eq 0 ] && [ "$reason" = "ERR_PACKAGE_PATH_NOT_EXPORTED" ]; then
       echo "  import $specifier: subpath-only exports, no root entry (expected for this package)"
     else
       echo "  import $specifier: FAIL ${reason:-unknown}"

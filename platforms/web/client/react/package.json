@@ -20,8 +20,8 @@
     "directory": "platforms/web/client/react"
   },
   "license": "MPL-2.0",
-  "private": true,
   "files": [
+    "LICENSE",
     "binding.js",
     "binding.d.ts"
   ],
@@ -35,7 +35,8 @@
   "scripts": {
     "build": "tsc",
     "pretest": "npm run build",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "prepack": "npm test"
   },
   "exports": {
     ".": {
@@ -55,5 +56,9 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "typescript": "5.9.3"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
   }
 }

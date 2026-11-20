@@ -80,6 +80,27 @@
         "publish",
         "dist-tag"
       ]
+    },
+    {
+      "name": "@tiqian/astro",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
+    },
+    {
+      "name": "@tiqian/sveltekit",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
+    },
+    {
+      "name": "@tiqian/react",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
     }
   ]
 }
