@@ -438,9 +438,8 @@ function computeRenderArtifact(
 
 /**
  * Overwrites the render fields of a prepared entry with the Node-computed
- * values, then freezes the entry. Unsupported entries pass through untouched;
- * the font-contract lanes keep their own freezeEntry call and never reach this
- * helper.
+ * values, then freezes the entry. This applies to snapshots and font contracts.
+ * Unsupported entries are frozen without adding render fields.
  */
 export function backfillRenderFields(entry: PreparedEntry): PreparedEntry {
   if (entry.status !== "prepared") {
