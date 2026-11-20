@@ -408,13 +408,17 @@ function registerPreparedValueStyle(state: PreparedStyleState, declaration: stri
   return index;
 }
 
+// Preserve existing CSS rules across paragraph commits to avoid invalidating
+// every previously rendered paragraph when only new declarations are added.
+const syncedPreparedRules = new WeakMap<PreparedStyleState, string[]>();
+
 function syncPreparedValueStyles(state: PreparedStyleState) {
   if (!state.dirty) return;
   const rootScope = `[${VALUE_STYLE_SCOPE_ATTRIBUTE}="${state.scope}"]`;
   const snapshotValuesActive = state.owners.has(SNAPSHOT_STYLE_OWNER);
   const runtimeValuesActive = Array.from(state.owners.keys()).some((owner) =>
     owner !== SNAPSHOT_STYLE_OWNER);
-  state.styleElement.textContent = state.declarations.map((declaration: string, index: number) => {
+  const rules = state.declarations.flatMap((declaration: string, index: number) => {
     // PreparedValueNamespaceIsolation: build-time snapshot CSS remains live in
     // the document so it can restore exact first-paint nodes. Runtime lowering
     // must use a distinct class namespace; otherwise the same compact index can
@@ -427,8 +431,22 @@ function syncPreparedValueStyles(state: PreparedStyleState) {
     const runtimeRule = runtimeValuesActive
       ? `${rootScope}[${VALUE_STYLE_SCOPE_ATTRIBUTE}] [data-tq-rendered="true"] .${runtimeValueStyleClass(runtimeValueStyleKey(declaration))}{${declaration}}`
       : "";
-    return snapshotRule + runtimeRule;
-  }).join("");
+    return [snapshotRule, runtimeRule].filter(Boolean);
+  });
+
+  // Owner changes may remove a namespace; replace only the differing suffix.
+  // Detached/non-browser style elements retain the text-based fallback.
+  const sheet = state.styleElement.sheet;
+  const previous = syncedPreparedRules.get(state) ?? [];
+  if (sheet) {
+    let shared = 0;
+    while (shared < previous.length && previous[shared] === rules[shared]) shared++;
+    while (sheet.cssRules.length > shared) sheet.deleteRule(shared);
+    for (let index = shared; index < rules.length; index++) sheet.insertRule(rules[index], index);
+  } else {
+    state.styleElement.textContent = rules.join("");
+  }
+  syncedPreparedRules.set(state, rules);
   state.dirty = false;
 }
 
