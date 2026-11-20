@@ -470,6 +470,19 @@ step_verify_compare() {
   in_devshell "boring compare --project boring.json"
 }
 
+# Generate and test one shard of bundles from the source tree. The shard builds
+# its own trees so no generated directory has to travel between jobs, and it
+# keeps only the suite results for the comparison stage.
+step_verify_shard() {
+  local ids="${BUNDLES_OVERRIDE:-}"
+  if [ -z "$ids" ]; then
+    echo "verify-shard needs --bundles; every bundle runs in one shard of the matrix" >&2
+    return 2
+  fi
+  in_devshell "boring gen $ids --project boring.json" || return $?
+  in_devshell "boring test $ids --project boring.json"
+}
+
 step_summary() {
   local report="$ROOT/report.md"
   {
@@ -506,6 +519,7 @@ run_named_step() {
     verify) run_step verify step_verify ;;
     verify-test) run_step verify-test step_verify_test ;;
     verify-compare) run_step verify-compare step_verify_compare ;;
+    verify-shard) run_step verify-shard step_verify_shard ;;
     summary) run_step summary step_summary ;;
     *) echo "unknown stage: $1" >&2; exit 2 ;;
   esac
