@@ -210,9 +210,143 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
 
+  checks:
+    name: Run the artifact checks
+    needs: [plan, packs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      STAGING_VERSION: ${{ needs.plan.outputs.staging_version }}
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install Nix
+        id: nix-installer
+        continue-on-error: true
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Install Nix with the install script when the action fails
+        if: steps.nix-installer.outcome != 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL \
+              https://install.determinate.systems/nix \
+              | sh -s -- install --no-confirm; then
+              exit 0
+            fi
+            echo "nix install attempt ${attempt} failed; retrying" >&2
+            sleep 15
+          done
+          exit 1
+
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Stage the pinned generation inputs
+        shell: bash
+        run: |
+          nix develop -c bash -c "mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/"
+
+      - name: Download the shard staging trees
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-packs-*
+          merge-multiple: true
+          path: ${{ runner.temp }}
+
+      - name: Run the checks
+        shell: bash
+        run: |
+          unset ANDROID_SDK_ROOT
+          export RUNNER_TEMP
+          nix develop -c bash tools/staging-pipeline.sh \
+            --stages 'collect-artifacts compile-bundles publish-contract registry-tree staging-isolation maven-artifact-ids cargo-consume'
+
+      - name: Upload the checks result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-checks
+          path: ${{ runner.temp }}/tiqian-staging-*/
+          if-no-files-found: warn
+          retention-days: 3
+
+  maven:
+    name: Publish the Maven artifacts
+    needs: [plan, packs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      STAGING_VERSION: ${{ needs.plan.outputs.staging_version }}
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Install Nix
+        id: nix-installer
+        continue-on-error: true
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Install Nix with the install script when the action fails
+        if: steps.nix-installer.outcome != 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL \
+              https://install.determinate.systems/nix \
+              | sh -s -- install --no-confirm; then
+              exit 0
+            fi
+            echo "nix install attempt ${attempt} failed; retrying" >&2
+            sleep 15
+          done
+          exit 1
+
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Stage the pinned generation inputs
+        shell: bash
+        run: |
+          nix develop -c bash -c "mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/"
+
+      - name: Download the shard staging trees
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-packs-*
+          merge-multiple: true
+          path: ${{ runner.temp }}
+
+      - name: Run the Maven publication
+        shell: bash
+        run: |
+          unset ANDROID_SDK_ROOT
+          export RUNNER_TEMP
+          nix develop -c bash tools/staging-pipeline.sh \
+            --stages 'maven-local-publish maven-local-repo'
+
+      - name: Upload the checks result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-maven
+          path: ${{ runner.temp }}/tiqian-staging-*/
+          if-no-files-found: warn
+          retention-days: 3
+
   assemble:
     name: Assemble and verify the staging set
-    needs: [plan, packs, verify-tests]
+    needs: [plan, packs, verify-tests, checks, maven]
     runs-on: ubuntu-latest
     timeout-minutes: 240
     env:
@@ -278,13 +412,27 @@ jobs:
           merge-multiple: true
           path: engine-haxe/out/test-results
 
+      - name: Download the checks result
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-checks
+          merge-multiple: true
+          path: ${{ runner.temp }}
+
+      - name: Download the Maven publication
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-maven
+          merge-multiple: true
+          path: ${{ runner.temp }}
+
       - name: Run the remaining stages
         shell: bash
         run: |
           unset ANDROID_SDK_ROOT
           export RUNNER_TEMP
           nix develop -c bash tools/staging-pipeline.sh \
-            --stages 'collect-artifacts compile-bundles publish-contract registry-tree staging-isolation maven-artifact-ids cargo-consume maven-local-publish maven-local-repo verify-compare summary'
+            --stages 'verify-compare summary'
 
       - name: Upload the staging report
         if: always()
