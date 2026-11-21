@@ -1,7 +1,7 @@
 {
   "name": "@tiqian/precompute-linux-x64-gnu",
   "description": "Prebuilt binary package for @tiqian/precompute on `linux-x64-gnu`.",
-  "version": "0.1.0-alpha.9",
+  "version": "0.1.0-alpha.10",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tiqian-cjk/tiqian.git",

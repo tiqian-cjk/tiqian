@@ -1,6 +1,6 @@
 {
   "name": "@tiqian/astro",
-  "version": "0.1.0-alpha.9",
+  "version": "0.1.0-alpha.10",
   "description": "Astro integration for @tiqian/web-component.",
   "license": "MPL-2.0",
   "type": "module",
@@ -27,17 +27,17 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@tiqian/core": "0.1.0-alpha.9"
+    "@tiqian/core": "0.1.0-alpha.10"
   },
   "peerDependencies": {
-    "@tiqian/precompute": "0.1.0-alpha.9",
-    "@tiqian/web-component": "0.1.0-alpha.9",
+    "@tiqian/precompute": "0.1.0-alpha.10",
+    "@tiqian/web-component": "0.1.0-alpha.10",
     "astro": ">=5"
   },
   "devDependencies": {
     "@astrojs/compiler-rs": "0.3.1",
-    "@tiqian/precompute": "0.1.0-alpha.9",
-    "@tiqian/web-component": "0.1.0-alpha.9",
+    "@tiqian/precompute": "0.1.0-alpha.10",
+    "@tiqian/web-component": "0.1.0-alpha.10",
     "astro": "7.0.7"
   },
   "scripts": {
