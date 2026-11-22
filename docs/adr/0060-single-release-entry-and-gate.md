@@ -33,7 +33,8 @@ GitHub Actions 的运行记录与 npm 仓库的查询结果如下：
 2. `.github/workflows/release-gate.yml` 是可复用的发布前检查，每个发布 workflow
    在发布前调用它。`tools/release-gate.py` 读取 `release-manifest.json`，要求
    `release.requiredLanes` 的每一条 workflow 在发版 commit 上都有 completed 且
-   success 的运行记录；没有运行记录时同样拒绝。
+   success 的运行记录。发布入口等待尚未登记或仍在运行的检查。检查结束后给出失败结果，
+   或等待到期时仍缺少成功记录，发布作业停止。
 3. `release-manifest.json` 记录发布单元；`tools/release-gate.py` 把
    `boring.json`、npm 清单与 `build.gradle.kts` 的包集合与清单交叉核对，
    出现未登记的包即拒绝。

@@ -7,13 +7,20 @@ CI 打包五个目标生态的产物，写入 registry 仓库并部署站点。�
 
 推送 `v*.*.*` 标签只触发 `.github/workflows/release.yml`。这个 workflow 先运行
 `.github/workflows/release-gate.yml`，由 `tools/release-gate.py` 读取
-`release-manifest.json`，要求 `Native precompute CI` 与 `Build Neon precompute`
-在标签 commit 上都有 completed 且 success 的运行记录；任一 workflow 失败或没有运行
-记录时，全部发布 job 都不会开始。
+`release-manifest.json`，要求 `Native precompute CI`、`Build Neon precompute` 与
+`Bundle verification` 在标签提交上都有成功记录。开发者可以在同一次 Git 推送中上传
+`main` 和版本标签。发版前检查每 30 秒查询尚未通过的作业，最多等待五小时。全部检查通过后
+开始打包。任一检查完成但失败，或等待到期时仍有检查未通过，发布作业会停止。
 
 检查通过后，`release.yml` 按依赖顺序调用 `publish-ffi.yml`、`publish-core.yml`、
 `publish-web-component.yml`、`publish-precompute.yml`、`publish-web-adapters.yml`、
 `publish.yml`、`release-assets.yml` 与 `release-registry.yml`。
+`pack-release-bundles.yml` 将 Web、Kotlin、Swift 及 Cargo 和 pub 归档分成四组并行打包。
+Web 分组交付本次发布的 FFI runtime 和两个生成的 npm 工作区包，几个 npm 作业直接下载这些产物。
+Web 分组还优先复用检查通过的 `Build Neon precompute` 运行生成的 FFI 源码。
+`build-precompute-release.yml` 从同一次检查下载四个平台包和主包，核对包名、版本及文件清单，
+并在已有的主包 JavaScript 上改写依赖版本后重新打包。产物缺失或校验失败时重新构建。
+`publish-precompute.yml` 等待这些包及其 npm 依赖就绪后发布。
 `publish-web-adapters.yml` 等待同版本的预计算包和生成的 TypeScript 包发布，再构建并测试
 `@tiqian/astro`、`@tiqian/sveltekit` 和 `@tiqian/react`。工作流在空项目中安装每个压缩包并
 加载 JavaScript 入口，随后将压缩包发布到 npm 公共仓库的 `alpha` 标签。
@@ -159,8 +166,8 @@ python3 tools/align-package-versions.py "${GITHUB_REF_NAME#v}"
 占位版本 `0.1.0`，下载地址就不存在。
 
 
-制品与 registry 元数据由同一条 `boring pack` 命令产出。四个 registry 参数同时给出时，
-`boring pack` 在写出每个 bundle 的制品之后，把 registry 树写到 `$RUNNER_TEMP/registry-tree`：
+每个分组用同一条 `boring pack` 命令生成所属制品及其 registry 元数据。
+下面的命令展示一次打包如何写入 `$RUNNER_TEMP/registry-tree`：
 
 ```shell
 nix develop -c bash -c "boring pack protocol-rust protocol-ts protocol-kotlin protocol-swift protocol-dart engine-rust ts kotlin-f32 kotlin-f64 swift-f32 swift-f64 dart --registry-out "$RUNNER_TEMP/registry-tree" --owner "${{ github.repository_owner }}" --repo "${{ github.event.repository.name }}" --asset-base "${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.ref_name }}""
@@ -178,6 +185,8 @@ GitHub Release 下载前缀，`--registry-out` 取树的根目录。四个参数
    `release-artifacts/`；某个命名的文件在输出根下找不到时该步骤失败。清单来自 pack
    写出的元数据，Gradle 的 `.module`、Kotlin/Native 的 `.klib` 与 Android 的
    `.aar` 因此随 pack 的产物一并进入发布资产。
+   `tools/assemble-release-pack.py` 汇总各分组的产物和 registry 树。相同路径若出现不同字节，
+   汇总作业会失败。作业写入 `SHA256SUMS`，随后核对文件及元数据的摘要。
 2. Create GitHub Release：把 `release-artifacts/*` 作为标签的发布资产上传。
 3. Upload the Swift archives：把 `release-artifacts/*.zip` 上传到 R2 的
    `swift/tiqian/<包名>/<版本>.zip`。元数据的 `archive` 字段指向这个路径，
@@ -196,7 +205,7 @@ GitHub Release 下载前缀，`--registry-out` 取树的根目录。四个参数
 
 1. `python3 tools/compile-bundles.py --project boring.json` 对每个 bundle 的生成物运行一次
    目标编译器，逐 bundle 打印退出码；pack 已经编译的目标打印 `compiled by pack`。
-   `.github/workflows/release.yml` 的 pack job 在打包之后运行这条命令，
+   `.github/workflows/pack-release-bundles.yml` 在打包之后按分组运行这条命令，
    `tools/staging-pipeline.sh` 的 `compile-bundles` stage 运行同一条命令。
 2. `nix develop -c bash -c 'boring verify --project boring.json'` 生成全部 bundle、运行全部
    bundle 的生成测试，并比较参与比较的 bundle（driver `packages/driver/src/driver/Main.hx`
@@ -209,6 +218,10 @@ GitHub Release 下载前缀，`--registry-out` 取树的根目录。四个参数
 `boring.json` 声明 `compare: false` 的 6 个 protocol 与 shared bundle 不参与
 `boring compare`：该命令按单一 baseline（`kotlin-f32`）的测试 id 逐目标比对，而 protocol
 bundle 的测试语料与 baseline 不同。它们的生成测试仍由 `boring verify` 运行。
+
+Kotlin 分组和 Maven 发布读取 `ci-native-precompute.yml` 在主分支保存的 Gradle 依赖。
+`build-neon-precompute.yml` 缓存生成的两棵原生源码树，缓存键包含运行环境、flake 锁文件、
+`boring.json` 和生成输入的摘要。发版时命中这份缓存的原生源码作业可跳过 Nix 安装和源码生成。
 
 提交之后执行 Deploy the registry site 一步，用 `PAGES_DEPLOY_HOOK` 触发 Cloudflare
 Pages 构建。registry 工具在 boring 仓库构建并随发布资产上传
@@ -569,15 +582,15 @@ Fetching tiqian.tiqian-engine-f32
 `boring pack` 在 ts 目标上调用 `package-tsc`，按 `BORING_PACKAGE_TSC`、PATH 上的
 `tsc` 的顺序解析编译器，两者都缺时以 `pack on the ts target needs tsc` 结束。flake
 devShell 不提供 `tsc`，脚本因此在两者都缺时把 bun 承载的 shim 写到 staging 根目录并
-导出 `BORING_PACKAGE_TSC`，与 `release.yml` 的 Pack every bundle 步骤做法一致。
+导出 `BORING_PACKAGE_TSC`，与 `pack-release-bundles.yml` 的打包步骤做法一致。
 
 脚本步骤与对应的发版步骤：
 
 | staging 步骤 | 对应的发版步骤 |
 | --- | --- |
-| `align` | `release.yml` 的 Align the package versions |
-| `pack` | `release.yml` 的 Pack every bundle |
-| `collect-artifacts` | `release.yml` 的 Collect the artifacts 与 Record the artifact digests |
+| `align` | `pack-release-bundles.yml` 的 Align the package versions with the release |
+| `pack` | `pack-release-bundles.yml` 的 Pack and compile this shard |
+| `collect-artifacts` | `pack-release-bundles.yml` 收集各组制品，`release.yml` 汇总并校验摘要 |
 | `registry-tree` | `release-registry.yml` 的 Check the registry tree against the artifacts |
 | `maven-artifact-ids` | maven 元数据的 `artifacts` 数组要带 `artifactId` |
 | `cargo-consume` | cargo 消费者从 pack 产物构建依赖 |
