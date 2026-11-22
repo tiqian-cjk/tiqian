@@ -7,12 +7,18 @@ package org.tiqian.shared.prepared_dom;
  */
 class RenderedMarkupContainer implements MarkupContainer implements MarkupNode {
     private final _tag:String;
-    private final _entries:Array<AttributeEntry>;
+    private var _entries:Array<AttributeEntry>;
     private final _children:Array<MarkupNode> = [];
 
     public function new(tag:String, entries:Array<AttributeEntry>) {
         this._tag = tag;
         this._entries = entries;
+    }
+
+    /** Preserve the canonical attribute order when a closing run supplies metadata. */
+    public function setAttribute(name:String, value:String):Void {
+        Markup.setAttribute(_entries, name, value);
+        _entries = Markup.sortedAttributeEntries(_entries);
     }
 
     public var children(get, never):Array<MarkupNode>;

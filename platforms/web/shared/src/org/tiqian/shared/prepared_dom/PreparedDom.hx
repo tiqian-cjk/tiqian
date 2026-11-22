@@ -147,6 +147,9 @@ class PreparedDom {
         Markup.setAttribute(attributes, "data-tq-advance", "" + advance);
         Markup.setAttribute(attributes, "data-tq-geometry", "true");
         Markup.setAttribute(attributes, "data-tq-x", "" + input.drawX);
+        if (spacingBoundary != "") {
+            Markup.setAttribute(attributes, "data-tq-spacing-boundary", spacingBoundary);
+        }
         if (input.shapingBoundary || featureSignature != "") {
             Markup.setAttribute(attributes, "data-tq-shaping-boundary", "");
         }

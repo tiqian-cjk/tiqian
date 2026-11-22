@@ -890,6 +890,8 @@ function restoreLiveSemanticElements(
     seen.add(sourceIndex);
     const clone = source.cloneNode(false) as HTMLElement;
     clone.setAttribute("data-tq-source-semantic", "true");
+    const spacingEnd = placeholder.getAttribute("data-tq-spacing-end");
+    if (spacingEnd !== null) clone.setAttribute("data-tq-spacing-end", spacingEnd);
     const cjkStrong = cjkBySourceIndex.get(sourceIndex);
     if (cjkStrong != null) {
       clone.setAttribute("data-tq-cjk-emphasis", "true");

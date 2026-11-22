@@ -542,23 +542,25 @@ impl Semantics {
         self.indices(|span_start, span_end| offset > span_start && offset < span_end)
     }
 
-    /// Keep the wrapper order in the spacing marker for nested semantics.
-    fn ending_tags(&self, path: &[usize], offset: i32) -> String {
-        let offset = i64::from(offset);
-        let mut tags = String::new();
-        for &index in path {
+    /// Mark both sides of a semantic boundary while keeping the run advance intact.
+    fn mark_spacing_ends(&self, draft: &mut Draft, run: &CellRun) -> String {
+        let mut tags = Vec::new();
+        for (depth, &index) in run.semantic_path.iter().enumerate() {
             let (end, tag) = match self {
                 Self::Snapshot(spans) => (spans[index].end, &spans[index].tag_name),
                 Self::Live(spans) => (spans[index].end, &spans[index].tag_name),
             };
-            if end == offset {
-                if !tags.is_empty() {
-                    tags.push(' ');
-                }
-                tags.push_str(tag);
+            if end != i64::from(run.range_end) {
+                continue;
             }
+
+            let wrapper = draft.active_containers[depth];
+            if let NodeDraft::Element { entries, .. } = &mut draft.nodes[wrapper] {
+                set_attribute(entries, "data-tq-spacing-end", Some(px(run.spacing.px)));
+            }
+            tags.push(tag.as_str());
         }
-        tags
+        tags.join(" ")
     }
 
     fn indices(&self, covers: impl Fn(i64, i64) -> bool) -> Vec<usize> {
@@ -1274,7 +1276,9 @@ fn render_line(
     draft.append_child(marker_container, marker);
 
     for child in &children {
-        let path = child.semantic_path().to_vec();
+        let container = draft.semantic_container_for(child.semantic_path(), |index| {
+            semantics.wrapper_with_cjk(index, cjk_strong_semantics)
+        });
         let node = match child {
             LineChild::Run(run) => render_run(draft, run, semantics, style_class_for)?,
             LineChild::InlineObject {
@@ -1295,9 +1299,6 @@ fn render_line(
                 bopomofo_annotation_span(draft, z, *width, *line_top, *line_height, style_class_for)
             }
         };
-        let container = draft.semantic_container_for(&path, |index| {
-            semantics.wrapper_with_cjk(index, cjk_strong_semantics)
-        });
         draft.append_child(container, node);
     }
 
@@ -1667,6 +1668,18 @@ fn render_run(
         ("data-tq-geometry".to_string(), Some("true".to_string())),
         ("data-tq-x".to_string(), Some(js_number_string(run.draw_x))),
     ];
+    let boundary = if run.spacing.px > 0.0 {
+        semantics.mark_spacing_ends(draft, run)
+    } else {
+        String::new()
+    };
+    if !boundary.is_empty() {
+        set_attribute(
+            &mut attributes,
+            "data-tq-spacing-boundary",
+            Some(boundary.clone()),
+        );
+    }
     if run.shaping_boundary || !feature_signature.is_empty() {
         attributes.push(("data-tq-shaping-boundary".to_string(), Some(String::new())));
     }
@@ -1780,7 +1793,6 @@ fn render_run(
                 Some("true".to_string()),
             ),
         ];
-        let boundary = semantics.ending_tags(&run.semantic_path, run.range_end);
         if !boundary.is_empty() {
             set_attribute(
                 &mut carrier_attributes,
