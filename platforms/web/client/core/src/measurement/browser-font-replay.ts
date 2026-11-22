@@ -161,6 +161,8 @@ function createShapeJsonCallback(registry: ReplayRegistry, sessionId: string): S
     const session = registry.sessions.get(sessionId);
     if (!session) throw new Error(`UnknownFontSession:${sessionId}`);
 
+    // Match the server's key for display substitutions by using the source range.
+    const sourceText = request.text.substring(request.range.start, request.range.end);
     const displayText = request.displayText;
     const serializedFamilies = request.style.fontFamilies.join("\u001f");
     const fontSize = request.style.fontSize;
@@ -168,7 +170,6 @@ function createShapeJsonCallback(registry: ReplayRegistry, sessionId: string): S
     const italic = request.style.italic;
     const locale = request.style.locale;
     const role = request.fontDecision.role;
-    const sourceText = request.sourceText ?? displayText;
 
     const key = shapeReplayKey(
       displayText,
@@ -199,7 +200,7 @@ function createShapeJsonCallback(registry: ReplayRegistry, sessionId: string): S
     return JSON.stringify({
       clusters: [{
         range: request.range,
-        text: request.text.substring(request.range.start, request.range.end),
+        text: sourceText,
         displayText,
         fontKey: request.fontDecision.candidateKey,
         advance: glyphs.advance,
@@ -220,7 +221,7 @@ function createShapeJsonCallback(registry: ReplayRegistry, sessionId: string): S
       }],
       decisions: [{
         range: request.range,
-        sourceText: request.text.substring(request.range.start, request.range.end),
+        sourceText,
         displayText,
         fontKey: request.fontDecision.candidateKey,
         glyphCount: glyphs.glyphs.length,
