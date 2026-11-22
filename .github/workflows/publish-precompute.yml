@@ -225,6 +225,8 @@ jobs:
     # blocking the remaining lanes.
     continue-on-error: true
     needs: [validate, publish]
+    # The standalone build can be skipped when the caller supplies the packages.
+    if: ${{ !cancelled() && needs.validate.result == 'success' && needs.publish.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
