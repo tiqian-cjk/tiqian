@@ -7,11 +7,10 @@ must be reachable from the single release entrypoint. Before the entrypoint
 publishes anything, this gate requires each lane under release.requiredLanes
 to have a completed, successful workflow run on the release commit.
 
-The gate refuses when a lane is red, when a lane has not run on the release
-commit at all, and when a lane is still queued or running. A missing run is
-not evidence of success. A --sha that is not a full 40-character commit id, or
-that the repository does not know, is reported as a separate input error
-before any lane is evaluated.
+The gate refuses a completed failure. When a wait is configured it polls for
+required lanes that have not appeared yet or are still running. A --sha that
+is not a full 40-character commit id, or that the repository does not know,
+is reported as a separate input error before any lane is evaluated.
 
 Exit status: 0 the release may proceed, 1 the release is refused,
 2 the gate, the manifest, or the arguments given to the gate are unusable.
@@ -24,6 +23,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -34,6 +34,7 @@ EXIT_MISCONFIGURED = 2
 
 GATE_JOB = "release-gate"
 GATE_WORKFLOW_REF = "uses: ./.github/workflows/release-gate.yml"
+POLL_INTERVAL_SECONDS = 30
 
 
 class GateError(Exception):
@@ -471,9 +472,7 @@ def fetch_lane_run(repo: str, sha: str, lane_file: str, token: str | None) -> di
         for run in runs
         if run.get("status") == "completed" and run.get("conclusion") == "success"
     ]
-    if successful:
-        return successful[0]
-    return latest_run_for_lane(runs, lane_file)
+    return latest_run_for_lane(successful, lane_file) or latest_run_for_lane(runs, lane_file)
 
 
 def runs_from_fixture(path: Path, sha: str) -> list[dict]:
@@ -497,30 +496,50 @@ def runs_from_fixture(path: Path, sha: str) -> list[dict]:
     misconfigured(f"{path} is not a runs list or a workflows mapping")
 
 
-def check_lanes(repo: str, sha: str, manifest: dict, token: str | None, fixture: Path | None) -> list[str]:
-    release = manifest["release"]
-    fixture_runs = runs_from_fixture(fixture, sha) if fixture else None
-    lines: list[str] = []
-    for lane in release["requiredLanes"]:
-        lane_file = lane["workflow"]
-        if fixture_runs is None:
-            run = fetch_lane_run(repo, sha, lane_file, token)
-        else:
-            run = latest_run_for_lane(fixture_runs, lane_file)
-        label = f"{lane['name']} ({Path(lane_file).name})"
-        if run is None:
-            refuse(
-                f"{label} has no run recorded on {sha}; a missing run is not green "
-                "(a run's head_sha is the full 40-character commit id)"
+def check_lanes(
+    repo: str, sha: str, manifest: dict, token: str | None, fixture: Path | None,
+    wait_seconds: int = 0,
+) -> dict[str, dict]:
+    deadline = time.monotonic() + wait_seconds
+    remaining = manifest["release"]["requiredLanes"]
+    passed: dict[str, dict] = {}
+
+    # A branch and a tag pushed together can register their workflows in either order.
+    while remaining:
+        fixture_runs = runs_from_fixture(fixture, sha) if fixture else None
+        pending = []
+        reasons = []
+        for lane in remaining:
+            lane_file = lane["workflow"]
+            label = f"{lane['name']} ({Path(lane_file).name})"
+            run = (
+                fetch_lane_run(repo, sha, lane_file, token) if fixture_runs is None
+                else latest_run_for_lane(fixture_runs, lane_file)
             )
-        status = run.get("status")
-        conclusion = run.get("conclusion")
-        if status != "completed":
-            refuse(f"{label} is {status} on {sha}; the release waits for a completed run")
-        if conclusion != "success":
-            refuse(f"{label} is {conclusion} on {sha}; every required lane must be green")
-        lines.append(f"{label}: success on {sha}")
-    return lines
+
+            # Keep completed successes and stop on the first completed failure.
+            if run is not None and run.get("status") == "completed":
+                conclusion = run.get("conclusion")
+                if conclusion != "success":
+                    refuse(f"{label} is {conclusion} on {sha}; every required lane must be green")
+                passed[lane_file] = run
+                continue
+            pending.append(lane)
+            status = run.get("status") if run is not None else "no run recorded"
+            reasons.append(f"{label}: {status}")
+
+        # Poll only lanes without a success on this exact commit.
+        remaining = pending
+        if not remaining:
+            break
+        description = f"{sha}: {', '.join(reasons)}"
+        seconds_left = deadline - time.monotonic()
+        if seconds_left <= 0:
+            prefix = "timed out waiting for required lanes" if wait_seconds else "required lanes are not ready"
+            refuse(f"{prefix} on {description}")
+        print(f"GATE: waiting on {description}", flush=True)
+        time.sleep(min(POLL_INTERVAL_SECONDS, seconds_left))
+    return passed
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -532,6 +551,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--token", help="GitHub token with actions:read; unauthenticated reads work for public repositories")
     parser.add_argument("--runs-json", type=Path, help="read lane runs from a JSON fixture instead of the GitHub API (drills)")
+    parser.add_argument("--wait-seconds", type=int, default=0, help="maximum wait for missing or pending runs")
+    parser.add_argument("--github-output", type=Path, help="append the successful workflow run IDs")
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent, help="repository root")
     return parser.parse_args(argv)
 
@@ -544,6 +565,8 @@ def main(argv: list[str]) -> int:
         # unusable one before reading the manifest or calling the API.
         if not args.sha:
             misconfigured("--sha is required to evaluate lane runs")
+        if args.wait_seconds < 0:
+            misconfigured("--wait-seconds must be nonnegative")
         sha = require_full_sha(args.sha)
         if not args.runs_json and not args.repo:
             misconfigured("--repo is required when --runs-json is absent")
@@ -557,9 +580,17 @@ def main(argv: list[str]) -> int:
         for line in structural:
             print(f"GATE: {line}")
         print(f"GATE: evaluating {len(manifest['release']['requiredLanes'])} required lanes on {sha}")
-        lane_lines = check_lanes(args.repo or "", sha, manifest, args.token, args.runs_json)
-        for line in lane_lines:
-            print(f"GATE: {line}")
+        passed = check_lanes(args.repo or "", sha, manifest, args.token, args.runs_json, args.wait_seconds)
+        for lane in manifest["release"]["requiredLanes"]:
+            print(f"GATE: {lane['name']} ({Path(lane['workflow']).name}): success on {sha}")
+
+        # Consumers download artifacts from the runs that satisfied this gate.
+        if args.github_output:
+            with args.github_output.open("a", encoding="utf-8") as output:
+                for workflow, run in passed.items():
+                    run_id = run.get("id")
+                    if isinstance(run_id, int) and run_id > 0:
+                        output.write(f"{Path(workflow).stem}-run-id={run_id}\n")
     except GateError as error:
         print(f"GATE: {'MISCONFIGURED' if error.status == EXIT_MISCONFIGURED else 'REFUSE'}: {error}")
         return error.status

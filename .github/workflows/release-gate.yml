@@ -9,10 +9,18 @@ name: Release gate
 # release commit.
 on:
   workflow_call:
+    inputs:
+      wait-seconds:
+        description: Time to wait for missing or pending checks on the release commit
+        type: number
+        default: 0
     outputs:
       version:
         description: Release version without the v prefix
         value: ${{ jobs.gate.outputs.version }}
+      neon-run-id:
+        description: Successful Neon build run on the release commit
+        value: ${{ jobs.gate.outputs.neon-run-id }}
 
 permissions:
   contents: read
@@ -22,8 +30,10 @@ jobs:
   gate:
     name: Verify required lanes on the release commit
     runs-on: ubuntu-latest
+    timeout-minutes: 310
     outputs:
       version: ${{ steps.release.outputs.version }}
+      neon-run-id: ${{ steps.evaluate.outputs.build-neon-precompute-run-id }}
     steps:
       - name: Check out the release commit
         uses: actions/checkout@v4
@@ -43,10 +53,14 @@ jobs:
         run: python3 tools/align-package-versions.py --check "${GITHUB_REF_NAME#v}"
 
       - name: Evaluate the release gate
+        id: evaluate
         env:
           GH_TOKEN: ${{ github.token }}
+          WAIT_SECONDS: ${{ inputs.wait-seconds }}
         run: |
           python3 tools/release-gate.py \
             --repo "$GITHUB_REPOSITORY" \
             --sha "$GITHUB_SHA" \
+            --wait-seconds "$WAIT_SECONDS" \
+            --github-output "$GITHUB_OUTPUT" \
             --token "$GH_TOKEN"

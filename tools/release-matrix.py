@@ -12,6 +12,7 @@ Usage:
     release-matrix.py --check [--project boring.json]
     release-matrix.py --list-bundles [--project boring.json]
     release-matrix.py --matrix [--project boring.json]
+    release-matrix.py --pack-matrix [--project boring.json]
     release-matrix.py --json [--project boring.json]
 
 Exit status: 0 the check passed, 1 the check found a gap, 2 the project file
@@ -305,6 +306,7 @@ def main(argv: list) -> int:
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--list-bundles", action="store_true")
     parser.add_argument("--matrix", action="store_true")
+    parser.add_argument("--pack-matrix", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     try:
@@ -315,6 +317,20 @@ def main(argv: list) -> int:
     if args.list_bundles:
         for bundle_id in matrix["packBundles"]:
             print(bundle_id)
+        return EXIT_OK
+    if args.pack_matrix:
+        # Keep each registry ecosystem together. Cargo and pub share a runner.
+        shards: dict[str, list[str]] = {}
+        for entry in matrix["bundles"]:
+            if entry["packed"]:
+                shard = "sources" if entry["ecosystem"] in ("cargo", "pub") else entry["ecosystem"]
+                shards.setdefault(shard, []).append(entry["id"])
+
+        # Publish jobs consume the Web inputs without waiting for other shards.
+        print(json.dumps({
+            "web": " ".join(shards.pop("npm", [])),
+            "include": [{"shard": shard, "bundles": " ".join(ids)} for shard, ids in shards.items()],
+        }))
         return EXIT_OK
     if args.matrix:
         include = [
@@ -336,7 +352,7 @@ def main(argv: list) -> int:
         print(json.dumps(matrix, indent=2, sort_keys=True))
         return EXIT_OK
     if not args.check:
-        parser.error("choose --check, --list-bundles, --matrix or --json")
+        parser.error("choose --check, --list-bundles, --matrix, --pack-matrix or --json")
     failures = check_matrix(matrix, args.project)
     report(matrix, failures)
     return EXIT_GAP if failures else EXIT_OK

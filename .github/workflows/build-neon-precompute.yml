@@ -199,7 +199,12 @@ jobs:
           exit 1
       - name: Allow unprivileged user namespaces
         run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: Cache the generated native inputs for releases
+        id: native-inputs
+        uses: ./.github/actions/cache-precompute-inputs
+
       - name: Generate the precompute engine tree with the flake toolchain
+        if: steps.native-inputs.outputs.hit != 'true'
         run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs'
       - name: Generate the TypeScript engine tree with the flake toolchain
         # tiqian-protocol and tiqian-shared are workspace:* members under

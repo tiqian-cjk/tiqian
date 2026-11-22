@@ -42,6 +42,7 @@
     "test": "node --test *.test.mjs",
     "verify:package": "node ./verify-package.ts",
     "verify:release": "npm run prepack && node ./verify-release.ts",
+    "verify:prepared-release": "npm test && npm run verify:package && node ./verify-release.ts",
     "release:prepare": "node ./prepare-release.ts",
     "prepack": "npm run build:runtime && npm test && npm run verify:package"
   },

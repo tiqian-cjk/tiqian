@@ -91,6 +91,15 @@ jobs:
           distribution: temurin
           java-version: "25"
 
+      - name: Restore the Gradle dependency cache from CI
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'gradle/gradle-daemon-jvm.properties', '**/*.gradle.kts') }}
+          restore-keys: gradle-${{ runner.os }}-
+
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 

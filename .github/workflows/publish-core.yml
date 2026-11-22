@@ -8,6 +8,11 @@ name: Publish core package
 # on a v*.*.* tag), and each one runs the release gate before publishing.
 on:
   workflow_call:
+    inputs:
+      web-inputs:
+        description: Shared Web build artifact from this release run
+        type: string
+        default: ""
   workflow_dispatch:
 
 permissions:
@@ -73,62 +78,11 @@ jobs:
           version="$(node -p "require('./platforms/web/client/core/package.json').version")"
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
-      # The install resolves two generated, gitignored trees: tiqian-protocol
-      # and tiqian-shared are workspace:* members under
-      # engine-haxe/out/{protocol-ts,shared-ts}/gen whose package.json is
-      # written by boring pack, and @tiqian/core type-checks against the
-      # @tiqian/ffi runtime/ build product. npm cannot resolve the workspace
-      # protocol (EUNSUPPORTEDPROTOCOL), so this lane generates the trees, packs
-      # the member manifests, then installs with bun.
-      - name: Install Nix
-        id: nix-installer
-        continue-on-error: true
-        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
-
-      - name: Install Nix with the install script when the action fails
-        if: steps.nix-installer.outcome != 'success'
-        shell: bash
-        run: |
-          set -euo pipefail
-          for attempt in 1 2 3; do
-            if curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL \
-              https://install.determinate.systems/nix \
-              | sh -s -- install --no-confirm; then
-              exit 0
-            fi
-            echo "nix install attempt ${attempt} failed; retrying" >&2
-            sleep 15
-          done
-          exit 1
-      - name: Allow unprivileged user namespaces
-        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
-      - name: Generate the TypeScript engine tree with the flake toolchain
-        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs ts'
-      - name: Align the generated package versions with the release
-        # boring pack writes the placeholder version from boring.json, and the
-        # sibling archives the inspect step installs must carry the release
-        # version @tiqian/core depends on, so align before packing.
-        run: python3 tools/align-package-versions.py ${{ steps.release.outputs.version }}
-
-      - name: Write the protocol and shared package manifests
-        run: |
-          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
-          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
-          chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
-      - name: Install workspace dependencies
-        working-directory: .
-        # bun, not npm: the web consumers declare tiqian-protocol and
-        # tiqian-shared as workspace:*, and npm refuses that protocol with
-        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
-        # which would regenerate the protocol-ts tree and delete the manifest
-        # boring pack wrote; the runtime is assembled explicitly below.
-        run: nix develop -c bun install --ignore-scripts
-      - name: Assemble the @tiqian/ffi runtime with the flake toolchain
-        # @tiqian/core resolves @tiqian/ffi through its runtime/ declarations,
-        # which the skipped root postinstall used to assemble.
-        working-directory: platforms/web/client/engine-runtime
-        run: nix develop -c npm run build:runtime
+      - name: Prepare the Web release workspace
+        uses: ./.github/actions/prepare-release-web-workspace
+        with:
+          artifact: ${{ inputs.web-inputs }}
+          version: ${{ steps.release.outputs.version }}
 
       - name: Verify the package contents
         working-directory: platforms/web/client/core
@@ -144,7 +98,7 @@ jobs:
         # carries a workspace range.
         run: python3 "$GITHUB_WORKSPACE/tools/publish-contract.py" --resolve . --version "${{ steps.release.outputs.version }}"
 
-      - name: Build and pack the release tarball
+      - name: Pack the verified runtime
         working-directory: platforms/web/client/core
         env:
           TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-core-release
@@ -152,7 +106,6 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${TIQIAN_RELEASE_ARTIFACT_DIR}"
-          npm run build
           npm pack --pack-destination "${TIQIAN_RELEASE_ARTIFACT_DIR}"
           test "$(find "${TIQIAN_RELEASE_ARTIFACT_DIR}" -maxdepth 1 -name '*.tgz' | wc -l)" -eq 1
 
@@ -168,10 +121,10 @@ jobs:
       - name: Inspect the release package the way a consumer receives it
         # The build step above proves the tarball matches its own checks. This
         # step installs the archive into an empty project beside the sibling
-        # archives this lane already generated for the manifest step, and
+        # archives the Web pack shard generated for the manifest step, and
         # imports the entry a consumer uses, so a manifest or file-list defect
-        # fails here instead of at a registry. The siblings come from this
-        # lane's own pack output: the release publishes them from the pack
+        # fails here instead of at a registry. The siblings come from that
+        # shard's pack output: the release publishes them from the pack
         # matrix later, so the registry does not have them yet at this point.
         shell: bash
         env:

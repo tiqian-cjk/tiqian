@@ -2,6 +2,11 @@ name: Publish Web adapters
 
 on:
   workflow_call:
+    inputs:
+      web-inputs:
+        description: Shared Web build artifact from this release run
+        type: string
+        default: ""
     outputs:
       adapters:
         description: Adapter names for alpha publication and latest tag synchronization
@@ -33,28 +38,15 @@ jobs:
       - name: Use the release npm CLI
         run: npm install --global npm@11.12.1
 
-      - uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+      - name: Prepare the Web release workspace
+        uses: ./.github/actions/prepare-release-web-workspace
+        with:
+          artifact: ${{ inputs.web-inputs }}
+          version: ${{ needs.release-gate.outputs.version }}
+          linker: hoisted
 
-      - name: Allow unprivileged user namespaces
-        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
-
-      - name: Generate the TypeScript engine and workspace packages
-        env:
-          RELEASE_VERSION: ${{ needs.release-gate.outputs.version }}
+      - name: Build the Web packages and precompute library
         run: |
-          python3 tools/align-package-versions.py "${RELEASE_VERSION}"
-          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
-          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
-          chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs ts && boring pack protocol-ts shared-ts --project boring.json'
-
-      - name: Install workspace dependencies
-        # The Astro and SvelteKit fixture projects share the root node_modules.
-        run: nix develop -c bun install --ignore-scripts --linker hoisted
-
-      - name: Build the Web runtime and precompute library
-        run: |
-          (cd platforms/web/client/engine-runtime && nix develop "${GITHUB_WORKSPACE}" -c npm run build:runtime)
           (cd platforms/web/client/core && npm exec -- tsc -b)
           (cd platforms/web/client/web-component && npm exec -- tsc -b --noCheck)
           (cd platforms/web/server/core && npm run build)

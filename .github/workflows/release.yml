@@ -1,7 +1,7 @@
 name: Release
 
-# One version tag publishes every package. The gate job refuses the release
-# when any required lane is red on the tagged commit; the publishing jobs run
+# One version tag publishes every package. The gate waits for required lanes
+# on the tagged commit and refuses any completed failure; publishing jobs run
 # in dependency order and the registry write, which produces the publicly
 # visible version, runs only after every other lane succeeded.
 #
@@ -27,6 +27,9 @@ jobs:
       actions: read
     uses: ./.github/workflows/release-gate.yml
     secrets: inherit
+    with:
+      # Leave time for CI to queue and for the four-hour bundle verification.
+      wait-seconds: 18000
 
   # The bundle list in boring.json is the only release input. This job derives
   # the matrix the following jobs expand: one entry per bundle carries its
@@ -41,7 +44,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       include: ${{ steps.matrix.outputs.include }}
-      bundles: ${{ steps.matrix.outputs.bundles }}
+      pack_targets: ${{ steps.matrix.outputs.pack_targets }}
+      web_bundles: ${{ steps.matrix.outputs.web_bundles }}
       version: ${{ steps.matrix.outputs.version }}
     steps:
       - name: Check out the release commit
@@ -55,114 +59,61 @@ jobs:
           set -euo pipefail
           version="${{ needs.gate.outputs.version }}"
           include="$(python3 tools/release-matrix.py --matrix --version "${version}")"
-          bundles="$(python3 tools/release-matrix.py --list-bundles | paste -sd" " -)"
-          bundles="${bundles% }"
-          echo "include=${include}" >> "${GITHUB_OUTPUT}"
-          echo "bundles=${bundles}" >> "${GITHUB_OUTPUT}"
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          pack_matrix="$(python3 tools/release-matrix.py --pack-matrix)"
+          pack_targets="$(jq -c '.include' <<< "$pack_matrix")"
+          web_bundles="$(jq -er '.web | select(length > 0)' <<< "$pack_matrix")"
+          echo "include=${include}" >> "$GITHUB_OUTPUT"
+          echo "pack_targets=${pack_targets}" >> "$GITHUB_OUTPUT"
+          echo "web_bundles=${web_bundles}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
 
-  # One pack run produces every artifact and the registry metadata tree. The
-  # registry job below still packs for itself until it consumes these
-  # artifacts instead. The inner command is single-quoted so the outer shell
-  # hands one argument to bash -c; the inner shell expands RUNNER_TEMP and the
-  # bundle list.
-  pack:
-    name: Pack every bundle
+  # The Web shard also builds the inputs reused by the npm publishers.
+  pack-web:
+    needs: [gate, matrix]
+    uses: ./.github/workflows/pack-release-bundles.yml
+    with:
+      shard: npm
+      bundles: ${{ needs.matrix.outputs.web_bundles }}
+      version: ${{ needs.matrix.outputs.version }}
+      neon-run-id: ${{ needs.gate.outputs.neon-run-id }}
+
+  pack-targets:
     needs: [matrix]
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.pack_targets) }}
+    uses: ./.github/workflows/pack-release-bundles.yml
+    with:
+      shard: ${{ matrix.shard }}
+      bundles: ${{ matrix.bundles }}
+      version: ${{ needs.matrix.outputs.version }}
+
+  pack:
+    name: Assemble and verify the release artifacts
+    needs: [matrix, pack-web, pack-targets]
     runs-on: ubuntu-latest
     steps:
       - name: Check out the release commit
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - name: Install Nix
-        id: nix-installer
-        continue-on-error: true
-        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
 
-      - name: Install Nix with the install script when the action fails
-        if: steps.nix-installer.outcome != 'success'
+      - name: Download the pack shards
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: release-pack-*
+          path: ${{ runner.temp }}/release-packs
+
+      - name: Assemble the pack outputs and verify the artifact digests
+        env:
+          PACK_TARGETS: ${{ needs.matrix.outputs.pack_targets }}
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in 1 2 3; do
-            if curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL \
-              https://install.determinate.systems/nix \
-              | sh -s -- install --no-confirm; then
-              exit 0
-            fi
-            echo "nix install attempt ${attempt} failed; retrying" >&2
-            sleep 15
-          done
-          exit 1
-      - name: Allow unprivileged user namespaces
-        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
-      - name: Stage the pinned generation inputs
-        shell: bash
-        run: |
-          nix develop -c bash -c "mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/"
-          ls -l tools/unicode-data
-      - name: Align the package versions with the release
-        run: python3 tools/align-package-versions.py "${GITHUB_REF_NAME#v}"
-      # The pack action compiles the TypeScript bundles through package-tsc
-      # (PackageArtifacts.hx:184-209 in the pinned boring checkout). A clean
-      # runner has no tsc on PATH and the flake devShell ships none, so the
-      # define is pointed at the pinned compiler through the devShell bun, the
-      # same shim publish-core.yml:91 writes. Without it pack stops at
-      # "pack on the ts target needs tsc" and no TypeScript artifact is built.
-      - name: Pack every bundle and write the registry tree
-        shell: bash
-        run: |
-          # Gradle refuses to configure any Android project when ANDROID_HOME
-          # and ANDROID_SDK_ROOT name different roots. The image exports
-          # ANDROID_SDK_ROOT=/usr/local/lib/android/sdk while flake.nix exports
-          # the pinned SDK as ANDROID_HOME, so drop the image variable before
-          # the devShell starts, as publish.yml:158 and staging-pipeline.yml:77
-          # already do for their Gradle steps.
-          unset ANDROID_SDK_ROOT
-          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
-          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
-          chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'boring pack ${{ needs.matrix.outputs.bundles }} --registry-out "$RUNNER_TEMP/registry-tree" --owner "${{ github.repository_owner }}" --repo "${{ github.event.repository.name }}" --asset-base "${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.ref_name }}"'
-      # The pack action reads the generated sources for two targets only: it
-      # compiles TypeScript and Kotlin and archives Swift, Dart and Rust. This
-      # step is the compile point for those three, so a generation defect that
-      # the archiving steps cannot see fails the release here instead of
-      # surfacing after the artifacts were uploaded.
-      - name: Compile every bundle's generated tree
-        shell: bash
-        run: |
-          unset ANDROID_SDK_ROOT
-          nix develop -c bash -c 'python3 tools/compile-bundles.py --project boring.json'
-      - name: Embed the repository URL in the npm manifests
-        # npm validates the provenance bundle against the manifest and refuses
-        # a package whose "repository.url" is empty (422) before storing it.
-        # The bundler does not emit the field, so it is added to the archives
-        # the pack run wrote, and the registry metadata is refreshed with the
-        # new digests.
-        shell: bash
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          python3 tools/embed-repository.py --tree "${RUNNER_TEMP}/registry-tree" \
-            engine-haxe/out/*/@tiqian-*.tgz
+          mapfile -t targets < <(jq -r '.[].shard' <<< "$PACK_TARGETS")
+          python3 tools/assemble-release-pack.py "$RUNNER_TEMP/release-packs" . npm "${targets[@]}"
+          (cd release-artifacts && sha256sum * | sort > SHA256SUMS)
+          python3 tools/check-registry-tree.py --tree registry-tree --artifacts release-artifacts
 
-      - name: Collect the artifacts
-        shell: bash
-        run: |
-          # The registry tree the same pack run wrote is the artifact list: the
-          # collect step copies exactly the files the metadata names, so a new
-          # artifact type (the Kotlin Multiplatform .module, .klib and .aar)
-          # enters the release without an allowlist edit here.
-          python3 tools/collect-release-artifacts.py \
-            --tree "${RUNNER_TEMP}/registry-tree" \
-            --source engine-haxe/out \
-            --artifacts release-artifacts
-          ls -la release-artifacts/
-      - name: Record the artifact digests
-        shell: bash
-        run: |
-          cd release-artifacts
-          sha256sum * | sort > SHA256SUMS
-          cat SHA256SUMS
       - name: Upload the release artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -170,11 +121,12 @@ jobs:
           path: release-artifacts
           if-no-files-found: error
           retention-days: 7
+
       - name: Upload the registry tree
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: registry-tree
-          path: ${{ runner.temp }}/registry-tree
+          path: registry-tree
           if-no-files-found: error
           retention-days: 7
 
@@ -329,18 +281,18 @@ jobs:
         run: |
           echo "${BUNDLE}: packed=${PACKED} ecosystem=${ECOSYSTEM} official=${OFFICIAL}"
 
-  # The npm and Maven lanes below still build and publish their own packages.
-  # They stay in the entrypoint until their inputs come from the pack run and
-  # release-manifest.json is rewritten, so the release gate keeps seeing every
-  # unit it declares.
+  # The Web packages reuse generated inputs. Consumer checks still decide the
+  # publish order, and the native package build can run beside the Web publishers.
   npm-ffi:
-    needs: [gate]
+    needs: [gate, pack-web]
     permissions:
       contents: read
       actions: read
       id-token: write
     uses: ./.github/workflows/publish-ffi.yml
     secrets: inherit
+    with:
+      web-inputs: release-web-inputs
 
   npm-core:
     needs: [gate, npm-ffi]
@@ -350,6 +302,8 @@ jobs:
       id-token: write
     uses: ./.github/workflows/publish-core.yml
     secrets: inherit
+    with:
+      web-inputs: release-web-inputs
 
   npm-web-component:
     needs: [gate, npm-core]
@@ -359,15 +313,28 @@ jobs:
       id-token: write
     uses: ./.github/workflows/publish-web-component.yml
     secrets: inherit
+    with:
+      web-inputs: release-web-inputs
+
+  precompute-build:
+    needs: [gate, pack-web]
+    uses: ./.github/workflows/build-precompute-release.yml
+    with:
+      version: ${{ needs.gate.outputs.version }}
+      web-inputs: release-web-inputs
+      neon-run-id: ${{ needs.gate.outputs.neon-run-id }}
 
   npm-precompute:
-    needs: [gate, npm-web-component]
+    needs: [gate, npm-web-component, precompute-build]
     permissions:
       contents: read
       actions: read
       id-token: write
     uses: ./.github/workflows/publish-precompute.yml
     secrets: inherit
+    with:
+      use-built-artifacts: true
+      use-ci-packages: ${{ needs.precompute-build.outputs.reused == 'true' }}
 
   npm-web-adapters:
     # The consumer checks install the published precompute, protocol and shared
@@ -379,6 +346,8 @@ jobs:
       id-token: write
     uses: ./.github/workflows/publish-web-adapters.yml
     secrets: inherit
+    with:
+      web-inputs: release-web-inputs
 
   npm-web-adapters-latest:
     name: Synchronize @tiqian/${{ matrix.adapter }} latest dist-tag

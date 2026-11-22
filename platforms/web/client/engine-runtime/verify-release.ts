@@ -39,8 +39,8 @@ interface PackedItem {
 type PackedList = readonly PackedItem[];
 
 try {
-  // prepack already rebuilt and verified the working tree. Pack without scripts
-  // here so this consumer check cannot recursively invoke verify:release.
+  // The release script already verified the runtime. Keep those exact bytes
+  // by packing with lifecycle scripts disabled.
   const packed: PackedList = JSON.parse(runNpm([
     "pack",
     "--ignore-scripts",
