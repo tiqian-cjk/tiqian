@@ -22,6 +22,9 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.use
 import org.jetbrains.skia.EncodedImageFormat
+import org.tiqian.core.Glyph
+import org.tiqian.core.GlyphRun
+import org.tiqian.core.LayoutConstraints
 import org.tiqian.core.LayoutResult
 import org.tiqian.core.RichTextRole
 import org.tiqian.core.TextRange
@@ -44,6 +47,24 @@ import kotlin.test.assertTrue
  */
 @OptIn(ExperimentalComposeUiApi::class)
 class RichTextRenderTest {
+
+    @Test
+    fun replayIndexGroupsGlyphsByExactRangeInRunOrder() {
+        val whole = TextRange(0, 2)
+        val prefix = TextRange(0, 1)
+        val base = ParagraphMeasurer(ExplainableStubParagraphLayoutEngine()).measure("Hi", LayoutConstraints(maxWidth = 100f))
+        val result = base.copy(
+            glyphRuns = listOf(
+                GlyphRun(whole, "latin", listOf(Glyph(7, whole, 5f), Glyph(9, prefix, 5f), Glyph(4, whole, 5f)), 15f),
+                GlyphRun(whole, "fallback", listOf(Glyph(7, TextRange(0, 2), 5f)), 5f),
+            ),
+        )
+
+        val groups = result.toReplayIndex(emptyList()).glyphsByClusterRange
+        assertEquals(setOf(whole, prefix), groups.keys)
+        assertEquals(listOf(7, 4, 7), groups.getValue(TextRange(0, 2)).map { it.id })
+        assertEquals(listOf(9), groups.getValue(TextRange(0, 1)).map { it.id })
+    }
 
     @Test
     fun backgroundAndTextDecorationPaintFromRichTextSpans() {

@@ -110,38 +110,25 @@ class LayoutResultReplayIndexFns {
             positionedIndex2 += 1;
         }
 
-        final glyphKeys = new Array<TextRange>();
-        final glyphValues = new Array<Array<Glyph>>();
+        final buckets = new HashMap<TextRange, Array<Glyph>>();
+        final glyphsByClusterRange = new HashMap<TextRange, ReadOnlyArray<Glyph>>();
         var glyphRunIndex = 0;
         while (glyphRunIndex < result.glyphRuns.length) {
             final run = result.glyphRuns[glyphRunIndex];
             var runGlyphIndex = 0;
             while (runGlyphIndex < run.glyphs.length) {
                 final glyph = run.glyphs[runGlyphIndex];
-                var found = -1;
-                var glyphIndex = 0;
-                while (glyphIndex < glyphKeys.length) {
-                    if (glyphKeys[glyphIndex].start == glyph.clusterRange.start && glyphKeys[glyphIndex].end == glyph.clusterRange.end) {
-                        found = glyphIndex;
-                        break;
-                    }
-                    glyphIndex += 1;
-                }
-                if (found >= 0) {
-                    glyphValues[found].push(glyph);
+                final bucket = buckets.get(glyph.clusterRange);
+                if (bucket != null) {
+                    bucket.push(glyph);
                 } else {
-                    glyphKeys.push(glyph.clusterRange);
-                    glyphValues.push([glyph]);
+                    final first:Array<Glyph> = [glyph];
+                    buckets.set(glyph.clusterRange, first);
+                    glyphsByClusterRange.set(glyph.clusterRange, first);
                 }
                 runGlyphIndex += 1;
             }
             glyphRunIndex += 1;
-        }
-        final glyphsByClusterRange = new HashMap<TextRange, ReadOnlyArray<Glyph>>();
-        var glyphKeyIndex = 0;
-        while (glyphKeyIndex < glyphKeys.length) {
-            glyphsByClusterRange.set(glyphKeys[glyphKeyIndex], glyphValues[glyphKeyIndex]);
-            glyphKeyIndex += 1;
         }
 
         return new LayoutResultReplayIndex(

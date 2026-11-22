@@ -619,17 +619,19 @@ class LayoutQueries {
                 final leadingGap:Float = indexInLine == 0 ? 0.0 : floatByRange(leadingAutoSpaceGaps, cluster.range);
                 final drawX:Float = x + cluster.leadingLayoutAdvance + cluster.glyphInlineShift + leadingGap - floatByRange(leadingConsumed, cluster.range);
                 final right:Float = x + cluster.advance;
-                final glyphs:Array<Glyph> = glyphsForCluster(result, cluster.range);
                 var sourceStops:Null<Array<Float>> = null;
-                if (cluster.range.length > 1 && glyphs.length == cluster.range.length) {
-                    final stops:Array<Float> = [x];
-                    var glyphIndex:Int = 1;
-                    while (glyphIndex < cluster.range.length) {
-                        stops.push(clampFloat(drawX + glyphs[glyphIndex].x, x, right));
-                        glyphIndex += 1;
+                if (cluster.range.length > 1) {
+                    final glyphs:Array<Glyph> = glyphsForCluster(result, cluster.range);
+                    if (glyphs.length == cluster.range.length) {
+                        final stops:Array<Float> = [x];
+                        var glyphIndex:Int = 1;
+                        while (glyphIndex < cluster.range.length) {
+                            stops.push(clampFloat(drawX + glyphs[glyphIndex].x, x, right));
+                            glyphIndex += 1;
+                        }
+                        stops.push(right);
+                        sourceStops = stops;
                     }
-                    stops.push(right);
-                    sourceStops = stops;
                 }
                 positioned.push(new PositionedCluster(lineIndex, clusterIndex, cluster.range, x, line.top, right, line.bottom,
                     line.baseline + cluster.baselineShift, drawX, sourceStops));
