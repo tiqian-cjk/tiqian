@@ -2,6 +2,10 @@ name: Publish Web adapters
 
 on:
   workflow_call:
+    outputs:
+      adapters:
+        description: Adapter names for alpha publication and latest tag synchronization
+        value: ${{ jobs.pack.outputs.adapters }}
 
 permissions:
   contents: read
@@ -15,6 +19,8 @@ jobs:
     name: Build, test and pack the Web adapters
     needs: [release-gate]
     runs-on: ubuntu-latest
+    outputs:
+      adapters: '["astro", "sveltekit", "react"]'
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
@@ -93,7 +99,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        adapter: [astro, sveltekit, react]
+        adapter: ${{ fromJSON(needs.pack.outputs.adapters) }}
     env:
       ADAPTER: ${{ matrix.adapter }}
       RELEASE_VERSION: ${{ needs.release-gate.outputs.version }}
@@ -117,22 +123,3 @@ jobs:
           export NODE_PATH="$(npm root --global)"
           node tools/check-npm-release-order.cjs "@tiqian/${ADAPTER}" "$RELEASE_VERSION"
           bash tools/npm-publish.sh "$RUNNER_TEMP/web-adapters/tiqian-${ADAPTER}-${RELEASE_VERSION}.tgz" --tag alpha
-
-      - name: Point latest at the published alpha
-        run: |
-          package="@tiqian/${ADAPTER}"
-          npm install --global npm@11.21.0
-          export NODE_PATH="$(npm root --global)"
-          # npm publish leaves alpha at the new version. A rerun of an older
-          # release must not move latest past the current alpha.
-          for attempt in {1..12}; do
-            alpha="$(npm view "$package" dist-tags.alpha || true)"
-            if [[ "$alpha" == "$RELEASE_VERSION" ]]; then
-              node tools/check-npm-release-order.cjs "$package" "$RELEASE_VERSION"
-              bash tools/npm-dist-tag.sh --package "$package" --version "$RELEASE_VERSION" --tag latest
-              exit 0
-            fi
-            if [[ "$attempt" -lt 12 ]]; then sleep 5; fi
-          done
-          echo "::error::$package alpha points to $alpha, expected $RELEASE_VERSION"
-          exit 1
