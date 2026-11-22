@@ -593,6 +593,7 @@ private fun updateInlineObjectPlacements(
     placements: List<CjkInlineObjectPlacement>,
 ) {
     require(inlineObjects.size == placements.size)
+    if (inlineObjects.isEmpty()) return
     val positionedByRange = replayIndex?.positionedClusters?.associateBy { it.range }.orEmpty()
     inlineObjects.forEachIndexed { index, inlineObject ->
         val placement = placements[index]
