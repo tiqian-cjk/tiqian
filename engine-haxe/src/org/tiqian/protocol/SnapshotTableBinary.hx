@@ -593,15 +593,17 @@ private class StringInterner {
     }
 
     public function intern(text:String):Int {
+        // The Rust target copies the field when reading its length.
+        final stringCount = strings.length;
         var indexIdx:Int = 0;
-        while (indexIdx < strings.length) {
+        while (indexIdx < stringCount) {
             if (strings[indexIdx] == text) {
                 return indexIdx;
             }
             indexIdx++;
         }
         strings.push(text);
-        return strings.length - 1;
+        return stringCount;
     }
 }
 
