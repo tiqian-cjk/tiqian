@@ -52,18 +52,20 @@ class RichTextRenderTest {
     fun replayIndexGroupsGlyphsByExactRangeInRunOrder() {
         val whole = TextRange(0, 2)
         val prefix = TextRange(0, 1)
+        val suffix = TextRange(1, 2)
         val base = ParagraphMeasurer(ExplainableStubParagraphLayoutEngine()).measure("Hi", LayoutConstraints(maxWidth = 100f))
         val result = base.copy(
             glyphRuns = listOf(
                 GlyphRun(whole, "latin", listOf(Glyph(7, whole, 5f), Glyph(9, prefix, 5f), Glyph(4, whole, 5f)), 15f),
-                GlyphRun(whole, "fallback", listOf(Glyph(7, TextRange(0, 2), 5f)), 5f),
+                GlyphRun(whole, "fallback", listOf(Glyph(3, suffix, 5f), Glyph(7, TextRange(0, 2), 5f)), 10f),
             ),
         )
 
         val groups = result.toReplayIndex(emptyList()).glyphsByClusterRange
-        assertEquals(setOf(whole, prefix), groups.keys)
+        assertEquals(setOf(whole, prefix, suffix), groups.keys)
         assertEquals(listOf(7, 4, 7), groups.getValue(TextRange(0, 2)).map { it.id })
         assertEquals(listOf(9), groups.getValue(TextRange(0, 1)).map { it.id })
+        assertEquals(listOf(3), groups.getValue(TextRange(1, 2)).map { it.id })
     }
 
     @Test

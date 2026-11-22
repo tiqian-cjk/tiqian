@@ -110,25 +110,32 @@ class LayoutResultReplayIndexFns {
             positionedIndex2 += 1;
         }
 
-        final buckets = new HashMap<TextRange, Array<Glyph>>();
-        final glyphsByClusterRange = new HashMap<TextRange, ReadOnlyArray<Glyph>>();
+        // Keep mutable buckets out of the map: value-semantic targets copy arrays on lookup.
+        final bucketIndices = new HashMap<TextRange, Int>();
+        final glyphBuckets = new Array<Array<Glyph>>();
         var glyphRunIndex = 0;
         while (glyphRunIndex < result.glyphRuns.length) {
             final run = result.glyphRuns[glyphRunIndex];
             var runGlyphIndex = 0;
             while (runGlyphIndex < run.glyphs.length) {
                 final glyph = run.glyphs[runGlyphIndex];
-                final bucket = buckets.get(glyph.clusterRange);
-                if (bucket != null) {
-                    bucket.push(glyph);
+                final bucketIndex = bucketIndices.get(glyph.clusterRange);
+                if (bucketIndex != null) {
+                    glyphBuckets[bucketIndex].push(glyph);
                 } else {
-                    final first:Array<Glyph> = [glyph];
-                    buckets.set(glyph.clusterRange, first);
-                    glyphsByClusterRange.set(glyph.clusterRange, first);
+                    bucketIndices.set(glyph.clusterRange, glyphBuckets.length);
+                    glyphBuckets.push([glyph]);
                 }
                 runGlyphIndex += 1;
             }
             glyphRunIndex += 1;
+        }
+        final glyphsByClusterRange = new HashMap<TextRange, ReadOnlyArray<Glyph>>();
+        var i = 0;
+        while (i < glyphBuckets.length) {
+            final bucket = glyphBuckets[i];
+            glyphsByClusterRange.set(bucket[0].clusterRange, bucket);
+            i += 1;
         }
 
         return new LayoutResultReplayIndex(
