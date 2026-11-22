@@ -39,100 +39,138 @@ class SnapshotTableBinary {
     }
 
     public static function encodeData(data:TableData):Bytes {
+        // Read arrays once. The Rust target copies owned arrays on field access.
+        final metricRows = data.metricRows;
+        final valuePool = data.valuePool;
+        final probeTextRefs = data.probeTextRefs;
+        final probeAdvanceRefs = data.probeAdvanceRefs;
+        final probeStyleRefs = data.probeStyleRefs;
+        final probeFeatureRefs = data.probeFeatureRefs;
+        final advancePool = data.advancePool;
+
+        // Keep the style and feature columns local for their row loops as well.
+        final styleFontSize = data.styleFontSize;
+        final styleFontWeight = data.styleFontWeight;
+        final styleItalic = data.styleItalic;
+        final styleScriptRefs = data.styleScriptRefs;
+        final styleLanguageRefs = data.styleLanguageRefs;
+        final featuresPool = data.featuresPool;
+
+        // Write the header and the leading string region in format order.
         final writer = new TableWriter();
         writer.raw(Bytes.ofString(MAGIC));
         writer.u32(data.replayStringCount);
         writer.u32(data.strings.length);
-        writer.u32(data.metricRows.length);
-        writer.u32(data.valuePool.length);
-        writer.u32(data.probeTextRefs.length);
-        writer.u32(data.advancePool.length);
-        writer.u32(data.styleFontSize.length);
-        writer.u32(data.featuresPool.length);
+        writer.u32(metricRows.length);
+        writer.u32(valuePool.length);
+        writer.u32(probeTextRefs.length);
+        writer.u32(advancePool.length);
+        writer.u32(styleFontSize.length);
+        writer.u32(featuresPool.length);
+
+        // Count the trailing text regions before writing the first region.
         writer.u32(data.faceTexts.length);
         writer.u32(data.typographyTexts.length);
         writer.u32(data.valueStyleTexts.length);
         writer.u32(data.fontPreloadTexts.length);
         writeTextRegion(writer, data.strings);
+
+        // Encode metrics by column so the decoder can address each field.
         var indexIdx:Int = 0;
-        while (indexIdx < data.metricRows.length) {
-            writer.u32(data.metricRows[indexIdx].familiesRef);
+        while (indexIdx < metricRows.length) {
+            writer.u32(metricRows[indexIdx].familiesRef);
             indexIdx++;
         }
         indexIdx = 0;
-        while (indexIdx < data.metricRows.length) {
-            writer.f64(data.metricRows[indexIdx].weight);
+        while (indexIdx < metricRows.length) {
+            writer.f64(metricRows[indexIdx].weight);
+            indexIdx++;
+        }
+
+        // Write the style flag and font role as separate columns.
+        indexIdx = 0;
+        while (indexIdx < metricRows.length) {
+            writer.u8(metricRows[indexIdx].italic);
             indexIdx++;
         }
         indexIdx = 0;
-        while (indexIdx < data.metricRows.length) {
-            writer.u8(data.metricRows[indexIdx].italic);
+        while (indexIdx < metricRows.length) {
+            writer.u32(metricRows[indexIdx].roleRef);
+            indexIdx++;
+        }
+
+        // Finish the metric columns with references into the shared pools.
+        indexIdx = 0;
+        while (indexIdx < metricRows.length) {
+            writer.u32(metricRows[indexIdx].faceSelectionRef);
             indexIdx++;
         }
         indexIdx = 0;
-        while (indexIdx < data.metricRows.length) {
-            writer.u32(data.metricRows[indexIdx].roleRef);
+        while (indexIdx < metricRows.length) {
+            writer.u32(metricRows[indexIdx].valuePoolRef);
+            indexIdx++;
+        }
+
+        // Write pooled metrics followed by the first probe reference column.
+        indexIdx = 0;
+        while (indexIdx < valuePool.length) {
+            writeValueRow(writer, valuePool[indexIdx]);
             indexIdx++;
         }
         indexIdx = 0;
-        while (indexIdx < data.metricRows.length) {
-            writer.u32(data.metricRows[indexIdx].faceSelectionRef);
+        while (indexIdx < probeTextRefs.length) {
+            writer.u32(probeTextRefs[indexIdx]);
+            indexIdx++;
+        }
+
+        // Write the probe references into the advance and style pools.
+        indexIdx = 0;
+        while (indexIdx < probeAdvanceRefs.length) {
+            writer.u16(probeAdvanceRefs[indexIdx]);
             indexIdx++;
         }
         indexIdx = 0;
-        while (indexIdx < data.metricRows.length) {
-            writer.u32(data.metricRows[indexIdx].valuePoolRef);
+        while (indexIdx < probeStyleRefs.length) {
+            writer.u16(probeStyleRefs[indexIdx]);
+            indexIdx++;
+        }
+
+        // Finish the probe references, then write the pooled advances.
+        indexIdx = 0;
+        while (indexIdx < probeFeatureRefs.length) {
+            writer.u16(probeFeatureRefs[indexIdx]);
             indexIdx++;
         }
         indexIdx = 0;
-        while (indexIdx < data.valuePool.length) {
-            writeValueRow(writer, data.valuePool[indexIdx]);
+        while (indexIdx < advancePool.length) {
+            writer.f64(advancePool[indexIdx]);
+            indexIdx++;
+        }
+
+        // Style records store their numeric fields and string references together.
+        indexIdx = 0;
+        while (indexIdx < styleFontSize.length) {
+            writer.f64(styleFontSize[indexIdx]);
+            writer.f64(styleFontWeight[indexIdx]);
+            writer.u8(styleItalic[indexIdx]);
+            writer.u32(styleScriptRefs[indexIdx]);
+            writer.u32(styleLanguageRefs[indexIdx]);
+            indexIdx++;
+        }
+
+        // Write the feature row lengths first, then concatenate their bytes.
+        indexIdx = 0;
+        while (indexIdx < featuresPool.length) {
+            writer.u32(featureRowBytes(featuresPool[indexIdx]).length);
             indexIdx++;
         }
         indexIdx = 0;
-        while (indexIdx < data.probeTextRefs.length) {
-            writer.u32(data.probeTextRefs[indexIdx]);
+        while (indexIdx < featuresPool.length) {
+            writer.raw(featureRowBytes(featuresPool[indexIdx]));
             indexIdx++;
         }
-        indexIdx = 0;
-        while (indexIdx < data.probeAdvanceRefs.length) {
-            writer.u16(data.probeAdvanceRefs[indexIdx]);
-            indexIdx++;
-        }
-        indexIdx = 0;
-        while (indexIdx < data.probeStyleRefs.length) {
-            writer.u16(data.probeStyleRefs[indexIdx]);
-            indexIdx++;
-        }
-        indexIdx = 0;
-        while (indexIdx < data.probeFeatureRefs.length) {
-            writer.u16(data.probeFeatureRefs[indexIdx]);
-            indexIdx++;
-        }
-        indexIdx = 0;
-        while (indexIdx < data.advancePool.length) {
-            writer.f64(data.advancePool[indexIdx]);
-            indexIdx++;
-        }
-        indexIdx = 0;
-        while (indexIdx < data.styleFontSize.length) {
-            writer.f64(data.styleFontSize[indexIdx]);
-            writer.f64(data.styleFontWeight[indexIdx]);
-            writer.u8(data.styleItalic[indexIdx]);
-            writer.u32(data.styleScriptRefs[indexIdx]);
-            writer.u32(data.styleLanguageRefs[indexIdx]);
-            indexIdx++;
-        }
-        indexIdx = 0;
-        while (indexIdx < data.featuresPool.length) {
-            writer.u32(featureRowBytes(data.featuresPool[indexIdx]).length);
-            indexIdx++;
-        }
-        indexIdx = 0;
-        while (indexIdx < data.featuresPool.length) {
-            writer.raw(featureRowBytes(data.featuresPool[indexIdx]));
-            indexIdx++;
-        }
+
+        // Write the trailing JSON regions and the revision bytes.
         writeTextRegion(writer, data.faceTexts);
         writeTextRegion(writer, data.typographyTexts);
         writeTextRegion(writer, data.valueStyleTexts);
@@ -306,13 +344,16 @@ class SnapshotTableBinary {
     }
 
     static function lower(table:TableInput):TableData {
+        // Keep the input arrays local while building the interned columns.
+        final metrics = table.metrics;
+        final probes = table.probes;
         final data = new TableData();
         data.replayStringCount = table.replayStrings.length;
         final interner = new StringInterner(table.replayStrings);
         var indexIdx:Int = 0;
         final metricEntries = new Array<MetricEntry>();
-        while (indexIdx < table.metrics.length) {
-            final row = table.metrics[indexIdx];
+        while (indexIdx < metrics.length) {
+            final row = metrics[indexIdx];
             final entry = new MetricEntry(interner.intern(row.serializedFamilies), row.fontWeight,
                 row.italic ? 1 : 0, interner.intern(row.role), interner.intern(row.faceSelectionText), 0);
             entry.valuesEm = row.valuesEm;
@@ -335,15 +376,16 @@ class SnapshotTableBinary {
         final stylePool = new Array<StyleRow>();
         final featuresPool = new Array<Array<Int>>();
         indexIdx = 0;
-        while (indexIdx < table.probes.length) {
-            final probe = table.probes[indexIdx];
+        while (indexIdx < probes.length) {
+            final probe = probes[indexIdx];
             final textRef = interner.intern(probe.text);
             final scriptRef = interner.intern(probe.script);
             final languageRef = interner.intern(probe.language);
             final featureRefs = new Array<Int>();
+            final features = probe.features;
             var featureIdx:Int = 0;
-            while (featureIdx < probe.features.length) {
-                featureRefs.push(interner.intern(probe.features[featureIdx]));
+            while (featureIdx < features.length) {
+                featureRefs.push(interner.intern(features[featureIdx]));
                 featureIdx++;
             }
             data.probeTextRefs.push(textRef);
