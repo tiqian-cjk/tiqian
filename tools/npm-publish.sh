@@ -14,6 +14,9 @@
 # publishing with a long-lived credential.
 #
 # Usage: tools/npm-publish.sh <tarball> [--tag alpha]
+#
+# NPM_PUBLISH_DIVERGED_LOG, when set, names a file that receives one line per
+# version npm already holds with other bytes than the local tarball.
 set -uo pipefail
 
 tarball=""
@@ -42,11 +45,18 @@ if [ -n "$published_sha1" ]; then
     echo "$name@$version is already published with the same shasum; nothing to upload"
     exit 0
   fi
-  # A re-run rebuilds the native archive, and two builds of the same source are
-  # not byte-identical, so a difference on an already published version is
-  # expected. The registry copy is the one consumers install and it was
+  # An earlier run of the same version published a build of its own, and two
+  # builds of the same source are not byte-identical (a re-run within one
+  # release run publishes the tarball its first attempt kept, so it lands in
+  # the branch above). The npm copy is the one consumers install and it was
   # verified when it was published; report the difference and keep going.
+  # The registry cannot serve this run's tarball under the npm integrity, so
+  # the difference is also appended to NPM_PUBLISH_DIVERGED_LOG when the
+  # caller names one, and the registry lane refuses to describe the package.
   echo "::warning::$name@$version is already published with shasum $published_sha1, the local tarball is $local_sha1; keeping the published copy"
+  if [ -n "${NPM_PUBLISH_DIVERGED_LOG:-}" ]; then
+    printf '%s@%s npm shasum %s, this run %s\n' "$name" "$version" "$published_sha1" "$local_sha1" >> "$NPM_PUBLISH_DIVERGED_LOG"
+  fi
   exit 0
 fi
 

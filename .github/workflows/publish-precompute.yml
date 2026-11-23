@@ -100,6 +100,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
       id-token: write
     env:
       RELEASE_VERSION: ${{ needs.validate.outputs.version }}
@@ -194,10 +195,24 @@ jobs:
           bash "${GITHUB_WORKSPACE}/tools/check-npm-package.sh" "${main}" \
             --expect @tiqian/precompute --manifest-only
 
+      - name: Fix the release tarballs for this run
+        # The first attempt of the release run keeps the verified tarball as an
+        # artifact and a re-run publishes that kept file instead of its rebuild,
+        # so npm and the registry receive the same bytes.
+        uses: ./.github/actions/keep-npm-tarballs
+        with:
+          name: npm-tarball-precompute
+          root: packages
+          path: |
+            packages/main-package/*.tgz
+            packages/binary-package-*/*.tgz
+
       # Platform packages first: the main package lists them as optional
       # dependencies at the same version.
       - name: Publish the platform packages
         shell: bash
+        env:
+          NPM_PUBLISH_DIVERGED_LOG: ${{ runner.temp }}/npm-diverged.txt
         run: |
           set -euo pipefail
           for name in binary-package-darwin-arm64 binary-package-linux-arm64-gnu binary-package-linux-x64-gnu binary-package-win32-x64-msvc; do
@@ -213,10 +228,23 @@ jobs:
         # refusal and the release continues.
         continue-on-error: true
         shell: bash
+        env:
+          NPM_PUBLISH_DIVERGED_LOG: ${{ runner.temp }}/npm-diverged.txt
         run: |
           set -euo pipefail
           tarball="$(find packages/main-package -maxdepth 1 -type f -name '*.tgz' -print -quit)"
           bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
+
+      - name: Report a version npm already holds with other bytes
+        # npm-publish.sh keeps a published copy that differs from this run's
+        # tarball, which happens when an earlier run of the same version
+        # published it. The registry lane refuses to describe such a tarball.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-diverged-precompute
+          path: ${{ runner.temp }}/npm-diverged.txt
+          if-no-files-found: ignore
+          overwrite: true
 
   sync-latest:
     name: Synchronize latest dist-tags

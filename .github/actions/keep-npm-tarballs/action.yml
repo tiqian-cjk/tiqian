@@ -1,0 +1,77 @@
+name: Keep the release npm tarballs
+description: >-
+  Fix the npm tarballs of one lane for the whole release run. The first
+  attempt uploads its verified tarballs as an npm-tarball-* artifact; a re-run
+  replaces the tarballs it rebuilt with that artifact, so npm and the registry
+  receive the bytes of the first attempt however often the lane runs.
+inputs:
+  name:
+    description: Artifact name, npm-tarball-<lane>
+    required: true
+  root:
+    description: Directory the tarballs sit under; the artifact keeps paths relative to it
+    required: true
+  path:
+    description: Tarball paths or globs under root, one per line, as upload-artifact takes them
+    required: true
+outputs:
+  reused:
+    description: true when an earlier attempt of this run kept the tarballs
+    value: ${{ steps.lookup.outputs.reused }}
+runs:
+  using: composite
+  steps:
+    # Artifacts belong to the run, not to the attempt: a job re-run in a later
+    # attempt downloads what an earlier attempt uploaded. The lookup asks the
+    # API rather than trying a download, so a first attempt finds no artifact
+    # without a failing step.
+    - name: Look for tarballs an earlier attempt kept
+      id: lookup
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ARTIFACT: ${{ inputs.name }}
+      run: |
+        set -euo pipefail
+        count="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?name=${ARTIFACT}" \
+          --jq '[.artifacts[] | select(.expired | not)] | length')"
+        if [[ "${count}" -gt 0 ]]; then
+          echo "attempt ${GITHUB_RUN_ATTEMPT} reuses ${ARTIFACT} from an earlier attempt"
+          echo "reused=true" >> "${GITHUB_OUTPUT}"
+        else
+          echo "reused=false" >> "${GITHUB_OUTPUT}"
+        fi
+
+    # The paths resolve from the workspace, as they do for upload-artifact, and
+    # the restore writes the kept files back to the same places, so the publish
+    # steps after this action find the tarballs where they always do.
+    - name: Drop the rebuilt tarballs
+      if: steps.lookup.outputs.reused == 'true'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        TARBALLS: ${{ inputs.path }}
+      run: |
+        set -euo pipefail
+        shopt -s nullglob
+        while IFS= read -r pattern; do
+          [[ -z "${pattern}" ]] && continue
+          for file in ${pattern}; do
+            rm -f -- "${file}"
+          done
+        done <<< "${TARBALLS}"
+
+    - name: Restore the kept tarballs
+      if: steps.lookup.outputs.reused == 'true'
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.root }}
+
+    - name: Keep the verified tarballs
+      if: steps.lookup.outputs.reused != 'true'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        if-no-files-found: error
