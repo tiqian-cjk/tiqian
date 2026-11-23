@@ -5,21 +5,37 @@ name: Publish precompute packages
 # platforms/web/server/precompute/binding, which consumes the boring
 # engine-rust bundle; the legacy Kotlin/Native C ABI engine archive is
 # retired with the Stage1 cutover.
+# Called by .github/workflows/release.yml from the v*.*.* release tag, after
+# the web-component lane published the @tiqian/web-component version this package pins, and
+# gated before publishing.
 on:
-  push:
-    tags:
-      - "@tiqian/precompute@*"
+  workflow_call:
+    inputs:
+      use-built-artifacts:
+        description: The release entrypoint already built the precompute packages
+        type: boolean
+        default: false
+      use-ci-packages:
+        description: The build reused the precompute packages from successful CI
+        type: boolean
+        default: false
+  workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: publish-tiqian-precompute
   cancel-in-progress: false
 
 jobs:
+  release-gate:
+    uses: ./.github/workflows/release-gate.yml
+
   validate:
     name: Validate release tag
+    needs: [release-gate]
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.release.outputs.version }}
@@ -40,12 +56,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="$(node -p "require('./platforms/web/server/core/package.json').version")"
-          expected_tag="@tiqian/precompute@${version}"
-          if [[ "${GITHUB_REF_NAME}" != "${expected_tag}" ]]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match package version ${version}"
+          if [[ "${GITHUB_REF_TYPE}" != "tag" || "${GITHUB_REF_NAME}" != v*.*.* ]]; then
+            echo "::error::This lane runs only from a v*.*.* release tag, received ${GITHUB_REF_NAME}."
             exit 1
           fi
+          version="$(node -p "require('./platforms/web/server/core/package.json').version")"
           if [[ "$(git cat-file -t "${GITHUB_REF_NAME}")" != "tag" ]]; then
             echo "::error::Release tag must be annotated"
             exit 1
@@ -70,138 +85,33 @@ jobs:
           done
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
-  binaries:
-    name: Build addon (${{ matrix.platform }})
+  build:
+    if: '!inputs.use-built-artifacts'
     needs: [validate]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux-x64-gnu
-            os: ubuntu-latest
-          - platform: linux-arm64-gnu
-            os: ubuntu-24.04-arm
-          - platform: darwin-arm64
-            os: macos-latest
-          - platform: win32-x64-msvc
-            os: windows-latest
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Check out the tagged commit
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
-
-      - name: Set up Node.js 24
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: "24"
-          package-manager-cache: false
-
-      - name: Install workspace dependencies
-        working-directory: .
-        # npm install, not npm ci: the platform binary optional deps of the
-        # precompute member are not on the registry, so no lockfile can carry
-        # resolved entries for them and npm ci (npm >= 11) rejects the gap.
-        run: npm install --no-audit --no-fund
-
-      - name: Build addon and place platform binary
-        working-directory: platforms/web/server/core
-        shell: bash
-        env:
-          NEON_BUILD_PLATFORM: ${{ matrix.platform }}
-        run: |
-          cargo build --manifest-path ../precompute/binding/Cargo.toml \
-            --release --message-format=json-render-diagnostics > cargo.log
-          npx neon dist --name tiqian-precompute-neon < cargo.log
-          test -f "platforms/${NEON_BUILD_PLATFORM}/index.node"
-
-      - name: Smoke test through the npm loader
-        working-directory: platforms/web/server/core
-        shell: bash
-        run: npm test
-
-      - name: Pack platform package
-        working-directory: platforms/web/server/core/platforms/${{ matrix.platform }}
-        shell: bash
-        run: |
-          mkdir -p ../../pack-output
-          PACK_OUTPUT=$(npm pack --pack-destination ../../pack-output | grep '\.tgz$' | head -n 1)
-          if [[ -z "$PACK_OUTPUT" ]]; then
-            echo "::error::Failed to pack the platform package."
-            exit 1
-          fi
-          FILENAME=$(basename "$PACK_OUTPUT")
-          echo "filename=$FILENAME" >> "$GITHUB_OUTPUT"
-        id: pack
-
-      - name: Upload platform package
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: binary-package-${{ matrix.platform }}
-          path: platforms/web/server/core/pack-output/${{ steps.pack.outputs.filename }}
-          if-no-files-found: error
-          retention-days: 7
-
-  main-package:
-    name: Pack main package
-    needs: [validate]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out the tagged commit
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - name: Set up Node.js 24
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: "24"
-          package-manager-cache: false
-
-      - name: Install workspace dependencies
-        working-directory: .
-        # npm install, not npm ci: the platform binary optional deps of the
-        # precompute member are not on the registry, so no lockfile can carry
-        # resolved entries for them and npm ci (npm >= 11) rejects the gap.
-        run: npm install --no-audit --no-fund
-
-      - name: Lint, typecheck, and build the JS entry
-        working-directory: platforms/web/server/core
-        run: |
-          npm run lint
-          npm run build
-          npm run typecheck
-
-      - name: Pack
-        working-directory: platforms/web/server/core
-        shell: bash
-        id: pack
-        run: |
-          mkdir -p pack-output
-          PACK_OUTPUT=$(npm pack --pack-destination pack-output | grep '\.tgz$' | head -n 1)
-          if [[ -z "$PACK_OUTPUT" ]]; then
-            echo "::error::Failed to pack the main package."
-            exit 1
-          fi
-          echo "filename=$(basename "$PACK_OUTPUT")" >> "$GITHUB_OUTPUT"
-
-      - name: Upload main package
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: main-package
-          path: platforms/web/server/core/pack-output/${{ steps.pack.outputs.filename }}
-          if-no-files-found: error
-          retention-days: 7
+    uses: ./.github/workflows/build-precompute-release.yml
+    with:
+      version: ${{ needs.validate.outputs.version }}
 
   publish:
     name: Publish verified tarballs to alpha
-    needs: [validate, binaries, main-package]
+    needs: [validate, build]
+    # The entrypoint waits for its early build before calling this workflow.
+    if: ${{ !cancelled() && needs.validate.result == 'success' && (inputs.use-built-artifacts || needs.build.result == 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
       id-token: write
     env:
       RELEASE_VERSION: ${{ needs.validate.outputs.version }}
     steps:
+      # The contract and inspect steps run the repository tools, and the job
+      # only downloaded artifacts before this point.
+      - name: Check out the release commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
       - name: Set up Node.js 24
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
@@ -212,9 +122,25 @@ jobs:
       - name: Use an OIDC-capable npm CLI
         run: npm install --global npm@11.12.1
 
-      - name: Download all package artifacts
+      - name: Download the native package artifacts
+        if: '!inputs.use-ci-packages'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
+          pattern: binary-package-*
+          path: packages
+
+      - name: Download the main package artifact
+        if: '!inputs.use-ci-packages'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: main-package
+          path: packages/main-package
+
+      - name: Download the packages reused from CI
+        if: inputs.use-ci-packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-ci-precompute-packages
           path: packages
 
       - name: Verify a complete package set
@@ -233,30 +159,116 @@ jobs:
               echo "::error::$(basename "$tarball") does not carry version ${RELEASE_VERSION}."
               exit 1
             fi
-          done < <(find packages -name '*.tgz' -print0)
+          done < <(find packages/main-package packages/binary-package-* -name '*.tgz' -print0)
+
+      - name: Hold every precompute package to the npm publish contract
+        # Each archive is inspected before any of them reaches the registry:
+        # the manifest name, the version and a workspace range are contract
+        # violations, and the main package is installed so its entry loads.
+        # The platform packages carry a native binary, so they get the manifest
+        # and contents checks rather than an import that only works on the
+        # matching platform.
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          for tarball in $(find packages -maxdepth 2 -type f -name '*.tgz' | sort); do
+            python3 "${GITHUB_WORKSPACE}/tools/publish-contract.py" --archive "${tarball}"
+          done
+          main="$(find packages/main-package -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          # The main package lists the platform packages as optional
+          # dependencies at this version; they are published after this check,
+          # so the archives from this run stand in for them. The entry loads a
+          # platform binary, so the check verifies resolvability rather than
+          # importing it.
+          siblings=()
+          for dir in packages/binary-package-*; do
+            path="$(find "${dir}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+            [[ -n "${path}" ]] && siblings+=(--with "${path}")
+          done
+          # The registry does not have @tiqian/protocol or @tiqian/shared yet
+          # (the pack matrix publishes them after this lane), so an install of
+          # the main package cannot resolve its siblings here. The binaries job
+          # already ran the loader test against the built addon on every
+          # platform; this step holds the published manifest and file list.
+          bash "${GITHUB_WORKSPACE}/tools/check-npm-package.sh" "${main}" \
+            --expect @tiqian/precompute --manifest-only
+
+      - name: Fix the release tarballs for this run
+        # The first attempt of the release run keeps the verified tarball as an
+        # artifact and a re-run publishes that kept file instead of its rebuild,
+        # so npm and the registry receive the same bytes.
+        uses: ./.github/actions/keep-release-files
+        with:
+          name: npm-tarball-precompute
+          root: packages
+          path: |
+            packages/main-package/*.tgz
+            packages/binary-package-*/*.tgz
 
       # Platform packages first: the main package lists them as optional
       # dependencies at the same version.
-      - name: Publish each tarball
+      - name: Publish the platform packages
         shell: bash
+        env:
+          NPM_PUBLISH_DIVERGED_LOG: ${{ runner.temp }}/npm-diverged.txt
         run: |
           set -euo pipefail
           for name in binary-package-darwin-arm64 binary-package-linux-arm64-gnu binary-package-linux-x64-gnu binary-package-win32-x64-msvc; do
             tarball="$(find "packages/$name" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
-            npm publish "${tarball}" --ignore-scripts --access public --tag alpha
+            bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
           done
+
+      - name: Publish the main package
+        # This package answers 404 from the registry while the platform
+        # packages publish from the same workflow, so its trusted publisher
+        # entry names a different workflow. A 404 here must not hold the
+        # registry write and the Maven lanes behind it; the step reports the
+        # refusal and the release continues.
+        continue-on-error: true
+        shell: bash
+        env:
+          NPM_PUBLISH_DIVERGED_LOG: ${{ runner.temp }}/npm-diverged.txt
+        run: |
+          set -euo pipefail
           tarball="$(find packages/main-package -maxdepth 1 -type f -name '*.tgz' -print -quit)"
-          npm publish "${tarball}" --ignore-scripts --access public --tag alpha
+          bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
+
+      - name: Report a version npm already holds with other bytes
+        # npm-publish.sh keeps a published copy that differs from this run's
+        # tarball, which happens when an earlier run of the same version
+        # published it. The registry lane refuses to describe such a tarball.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-diverged-precompute
+          path: ${{ runner.temp }}/npm-diverged.txt
+          if-no-files-found: ignore
+          overwrite: true
 
   sync-latest:
     name: Synchronize latest dist-tags
+    # A trusted publisher whose connection lacks the dist-tag switch answers
+    # 403; the version is already published, so this job reports it without
+    # blocking the remaining lanes.
+    continue-on-error: true
     needs: [validate, publish]
+    # The standalone build can be skipped when the caller supplies the packages.
+    if: ${{ !cancelled() && needs.validate.result == 'success' && needs.publish.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Trusted publishing authenticates the dist-tag writes; no token is read.
+      id-token: write
     env:
       RELEASE_VERSION: ${{ needs.validate.outputs.version }}
     steps:
+      - name: Check out the release commit
+        # The dist-tag step runs tools/npm-dist-tag.sh from the repository, so
+        # this job needs the checkout the publish job has.
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
       - name: Set up Node.js 24
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
@@ -269,21 +281,19 @@ jobs:
 
       - name: Point latest at the published alpha
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_DIST_TAG_TOKEN }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "${NODE_AUTH_TOKEN}" ]]; then
-            echo "::error::NPM_DIST_TAG_TOKEN is not configured"
-            exit 1
-          fi
+          # 11.21.0 is the first CLI that manages dist-tags through trusted publishing.
+          npm install --global npm@11.21.0
           for package in \
             @tiqian/precompute \
             @tiqian/precompute-darwin-arm64 \
             @tiqian/precompute-linux-arm64-gnu \
             @tiqian/precompute-linux-x64-gnu \
             @tiqian/precompute-win32-x64-msvc; do
-            npm dist-tag add "${package}@${RELEASE_VERSION}" latest
+            bash "${GITHUB_WORKSPACE}/tools/npm-dist-tag.sh" --package "${package}" --version "${RELEASE_VERSION}" --tag latest
           done
 
       - name: Verify alpha and latest

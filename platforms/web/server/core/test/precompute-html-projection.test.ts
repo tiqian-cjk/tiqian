@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseHTML } from "linkedom";
 
-import type { DomNode } from "../lib/shared-gen/org/tiqian/shared/html/DomNode.js";
+import type { DomNode } from "@tiqian/shared/org/tiqian/shared/html/DomNode";
 import {
   projectedTextOnly,
   snapshotProjection,

@@ -1,5 +1,6 @@
 package org.tiqian.core;
 
+@:mainOnly
 @:dataClass
 class ColorSpan {
     public final start:Int;

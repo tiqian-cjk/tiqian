@@ -95,7 +95,7 @@ testlib 的失败消息写入 `out/test-results/rust.jsonl`，路径可用环境
 
 ## 构建与验证
 
-项目使用 Gradle Kotlin Multiplatform，JVM 工具链版本为 25；包含 Android 目标平台与 `:ffi:js` 的 Kotlin/JS 目标平台。
+项目使用 Gradle Kotlin Multiplatform，JVM 工具链版本为 25；包含 Android 目标平台。
 
 ```shell
 ./gradlew build
@@ -109,13 +109,14 @@ testlib 的失败消息写入 `out/test-results/rust.jsonl`，路径可用环境
 ./gradlew :demo:android:assembleDebug
 ./gradlew runComposeDemo
 
-./gradlew :ffi:js:jsNodeTest
-./gradlew :ffi:js:assembleNpmPackage
 npm install --no-audit --no-fund
+(cd platforms/web/client/engine-runtime && npm run build:runtime)
 (cd platforms/web/client/core && npm test)
 (cd platforms/web/client/web-component && npm test)
-(cd ffi/js/npm && npm test)
+(cd platforms/web/client/engine-runtime && npm test)
 ```
+
+Rust 侧的 `engine-gen` 是构建期生成物（`node tools/generate-engine-gen.mjs`，产物在 `engine-haxe/out/engine-rust/gen`），不入库；生成器需要 `nix develop` 提供的 `boring` 驱动。先跑生成器再 `cargo build -p tiqian`。JS 侧的 `engine-gen` 仍入库，缺口见 `t-mwckjk9n-orhm`。
 
 根目录 `npm install` 安装所有 workspace 依赖；预编译平台二进制的 optional dependencies 未发布到 npm 仓库，lock 文件不包含其解析条目，npm 11 以上版本执行 `npm ci` 会报错，因此统一使用 `npm install`。
 
@@ -133,9 +134,9 @@ npm install --no-audit --no-fund
 ## 模块边界
 
 - **排版核心**：`engine`（单一发布模块，整合原 `core`、`font`、`linebreak`、`clreq`、`layout`、`shaping/api`）定义数据结构、字体策略、断行规则、中文排版规则、塑造接口定义与最终 `LayoutResult`；代码按 `org.tiqian.{core,font,linebreak,clreq,layout,shaping}` 包组织。
-- **平台字形塑造**：塑造接口定义于 `engine`；`platforms/jvm/{shaping,skia}`、`platforms/android/{shaping,native-font}`、`platforms/apple/shaping` 提供各平台实现。
+- **平台字形塑造**：塑造接口定义于 `engine`；`platforms/compose/skia-jvm`、`platforms/android/{shaping,native-font}`、`platforms/apple/shaping` 提供各平台实现。
 - **前端适配**：`platforms/compose/{compose,material3}`、`platforms/web/client`、`platforms/android/view`、`platforms/apple/frontend` 接收排版结果并执行界面呈现。
-- **外部语言接口**：`ffi/js` 与 `ffi/native` 将 `engine` 导出为 JavaScript 与 C 接口；`ffi/rust` 包含预编译 Rust 绑定。`platforms/web/server` 由项目维护者管理。
+- **外部语言接口**：`platforms/web/client/engine-runtime` 提供 Web 客户端使用的 npm 引擎包；`platforms/web/server/precompute/tiqian` 与 `platforms/web/server/precompute/engine-gen` 提供 Rust 预计算绑定。`platforms/web/server` 由项目维护者管理。
 - **示例与工具**：`demo` 包含跨平台 Desktop 与 Android 示例界面，`demo/android` 提供 Android 运行壳；`engine` 模块的 `commonTest` 包含测试用例数据与排版报告生成工具。
 
 平台适配层负责字体加载、字形塑造、字形度量、绘制与宿主样式读取，不自行计算字体回退、标点间距、避头尾、行调整或两端对齐。依赖平台度量数据的规则将数据返回排版核心决策流程，不在呈现层补充视觉偏移。
@@ -155,6 +156,7 @@ npm install --no-audit --no-fund
 
 - 单个源码文件行数控制在 1000 行以内。新代码按功能拆分文件；既有文件超标时优先通过移动代码解耦，类文件拆分可通过定义同包 internal 扩展函数或按测试主题拆分子类实现，修改后必须保证模块测试全部通过且黄金数据无变动。
 - 入口文件仅负责接口暴露与组件装配，不存放具体业务逻辑实现；具体实现存放于按功能命名的源码文件中。
+- 可执行文件只有一处：`tools/`。入库数据放在 `engine-haxe/data/`，手册放在 `docs/`，见 [ADR 0063](docs/adr/0063-single-tools-directory.md)。
 
 命名规范：
 

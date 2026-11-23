@@ -107,8 +107,7 @@ cluster、glyph、advance 和 ink bounds。可重放后端还用稳定 `FontFace
 
 当前平台实现包括：
 
-- `platforms/jvm/shaping`：AWT 字体与 glyph vector；
-- `platforms/jvm/skia`：Skia / Skiko，供 Compose Desktop 与 JVM 渲染；
+- `platforms/compose/skia-jvm`：Skia / Skiko，是 Compose Desktop 的 JVM shaping 与绘制后端；
 - `platforms/android/native-font`：宿主可显式选择的 Android API 23+ HarfBuzz / FreeType
   受控字体后端，从同一字体字节完成
   shaping、metrics、ink 与 outline replay；文件字体按内容身份只读映射一次，`ByteArray` / asset
@@ -122,6 +121,9 @@ cluster、glyph、advance 和 ink bounds。可重放后端还用稳定 `FontFace
 - `platforms/apple/shaping`：Apple Core Text shaping、系统字体度量与 glyph ink。语言和显式 OpenType
   feature 进入同一条 `CTLine` 测绘路径；无法施加的 feature 以具名 capability issue 降级，不能
   只把请求原样写进 `GlyphRun`。
+
+AWT 对照实现 `AwtTextShaper`（包 `org.tiqian.shaping.jvm`）不发布，也不是平台模块：它只服务
+`tools/engine-probes` 里 `AwtSkiaShapingComparisonTest` 与标点探针的 AWT ↔ Skia 对照。
 
 平台 adapter 不决定 CLREQ 码点替换、标点宽度、避头尾或两端对齐。它无法提供某项证据时，
 必须输出具名降级原因，不用在 renderer 中猜补偿值。
@@ -207,7 +209,7 @@ TalkBack character-location 能力不属于当前静态正文路径。
 
 ### Web
 
-`platforms/web/client` 发布 ESM 包 `@tiqian/prose` 与 light-DOM `<tiqian-prose>`。服务器输出的
+`platforms/web/client` 发布 ESM 包 `@tiqian/web-component` 与 light-DOM `<tiqian-prose>`。服务器输出的
 HTML 先保持可读，TS runtime（`@tiqian/core` 宿主模块与 `@tiqian/ffi` 引擎）与字体就绪后按 viewport 距离逐段原子增强。原 `<p>`、链接、代码、强调、自定义
 inline 与 CSS 仍由宿主持有；引擎只写入断行和 spacing geometry。
 `strong-as-emphasis` lowering 先保留 source range，等整段文本完成空白投影后再通过 FFI 批量取得
@@ -216,7 +218,7 @@ inline 与 CSS 仍由宿主持有；引擎只写入断行和 spacing geometry。
 
 同仓库的 `platforms/web/client/sveltekit` 与 `platforms/web/client/astro` 分别发布
 `@tiqian/sveltekit` 和 `@tiqian/astro`。它们只把框架的 SSR、静态构建、head 资产与客户端导航生命周期
-接到 `@tiqian/prose`，不拥有另一份 HTML 投影或排版规则。最低配置的组件输出 semantic SSR，浏览器按
+接到 `@tiqian/web-component`，不拥有另一份 HTML 投影或排版规则。最低配置的组件输出 semantic SSR，浏览器按
 实时 content width 增强；构建字体证据不要求宽度，只有显式 fixed-measure snapshot 需要
 `maxWidthPx`。完整边界见 [ADR 0042](adr/0042-framework-web-integrations.md)。
 
@@ -297,7 +299,7 @@ caret/selection 几何；平台 tokenizer 不参与 shaping、断行或字位计
   数据结构与 layout contract、字体角色 / fallback / 度量策略、平台无关的 shaping / replayable
   font contract、断行机会与西文断词、中文 profile / 标点分类 / 禁则 / 空间策略、段落布局 / 修复 /
   行调整与结构化 decision。
-- `platforms/jvm/{shaping,skia}`、`platforms/android/{shaping,native-font,rendering}`、
+- `platforms/compose/skia-jvm`、`platforms/android/{shaping,native-font,rendering}`、
   `platforms/apple/shaping`：各宿主的 shaping / replayable font 实现；
   `platforms/android/shaping` 是 Compose Android 默认的公开平台 run 后端，
   `platforms/android/native-font` 持有宿主可显式选择的共享字体源、受控 face、
@@ -312,7 +314,7 @@ caret/selection 几何；平台 tokenizer 不参与 shaping、断行或字位计
 - `ffi/js`：引擎的 Kotlin/JS 对外接口（`@JsExport` wire 与 HarfBuzz session 后端）；不拥有排版规则。
 - `platforms/web/server`：Rust workspace（`tiqian-precompute`、`tiqian-precompute-neon`）与
   `@tiqian/precompute` npm 包；Node exact-font session 与构建期编排；不拥有排版规则。
-- `platforms/web/client/astro`、`platforms/web/client/sveltekit`：框架 SSR / build / navigation transport；消费 `@tiqian/prose` 的公共
+- `platforms/web/client/astro`、`platforms/web/client/sveltekit`：框架 SSR / build / navigation transport；消费 `@tiqian/web-component` 的公共
   HTML prepare 与 snapshot contract，不拥有排版或字体 policy。
 - `demo`：Desktop / Android 共用的 Compose 示例界面与 Desktop 启动入口。
 - `demo/android`：Android 应用壳、Compose 启动入口、原生 View 的 RecyclerView dogfood surface

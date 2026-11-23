@@ -202,7 +202,7 @@ class RichTextRenderTest {
         val density = Density(1f)
         val spans = annotated.cjkRichTextSpans(inlineCodePaint = defaultInlineCodePaint(density))
         val result = layout ?: error("onTextLayout not called")
-        val codeRanges = spans.filter { it.role == RichTextRole.InlineCode }.map { it.range }
+        val codeRanges = spans.filter { it.role == org.tiqian.core.InlineCode.instance }.map { it.range }
         assertTrue(
             result.debug.autoSpaceDecisions.any {
                 it.reason == "InlineBoxOuterAutoSpace:leading-W-N"
@@ -267,7 +267,7 @@ class RichTextRenderTest {
         val segments = result
             .toReplayIndex(spans)
             .richTextBackgroundSegments
-            .filter { it.span.role == RichTextRole.InlineCode }
+            .filter { it.span.role == org.tiqian.core.InlineCode.instance }
         assertTrue(segments.size >= 2, "expected wrapped inline code, got ${segments.size} segment")
         val firstCodeSegment = segments.first()
         val positioned = result.positionedClusters()
@@ -529,7 +529,7 @@ class RichTextRenderTest {
             .filter { it.range.start >= 0 && it.range.end <= "template".length }
             .maxOf { it.right }
         val underline = result.positionedRichTextSegments(text.cjkRichTextSpans())
-            .single { it.span.role == RichTextRole.Underline }
+            .single { it.span.role == org.tiqian.core.Underline.instance }
 
         assertEquals(TextRange(0, "template".length), underline.range)
         assertEquals(templateRight, underline.right, absoluteTolerance = 0.01f)
@@ -551,7 +551,7 @@ class RichTextRenderTest {
             density = Density(1f),
             textStyle = CjkTextStyle(fontSize = 16.sp),
         )
-        val underlineSpan = text.cjkRichTextSpans().single { it.role == RichTextRole.Underline }
+        val underlineSpan = text.cjkRichTextSpans().single { it.role == org.tiqian.core.Underline.instance }
         val replayIndex = result.toReplayIndex(listOf(underlineSpan))
         val occupied = replayIndex.richTextSegments.single()
         val underline = replayIndex.richTextDecorationSegments.single()

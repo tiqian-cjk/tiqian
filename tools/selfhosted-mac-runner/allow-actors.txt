@@ -1,0 +1,7 @@
+# GitHub accounts allowed to start a job on the self-hosted macOS runner.
+# One login per line. Blank lines and lines starting with # are ignored.
+# The value is compared with the GITHUB_ACTOR environment variable exactly,
+# so write the account with the same capitalization GitHub reports.
+#
+# This file is deliberately empty: until an account is added here every job is
+# refused by job-started.sh.

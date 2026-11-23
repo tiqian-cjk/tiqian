@@ -10,10 +10,11 @@ import type {
   WorkerRequestEnvelope,
   WorkerResponseEnvelope,
 } from "./web-worker/worker-channel.js";
-import { precomputeParagraphWithDiagnostics } from "@tiqian/ffi";
+import { precomputeParagraphPlan } from "@tiqian/ffi";
 import type { DecorationWire } from "@tiqian/ffi";
 import { prepareParagraphRequestWire } from "./wire-construction.js";
 import type { WorkerLayoutRequestBody } from "./web-worker/worker-channel.js";
+import { initializeGlobalServices } from "../services/global-services.js";
 
 type WorkerMessageEventListener = (event: MessageEvent<WorkerRequestEnvelope>) => void | Promise<void>;
 
@@ -23,6 +24,9 @@ interface LayoutWorkerMessageScope {
 }
 
 const sessions: Map<string, ServerReplayFontSession> = new Map();
+
+// Workers own a separate global scope; custom-element registration only initializes the page.
+initializeGlobalServices();
 
 function errorDetail(error: unknown): string {
   return String(error instanceof Error ? error.message : error).slice(0, 1_000);
@@ -91,15 +95,12 @@ function errorDetail(error: unknown): string {
       emphasisDotGapEm: null,
       renderEvidenceOverride: request.renderEvidence,
     });
-    const rawEnvelope = precomputeParagraphWithDiagnostics(
+    const plan = precomputeParagraphPlan(
       requestDto,
       0.0,
       session.shapeJson,
       session.metricsJson,
     );
-    // The diagnostics export returns the plan-plus-diagnostics envelope; the
-    // worker channel keeps carrying the bare plan JSON.
-    const plan = JSON.parse(rawEnvelope).plan;
     (globalThis as LayoutWorkerMessageScope).postMessage({ id, ok: true, plan });
   } catch (error) {
     (globalThis as LayoutWorkerMessageScope).postMessage({ id, ok: false, error: errorDetail(error) });

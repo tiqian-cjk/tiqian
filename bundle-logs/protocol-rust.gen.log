@@ -1,3 +1,0 @@
-[gen] protocol-rust -> /home/losses/Development/tq-workspace/tiqian/.scratch/tasks/wb-t-mv4gfi00-ndqa/engine-haxe/out/protocol-rust/gen, /home/losses/Development/tq-workspace/tiqian/.scratch/tasks/wb-t-mv4gfi00-ndqa/engine-haxe/out/protocol-rust/gen-tests
-  $ haxe -cp engine-haxe/src -cp engine-haxe/macros engine-haxe/targets/protocol-rust.hxml -D rust-output=/home/losses/Development/tq-workspace/tiqian/.scratch/tasks/wb-t-mv4gfi00-ndqa/engine-haxe/out/protocol-rust/gen -D rust-test-output=/home/losses/Development/tq-workspace/tiqian/.scratch/tasks/wb-t-mv4gfi00-ndqa/engine-haxe/out/protocol-rust/gen-tests
-bundle driver: ok

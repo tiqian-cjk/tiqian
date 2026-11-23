@@ -409,14 +409,13 @@ test("Parity against the scripted canvas-model backend", () => {
 
   const { shapeJson: scriptedShapeJson, metricsJson: scriptedMetricsJson } = makeScriptedCanvasModelCallbacks();
 
-  let planB;
+  let planB: any;
   try {
     const requestDiag = buildTestRequest();
-    const rawScriptedEnvelope = precomputeParagraphWithDiagnostics(
+    const rawScriptedEnvelope = precomputeParagraphWithBrowserMetrics(
       requestDiag,
       0.0,
-      scriptedShapeJson,
-      scriptedMetricsJson,
+      { shapeJson: scriptedShapeJson, metricsJson: scriptedMetricsJson },
     );
     planB = JSON.parse(JSON.parse(rawScriptedEnvelope).plan);
   } finally {

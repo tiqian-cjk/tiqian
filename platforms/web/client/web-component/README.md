@@ -1,9 +1,9 @@
-# `@tiqian/prose`
+# `@tiqian/web-component`
 
-提椠是一个中日韩段落书写器。`@tiqian/prose` 是提椠的 Web 前端，目前用于简体中文横排。
+提椠是一个中日韩段落书写器。`@tiqian/web-component` 是提椠的 Web 前端，目前用于简体中文横排。
 
 它适合已经用 Markdown、静态站点生成器或 SSR 输出文章的网站。网站继续生成普通 HTML，
-`@tiqian/prose` 在浏览器支持时接管能够保真处理的段落。你不需要重写现有内容管线，字体、颜色、
+`@tiqian/web-component` 在浏览器支持时接管能够保真处理的段落。你不需要重写现有内容管线，字体、颜色、
 链接和交互样式也仍由网站自己控制。
 
 提椠会按整段正文计算字体、标点空间和断行，再把结果呈现为普通 DOM 文字，而不是 Canvas 或图片；
@@ -15,7 +15,7 @@ alpha 版本，不承诺稳定 API，也还不支持竖排、日文 JLREQ 或所
 ## 安装
 
 ```shell
-npm install @tiqian/prose@alpha
+npm install @tiqian/web-component@alpha
 ```
 
 ## 自定义元素
@@ -32,7 +32,7 @@ npm install @tiqian/prose@alpha
 </style>
 
 <script type="module">
-  import "@tiqian/prose/element";
+  import "@tiqian/web-component/element";
 </script>
 ```
 
@@ -42,6 +42,41 @@ npm install @tiqian/prose@alpha
 
 请把 `display: block` 放进网站自己的首屏 CSS。这样即使 JavaScript 还没加载或不可用，
 `<tiqian-prose>` 也不会按浏览器默认的行内元素显示。
+
+### 同步重排与打印
+
+`article.relayoutSync()` 会读取当前容器尺寸，在返回前用提椠完成全文排版，并返回成功接管的
+段落数。程序化宿主也可以调用 `context.relayoutSync()`；原有 `context.relayout()` 仍按帧调度。
+同步接口保留原有段落元素，支持已采用的 SSR 快照和混合排版，不创建额外的打印文章副本。
+
+应先等到 `tiqian:ready`，并在打开打印前加载所需字体和样式。在 `beforeprint` 中先应用打印宽度，
+再调用同步接口；关闭预览后恢复屏幕尺寸并再次调用。下面的宽度应与站点的纸张、页边距相匹配：
+
+```js
+const article = document.querySelector("tiqian-prose");
+let previousStyle;
+
+// Register after tiqian:ready and after the required print fonts have loaded.
+window.addEventListener("beforeprint", () => {
+  previousStyle = article.getAttribute("style");
+  article.style.setProperty("width", "180mm", "important");
+  article.relayoutSync({ firstLineIndentIc: 2 });
+});
+
+// Restore the host size before measuring the screen layout again.
+window.addEventListener("afterprint", () => {
+  if (previousStyle == null) article.removeAttribute("style");
+  else article.setAttribute("style", previousStyle);
+  article.relayoutSync({ firstLineIndentIc: 0 });
+});
+```
+
+该接口同步使用已加载的浏览器字体度量，不等待 Worker、字体下载或服务端 replay 字体会话。
+`firstLineIndentIc` 可覆盖段落首行缩进（列表项不缩进）；它与其他排版选项一样保留到下一次重排。
+例如打印正文可设为 `2`，返回屏幕后恢复为 `0`。对已接管的段落，应将 CSS `text-indent` 设为 `0`，
+避免浏览器在提椠已计算的首行位移上再次叠加缩进；未接管的段落仍可使用 `text-indent: 2em`。
+它会取消在途排版并重建全部段落，完成时同步发出 `tiqian:relayout-ready`；不支持的段落仍保留
+可读的原文，并通过原有诊断报告。未连接或 `disabled` 时返回 `0`，首次 ready 前调用会抛错。
 
 提椠默认让原生列表标记保留在正文外侧，并用 `2ic` 作为列表正文缩进。已有站点需要延续自己的
 列表几何时，可以在正文根节点覆盖 `--tq-list-indent`：
@@ -121,7 +156,7 @@ tiqian-prose {
 不能使用自定义元素时，可以自行管理正文根节点的生命周期：
 
 ```js
-import { destroy, enhance } from "@tiqian/prose";
+import { destroy, enhance } from "@tiqian/web-component";
 
 const article = document.querySelector("article");
 await enhance(article);
@@ -140,7 +175,7 @@ await destroy(article);
 执行；安装时会按平台带入对应的二进制可选依赖：
 
 ```sh
-npm install @tiqian/prose @tiqian/precompute
+npm install @tiqian/web-component @tiqian/precompute
 ```
 
 ```js
@@ -212,7 +247,7 @@ template 的形式进入页面，不改变浏览器的首次绘制。浏览器�
 与
 [ADR 0052](https://github.com/tiqian-cjk/tiqian/blob/main/docs/adr/0052-precompute-cache-and-batch-renderer.md)。
 
-客户端导航照常传递原始正文 HTML；创建新的 `<tiqian-prose>` 前，用 `@tiqian/prose/snapshot-client`
+客户端导航照常传递原始正文 HTML；创建新的 `<tiqian-prose>` 前，用 `@tiqian/web-component/snapshot-client`
 的 `registerSnapshotBundle()` 注册 bundle 中的客户端数据即可复用快照，不必重复传输整篇预排
 HTML。
 
@@ -251,7 +286,7 @@ const fontBundle = assembleFontContractBundle(contractData, contractTables);
 正文，即可得到 semantic SSR 和按浏览器真实容器宽度运行的提椠增强；无需声明最大宽度。需要构建期
 exact-font replay 时再配置宿主字体，只有主动开启 fixed-measure snapshot 时才传 `maxWidthPx`。
 
-框架包保持独立，是为了不让普通 `@tiqian/prose` 用户安装 Svelte 或 Astro；它们与核心放在同一仓库，
+框架包保持独立，是为了不让普通 `@tiqian/web-component` 用户安装 Svelte 或 Astro；它们与核心放在同一仓库，
 以便 snapshot wire 和发布版本始终一起验证。开启构建期预排时，框架包的服务端入口同样来自
 `@tiqian/precompute`，需要一并安装。
 

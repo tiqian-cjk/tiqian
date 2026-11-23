@@ -16,11 +16,8 @@
 // Ambient global declarations pulled in via import type from owner modules.
 import type { LoweredParagraph } from "./lowered-paragraph.js";
 import { LAYOUT_REVISION, SNAPSHOT_SCHEMA } from "../sampler/snapshot/snapshot-schema.js";
-import {
-  precomputeParagraphWithBrowserMetrics,
-  precomputeParagraphWithDiagnostics,
-} from "@tiqian/ffi";
-import type { PrepareParagraphRequest } from "@tiqian/ffi";
+import { precomputeParagraphWithDiagnostics } from "@tiqian/ffi";
+import type { PlanWithDiagnostics, PrepareParagraphRequest } from "@tiqian/ffi";
 import {
   decorationWires,
   inlineBoxWires,
@@ -38,22 +35,6 @@ interface LayoutPlanLine {
 
 interface LayoutPlan {
   lines: LayoutPlanLine[];
-}
-
-interface LayoutCapabilityIssue {
-  name: string;
-  reason: string;
-}
-
-interface LayoutAdvanceSuspect {
-  displayText: string;
-  advance: number;
-  reason: string;
-}
-
-interface LayoutDiagnostics {
-  capabilityIssues: LayoutCapabilityIssue[];
-  advanceSuspects: LayoutAdvanceSuspect[];
 }
 
 // The prepare verdict is a discriminated union on kind. Every original
@@ -74,10 +55,10 @@ interface PrepareUnsupportedResult {
 
 export interface PrepareReadyResult {
   kind: "ready";
-  rawEnvelope: string;
-  planJson: string;
+  rawEnvelope: unknown;
+  planJson: string | Record<string, unknown>;
   plan: LayoutPlan;
-  diagnostics: LayoutDiagnostics;
+  diagnostics: PlanWithDiagnostics["diagnostics"];
   width: number;
   measure: number;
   snapshotFontSessionUsed: boolean;
@@ -339,7 +320,7 @@ export function wireArguments(lowered: LoweredParagraph): PrepareParagraphReques
 
     let snapshotFontSessionUsed = browserFallback != null;
 
-    let rawEnvelope;
+    let rawEnvelope: PlanWithDiagnostics;
     if (snapshotSession != null) {
       try {
         // SnapshotSessionSemanticLayout: one font session serves the canonical
@@ -357,29 +338,22 @@ export function wireArguments(lowered: LoweredParagraph): PrepareParagraphReques
         // SnapshotSessionBrowserFallback* wrappers are deliberately not ported
         // (Slice 4a note); the whole paragraph re-runs instead.
         snapshotFontSessionUsed = false;
-        rawEnvelope = precomputeParagraphWithBrowserMetrics(
-          wire,
-          ZERO_ADVANCE_EPSILON,
-          browserFallback!.bridge as BrowserBridgeDescriptor,
-        );
+        rawEnvelope = layoutWithBrowserMetrics(wire, browserFallback!.bridge as BrowserBridgeDescriptor);
       }
     } else {
       if (browserFallback == null) {
         throw new Error('missing browserFallback descriptor for browser-metric layout');
       }
       snapshotFontSessionUsed = false;
-      rawEnvelope = precomputeParagraphWithBrowserMetrics(
-        wire,
-        ZERO_ADVANCE_EPSILON,
-        browserFallback.bridge as BrowserBridgeDescriptor,
-      );
+      rawEnvelope = layoutWithBrowserMetrics(wire, browserFallback.bridge as BrowserBridgeDescriptor);
     }
 
-    const envelope = JSON.parse(rawEnvelope);
-    const planJson = envelope.plan;
-    const plan = JSON.parse(planJson);
-    const diagnostics = envelope.diagnostics;
+    const { plan: planJson, diagnostics } = rawEnvelope;
+    const plan = planJson as unknown as LayoutPlan;
 
+    // Verdict, not diagnostics: capabilityIssues and advanceSuspects are the
+    // render gates below (the first hit returns unsupported); the full arrays
+    // have no other consumer. Keep the names and semantics as published.
     const capabilityIssue = diagnostics.capabilityIssues[0];
     if (capabilityIssue != null) {
       return {
@@ -449,3 +423,9 @@ export function wireArguments(lowered: LoweredParagraph): PrepareParagraphReques
       snapshotFontSessionUsed: snapshotFontSessionUsed,
     };
   }
+
+// Canvas callbacks are closures created once per bridge, so width-only
+// relayouts reuse the same annotation cache as the replay-session path.
+function layoutWithBrowserMetrics(wire: PrepareParagraphRequest, bridge: BrowserBridgeDescriptor): PlanWithDiagnostics {
+  return precomputeParagraphWithDiagnostics(wire, ZERO_ADVANCE_EPSILON, bridge.shapeJson, bridge.metricsJson);
+}

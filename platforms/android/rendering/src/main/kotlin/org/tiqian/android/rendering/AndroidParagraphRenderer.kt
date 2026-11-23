@@ -18,9 +18,16 @@ import org.tiqian.core.LayoutResult
 import org.tiqian.core.LayoutResultReplayIndex
 import org.tiqian.core.LineBox
 import org.tiqian.core.RichTextLineSegment
-import org.tiqian.core.RichTextRole
-import org.tiqian.core.RichTextBackgroundDrawStyle
+import org.tiqian.core.Background
+import org.tiqian.core.Border
+import org.tiqian.core.Dashed
+import org.tiqian.core.Dotted
+import org.tiqian.core.Fill
+import org.tiqian.core.InlineCode
+import org.tiqian.core.LineThrough
 import org.tiqian.core.RichTextLinePattern
+import org.tiqian.core.Solid
+import org.tiqian.core.Underline
 import org.tiqian.core.TextSpan
 import org.tiqian.core.TextStyle
 import org.tiqian.core.richTextDecorationLineY
@@ -52,7 +59,7 @@ internal class AndroidParagraphDrawCache {
     internal val skipInkPath = Path()
     internal val skipInkBounds = RectF()
     internal val skipInkIntervals = HashMap<Long, FloatArray>()
-    internal val dashEffects = HashMap<RichTextLinePattern.Dashed, DashPathEffect>()
+    internal val dashEffects = HashMap<Dashed, DashPathEffect>()
     internal val platformFonts31 = HashMap<String, Any?>()
     // Kept as Any so loading the cache itself remains safe on API 23-30, where Canvas.drawGlyphs
     // is unavailable. The API 31 helper creates and owns the typed batch lazily.
@@ -687,17 +694,17 @@ private fun drawAndroidRichTextBackgrounds(
     val paint = drawCache.richTextBackgroundPaint
     for (seg in segments) {
         val argb = when (seg.span.role) {
-            RichTextRole.Background -> seg.span.paint.argb
-            RichTextRole.InlineCode -> seg.span.paint.argb ?: INLINE_CODE_BACKGROUND_COLOR
+            Background.instance -> seg.span.paint.argb
+            InlineCode.instance -> seg.span.paint.argb ?: INLINE_CODE_BACKGROUND_COLOR
             else -> null
         } ?: continue
         paint.color = argb
         val inset = when (val drawStyle = seg.span.paint.background.drawStyle) {
-            RichTextBackgroundDrawStyle.Fill -> {
+            is Fill -> {
                 paint.style = Paint.Style.FILL
                 0f
             }
-            is RichTextBackgroundDrawStyle.Border -> {
+            is Border -> {
                 paint.style = Paint.Style.STROKE
                 paint.strokeWidth = drawStyle.strokeWidth
                 drawStyle.strokeWidth / 2f
@@ -750,32 +757,35 @@ private fun drawAndroidRichTextLines(
     strokePaint.style = Paint.Style.STROKE
     for (seg in segments) {
         val role = seg.span.role
-        if (role != RichTextRole.Underline && role != RichTextRole.LineThrough) continue
+        if (role != Underline.instance && role != LineThrough.instance) continue
         when (val pattern = seg.span.paint.linePattern) {
-            RichTextLinePattern.Solid -> {
+            is Solid -> {
                 strokePaint.strokeWidth = (result.input.textStyle.fontSize / 16f).coerceAtLeast(1f)
                 strokePaint.pathEffect = null
                 strokePaint.strokeCap = Paint.Cap.BUTT
             }
-            is RichTextLinePattern.Dashed -> {
+            is Dashed -> {
                 strokePaint.strokeWidth = pattern.strokeWidth
                 strokePaint.strokeCap = Paint.Cap.ROUND
                 strokePaint.pathEffect = drawCache.dashEffects.getOrPut(pattern) {
                     DashPathEffect(floatArrayOf(pattern.dashLength, pattern.gapLength), 0f)
                 }
             }
-            is RichTextLinePattern.Dotted -> {
+            is Dotted -> {
                 strokePaint.strokeWidth = pattern.dotDiameter
                 strokePaint.strokeCap = Paint.Cap.BUTT
                 strokePaint.pathEffect = null
             }
         }
-        val skipBandPad = strokePaint.strokeWidth.coerceAtLeast(1f)
+        val skipBandPad = when (val pattern = seg.span.paint.linePattern) {
+            is org.tiqian.core.Dotted -> pattern.dotDiameter / 2f
+            else -> strokePaint.strokeWidth.coerceAtLeast(1f)
+        }
         val style = spans.lastOrNull { seg.range.start >= it.range.start && seg.range.start < it.range.end }?.style
             ?: result.input.textStyle
         val lineY = result.richTextDecorationLineY(seg, strokePaint.strokeWidth)
         strokePaint.color = seg.span.paint.argb ?: colorAt(seg.range.start, color, colorSpans)
-        if (role == RichTextRole.Underline) {
+        if (role == Underline.instance) {
             drawAndroidStraightInterlinearLine(
                 canvas = canvas,
                 result = result,
@@ -814,7 +824,7 @@ private fun drawAndroidStraightInterlinearLine(
     paint: Paint,
     skipBandPad: Float,
     skipClearance: Float,
-    linePattern: RichTextLinePattern = RichTextLinePattern.Solid,
+    linePattern: RichTextLinePattern = Solid.instance,
     spans: List<TextSpan>,
     typefaces: AndroidTypefaceResolver,
     skipCache: MutableMap<Long, FloatArray>,
@@ -832,8 +842,8 @@ private fun drawAndroidStraightInterlinearLine(
     }
     keptIntervals(left, right, skips, skipClearance) { x0, x1 ->
         when (linePattern) {
-            RichTextLinePattern.Solid -> canvas.drawLine(x0, lineY, x1, lineY, paint)
-            is RichTextLinePattern.Dashed -> {
+            is Solid -> canvas.drawLine(x0, lineY, x1, lineY, paint)
+            is Dashed -> {
                 paint.pathEffect = null
                 val saveCount = canvas.save()
                 canvas.clipRect(x0, lineY - paint.strokeWidth, x1, lineY + paint.strokeWidth)
@@ -861,7 +871,7 @@ private fun drawAndroidStraightInterlinearLine(
                 }
                 canvas.restoreToCount(saveCount)
             }
-            is RichTextLinePattern.Dotted -> {
+            is Dotted -> {
                 paint.style = Paint.Style.FILL
                 fittedDottedLineCenters(
                     spanLeft = left,

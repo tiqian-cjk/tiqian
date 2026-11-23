@@ -5,12 +5,15 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-tiqian = { path = "../../../../../ffi/rust/tiqian", version = "0.1.0" }
+tiqian = { path = "../tiqian", version = "0.1.0" }
 # The generated engine crate. The path is the vendored mount, which is the
 # same crate the tiqian facade depends on; pointing at engine-haxe/out/ would
 # depend on a gitignored build output and collide with the vendored package
 # name in the lockfile.
-tiqian-engine-gen = { path = "../../../../../ffi/rust/engine-gen" }
+tiqian-engine-gen = { path = "../engine-gen" }
+# The generated protocol crate. Like tiqian-engine-gen it is produced by
+# `node tools/generate-engine-gen.mjs` into a gitignored mount before cargo
+# build; the path is that mount, not engine-haxe/out/.
 tiqian-protocol-gen = { path = "../protocol-gen" }
 harfrust = "0.13"
 skrifa = "0.46"

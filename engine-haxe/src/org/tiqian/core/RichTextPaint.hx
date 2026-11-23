@@ -12,10 +12,13 @@ class RichTextPaint {
     public final background:RichTextBackgroundPaint;
     public final adjacentSameStyleClearance:Float;
 
-    public function new(?argb:Null<Int>, ?linePattern:Null<RichTextLinePattern>, background:RichTextBackgroundPaint, ?adjacentSameStyleClearance:Null<Float>) {
+    /** The published no-argument default, used by RichTextSpan. */
+    public static final Default:RichTextPaint = new RichTextPaint(null, null, null, null);
+
+    public function new(?argb:Null<Int>, ?linePattern:Null<RichTextLinePattern>, ?background:Null<RichTextBackgroundPaint>, ?adjacentSameStyleClearance:Null<Float>) {
         this.argb = argb == null ? null : argb;
         this.linePattern = linePattern == null ? Solid.instance : linePattern;
-        this.background = background;
+        this.background = background == null ? RichTextBackgroundPaint.Default : background;
         this.adjacentSameStyleClearance = adjacentSameStyleClearance == null ? 0.0 : adjacentSameStyleClearance;
         if (!isFinite(this.adjacentSameStyleClearance) || this.adjacentSameStyleClearance < 0.0) {
             throw new TiqianIllegalArgumentException(Message("Failed requirement."));
@@ -67,3 +70,4 @@ class RichTextPaint {
         return value == value && value != Math.POSITIVE_INFINITY && value != Math.NEGATIVE_INFINITY;
     }
 }
+

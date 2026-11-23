@@ -196,11 +196,11 @@ tiqian-prose [data-tq-rendered="true"] {
 
 [data-tq-rendered="true"] span[data-tq-shaping-boundary] {
   all: unset !important;
-  /* NativeSelectionBoundaryFlow: the boundary preserves one shaping run, but
-     must remain an inline participant. An inline-block becomes an atomic
-     selection island; with the paragraph's engine-owned zero line-height,
-     Chromium also exposes a zero-height box between adjacent Latin shards. */
-  display: inline !important;
+  /* Give each shaping run a one-em baseline box in the zero-height text flow.
+     The box inherits decorations so a link underline crosses its fragments. */
+  display: inline-block !important;
+  line-height: 1 !important;
+  text-decoration: inherit !important;
   white-space: pre !important;
   text-spacing-trim: space-all !important;
   vertical-align: baseline !important;
@@ -234,10 +234,11 @@ tiqian-prose [data-tq-rendered="true"] {
   font-feature-settings: "halt" 0, "chws" 0, "palt" 0, "fwid" 1 !important;
 }
 
+/* Keep first-line resets on paragraph boxes to avoid invalidating fragment
+   layout when the host animates decoration color. */
 [data-tq-rendered="true"]::first-letter,
 [data-tq-rendered="true"]::first-line,
-[data-tq-rendered="true"] [data-tq-shaping-boundary]::first-letter,
-[data-tq-rendered="true"] [data-tq-shaping-boundary]::first-line {
+[data-tq-rendered="true"] [data-tq-shaping-boundary]::first-letter {
   all: unset !important;
   font: inherit !important;
   font-feature-settings: inherit !important;

@@ -1,11 +1,12 @@
 package org.tiqian.layout;
+import org.tiqian.shaping.TextShaper.ShapingIssue;
 
 import org.tiqian.core.*;
 import org.tiqian.layout.ClusterRoleResolution.ResolvedClusterRange;
 import org.tiqian.layout.ParagraphShapingStage.ParagraphShapingStageResult;
 import org.tiqian.layout.ParagraphLayoutEngine.ExplainableStubParagraphLayoutEngine;
 import org.tiqian.shaping.TextShaper;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import org.tiqian.shaping.TextShaper.ShapingInput;
 import org.tiqian.shaping.TextShaper.ShapingResult;
 import org.tiqian.shaping.TextShaper.ExplainableStubTextShaper;
@@ -19,7 +20,7 @@ import std.SortedSet;
 import org.tiqian.font.FontPolicy.FontCandidate;
 import org.tiqian.font.FontPolicy.FontDecision;
 
-class ParagraphEmptyHyphenShaper implements ITextShaper {
+class ParagraphEmptyHyphenShaper implements TextShaper {
     public var delegate:ExplainableStubTextShaper = new ExplainableStubTextShaper();
 
     public function new() {}
@@ -31,7 +32,7 @@ class ParagraphEmptyHyphenShaper implements ITextShaper {
     }
 }
 
-class ParagraphMultiClusterShaper implements ITextShaper {
+class ParagraphMultiClusterShaper implements TextShaper {
     public var delegate:ExplainableStubTextShaper = new ExplainableStubTextShaper();
     public var toggle:Bool = false;
 
@@ -52,7 +53,7 @@ class ParagraphMultiClusterShaper implements ITextShaper {
     }
 }
 
-class ParagraphWordShaper implements ITextShaper {
+class ParagraphWordShaper implements TextShaper {
     public var delegate:ExplainableStubTextShaper = new ExplainableStubTextShaper();
 
     public function new() {}
@@ -69,7 +70,7 @@ class ParagraphWordShaper implements ITextShaper {
     }
 }
 
-class ParagraphEmptyClusterShaper implements ITextShaper {
+class ParagraphEmptyClusterShaper implements TextShaper {
     public var delegate:ExplainableStubTextShaper = new ExplainableStubTextShaper();
 
     public function new() {}
@@ -82,7 +83,7 @@ class ParagraphEmptyClusterShaper implements ITextShaper {
     }
 }
 
-class ParagraphDeficientDashShaper implements ITextShaper {
+class ParagraphDeficientDashShaper implements TextShaper {
     public function new() {}
 
     public function shape(i:ShapingInput):ShapingResult {
@@ -92,7 +93,7 @@ class ParagraphDeficientDashShaper implements ITextShaper {
     }
 }
 
-class ParagraphSufficientDashShaper implements ITextShaper {
+class ParagraphSufficientDashShaper implements TextShaper {
     public function new() {}
 
     public function shape(i:ShapingInput):ShapingResult {
@@ -102,7 +103,7 @@ class ParagraphSufficientDashShaper implements ITextShaper {
     }
 }
 
-class ParagraphRollbackShaper implements ITextShaper {
+class ParagraphRollbackShaper implements TextShaper {
     public var call:Int = 0;
 
     public function new() {}
@@ -110,14 +111,14 @@ class ParagraphRollbackShaper implements ITextShaper {
     public function shape(i:ShapingInput):ShapingResult {
         call++;
         var c = new Cluster(i.range, i.text.substring(i.range.start, i.range.end), "test", 16.0, i.displayText);
-        var issue = call == 1 ? TextShaper.UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE_ISSUE : null;
+        var issue = call == 1 ? ShapingIssue.UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE_ISSUE : null;
         var d = new ShapingDecisionInfo(i.range, i.text.substring(i.range.start, i.range.end), i.displayText, "test", 1, 16.0, "Test", "test", null,
             call == 2 ? 1 : 0, null, null, null, null, null, issue);
         return new ShapingResult([c], [new GlyphRun(i.range, "test", [], 16.0)], [d]);
     }
 }
 
-class ParagraphMultiGlyphShaper implements ITextShaper {
+class ParagraphMultiGlyphShaper implements TextShaper {
     public var count:Int = 0;
 
     public function new() {}
@@ -233,7 +234,7 @@ class ParagraphShapingStageCoverageTestSupport {
         TracedAssertions.recordRenderedNotNull(TestTraceRender.cap(res == null ? "null" : Std.string(res)));
     }
 
-    public static function engine(?shaper:ITextShaper, ?hyphenator:Hyphenator):ExplainableStubParagraphLayoutEngine {
+    public static function engine(?shaper:TextShaper, ?hyphenator:Hyphenator):ExplainableStubParagraphLayoutEngine {
         return new ExplainableStubParagraphLayoutEngine(null, null, null, null, null, null, null, null, null, null, shaper, hyphenator);
     }
 

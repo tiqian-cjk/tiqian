@@ -1,0 +1,77 @@
+name: Retire a Swift registry version
+
+# One deliberate deletion of artifacts a release produced but never completed.
+# The R2 bucket serves the Swift registry, so a version whose other ecosystems
+# never published stays resolvable to Swift users until its objects are
+# removed. This workflow takes the exact bundle and version, lists what it will
+# delete, deletes only those keys, and confirms each one is gone.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to withdraw, for example 0.1.0-alpha.8"
+        required: true
+      bundles:
+        description: "Comma-separated Swift bundle names"
+        required: true
+        default: "tiqian-engine-f32,tiqian-engine-f64,tiqian-protocol"
+      confirm:
+        description: 'Type "delete" to perform the deletion'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  withdraw:
+    name: Withdraw the version from the Swift registry
+    if: inputs.confirm == 'delete'
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      R2_ENDPOINT: https://91a3e85bc149574f96f64f55aa2c900e.r2.cloudflarestorage.com
+      R2_BUCKET: tiqian-registry
+      VERSION: ${{ inputs.version }}
+      BUNDLES: ${{ inputs.bundles }}
+    steps:
+      - name: List the objects this run withdraws
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet awscli
+          IFS=',' read -ra names <<< "${BUNDLES}"
+          for name in "${names[@]}"; do
+            key="swift/tiqian/${name}/${VERSION}.zip"
+            echo "${key}"
+            aws s3api head-object --bucket "${R2_BUCKET}" --key "${key}" \
+              --endpoint-url "${R2_ENDPOINT}" >/dev/null
+          done
+
+      - name: Delete them
+        shell: bash
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra names <<< "${BUNDLES}"
+          for name in "${names[@]}"; do
+            key="swift/tiqian/${name}/${VERSION}.zip"
+            aws s3api delete-object --bucket "${R2_BUCKET}" --key "${key}" \
+              --endpoint-url "${R2_ENDPOINT}"
+            echo "deleted ${key}"
+          done
+
+      - name: Confirm each object is gone
+        shell: bash
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra names <<< "${BUNDLES}"
+          for name in "${names[@]}"; do
+            key="swift/tiqian/${name}/${VERSION}.zip"
+            if aws s3api head-object --bucket "${R2_BUCKET}" --key "${key}" \
+                 --endpoint-url "${R2_ENDPOINT}" >/dev/null 2>&1; then
+              echo "::error::${key} still exists"
+              exit 1
+            fi
+            echo "gone ${key}"
+          done

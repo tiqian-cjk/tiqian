@@ -6,7 +6,6 @@ import org.tiqian.core.LayoutInput
 import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.TextStyle
 import org.tiqian.core.TiqianTextContent
-import org.tiqian.core.ic
 import org.tiqian.layout.ExplainableStubParagraphLayoutEngine
 import org.tiqian.layout.LookaheadLineBreaker
 import org.tiqian.shaping.skia.SkiaFontMetricsResolver
@@ -27,7 +26,7 @@ class MissingGlyphTofuTest {
             lineBreaker = LookaheadLineBreaker(),
             textShaper = SkiaTextShaper(),
             fontMetricsResolver = SkiaFontMetricsResolver(),
-            clreqProfileResolver = { ClreqProfile.MainlandHorizontal },
+            clreqProfileResolver = object : org.tiqian.clreq.ClreqProfileResolver { override fun resolve(profileId: org.tiqian.core.LayoutProfileId): org.tiqian.clreq.ClreqProfile = ClreqProfile.MainlandHorizontal },
         )
         val fontSize = 40f
         // 中 [U+10FFFD — Plane-16 PUA, no font covers it → .notdef] 文
@@ -35,7 +34,7 @@ class MissingGlyphTofuTest {
             LayoutInput(
                 content = TiqianTextContent("中􏿽文"),
                 textStyle = TextStyle(fontSize = fontSize, locale = "zh-Hans"),
-                paragraphStyle = ParagraphStyle(firstLineIndent = 0.ic),
+                paragraphStyle = ParagraphStyle(firstLineIndent = org.tiqian.core.Ic(0f)),
                 constraints = LayoutConstraints(maxWidth = 9999f),
             ),
         )

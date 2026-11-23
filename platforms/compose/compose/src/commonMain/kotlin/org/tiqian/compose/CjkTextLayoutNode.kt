@@ -202,21 +202,24 @@ internal class CjkTextLayoutNode(
         get() = semanticsText
 
     override fun selectionTextForCopy(range: org.tiqian.core.TextRange): String {
+        val start = range.start.coerceIn(0, semanticsText.length)
+        val end = range.end.coerceIn(start, semanticsText.length)
         val layout = result
-        return if (layout == null) {
-            semanticsText.text.substring(
-                range.start.coerceIn(0, semanticsText.length),
-                range.end.coerceIn(range.start.coerceIn(0, semanticsText.length), semanticsText.length),
-            )
-        } else if (!inlineOffsetMapping.hasRenderOnlyObjects) {
-            layout.getTextForCopy(range)
-        } else {
-            val readings =
-                buildList {
-                    layout.debug.rubyDecisions.forEach { add(RubySpan(inlineOffsetMapping.toLogical(it.baseRange), it.text)) }
-                    layout.debug.bopomofoDecisions.forEach { add(RubySpan(inlineOffsetMapping.toLogical(it.baseRange), it.text)) }
-                }
-            projectTextForCopy(semanticsText.text, range, readings)
+        val readings = if (layout != null && inlineOffsetMapping.hasRenderOnlyObjects) {
+            mutableListOf<RubySpan>().apply {
+                layout.debug.rubyDecisions.forEach { add(RubySpan(inlineOffsetMapping.toLogical(it.baseRange), it.text)) }
+                layout.debug.bopomofoDecisions.forEach { add(RubySpan(inlineOffsetMapping.toLogical(it.baseRange), it.text)) }
+            }
+        } else null
+        return buildString {
+            semanticsText.cjkWbrOffsets().forEachWbrFreeRange(start, end) { from, to ->
+                val logicalRange = org.tiqian.core.TextRange(from, to)
+                append(when {
+                    readings != null -> projectTextForCopy(semanticsText.text, logicalRange, readings)
+                    layout != null -> layout.getTextForCopy(logicalRange)
+                    else -> semanticsText.text.substring(from, to)
+                })
+            }
         }
     }
 
@@ -365,12 +368,22 @@ internal class CjkTextLayoutNode(
     }
 
     override fun SemanticsPropertyReceiver.applySemantics() {
-        text = this@CjkTextLayoutNode.semanticsText
+        // Accessibility text omits `wbr()` markers; semantic selection offsets are mapped between
+        // that text and the source text that selection state uses.
+        val wbrOffsets = semanticsText.cjkWbrOffsets()
+        text = semanticsText.withoutCjkWbr(wbrOffsets = wbrOffsets)
         val state = selectionState ?: return
         val range = state.rangeFor(this@CjkTextLayoutNode)
-        textSelectionRange = ComposeTextRange(range?.start ?: 0, range?.end ?: 0)
+        textSelectionRange = ComposeTextRange(
+            wbrOffsets.wbrSourceToProjectedOffset(range?.start ?: 0),
+            wbrOffsets.wbrSourceToProjectedOffset(range?.end ?: 0),
+        )
         setSelection { start, end, _ ->
-            state.setSelectionFromSemantics(this@CjkTextLayoutNode, start, end)
+            state.setSelectionFromSemantics(
+                this@CjkTextLayoutNode,
+                wbrOffsets.wbrProjectedToSourceOffset(start),
+                wbrOffsets.wbrProjectedToSourceOffset(end),
+            )
         }
         if (range != null && !range.isEmpty) {
             copyText { state.copySelection() }
@@ -528,11 +541,6 @@ internal class CjkTextLayoutNode(
                 textSpans = spans,
                 rubySpans = rubySpans,
             )
-            // LayoutConstraints uses identity equality; preserve it only while its scalar limits match.
-            val previousConstraints = cachedLayout?.input?.constraints
-            val engineConstraints = previousConstraints?.takeIf {
-                it.maxWidth == layoutWidth && it.maxHeight == Float.POSITIVE_INFINITY && it.maxLines == maxLines
-            } ?: LayoutConstraints(maxWidth = layoutWidth, maxLines = maxLines)
             val layoutInput = LayoutInput(
                 content = org.tiqian.core.TiqianTextContent(
                     text = text,
@@ -543,7 +551,7 @@ internal class CjkTextLayoutNode(
                 ),
                 textStyle = textStyle,
                 paragraphStyle = paragraphStyle,
-                constraints = engineConstraints,
+                constraints = LayoutConstraints(maxWidth = layoutWidth, maxLines = maxLines),
                 decorations = decorations,
                 rubySpans = rubySpans,
                 inlineBoxes = richTextSpans.layoutInlineBoxes(),

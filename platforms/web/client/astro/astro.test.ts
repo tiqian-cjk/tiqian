@@ -32,13 +32,15 @@ try {
 
 test("package manifest publishes only the integration surface", async () => {
   const manifest = JSON.parse(await readFile(new URL("./package.json", import.meta.url), "utf8"));
-  const prose = JSON.parse(await readFile(new URL("../web-component/package.json", import.meta.url), "utf8"));
+  const coreManifest = JSON.parse(await readFile(new URL("../core/package.json", import.meta.url), "utf8"));
+  const webComponentManifest = JSON.parse(await readFile(new URL("../web-component/package.json", import.meta.url), "utf8"));
   const precompute = JSON.parse(
     await readFile(new URL("../../../../platforms/web/server/core/package.json", import.meta.url), "utf8"),
   );
-  assert.equal(manifest.peerDependencies["@tiqian/prose"], prose.version);
+  assert.equal(manifest.dependencies["@tiqian/core"], coreManifest.version);
+  assert.equal(manifest.peerDependencies["@tiqian/web-component"], webComponentManifest.version);
   assert.equal(manifest.peerDependencies["@tiqian/precompute"], precompute.version);
-  assert.equal(manifest.engines.node, prose.engines.node);
+  assert.equal(manifest.engines.node, webComponentManifest.engines.node);
   assert.deepEqual(Object.keys(manifest.exports).sort(), [".", "./TiqianProse.astro"]);
   assert.ok(manifest.files.includes("TiqianProse.astro"));
   assert.ok(manifest.files.includes("dist"));

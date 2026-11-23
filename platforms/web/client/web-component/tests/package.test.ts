@@ -7,7 +7,7 @@ test("published package ships the TS runtime modules and no repository-only bin"
   const rootLock = JSON.parse(await readFile(new URL("../../../../../package-lock.json", import.meta.url), "utf8"));
   const lock = rootLock.packages["platforms/web/client/web-component"];
 
-  assert.equal(manifest.name, "@tiqian/prose");
+  assert.equal(manifest.name, "@tiqian/web-component");
   assert.equal(lock.version, manifest.version);
   assert.equal(manifest.license, "MPL-2.0");
   assert.equal(manifest.types, "./element.d.ts");
@@ -44,7 +44,9 @@ test("published package ships the TS runtime modules and no repository-only bin"
   ]);
   assert.equal(manifest.bin, undefined);
   assert.equal(manifest.exports["./build-runtime"], undefined);
-  assert.deepEqual(manifest.dependencies, { "@tiqian/core": "0.1.0-alpha.6" });
+  // The workspace pins the sibling to the release version, so the assertion
+  // follows the manifest instead of naming a version a release has to edit.
+  assert.deepEqual(manifest.dependencies, { "@tiqian/core": manifest.version });
   for (const removed of ["precompute.js", "precompute-html.js", "precompute-fonts.js", "precompute-node-fonts.js"]) {
     assert.equal(manifest.files.includes(removed), false, `${removed} must not ship`);
   }
@@ -65,7 +67,13 @@ test("published package ships the TS runtime modules and no repository-only bin"
   const coreManifest = JSON.parse(await readFile(new URL("../../core/package.json", import.meta.url), "utf8"));
   assert.equal(coreManifest.name, "@tiqian/core");
   assert.equal(coreManifest.version, manifest.version);
-  assert.deepEqual(coreManifest.dependencies, { "@tiqian/ffi": "0.1.0-alpha.1" });
+  // The generated protocol and shared trees are workspace members until
+  // tools/publish-contract.py resolves them for the packed archive.
+  assert.deepEqual(coreManifest.dependencies, {
+    "@tiqian/ffi": coreManifest.version,
+    "@tiqian/protocol": "workspace:*",
+    "@tiqian/shared": "workspace:*",
+  });
   assert.ok(coreManifest.files.includes("src/"));
   assert.equal(coreManifest.files.includes("runtime/"), false, "the Kotlin bundle directory is retired");
   assert.ok(coreManifest.files.includes("src/engine/layout-worker.js"));
@@ -77,7 +85,7 @@ test("the release helper derives the repository tag and commit subject from one 
   );
 
   assert.equal(normalizeReleaseVersion("0.1.0-alpha.3"), "0.1.0-alpha.3");
-  assert.equal(releaseTag("0.1.0-alpha.3"), "@tiqian/prose@0.1.0-alpha.3");
+  assert.equal(releaseTag("0.1.0-alpha.3"), "@tiqian/web-component@0.1.0-alpha.3");
   assert.equal(releaseCommitSubject("0.1.0-alpha.3"), "chore(web): prepare alpha.3 release");
   assert.equal(releaseCommitSubject("0.1.0"), "chore(web): prepare 0.1.0 release");
   assert.throws(() => normalizeReleaseVersion("v0.1.0-alpha.3"), /InvalidReleaseVersion/u);
@@ -85,34 +93,36 @@ test("the release helper derives the repository tag and commit subject from one 
   assert.throws(() => normalizeReleaseVersion("0.1.0+local"), /InvalidReleaseVersion/u);
 });
 
-test("the ffi release workflow mirrors the prose one for the engine package", async () => {
+test("the ffi release workflow mirrors the web-component one for the engine package", async () => {
   const workflow = await readFile(
     new URL("../../../../../.github/workflows/publish-ffi.yml", import.meta.url),
     "utf8",
   );
 
-  assert.match(workflow, /tags:\s*\n\s*- "@tiqian\/ffi@\*"/u);
-  assert.match(workflow, /working-directory: ffi\/js\/npm/u);
+  // The lane runs from the release entrypoint and from a manual dispatch on
+  // the release tag; it no longer triggers on a per-package tag.
+  assert.match(workflow, /workflow_call:/u);
+  assert.match(workflow, /workflow_dispatch:/u);
+  assert.match(workflow, /working-directory: platforms\/web\/client\/engine-runtime/u);
   assert.match(workflow, /TIQIAN_RELEASE_ARTIFACT_DIR/u);
   assert.match(workflow, /tiqian-ffi-release/u);
-  assert.match(workflow, /npm publish "\$\{tarball\}" --ignore-scripts --access public --tag alpha/u);
-  assert.match(workflow, /npm dist-tag add "@tiqian\/ffi@\$\{RELEASE_VERSION\}" latest/u);
-  assert.match(workflow, /tags\.alpha !== version \|\| tags\.latest !== version/u);
+  assert.match(workflow, /tools\/npm-publish\.sh" "\$\{tarball\}" --tag alpha/u);
+  assert.match(workflow, /tools\/npm-dist-tag\.sh" --package @tiqian\/ffi --version "\$\{RELEASE_VERSION\}" --tag latest/u);
 });
 
 test("the release workflow publishes one verified artifact and synchronizes both dist-tags", async () => {
   const workflow = await readFile(
-    new URL("../../../../../.github/workflows/publish-prose.yml", import.meta.url),
+    new URL("../../../../../.github/workflows/publish-web-component.yml", import.meta.url),
     "utf8",
   );
 
-  assert.match(workflow, /tags:\s*\n\s*- "@tiqian\/prose@\*"/u);
+  // See the ffi lane: one release entrypoint drives every package lane.
+  assert.match(workflow, /workflow_call:/u);
   assert.match(workflow, /id-token: write/u);
   assert.match(workflow, /TIQIAN_RELEASE_ARTIFACT_DIR/u);
-  assert.match(workflow, /npm publish "\$\{tarball\}" --ignore-scripts --access public --tag alpha/u);
-  assert.match(workflow, /NODE_AUTH_TOKEN: \$\{\{ secrets\.NPM_DIST_TAG_TOKEN \}\}/u);
-  assert.match(workflow, /npm dist-tag add "@tiqian\/prose@\$\{RELEASE_VERSION\}" latest/u);
-  assert.match(workflow, /tags\.alpha !== version \|\| tags\.latest !== version/u);
+  assert.match(workflow, /tools\/npm-publish\.sh" "\$\{tarball\}" --tag alpha/u);
+  assert.match(workflow, /id-token: write/u);
+  assert.match(workflow, /tools\/npm-dist-tag\.sh" --package @tiqian\/web-component --version "\$\{RELEASE_VERSION\}" --tag latest/u);
 });
 
 test("the release verifier accepts the verified package files", async () => {
@@ -185,10 +195,10 @@ test("the custom element validates a snapshot before dynamically loading the bro
     "utf8",
   );
   // Single source of truth: the stylesheet ships from @tiqian/core only;
-  // @tiqian/prose neither ships nor exports it.
-  const proseManifestForStyles = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
-  assert.equal(proseManifestForStyles.exports["./styles.css"], undefined, "@tiqian/prose must not export ./styles.css");
-  assert.equal(proseManifestForStyles.files.includes("styles.css"), false, "styles.css must not be in @tiqian/prose files");
+  // @tiqian/web-component neither ships nor exports it.
+  const webComponentManifestForStyles = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(webComponentManifestForStyles.exports["./styles.css"], undefined, "@tiqian/web-component must not export ./styles.css");
+  assert.equal(webComponentManifestForStyles.files.includes("styles.css"), false, "styles.css must not be in @tiqian/web-component files");
   const coreStylesSource = await readFile(new URL("../../core/styles.css", import.meta.url), "utf8");
   assert.ok(coreStylesSource.length > 0);
   assert.match(coreStylesSource, /--tq-styles-ready:\s*1/u);

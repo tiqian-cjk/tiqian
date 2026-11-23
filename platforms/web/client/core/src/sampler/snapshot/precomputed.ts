@@ -1,3 +1,5 @@
+import { numericFeatureContract } from "./numeric-features.js";
+import { loadBrowserFontFaces } from "../../measurement/font-face-loader.js";
 type SchedulerPostTaskCallback = () => void;
 type SchedulerPostTaskOptions = { priority: string };
 type SchedulerPostTask = (cb: SchedulerPostTaskCallback, opts: SchedulerPostTaskOptions) => Promise<void>;
@@ -971,6 +973,7 @@ const BOUNDARY_STYLE_PROPERTIES = [
 const FEATURE_OVERRIDABLE_BOUNDARY_STYLE_PROPERTIES = new Set([
   "fontFeatureSettings",
   "fontVariantEastAsian",
+  "fontVariantNumeric",
 ]);
 
 function openTypeFeatureContract(features: string[] | null | undefined): OpenTypeFeatureContract | null {
@@ -986,18 +989,25 @@ function openTypeFeatureContract(features: string[] | null | undefined): OpenTyp
     return null;
   }
   if (new Set(features).size !== features.length) return null;
-  const fontVariantNumeric = features[0] === "lnum" ? "lining-nums" : "normal";
-  const roleFeatures = fontVariantNumeric === "lining-nums" ? features.slice(1) : features;
+  const numeric = numericFeatureContract(features);
+  if (!numeric) return null;
+  const fontVariantNumeric = numeric.fontVariantNumeric ?? "normal";
+  const roleFeatures = numeric.roleFeatures;
   const roleSignature = roleFeatures.join(",");
-  if (roleSignature !== "" && roleSignature !== PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE) {
+  if (roleSignature !== "" && roleSignature !== "fwid" &&
+    roleSignature !== PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE) {
     return null;
   }
   return Object.freeze({
     signature: features.join(","),
-    fontFeatureSettings: roleSignature
+    fontFeatureSettings: roleSignature === PROPORTIONAL_CURLY_QUOTE_FEATURE_SIGNATURE
       ? PROPORTIONAL_CURLY_QUOTE_FEATURE_SETTINGS
-      : ENGINE_PUNCTUATION_FEATURE_SETTINGS,
-    fontVariantEastAsian: roleSignature ? "proportional-width" : "normal",
+      : roleSignature === "fwid"
+        ? `${ENGINE_PUNCTUATION_FEATURE_SETTINGS}, "fwid" 1`
+        : ENGINE_PUNCTUATION_FEATURE_SETTINGS,
+    // Full-width probes are emitted by the engine for punctuation shaping.
+    fontVariantEastAsian: roleSignature === "fwid" ? "full-width"
+      : roleSignature ? "proportional-width" : "normal",
     fontVariantNumeric,
   });
 }
@@ -1037,10 +1047,17 @@ function boundaryOpenTypeFeatureIssue(
 ): string | null {
   if (!contract) return "Boundary:openTypeFeatures";
   if (!contract.signature) return null;
+  const numericOverride = numericFeatureContract(contract.signature.split(","))?.fontVariantNumeric;
+  if (numericOverride != null && style.fontVariantNumeric !== numericOverride) {
+    return "Boundary:fontVariantNumeric";
+  }
   if (style.fontVariantEastAsian !== contract.fontVariantEastAsian) {
     return "Boundary:fontVariantEastAsian";
   }
-  if (!canonicalEnginePunctuationFeatureSettings(style.fontFeatureSettings, true)) {
+  const actual = parsedOpenTypeFeatureSettings(style.fontFeatureSettings);
+  const expected = parsedOpenTypeFeatureSettings(contract.fontFeatureSettings)!;
+  if (!actual || actual.size !== expected.size ||
+    [...expected].some(([tag, value]) => actual.get(tag) !== value)) {
     return "Boundary:fontFeatureSettings";
   }
   return null;
@@ -1092,10 +1109,12 @@ function generatedGeometryIssue(element: Element, paragraph: Element): string | 
     return null;
   }
   if (shapingBoundary) {
+    // New fragment boxes carry their own one-em line height.
+    const boxedBoundary = style.display === "inline-block";
+    if (boxedBoundary && style.lineHeight !== style.fontSize) return "Boundary:lineHeight";
+
     const contract = {
-      // NativeSelectionBoundaryFlow: prepared shaping runs stay inline so
-      // browser selection remains character-continuous across adjacent runs.
-      display: "inline",
+      display: boxedBoundary ? "inline-block" : "inline",
       whiteSpace: "pre",
       verticalAlign: "baseline",
       direction: "ltr",
@@ -1107,13 +1126,16 @@ function generatedGeometryIssue(element: Element, paragraph: Element): string | 
     const featureContract = boundaryOpenTypeFeatureContract(element);
     const inheritedProperties = (featureContract?.signature
       ? BOUNDARY_STYLE_PROPERTIES.filter((property) =>
-        !FEATURE_OVERRIDABLE_BOUNDARY_STYLE_PROPERTIES.has(property))
+        !FEATURE_OVERRIDABLE_BOUNDARY_STYLE_PROPERTIES.has(property) ||
+        (property === "fontVariantNumeric" &&
+          numericFeatureContract(featureContract.signature.split(","))?.fontVariantNumeric == null))
       : BOUNDARY_STYLE_PROPERTIES)
       // EngineOwnedBoundaryLetterSpacing: multi-character shaping runs can
       // also carry layout adjustment. Their serialized advance is checked
       // against the real border-box immediately below, so inherited equality
       // would reject correct engine geometry without adding protection.
       .filter((property) => property !== "letterSpacing" &&
+        (!boxedBoundary || property !== "lineHeight") &&
         (!projectedRenderFont || property !== "fontFamily"));
     const inheritedMismatch = inheritedProperties.find((property) =>
       String(style[property as keyof CSSStyleDeclaration] ?? "") !==
@@ -1485,7 +1507,10 @@ function computedTypographyIssue(
   if ((style.textRendering || "auto") !== "auto") return "textRendering";
   if (!new Set(["start", "left"]).has(style.textAlign || "start")) return "textAlign";
   if (!new Set(["auto", "start"]).has(style.textAlignLast || "auto")) return "textAlignLast";
-  if ((style.textJustify || "auto") !== "auto") return "textJustify";
+  // Prepared flow can explicitly disable justification. The default also
+  // leaves it inactive because the paragraph already requires start alignment.
+  const textJustify = style.textJustify || "auto";
+  if (textJustify !== "auto" && !(canonicalPreparedFlow && textJustify === "none")) return "textJustify";
   if ((style.direction || "ltr") !== "ltr") return "direction";
   if ((style.writingMode || "horizontal-tb") !== "horizontal-tb") return "writingMode";
   if (!ancestorFragmentationIsSafe(paragraph)) return "ancestorFragmentation";
@@ -1730,7 +1755,7 @@ async function validateFontEvidenceGroups(
   }
 
   const loaded = await Promise.all(Array.from(loadRequests.values(), async (request) =>
-    documentObject.fonts?.load?.(
+    loadBrowserFontFaces(documentObject.fonts,
       request.descriptor,
       Array.from(request.coverage).join(""),
     )));
@@ -2761,10 +2786,11 @@ export async function tryAdoptPrecomputedSnapshot(
         while (clone.firstChild) paragraph.appendChild(clone.firstChild);
       }
       const width = contentBoxWidth(paragraph);
-      if (
-        !snapshotEntryWidthMatches(width, entry) ||
-        !computedTypographyMatches(paragraph, entry.typography, true, manifest.renderFontFamilies)
-      ) throw new Error("RenderedSnapshotHostContractMismatch");
+      const typographyIssue = computedTypographyIssue(paragraph, entry.typography, true, manifest.renderFontFamilies);
+      if (!snapshotEntryWidthMatches(width, entry)) {
+        throw new Error("RenderedSnapshotHostContractMismatch:width");
+      }
+      if (typographyIssue) throw new Error(`RenderedSnapshotHostContractMismatch:${typographyIssue}`);
       const issue = renderedPreparedParagraphIssue(paragraph, width);
       if (issue) throw new Error(issue.replace("RenderedPreparedParagraph", "RenderedSnapshot"));
       if (anchors) anchors.compensate(commitAnchor);

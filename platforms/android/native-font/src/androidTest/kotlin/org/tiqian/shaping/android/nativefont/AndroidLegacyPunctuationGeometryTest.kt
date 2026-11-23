@@ -31,7 +31,7 @@ class AndroidLegacyPunctuationGeometryTest {
             val cluster = shaped.clusters.single()
             val glyph = shaped.glyphRuns.single().glyphs.single()
             val atom = builder.build(
-                char = character,
+                char = character.toString(),
                 range = TextRange(0, 1),
                 em = 32f,
                 inkInput = PunctuationInkInput(

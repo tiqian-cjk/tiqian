@@ -18,12 +18,14 @@
 // Importing this module registers nothing; explicit hosts call
 // registerTiqianProse() themselves (wc-s6 scope 8).
 import { createEnhanceContext } from "@tiqian/core/src/engine/context/enhance-context.js";
+import type { SynchronousRelayoutOptions } from "@tiqian/core/src/engine/context/enhance-context.js";
 import { OBSERVED_ATTRIBUTES } from "@tiqian/core/src/engine/enhance/options-ledger.js";
 import { INTERNAL_DISPATCH_MARKER } from "@tiqian/core/src/engine/enhance/event-channel.js";
 import type { MarkedCompletionEvent } from "@tiqian/core/src/engine/enhance/event-channel.js";
 import { globalServices, initializeGlobalServices } from "@tiqian/core/src/services/global-services.js";
 import { prefetchSnapshotTables } from "@tiqian/core/src/sampler/snapshot/snapshot-tables.js";
 import { CoordinationService } from "@tiqian/core/src/engine/coordination/coordination-service.js";
+import type { BrowserFontFaceLoader } from "@tiqian/core/src/measurement/font-face-loader.js";
 
 const ELEMENT_NAME = "tiqian-prose";
 
@@ -97,6 +99,11 @@ class TiqianProseElement extends HTMLElementBase {
     return this.#context.domWriteLayer.rawDomFragmentOf(paragraph);
   }
 
+  /** Synchronously lay out the existing prose at its current size. */
+  relayoutSync(options?: SynchronousRelayoutOptions): number {
+    return this.#context.relayoutSync(options);
+  }
+
   connectedCallback() {
     this.#context.mount();
   }
@@ -137,6 +144,8 @@ declare global {
 
 /** Options for the explicit registration entry (wc-s5 scope item 2). */
 export interface RegisterTiqianProseOptions {
+  /** Optional host-managed fonts; native loading remains the fallback. */
+  readonly loadFontFaces?: BrowserFontFaceLoader;
   /** Custom element tag to define; defaults to "tiqian-prose". */
   readonly tagName?: string;
   /** Install the source-faithful copy interceptor on the document; default true. */
@@ -154,6 +163,9 @@ export interface RegisterTiqianProseOptions {
  */
 export function registerTiqianProse(options: RegisterTiqianProseOptions = {}): void {
   initializeGlobalServices();
+  if (options.loadFontFaces) {
+    globalServices().coordination.fonts.fontFaceLoader = options.loadFontFaces;
+  }
   const tagName = options.tagName ?? ELEMENT_NAME;
   const interceptCopy = options.interceptCopy ?? true;
   const prefetchTables = options.prefetchTables ?? true;
@@ -176,7 +188,7 @@ export function registerTiqianProse(options: RegisterTiqianProseOptions = {}): v
 }
 
 // The /element entry exports the registration function and types. Consumers
-// who want zero-config auto-registration import from @tiqian/prose/auto.
+// who want zero-config auto-registration import from @tiqian/web-component/auto.
 // Explicit, parameterized registration calls registerTiqianProse() directly.
 
 export { TiqianProseElement, CoordinationService };

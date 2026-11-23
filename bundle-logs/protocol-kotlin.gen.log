@@ -1,3 +1,0 @@
-[gen] protocol-kotlin -> /home/losses/Development/tq-workspace/tiqian/.scratch/tasks/wb-t-mv4gfi00-ndqa/engine-haxe/out/protocol-kotlin/gen, /home/losses/Development/tq-workspace/tiqian/.scratch/tasks/wb-t-mv4gfi00-ndqa/engine-haxe/out/protocol-kotlin/gen-tests
-  $ haxe -cp engine-haxe/src -cp engine-haxe/macros engine-haxe/targets/protocol-kotlin.hxml -D kotlin-output=/home/losses/Development/tq-workspace/tiqian/.scratch/tasks/wb-t-mv4gfi00-ndqa/engine-haxe/out/protocol-kotlin/gen -D kotlin-test-output=/home/losses/Development/tq-workspace/tiqian/.scratch/tasks/wb-t-mv4gfi00-ndqa/engine-haxe/out/protocol-kotlin/gen-tests
-bundle driver: ok

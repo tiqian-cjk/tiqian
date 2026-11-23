@@ -17,7 +17,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { renderPreparedParagraphArtifact } from "@tiqian/prose/prepared-dom";
+import { renderPreparedParagraphArtifact } from "@tiqian/web-component/prepared-dom";
 
 import { sha256Hex, stableStringify } from "../lib/stable-stringify.js";
 

@@ -2,7 +2,7 @@ package org.tiqian.layout;
 
 import org.tiqian.core.*;
 import org.tiqian.clreq.*;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import org.tiqian.shaping.TextShaper.ShapingInput;
 import org.tiqian.shaping.TextShaper.ShapingResult;
 import org.tiqian.shaping.TextShaper.ExplainableStubTextShaper;
@@ -17,12 +17,12 @@ import org.tiqian.test.trace.TracedAssertions;
 
 using std.RecordCopy;
 
-class CountingTextShaper implements ITextShaper {
+class CountingTextShaper implements TextShaper {
     public var shapeCallCount:Int = 0;
 
-    final delegate:Null<ITextShaper>;
+    final delegate:Null<TextShaper>;
 
-    public function new(?delegate:ITextShaper) {
+    public function new(?delegate:TextShaper) {
         this.delegate = delegate;
     }
 

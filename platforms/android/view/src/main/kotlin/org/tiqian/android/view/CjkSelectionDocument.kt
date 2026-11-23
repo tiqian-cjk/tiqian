@@ -28,7 +28,7 @@ data class CjkSelectionDocumentFragment(
     )
 
     internal fun textForCopy(range: TextRange): String =
-        projectTextForCopy(text, range, rubySpans)
+        projectTextForCopy(text, range, rubySpans.toMutableList())
 
     internal fun coerceSelectionOffset(offset: Int, bias: SourceBoundaryBias): Int =
         coerceTextSelectionOffset(text, inlineObjects, offset, bias)

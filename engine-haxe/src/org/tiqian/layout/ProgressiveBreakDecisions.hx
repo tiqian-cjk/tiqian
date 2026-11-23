@@ -264,6 +264,7 @@ class ProgressiveBreakDecisions {
         return b;
     }
 
+    @:topLevel
     public static function lineLimit(maxWidth:Float, firstLineIndent:Float, lineStartCluster:Int):Float
         return lineStartCluster == 0 ? maxWidth - firstLineIndent : maxWidth;
 

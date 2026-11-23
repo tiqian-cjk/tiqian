@@ -2,6 +2,12 @@
 // output directory (<outRoot>/<id>/gen and <outRoot>/<id>/gen-tests) and every
 // results path (<resultsDir>/<id>.jsonl) from this file; none is named here.
 //
+// This file is the single generation entry. The project haxeArgs carry what every
+// bundle shares, each bundle's own haxeArgs carry its target arguments and its module
+// roots, and each engine bundle takes its engine roots from a source set. The
+// hand-written roots hxml files that used to supply the same arguments alongside this
+// file are gone, so there is no second copy of them that could drift.
+//
 //   each configuration's run.env carries the per-test budget the repository records
 //   (600000 ms): the boring runtime falls back to a 6 s budget when
 //   BORING_TEST_TIMEOUT_MS is unset, and eleven cases of this suite run longer
@@ -9,20 +15,74 @@
 // The flake pins the boring compiler and driver to one revision. Each Rust
 // package declares its own metadata below; the generator does not borrow
 // tiqian's license from the boring repository.
+//
+// Argument order matters where roots are concerned: the driver sorts a source
+// set's roots, while module roots written in haxeArgs keep their order, and that
+// order reaches the generated text. engine-rust therefore takes its own source
+// set: the rust target also roots the std.UStringException sample module. The
+// three swift bundles state -D swift-test-import=TiqianEngine in their haxeArgs,
+// and the driver reads the library module name from those same arguments.
+//
+// Keep every comment above this line. The staging pipeline parses the text from
+// the first opening brace as strict JSON, so a comment inside the object body is
+// fatal to it while the driver's own parser would accept the file. The leading
+// paragraph must hold no brace either: the pipeline starts at the first one it
+// finds, and a brace inside a comment starts the parse inside that comment.
+//
 {
   "outRoot": "engine-haxe/out",
   "resultsDir": "engine-haxe/out/test-results",
   "baseline": "kotlin-f32",
   "sourceRoots": ["engine-haxe/src", "engine-haxe/macros"],
+  "haxeArgs": [
+    "-lib", "reflaxe",
+    "-lib", "boring",
+    "-cp", ".haxelib/boring/git/samples",
+    "--macro", "haxe.macro.Compiler.addGlobalMetadata('org.tiqian', '@:build(std.RecordMember.build())')"
+  ],
   "sourceSets": {
     "engine": {
-      "types": ["runtime.UString", "runtime.TestCore"],
+      "types": [
+        "runtime.UString",
+        "runtime.TestCore",
+        "org.tiqian.protocol.NamedErrorNames",
+        "org.tiqian.core.FittedLinePatternGeometry",
+        "org.tiqian.core.RichTextLayoutProjection"
+      ],
       "discover": [
         {
           "root": "engine-haxe/src",
           "packages": [
-            "org.tiqian.core", "org.tiqian.layout", "org.tiqian.font",
-            "org.tiqian.clreq", "org.tiqian.shaping", "org.tiqian.linebreak"
+            "org.tiqian.core",
+            "org.tiqian.layout",
+            "org.tiqian.font",
+            "org.tiqian.clreq",
+            "org.tiqian.shaping",
+            "org.tiqian.linebreak"
+          ],
+          "suffix": "Test"
+        }
+      ]
+    },
+    "engine-rust": {
+      "types": [
+        "runtime.UString",
+        "runtime.TestCore",
+        "org.tiqian.protocol.NamedErrorNames",
+        "org.tiqian.core.FittedLinePatternGeometry",
+        "org.tiqian.core.RichTextLayoutProjection",
+        "std.UStringException"
+      ],
+      "discover": [
+        {
+          "root": "engine-haxe/src",
+          "packages": [
+            "org.tiqian.core",
+            "org.tiqian.layout",
+            "org.tiqian.font",
+            "org.tiqian.clreq",
+            "org.tiqian.shaping",
+            "org.tiqian.linebreak"
           ],
           "suffix": "Test"
         }
@@ -33,8 +93,20 @@
     {
       "id": "kotlin-f32",
       "target": "kotlin",
+      "precision": "f32",
       "sourceSet": "engine",
-      "rootsFile": "engine-haxe/targets/kotlin-f32.hxml",
+      "haxeArgs": [
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/kotlin/std-shadow",
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/kotlin",
+        "-cp", "engine-haxe/tests",
+        "--macro", "Intercept.run(['engine-haxe/src', 'engine-haxe/tests'])",
+        "--macro", "kotlincompiler.Compiler.use()",
+        "-D", "runtime-import=org.tiqian.boring.runtime",
+        "-D", "runtime-emit=runtime",
+        "-D", "package-artifact-stem=tiqian-engine"
+      ],
+      "kmpPublication": true,
+      "package": { "name": "tiqian-engine", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -43,7 +115,18 @@
       "id": "kotlin-f64",
       "target": "kotlin",
       "sourceSet": "engine",
-      "rootsFile": "engine-haxe/targets/kotlin-f64.hxml",
+      "haxeArgs": [
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/kotlin/std-shadow",
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/kotlin",
+        "-cp", "engine-haxe/tests",
+        "--macro", "Intercept.run(['engine-haxe/src', 'engine-haxe/tests'])",
+        "--macro", "kotlincompiler.Compiler.use()",
+        "-D", "runtime-import=org.tiqian.boring.runtime",
+        "-D", "runtime-emit=runtime",
+        "-D", "package-artifact-stem=tiqian-engine-f64",
+        "-D", "package-group=org.tiqian"
+      ],
+      "package": { "name": "tiqian-engine", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -52,7 +135,17 @@
       "id": "ts",
       "target": "ts",
       "sourceSet": "engine",
-      "rootsFile": "engine-haxe/targets/ts.hxml",
+      "haxeArgs": [
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/ts/std-shadow",
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/ts",
+        "--macro", "Intercept.run(['engine-haxe/src'])",
+        "--macro", "tscompiler.Compiler.use()",
+        "-D", "tiqian_ts",
+        "-D", "runtime-import=./runtime.js",
+        "-D", "runtime-emit=.",
+        "-D", "package-shell=none"
+      ],
+      "package": { "name": "tiqian-engine", "npmName": "@tiqian/engine", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -60,8 +153,20 @@
     {
       "id": "swift-f32",
       "target": "swift",
+      "precision": "f32",
       "sourceSet": "engine",
-      "rootsFile": "engine-haxe/targets/swift-f32.hxml",
+      "haxeArgs": [
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/swift/std-shadow",
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/swift",
+        "--macro", "Intercept.run(['engine-haxe/src'])",
+        "--macro", "swiftcompiler.Compiler.use()",
+        "-D", "swift-test-import=TiqianEngine",
+        "-D", "runtime-import=@tiqian/runtime",
+        "-D", "runtime-emit=.",
+        "-D", "package-shell=none",
+        "-D", "package-artifact-stem=tiqian-engine-f32"
+      ],
+      "package": { "name": "tiqian-engine", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -70,7 +175,18 @@
       "id": "swift-f64",
       "target": "swift",
       "sourceSet": "engine",
-      "rootsFile": "engine-haxe/targets/swift-f64.hxml",
+      "haxeArgs": [
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/swift/std-shadow",
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/swift",
+        "--macro", "Intercept.run(['engine-haxe/src'])",
+        "--macro", "swiftcompiler.Compiler.use()",
+        "-D", "swift-test-import=TiqianEngine",
+        "-D", "runtime-import=@tiqian/runtime",
+        "-D", "runtime-emit=.",
+        "-D", "package-shell=none",
+        "-D", "package-artifact-stem=tiqian-engine-f64"
+      ],
+      "package": { "name": "tiqian-engine", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -79,67 +195,321 @@
       "id": "dart",
       "target": "dart",
       "sourceSet": "engine",
-      "rootsFile": "engine-haxe/targets/dart.hxml",
+      "haxeArgs": [
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/dart/std-shadow",
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/dart",
+        "--macro", "Intercept.run(['engine-haxe/src'])",
+        "--macro", "dartcompiler.Compiler.use()",
+        "-D", "runtime-import=@tiqian/runtime",
+        "-D", "runtime-emit=."
+      ],
+      "package": { "name": "tiqian-engine", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
     },
     {
       "id": "protocol-ts",
+      "compare": false,
       "target": "ts",
-      "rootsFile": "engine-haxe/targets/protocol-ts.hxml",
+      "haxeArgs": [
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/ts/std-shadow",
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/ts",
+        "--macro", "Intercept.run(['engine-haxe/src', '.haxelib/boring/git/samples'])",
+        "--macro", "tscompiler.Compiler.use()",
+        "-D", "tiqian_ts",
+        "-D", "runtime-import=./runtime.js",
+        "-D", "runtime-emit=.",
+        "-D", "package-shell=none",
+        "org.tiqian.protocol.WireValue",
+        "org.tiqian.protocol.Canonical",
+        "org.tiqian.protocol.CanonicalTest",
+        "org.tiqian.protocol.ParagraphRequest",
+        "org.tiqian.protocol.ParagraphRequestTest",
+        "org.tiqian.protocol.Revision",
+        "org.tiqian.protocol.RevisionTest",
+        "org.tiqian.protocol.NamedError",
+        "org.tiqian.protocol.NamedErrorTest",
+        "org.tiqian.protocol.SnapshotTableBinary",
+        "org.tiqian.protocol.SnapshotTableBinaryTest",
+        "org.tiqian.protocol.Plan",
+        "org.tiqian.protocol.PlanJsonNumber",
+        "org.tiqian.protocol.PlanSchema",
+        "org.tiqian.protocol.PlanJson",
+        "org.tiqian.protocol.PlanJsonTest",
+        "org.tiqian.protocol.PlanSchemaTest",
+        "org.tiqian.protocol.PlanPacked",
+        "org.tiqian.protocol.PlanPackedTest",
+        "org.tiqian.protocol.LayoutTree",
+        "org.tiqian.protocol.FontFaceRecord",
+        "org.tiqian.protocol.FontWeightSpec",
+        "org.tiqian.protocol.FontFaceSpec",
+        "org.tiqian.protocol.SessionFaceSpec",
+        "org.tiqian.protocol.ReplayKey",
+        "org.tiqian.protocol.ReplayKeyTest",
+        "org.tiqian.protocol.SnapshotTypography",
+        "org.tiqian.protocol.FontContract",
+        "org.tiqian.protocol.FontContractTest",
+        "org.tiqian.protocol.FaceInfo",
+        "org.tiqian.protocol.ContextFingerprint",
+        "org.tiqian.protocol.ContextFingerprintTest",
+        "org.tiqian.protocol.ParagraphRequestFields"
+      ],
+      "package": { "name": "tiqian-protocol", "npmName": "@tiqian/protocol", "version": "0.1.0", "license": "MPL-2.0" },
+      "run": {
+        "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
+      }
+    },
+    {
+      "id": "shared-ts",
+      "compare": false,
+      "target": "ts",
+      "haxeArgs": [
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/ts/std-shadow",
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/ts",
+        "-cp", "platforms/web/shared/src",
+        "--macro", "Intercept.run(['engine-haxe/src', '.haxelib/boring/git/samples', 'platforms/web/shared/src'])",
+        "--macro", "tscompiler.Compiler.use()",
+        "-D", "tiqian_ts",
+        "-D", "runtime-import=./runtime.js",
+        "-D", "runtime-emit=.",
+        "-D", "package-shell=none",
+        "org.tiqian.shared.prepared_dom.Markup",
+        "org.tiqian.shared.prepared_dom.MarkupTest",
+        "org.tiqian.shared.prepared_dom.PreparedDom",
+        "org.tiqian.shared.prepared_dom.Evidence",
+        "org.tiqian.shared.prepared_dom.EvidenceTest",
+        "org.tiqian.shared.prepared_dom.PreparedArtifact",
+        "org.tiqian.shared.prepared_dom.PreparedArtifactTest",
+        "org.tiqian.shared.prepared_dom.PreparedDomTest",
+        "org.tiqian.shared.html.CompoundSelector",
+        "org.tiqian.shared.html.DomAttribute",
+        "org.tiqian.shared.html.DomNode",
+        "org.tiqian.shared.html.DomParser",
+        "org.tiqian.shared.html.HtmlAttributeInsertion",
+        "org.tiqian.shared.html.HtmlError",
+        "org.tiqian.shared.html.HtmlNameCase",
+        "org.tiqian.shared.html.HtmlOpeningTag",
+        "org.tiqian.shared.html.HtmlParseException",
+        "org.tiqian.shared.html.HtmlScan",
+        "org.tiqian.shared.SnapshotValueStyle",
+        "org.tiqian.shared.ValueStyleInterner",
+        "org.tiqian.shared.snapshot.SnapshotSource"
+      ],
+      "package": { "name": "tiqian-shared", "npmName": "@tiqian/shared", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
     },
     {
       "id": "protocol-rust",
+      "compare": false,
       "target": "rust",
-      "rootsFile": "engine-haxe/targets/protocol-rust.hxml",
-      "package": { "name": "tiqian-protocol-gen", "version": "0.1.0", "license": "MPL-2.0" },
+      "haxeArgs": [
+        "-cp", ".haxelib/boring/git/packages/compiler",
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/rust/std-shadow",
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/rust",
+        "--macro", "Intercept.run(['engine-haxe/src', '.haxelib/boring/git/samples'])",
+        "--macro", "rustcompiler.Compiler.use()",
+        "-D", "runtime-import=crate::runtime",
+        "-D", "runtime-emit=runtime",
+        "-D", "package-name=tiqian-protocol-gen",
+        "-D", "package-license=MPL-2.0",
+        "org.tiqian.protocol.WireValue",
+        "org.tiqian.protocol.Canonical",
+        "org.tiqian.protocol.ParagraphRequest",
+        "org.tiqian.protocol.ParagraphRequestTest",
+        "org.tiqian.protocol.NamedError",
+        "org.tiqian.protocol.NamedErrorTest",
+        "runtime.SortedTable",
+        "runtime.TestCore",
+        "runtime.UString",
+        "org.tiqian.protocol.Revision",
+        "std.UStringException",
+        "org.tiqian.protocol.SnapshotTableBinary",
+        "org.tiqian.protocol.SnapshotTableBinaryTest",
+        "org.tiqian.protocol.Plan",
+        "org.tiqian.protocol.PlanJsonNumber",
+        "org.tiqian.protocol.PlanSchema",
+        "org.tiqian.protocol.PlanJson",
+        "org.tiqian.protocol.PlanJsonTest",
+        "org.tiqian.protocol.PlanSchemaTest",
+        "org.tiqian.protocol.PlanPacked",
+        "org.tiqian.protocol.PlanPackedTest",
+        "org.tiqian.protocol.LayoutTree",
+        "org.tiqian.protocol.FontFaceRecord",
+        "org.tiqian.protocol.FontWeightSpec",
+        "org.tiqian.protocol.FontFaceSpec",
+        "org.tiqian.protocol.SessionFaceSpec",
+        "org.tiqian.protocol.ReplayKey",
+        "org.tiqian.protocol.ReplayKeyTest",
+        "org.tiqian.protocol.SnapshotTypography",
+        "org.tiqian.protocol.FontContract",
+        "org.tiqian.protocol.FontContractTest",
+        "org.tiqian.protocol.FaceInfo",
+        "org.tiqian.protocol.ContextFingerprint",
+        "org.tiqian.protocol.ContextFingerprintTest"
+      ],
+      "package": { "name": "tiqian-protocol", "version": "0.1.0", "license": "MPL-2.0" },
+      "run": {
+        "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
+      }
+    },
+    {
+      "id": "protocol-dart",
+      "compare": false,
+      "target": "dart",
+      "haxeArgs": [
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/dart/std-shadow",
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/dart",
+        "--macro", "Intercept.run(['engine-haxe/src', '.haxelib/boring/git/samples'])",
+        "--macro", "dartcompiler.Compiler.use()",
+        "-D", "runtime-import=@tiqian/runtime",
+        "-D", "runtime-emit=.",
+        "-D", "tiqian_dart",
+        "org.tiqian.protocol.Revision",
+        "org.tiqian.protocol.RevisionTest",
+        "org.tiqian.protocol.NamedError",
+        "org.tiqian.protocol.NamedErrorTest",
+        "org.tiqian.protocol.ParagraphRequest",
+        "org.tiqian.protocol.ParagraphRequestTest",
+        "org.tiqian.protocol.Plan",
+        "org.tiqian.protocol.PlanJsonNumber",
+        "org.tiqian.protocol.PlanSchema",
+        "org.tiqian.protocol.PlanJson",
+        "org.tiqian.protocol.PlanJsonTest",
+        "org.tiqian.protocol.PlanSchemaTest",
+        "org.tiqian.protocol.PlanPacked",
+        "org.tiqian.protocol.PlanPackedTest",
+        "org.tiqian.protocol.LayoutTree",
+        "org.tiqian.protocol.FontFaceRecord",
+        "org.tiqian.protocol.FontWeightSpec",
+        "org.tiqian.protocol.FontFaceSpec",
+        "org.tiqian.protocol.SessionFaceSpec",
+        "org.tiqian.protocol.ReplayKey",
+        "org.tiqian.protocol.ReplayKeyTest",
+        "org.tiqian.protocol.SnapshotTypography",
+        "org.tiqian.protocol.FontContract",
+        "org.tiqian.protocol.FontContractTest",
+        "org.tiqian.protocol.FaceInfo",
+        "org.tiqian.protocol.ContextFingerprint",
+        "org.tiqian.protocol.ContextFingerprintTest"
+      ],
+      "package": { "name": "tiqian-protocol", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
     },
     {
       "id": "protocol-kotlin",
+      "compare": false,
       "target": "kotlin",
-      "rootsFile": "engine-haxe/targets/protocol-kotlin.hxml",
+      "haxeArgs": [
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/kotlin/std-shadow",
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/kotlin",
+        "--macro", "Intercept.run(['engine-haxe/src', '.haxelib/boring/git/samples'])",
+        "--macro", "kotlincompiler.Compiler.use()",
+        "-D", "runtime-import=org.tiqian.boring.runtime",
+        "-D", "runtime-emit=runtime",
+        "-D", "package-group=org.tiqian",
+        "org.tiqian.protocol.Revision",
+        "org.tiqian.protocol.RevisionTest",
+        "org.tiqian.protocol.NamedError",
+        "org.tiqian.protocol.NamedErrorTest",
+        "org.tiqian.protocol.ParagraphRequest",
+        "org.tiqian.protocol.ParagraphRequestTest",
+        "runtime.UString",
+        "runtime.TestCore",
+        "org.tiqian.protocol.Plan",
+        "org.tiqian.protocol.PlanJsonNumber",
+        "org.tiqian.protocol.PlanSchema",
+        "org.tiqian.protocol.PlanJson",
+        "org.tiqian.protocol.PlanJsonTest",
+        "org.tiqian.protocol.PlanSchemaTest",
+        "org.tiqian.protocol.PlanPacked",
+        "org.tiqian.protocol.PlanPackedTest",
+        "org.tiqian.protocol.LayoutTree",
+        "org.tiqian.protocol.FontFaceRecord",
+        "org.tiqian.protocol.FontWeightSpec",
+        "org.tiqian.protocol.FontFaceSpec",
+        "org.tiqian.protocol.SessionFaceSpec",
+        "org.tiqian.protocol.ReplayKey",
+        "org.tiqian.protocol.ReplayKeyTest",
+        "org.tiqian.protocol.SnapshotTypography",
+        "org.tiqian.protocol.FontContract",
+        "org.tiqian.protocol.FontContractTest",
+        "org.tiqian.protocol.FaceInfo",
+        "org.tiqian.protocol.ContextFingerprint",
+        "org.tiqian.protocol.ContextFingerprintTest"
+      ],
+      "package": { "name": "tiqian-protocol", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
     },
     {
-      // The C header carries the C ABI constants (research 5.3: "C ABI 常量
-      // 改经生成头文件供给"). The haxe target compiles the entry through stock
-      // Haxe to js; running the emitted js writes the generated header into
-      // the driver-derived gen directory (engine-haxe/out/protocol-c/gen).
-      // No test step: the entry is a writer, not a test.
-      "id": "protocol-c",
-      "target": "haxe",
-      "test": false,
-      "afterGen": {
-        "command": "bun",
-        "args": ["engine-haxe/out/protocol-c/gen/c-header.js"]
-      },
-      "rootsFile": "engine-haxe/targets/protocol-c.hxml"
-    },
-    {
-      "id": "engine-rust-f32",
-      "target": "rust",
-      "sourceSet": "engine",
-      "rootsFile": "engine-haxe/targets/rust-f32.hxml",
-      "package": { "name": "tiqian-engine-gen", "version": "0.1.0", "license": "MPL-2.0" },
+      "id": "protocol-swift",
+      "compare": false,
+      "target": "swift",
+      "haxeArgs": [
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/swift/std-shadow",
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/swift",
+        "--macro", "Intercept.run(['engine-haxe/src', '.haxelib/boring/git/samples'])",
+        "--macro", "swiftcompiler.Compiler.use()",
+        "-D", "swift-test-import=TiqianEngine",
+        "-D", "runtime-import=org.tiqian.boring.runtime",
+        "-D", "runtime-emit=runtime",
+        "-D", "package-shell=none",
+        "org.tiqian.protocol.Revision",
+        "org.tiqian.protocol.RevisionTest",
+        "org.tiqian.protocol.NamedError",
+        "org.tiqian.protocol.NamedErrorTest",
+        "org.tiqian.protocol.ParagraphRequest",
+        "org.tiqian.protocol.ParagraphRequestTest",
+        "runtime.UString",
+        "runtime.TestCore",
+        "org.tiqian.protocol.Plan",
+        "org.tiqian.protocol.PlanJsonNumber",
+        "org.tiqian.protocol.PlanSchema",
+        "org.tiqian.protocol.PlanJson",
+        "org.tiqian.protocol.PlanJsonTest",
+        "org.tiqian.protocol.PlanSchemaTest",
+        "org.tiqian.protocol.PlanPacked",
+        "org.tiqian.protocol.PlanPackedTest",
+        "org.tiqian.protocol.LayoutTree",
+        "org.tiqian.protocol.FontFaceRecord",
+        "org.tiqian.protocol.FontWeightSpec",
+        "org.tiqian.protocol.FontFaceSpec",
+        "org.tiqian.protocol.SessionFaceSpec",
+        "org.tiqian.protocol.ReplayKey",
+        "org.tiqian.protocol.ReplayKeyTest",
+        "org.tiqian.protocol.SnapshotTypography",
+        "org.tiqian.protocol.FontContract",
+        "org.tiqian.protocol.FontContractTest",
+        "org.tiqian.protocol.FaceInfo",
+        "org.tiqian.protocol.ContextFingerprint",
+        "org.tiqian.protocol.ContextFingerprintTest"
+      ],
+      "package": { "name": "tiqian-protocol", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
     },
     {
-      "id": "engine-rust-f64",
+      "id": "engine-rust",
       "target": "rust",
-      "sourceSet": "engine",
-      "rootsFile": "engine-haxe/targets/rust-f64.hxml",
-      "package": { "name": "tiqian-engine-gen", "version": "0.1.0", "license": "MPL-2.0" },
+      "sourceSet": "engine-rust",
+      "haxeArgs": [
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/rust/std-shadow",
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/rust",
+        "--macro", "Intercept.run(['engine-haxe/src', '.haxelib/boring/git/samples/std'])",
+        "--macro", "rustcompiler.Compiler.use()",
+        "-D", "runtime-import=crate::runtime",
+        "-D", "runtime-emit=runtime",
+        "-D", "package-name=tiqian-engine-gen",
+        "-D", "package-license=MPL-2.0"
+      ],
+      "package": { "name": "tiqian-engine", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }

@@ -1,79 +1,220 @@
 name: Release to Registry
+
+# The registry write is the last job of .github/workflows/release.yml. The pack
+# job already produced the artifacts and the metadata tree, the Web npm lanes
+# kept their tarballs as npm-tarball-* artifacts, and the Maven release job kept
+# the Gradle module files as maven-gradle-publication, so this workflow
+# downloads them, describes and checks them, uploads the files the pack did not
+# put on the release page, commits the trees and deploys the site. The release
+# page is published separately by release-assets.yml, which depends on the
+# pack job alone: a failed registry lane must not keep the release page off the
+# tag. Every step needs the artifacts of that release run, so the workflow has
+# no dispatch trigger of its own: a failed release is retried with "Re-run
+# failed jobs" on the release run.
 on:
-  push:
-    tags: ["v*.*.*"]
+  workflow_call:
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
   group: release-registry-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  R2_ENDPOINT: https://91a3e85bc149574f96f64f55aa2c900e.r2.cloudflarestorage.com
-  R2_BUCKET: tiqian-registry
   REGISTRY_REPO: tiqian-cjk/registry
 
 jobs:
-  pack-and-publish:
+  release-gate:
+    uses: ./.github/workflows/release-gate.yml
+
+  write-registry:
+    needs: [release-gate]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout tiqian
         uses: actions/checkout@v4
 
-      - name: Set up bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Set up Haxe
+      - name: Validate the release ref
+        shell: bash
         run: |
-          wget -q https://github.com/HaxeFoundation/haxe/releases/download/4.3.7/haxe-4.3.7-linux64.tar.gz
-          tar -xzf haxe-4.3.7-linux64.tar.gz
-          find . -maxdepth 1 -type d -name "haxe_*" -exec echo "{}/haxe" >> "$GITHUB_PATH" \;
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" != "tag" || "${GITHUB_REF_NAME}" != v*.*.* ]]; then
+            echo "::error::The registry lane runs only from a v*.*.* release tag, received ${GITHUB_REF_NAME}."
+            exit 1
+          fi
 
-      - name: Build packages via boring
-        run: nix develop -c bash -c "boring pack ts kotlin swift rust dart 2>&1 || true"
-
-      - name: Collect artifacts
-        run: |
-          mkdir -p release-artifacts
-          find . -name "*.tgz" -o -name "*.jar" -o -name "*.crate" -o -name "*.zip" | grep -v node_modules | while read f; do cp "$f" release-artifacts/; done
-          ls -la release-artifacts/
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Download the release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          files: release-artifacts/*
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: release-artifacts
+          path: release-artifacts
 
-      - name: Upload Swift zip to R2
+      - name: Download the registry tree
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: registry-tree
+          path: ${{ runner.temp }}/registry-tree
+
+      - name: Check the registry tree against the artifacts
+        # Every metadata.json must name an artifact this pack run produced with
+        # the digest it records, and every artifact must be named by the tree,
+        # so a tree entry without an uploaded asset cannot pass.
+        run: python3 tools/check-registry-tree.py --tree "$RUNNER_TEMP/registry-tree" --artifacts release-artifacts
+
+      - name: Download the npm divergence reports
+        # A Web lane uploads npm-diverged-* when npm already held a version with
+        # other bytes, which happens when an earlier run of the same version
+        # published it. The download goes through the same artifact service as
+        # the tarballs, so a report from this attempt is never missed.
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: npm-diverged-*
+          path: ${{ runner.temp }}/npm-diverged
+
+      - name: Hold back the Web packages npm holds from an earlier run
+        # This run's tarball would carry a different integrity than npm
+        # records, so a lockfile written against one source would fail against
+        # the other. The Web packages depend on each other, so none of them is
+        # written for this version; the pack tree is still committed and
+        # deployed, and the job fails at its end. The lanes publish to npm
+        # regardless.
+        id: diverged
+        shell: bash
         run: |
-          for zip in release-artifacts/*.zip; do
-            [ -f "$zip" ] || continue
-            curl -sf -X PUT \
-              -H "Content-Type: application/zip" \
-              --data-binary "@$zip" \
-              "https://${{ secrets.R2_ACCESS_KEY_ID }}:${{ secrets.R2_SECRET_ACCESS_KEY }}@${{ env.R2_ENDPOINT }}/${{ env.R2_BUCKET }}/swift/${{ github.ref_name }}/$(basename $zip)"
+          set -euo pipefail
+          reports="$(find "$RUNNER_TEMP/npm-diverged" -type f -name 'npm-diverged.txt' 2>/dev/null || true)"
+          if [[ -n "${reports}" ]]; then
+            while IFS= read -r report; do
+              while IFS= read -r line; do
+                echo "::error::${line}"
+              done < "${report}"
+            done <<< "${reports}"
+            echo "found=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "found=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Download the published Web tarballs
+        if: steps.diverged.outputs.found != 'true'
+        # Each Web npm lane keeps the tarball it handed to npm as an
+        # npm-tarball-* artifact, so the registry serves those bytes and npm
+        # and the registry agree on every integrity a lockfile records.
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: npm-tarball-*
+          merge-multiple: true
+          path: npm-tarballs
+
+      - name: Describe the Web tarballs in the registry tree
+        if: steps.diverged.outputs.found != 'true'
+        # The precompute artifact keeps its package directories; the release
+        # assets and the tree check use bare file names, so the tarballs move
+        # to one level first, and a name two lanes share stops the step. The
+        # npm units of release-manifest.json name every package the tarballs
+        # must pack, so a lane that kept no tarball stops the step as well.
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' tarball; do
+            if [[ -e "npm-tarballs/$(basename "$tarball")" ]]; then
+              echo "::error::two Web tarballs are named $(basename "$tarball")"
+              exit 1
+            fi
+            mv "$tarball" npm-tarballs/
+          done < <(find npm-tarballs -mindepth 2 -type f -name '*.tgz' -print0)
+          python3 tools/write-npm-registry-tree.py --tarballs npm-tarballs --tree "$RUNNER_TEMP/npm-registry-tree" \
+            --owner "${{ github.repository_owner }}" --repository "${{ github.repository }}" --version "${GITHUB_REF_NAME#v}" \
+            --expect-manifest release-manifest.json
+          python3 tools/check-registry-tree.py --tree "$RUNNER_TEMP/npm-registry-tree" --artifacts npm-tarballs
+
+      - name: Upload the Web tarballs to the release
+        if: steps.diverged.outputs.found != 'true'
+        # The metadata names these files as release assets; the script leaves
+        # an asset with the same bytes in place and stops on different bytes.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash tools/upload-release-assets.sh "$GITHUB_REF_NAME" npm-tarballs/*.tgz
+
+      - name: Download the Gradle modules
+        # The Maven release job keeps the module files its Maven Local preflight
+        # wrote as maven-gradle-publication, after its Central upload; a re-run
+        # restores that artifact, so this is the build the keeping attempt
+        # sent to Central.
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: maven-gradle-publication
+          path: maven-publication
+
+      - name: Describe the Gradle modules in the registry tree
+        # One package directory per module of the Gradle release unit, listing
+        # the root coordinate and its target coordinates; every module must be
+        # present. The files move to one flat directory under their asset names.
+        run: |
+          python3 tools/write-maven-registry-tree.py write --publication maven-publication --assets maven-assets \
+            --tree "$RUNNER_TEMP/maven-registry-tree" --owner "${{ github.repository_owner }}" \
+            --repository "${{ github.repository }}" --version "${GITHUB_REF_NAME#v}" --expect-manifest release-manifest.json
+          python3 tools/check-registry-tree.py --tree "$RUNNER_TEMP/maven-registry-tree" --artifacts maven-assets
+
+      - name: Upload the Gradle module files to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=()
+          for file in maven-assets/*; do
+            [[ "$(basename "$file")" == SHA256SUMS ]] && continue
+            files+=("$file")
           done
+          bash tools/upload-release-assets.sh "$GITHUB_REF_NAME" "${files[@]}"
 
       - name: Commit metadata to registry repo
+        env:
+          WEB_HELD_BACK: ${{ steps.diverged.outputs.found }}
         run: |
           git clone https://x-access-token:${{ secrets.REGISTRY_REPO_TOKEN }}@github.com/${{ env.REGISTRY_REPO }}.git /tmp/registry
           VERSION=${GITHUB_REF_NAME#v}
-          OWNER=$(echo "${{ github.repository }}" | cut -d/ -f1)
-          REPO=$(echo "${{ github.repository }}" | cut -d/ -f2)
-          META_DIR="/tmp/registry/$OWNER/$REPO/$VERSION"
-          for platform in npm cargo swift maven pub; do
-            mkdir -p "$META_DIR/$platform"
-            cat > "$META_DIR/$platform/metadata.json" << EOF
-          {"name":"tiqian-engine","version":"$VERSION","license":"MIT","repository":"${{ github.repository }}","tag":"${{ github.ref_name }}"}
-          EOF
-          done
+          OWNER="${{ github.repository_owner }}"
+          # Merge the released versions into the clone instead of replacing the
+          # owner directory: earlier versions stay published, and a re-run of a
+          # release rewrites that version directory with the same bytes. The
+          # pre-dotted alphaNN version is retired here: its only consumer has
+          # been notified, and it outranks 0.1.0-alpha.8, so the registry site
+          # would otherwise keep pointing latest at it.
+          python3 tools/merge-registry-tree.py --tree "$RUNNER_TEMP/registry-tree" --owner "$OWNER" --registry /tmp/registry --retire 0.1.0-alpha07
+          if [[ "$WEB_HELD_BACK" != "true" ]]; then
+            python3 tools/merge-registry-tree.py --tree "$RUNNER_TEMP/npm-registry-tree" --owner "$OWNER" --registry /tmp/registry
+          fi
+          python3 tools/merge-registry-tree.py --tree "$RUNNER_TEMP/maven-registry-tree" --owner "$OWNER" --registry /tmp/registry
           cd /tmp/registry
           git config user.name "Release Bot"
           git config user.email "release@tiqian.dev"
           git add .
-          git commit -m "release: ${{ github.repository }} ${{ github.ref_name }}"
-          git push origin main
+          # A re-run for the same tag finds the metadata already committed;
+          # an empty commit would exit non-zero and fail the job.
+          if git diff --cached --quiet; then
+            echo "registry metadata for $VERSION is already current"
+          else
+            git commit -m "release: ${{ github.repository }} ${{ github.ref_name }}"
+            git push origin main
+          fi
+      - name: Deploy the registry site
+        # The Pages Git integration does not fire for every push to the
+        # registry repository (only one deployment appeared for several
+        # commits), so the deploy hook triggers the production build.
+        env:
+          PAGES_DEPLOY_HOOK: ${{ secrets.PAGES_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$PAGES_DEPLOY_HOOK" ]; then
+            echo "PAGES_DEPLOY_HOOK is not configured; skipping the deployment"
+            exit 0
+          fi
+          curl -fsS -X POST "$PAGES_DEPLOY_HOOK" | head -c 200
+
+      - name: Fail for the held back Web packages
+        if: steps.diverged.outputs.found == 'true'
+        run: |
+          echo "::error::npm holds Web packages of this version from an earlier run, so the registry did not describe this version's Web packages; add them from the npm copy as the section 'Web npm 包进入 registry' of docs/release-pipeline.md describes"
+          exit 1

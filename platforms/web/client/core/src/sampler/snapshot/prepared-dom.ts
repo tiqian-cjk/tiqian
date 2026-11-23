@@ -2,7 +2,7 @@
 // from the package root; root paths remain as compatibility re-export shims.
 //
 // The lowering itself (string markup, evidence overlays, the prepared paragraph
-// artifact) is generated from Haxe into ./prepared-dom-gen. This module keeps
+// artifact) is generated from Haxe into the @tiqian/shared package. This module keeps
 // what the generated layer cannot hold: plan wire parsing and validation,
 // semantic normalization, live-source and inline-object DOM swaps, the
 // value-style registry, and the typed-to-wire artifact serialization.
@@ -20,23 +20,24 @@ import type {
   LiveSemanticSpan,
   SnapshotSemanticSpan,
 } from "./snapshot-source.js";
-import { EvidenceDecorationKind } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/EvidenceDecorationKind.js";
-import { PreparedArtifact } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/PreparedArtifact.js";
-import { PreparedDom as GeneratedPreparedDom } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/PreparedDom.js";
-import type { AttributeEntry as GeneratedAttributeEntry } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/AttributeEntry.js";
-import type { BopomofoZone as GeneratedBopomofoZone } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/BopomofoZone.js";
-import type { EvidenceDecorationSegment as GeneratedEvidenceDecorationSegment } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/EvidenceDecorationSegment.js";
-import type { EvidenceEmphasisDot as GeneratedEvidenceEmphasisDot } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/EvidenceEmphasisDot.js";
-import type { MarkupArtifact as GeneratedMarkupArtifact } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/MarkupArtifact.js";
-import type { PreparedArtifactOptions as GeneratedPreparedArtifactOptions } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/PreparedArtifactOptions.js";
-import type { PreparedArtifactResult as GeneratedPreparedArtifactResult } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/PreparedArtifactResult.js";
-import type { PreparedPlan as GeneratedPreparedPlan } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/PreparedPlan.js";
-import type { PreparedPlanCell as GeneratedPreparedPlanCell } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/PreparedPlanCell.js";
-import type { PreparedPlanLine as GeneratedPreparedPlanLine } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/PreparedPlanLine.js";
-import type { PreparedRenderTextSpan as GeneratedPreparedRenderTextSpan } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/PreparedRenderTextSpan.js";
-import type { PreparedSemanticSpan as GeneratedPreparedSemanticSpan } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/PreparedSemanticSpan.js";
-import type { RubyAnnotation as GeneratedRubyAnnotation } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/RubyAnnotation.js";
-import type { StyleDelta as GeneratedStyleDelta } from "./prepared-dom-gen/org/tiqian/shared/prepared_dom/StyleDelta.js";
+import type { PlanCell, PlanEmphasisRange, PlanLine } from "@tiqian/ffi/engine-gen/org/tiqian/protocol/Plan.js";
+import { EvidenceDecorationKind } from "@tiqian/shared/org/tiqian/shared/prepared_dom/EvidenceDecorationKind";
+import { PreparedArtifact } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedArtifact";
+import { PreparedDom as GeneratedPreparedDom } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedDom";
+import type { AttributeEntry as GeneratedAttributeEntry } from "@tiqian/shared/org/tiqian/shared/prepared_dom/AttributeEntry";
+import type { BopomofoZone as GeneratedBopomofoZone } from "@tiqian/shared/org/tiqian/shared/prepared_dom/BopomofoZone";
+import type { EvidenceDecorationSegment as GeneratedEvidenceDecorationSegment } from "@tiqian/shared/org/tiqian/shared/prepared_dom/EvidenceDecorationSegment";
+import type { EvidenceEmphasisDot as GeneratedEvidenceEmphasisDot } from "@tiqian/shared/org/tiqian/shared/prepared_dom/EvidenceEmphasisDot";
+import type { MarkupArtifact as GeneratedMarkupArtifact } from "@tiqian/shared/org/tiqian/shared/prepared_dom/MarkupArtifact";
+import type { PreparedArtifactOptions as GeneratedPreparedArtifactOptions } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedArtifactOptions";
+import type { PreparedArtifactResult as GeneratedPreparedArtifactResult } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedArtifactResult";
+import type { PreparedPlan as GeneratedPreparedPlan } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedPlan";
+import type { PreparedPlanCell as GeneratedPreparedPlanCell } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedPlanCell";
+import type { PreparedPlanLine as GeneratedPreparedPlanLine } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedPlanLine";
+import type { PreparedRenderTextSpan as GeneratedPreparedRenderTextSpan } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedRenderTextSpan";
+import type { PreparedSemanticSpan as GeneratedPreparedSemanticSpan } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedSemanticSpan";
+import type { RubyAnnotation as GeneratedRubyAnnotation } from "@tiqian/shared/org/tiqian/shared/prepared_dom/RubyAnnotation";
+import type { StyleDelta as GeneratedStyleDelta } from "@tiqian/shared/org/tiqian/shared/prepared_dom/StyleDelta";
 import type { EnhancedElementContext } from "../../engine/context/enhance-context.js";
 
 // --- Internal types ---
@@ -127,13 +128,13 @@ interface BridgeCandidateShape {
 /** Style class mapper callback. */
 type StyleClassForFn = (declaration: string) => string;
 
-/** Snapshot semantic span option entry. */
+/** Semantic range received from either snapshot or live-source replay. */
 interface SnapshotSemanticOption {
   start: number;
   end: number;
-  sourceIndex: number;
+  sourceIndex?: number;
   tagName: string;
-  attributes: [string, string][];
+  attributes?: readonly (readonly [string, string])[];
   order?: number;
 }
 
@@ -166,7 +167,7 @@ interface PreparedSpacingResult {
   px: number;
 }
 
-/** Cell shape from the prepared layout plan JSON. */
+/** Cell properties read from snapshot JSON and the generated runtime plan. */
 interface PreparedLayoutPlanCell {
   rangeStart: number;
   rangeEnd: number;
@@ -177,6 +178,7 @@ interface PreparedLayoutPlanCell {
   shapingBoundary?: boolean;
   openTypeFeatures?: string[];
   style?: StyleDelta | null;
+  styleDelta?: PlanCell["styleDelta"];
   latin?: boolean;
   dashStrategy?: string | null;
   shapingLanguage?: string | null;
@@ -191,7 +193,7 @@ interface PreparedLayoutPlanCell {
   leadingLayoutAdvance?: number;
 }
 
-/** Line shape from the prepared layout plan JSON. */
+/** Line properties read from snapshot JSON and the generated runtime plan. */
 interface PreparedLayoutPlanLine {
   cells: PreparedLayoutPlanCell[];
   top: number;
@@ -200,7 +202,7 @@ interface PreparedLayoutPlanLine {
   indent: number;
   visualWidth: number;
   hyphenAdvance: number;
-  endReason: string;
+  endReason: string | PlanLine["endReason"];
   rangeStart: number;
   rangeEnd: number;
 }
@@ -215,13 +217,13 @@ interface PlanBopomofoZone extends BopomofoZone {
   baseRangeEnd: number;
 }
 
-/** The canonical prepared layout plan JSON shape. */
+/** The plan properties consumed by the prepared DOM renderer. */
 interface PreparedLayoutPlan {
   schema: number;
   layoutRevision: string;
   height: number;
   lines: PreparedLayoutPlanLine[];
-  emphasisRanges?: [number, number][];
+  emphasisRanges?: ([number, number] | PlanEmphasisRange)[];
   rubyDecisions?: PlanRubyAnnotation[];
   bopomofoDecisions?: PlanBopomofoZone[];
   inlineEdges?: InlineEdgeEntry[];
@@ -236,7 +238,7 @@ interface PreparedParagraphRenderOptions {
   styleClassFor?: StyleClassForFn | null;
   semanticReplay?: string;
   sourceText?: string;
-  semantics?: SnapshotSemanticOption[];
+  semantics?: readonly SnapshotSemanticOption[];
   liveSemanticElements?: Element[];
   renderTextSpans?: RenderTextSpanEntry[];
   cjkStrongSemantics?: CjkStrongSemanticEntry[];
@@ -332,6 +334,11 @@ const VALUE_STYLE_ELEMENT_ATTRIBUTE = GeneratedPreparedDom.VALUE_STYLE_ELEMENT_A
 const LIVE_SEMANTIC_INDEX_ATTRIBUTE = GeneratedPreparedDom.LIVE_SEMANTIC_INDEX_ATTRIBUTE;
 const SNAPSHOT_STYLE_OWNER = GeneratedPreparedDom.SNAPSHOT_STYLE_OWNER;
 
+// A single Latin letter or digit can lack a shaping boundary in a compact plan.
+const SINGLE_LATIN_CELL = /^[\p{Script=Latin}0-9]$/u;
+const LATIN_CELL_START = /^[\p{Script=Latin}0-9]/u;
+const LATIN_CELL_END = /[\p{Script=Latin}0-9]$/u;
+
 function preparedPlan(value: string | PreparedLayoutPlan): PreparedLayoutPlan {
   return typeof value === "string" ? JSON.parse(value) : value;
 }
@@ -408,13 +415,17 @@ function registerPreparedValueStyle(state: PreparedStyleState, declaration: stri
   return index;
 }
 
+// Preserve existing CSS rules across paragraph commits to avoid invalidating
+// every previously rendered paragraph when only new declarations are added.
+const syncedPreparedRules = new WeakMap<PreparedStyleState, string[]>();
+
 function syncPreparedValueStyles(state: PreparedStyleState) {
   if (!state.dirty) return;
   const rootScope = `[${VALUE_STYLE_SCOPE_ATTRIBUTE}="${state.scope}"]`;
   const snapshotValuesActive = state.owners.has(SNAPSHOT_STYLE_OWNER);
   const runtimeValuesActive = Array.from(state.owners.keys()).some((owner) =>
     owner !== SNAPSHOT_STYLE_OWNER);
-  state.styleElement.textContent = state.declarations.map((declaration: string, index: number) => {
+  const rules = state.declarations.flatMap((declaration: string, index: number) => {
     // PreparedValueNamespaceIsolation: build-time snapshot CSS remains live in
     // the document so it can restore exact first-paint nodes. Runtime lowering
     // must use a distinct class namespace; otherwise the same compact index can
@@ -427,8 +438,22 @@ function syncPreparedValueStyles(state: PreparedStyleState) {
     const runtimeRule = runtimeValuesActive
       ? `${rootScope}[${VALUE_STYLE_SCOPE_ATTRIBUTE}] [data-tq-rendered="true"] .${runtimeValueStyleClass(runtimeValueStyleKey(declaration))}{${declaration}}`
       : "";
-    return snapshotRule + runtimeRule;
-  }).join("");
+    return [snapshotRule, runtimeRule].filter(Boolean);
+  });
+
+  // Owner changes may remove a namespace; replace only the differing suffix.
+  // Detached/non-browser style elements retain the text-based fallback.
+  const sheet = state.styleElement.sheet;
+  const previous = syncedPreparedRules.get(state) ?? [];
+  if (sheet) {
+    let shared = 0;
+    while (shared < previous.length && previous[shared] === rules[shared]) shared++;
+    while (sheet.cssRules.length > shared) sheet.deleteRule(shared);
+    for (let index = shared; index < rules.length; index++) sheet.insertRule(rules[index], index);
+  } else {
+    state.styleElement.textContent = rules.join("");
+  }
+  syncedPreparedRules.set(state, rules);
   state.dirty = false;
 }
 
@@ -488,7 +513,7 @@ export function releasePreparedStyleState(state: PreparedStyleState, context: En
 
 // --- Wire mapping into the generated lowering ---
 
-function toTypedStyleDelta(style: StyleDelta | null | undefined): GeneratedStyleDelta | null {
+function toTypedStyleDelta(style: StyleDelta | PlanCell["styleDelta"] | undefined): GeneratedStyleDelta | null {
   if (style == null) return null;
   return {
     fontSize: style.fontSize == null ? null : Number(style.fontSize),
@@ -497,7 +522,15 @@ function toTypedStyleDelta(style: StyleDelta | null | undefined): GeneratedStyle
   };
 }
 
-function toTypedCell(cell: PreparedLayoutPlanCell): GeneratedPreparedPlanCell {
+function toTypedCell(cell: PreparedLayoutPlanCell, index: number, cells: PreparedLayoutPlanCell[]): GeneratedPreparedPlanCell {
+  // PlanJson writes the generated styleDelta under the key style.
+  const style = cell.style ?? cell.styleDelta ?? null;
+  // Keep adjacent letters and digits eligible for the shared run merger.
+  const previous = cells[index - 1];
+  const next = cells[index + 1];
+  const isolatedLatinCell = SINGLE_LATIN_CELL.test(cell.display) &&
+    !(previous?.rangeEnd === cell.rangeStart && LATIN_CELL_END.test(previous.display)) &&
+    !(next?.rangeStart === cell.rangeEnd && LATIN_CELL_START.test(next.display));
   return {
     rangeStart: Number(cell.rangeStart),
     rangeEnd: Number(cell.rangeEnd),
@@ -507,10 +540,10 @@ function toTypedCell(cell: PreparedLayoutPlanCell): GeneratedPreparedPlanCell {
     naturalWidth: Number(cell.naturalWidth),
     leadingLayoutAdvance: Number(cell.leadingLayoutAdvance),
     advance: cell.advance == null ? null : Number(cell.advance),
-    shapingBoundary: cell.shapingBoundary === true,
+    shapingBoundary: cell.shapingBoundary === true || isolatedLatinCell,
     openTypeFeatures: cell.openTypeFeatures == null ? null : Array.from(cell.openTypeFeatures, String),
-    style: toTypedStyleDelta(cell.style),
-    styleSignature: JSON.stringify(cell.style ?? null),
+    style: toTypedStyleDelta(style),
+    styleSignature: JSON.stringify(style),
     punctuationSignature: JSON.stringify([
       cell.punctuationInkFloor ?? null,
       cell.punctuationBodyWidth ?? null,
@@ -529,6 +562,8 @@ function toTypedCell(cell: PreparedLayoutPlanCell): GeneratedPreparedPlanCell {
 }
 
 function toTypedLine(line: PreparedLayoutPlanLine): GeneratedPreparedPlanLine {
+  // The generated enum carries the same reason name in its kind field.
+  const reason = line.endReason;
   return {
     cells: line.cells.map(toTypedCell),
     top: Number(line.top),
@@ -537,7 +572,7 @@ function toTypedLine(line: PreparedLayoutPlanLine): GeneratedPreparedPlanLine {
     indent: Number(line.indent),
     visualWidth: Number(line.visualWidth),
     hyphenAdvance: Number(line.hyphenAdvance),
-    endReason: String(line.endReason),
+    endReason: typeof reason === "object" && reason != null ? reason.kind : String(reason),
     rangeStart: Number(line.rangeStart),
     rangeEnd: Number(line.rangeEnd),
   };
@@ -629,10 +664,8 @@ function toTypedPlan(plan: PreparedLayoutPlan): GeneratedPreparedPlan {
   return {
     height: Number(plan.height),
     lines: plan.lines.map(toTypedLine),
-    emphasisRanges: Array.from(plan.emphasisRanges ?? [], (range) => ({
-      start: Number(range[0]),
-      end: Number(range[1]),
-    })),
+    emphasisRanges: Array.from(plan.emphasisRanges ?? [], (range) =>
+      Array.isArray(range) ? { start: Number(range[0]), end: Number(range[1]) } : range),
     rubyDecisions,
     bopomofoDecisions,
     inlineEdges: Array.from(plan.inlineEdges ?? [], (edge) => ({
@@ -821,7 +854,7 @@ function restoreLiveSemanticElements(
   host: Element,
   sourceElements: Element[],
   expectedCount: number,
-  semantics: LiveSemanticSpan[] = [],
+  semantics: readonly SnapshotSemanticOption[] = [],
   cjkStrongSemantics: CjkStrongSemanticEntry[] = [],
 ) {
   if (expectedCount === 0) return;
@@ -857,6 +890,8 @@ function restoreLiveSemanticElements(
     seen.add(sourceIndex);
     const clone = source.cloneNode(false) as HTMLElement;
     clone.setAttribute("data-tq-source-semantic", "true");
+    const spacingEnd = placeholder.getAttribute("data-tq-spacing-end");
+    if (spacingEnd !== null) clone.setAttribute("data-tq-spacing-end", spacingEnd);
     const cjkStrong = cjkBySourceIndex.get(sourceIndex);
     if (cjkStrong != null) {
       clone.setAttribute("data-tq-cjk-emphasis", "true");
@@ -938,7 +973,7 @@ export function renderPreparedParagraphInto(
               }
             }
           }
-          if (!selected) return null;
+          if (selected?.sourceIndex == null) return null;
           const element = options.liveSemanticElements![selected.sourceIndex];
           if (!element) return null;
           try {
@@ -978,7 +1013,7 @@ export function renderPreparedParagraphInto(
       host,
       Array.from(options.liveSemanticElements ?? []),
       lowered.liveSemanticCount,
-      Array.from(options.semantics ?? []),
+      options.semantics,
       Array.from(options.cjkStrongSemantics ?? []),
     );
   }

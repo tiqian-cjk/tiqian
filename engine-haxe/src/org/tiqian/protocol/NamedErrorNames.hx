@@ -9,6 +9,7 @@ package org.tiqian.protocol;
  * Consumers read the name of a variant from these accessors; none of the
  * three lanes keeps its own copy of the strings.
  */
+@:mainOnly
 class NamedErrorNames {
     /** The variants in declaration order (NamedError.hx header rules the order). */
     public static function variants():Array<NamedError> {

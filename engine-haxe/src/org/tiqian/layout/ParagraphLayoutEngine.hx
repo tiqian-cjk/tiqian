@@ -17,7 +17,7 @@ import org.tiqian.font.FontRoleContext.FontRoleClassifier;
 import org.tiqian.font.FontMetrics.ScriptAwareFontMetricsNormalizer;
 import org.tiqian.font.FontMetrics.StubFontMetricsResolver;
 import org.tiqian.linebreak.Hyphenator;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import org.tiqian.shaping.TextShaper.ExplainableStubTextShaper;
 import org.tiqian.layout.PunctuationModel.PunctuationAtomBuilder;
 import org.tiqian.layout.PunctuationModel.PunctuationSpacingCompressor;
@@ -56,14 +56,14 @@ class ExplainableStubParagraphLayoutEngine implements ParagraphLayoutEngine {
     public final quotePairAnalyzer:QuotePairAnalyzer;
     public final lineBreaker:LineBreaker;
     public final justifier:Justifier;
-    public final textShaper:ITextShaper;
+    public final textShaper:TextShaper;
     public final hyphenator:Hyphenator;
     public final annotationCache:WidthIndependentAnnotationCache;
 
     public function new(?fontRoleClassifier:FontRoleClassifier, ?fallbackResolver:FallbackResolver, ?clreqProfileResolver:ClreqProfileResolver,
             ?fontMetricsResolver:FontMetricsResolver, ?fontMetricsNormalizer:FontMetricsNormalizer, ?punctuationAtomBuilder:PunctuationAtomBuilder,
             ?punctuationSpacingCompressor:PunctuationSpacingCompressor, ?quotePairAnalyzer:QuotePairAnalyzer, ?lineBreaker:LineBreaker, ?justifier:Justifier,
-            ?textShaper:ITextShaper, ?hyphenator:Hyphenator, ?annotationCache:WidthIndependentAnnotationCache) {
+            ?textShaper:TextShaper, ?hyphenator:Hyphenator, ?annotationCache:WidthIndependentAnnotationCache) {
         this.fontRoleClassifier = fontRoleClassifier == null ? new CjkFontRoleClassifier() : fontRoleClassifier;
         this.fallbackResolver = fallbackResolver == null ? new ParagraphLayoutFallbackResolver() : fallbackResolver;
         this.clreqProfileResolver = clreqProfileResolver == null ? new BuiltInClreqProfileResolver() : clreqProfileResolver;

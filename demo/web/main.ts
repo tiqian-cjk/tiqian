@@ -1,5 +1,5 @@
-import '@tiqian/prose/auto';
-import { registerTiqianProse } from '@tiqian/prose/element';
+import '@tiqian/web-component/auto';
+import { registerTiqianProse } from '@tiqian/web-component/element';
 import { createEnhanceContext } from '@tiqian/core/src/engine/context/enhance-context.js';
 
 interface MetricsEventDetail {

@@ -23,7 +23,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.tiqian.core.TextRange
 import org.tiqian.core.TextStyle
-import org.tiqian.core.RichTextRole
+import org.tiqian.core.Link
 import org.tiqian.core.RichTextSpan
 import org.tiqian.core.TiqianTextContent
 import org.tiqian.core.getBoundingBoxes
@@ -68,7 +68,7 @@ class CjkTextViewAccessibilityInstrumentedTest {
                         content = TiqianTextContent(source),
                         textStyle = TextStyle(fontSize = 32f),
                         richTextSpans = listOf(
-                            RichTextSpan(TextRange(0, source.length), RichTextRole.Link("https://example.com")),
+                            RichTextSpan(TextRange(0, source.length), Link("https://example.com")),
                         ),
                     )
                 }

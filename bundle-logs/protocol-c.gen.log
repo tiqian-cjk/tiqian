@@ -1,4 +1,0 @@
-[gen] protocol-c -> /home/losses/Development/tq-workspace/tiqian/.scratch/tasks/wb-t-mv4gfi00-ndqa/engine-haxe/out/protocol-c/gen, /home/losses/Development/tq-workspace/tiqian/.scratch/tasks/wb-t-mv4gfi00-ndqa/engine-haxe/out/protocol-c/gen-tests
-  $ haxe -cp engine-haxe/src -cp engine-haxe/macros engine-haxe/targets/protocol-c.hxml
-  $ bun engine-haxe/out/protocol-c/gen/c-header.js
-bundle driver: ok

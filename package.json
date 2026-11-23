@@ -2,7 +2,9 @@
   "name": "tiqian",
   "private": true,
   "workspaces": [
-    "ffi/js/npm",
+    "engine-haxe/out/protocol-ts/gen",
+    "engine-haxe/out/shared-ts/gen",
+    "platforms/web/client/engine-runtime",
     "platforms/web/client/core",
     "platforms/web/client/web-component",
     "platforms/web/client/react",
@@ -11,6 +13,9 @@
     "platforms/web/client/sveltekit",
     "demo/web"
   ],
+  "scripts": {
+    "postinstall": "node ./platforms/web/client/engine-runtime/build-runtime.ts --install-hook"
+  },
   "devDependencies": {
     "typescript": "5.9.3",
     "@types/bun": "1.4.0"

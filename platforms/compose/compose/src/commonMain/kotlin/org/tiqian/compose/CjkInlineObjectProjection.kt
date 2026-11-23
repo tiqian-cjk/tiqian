@@ -3,7 +3,7 @@ package org.tiqian.compose
 import androidx.compose.ui.text.AnnotatedString
 import org.tiqian.core.SourceBoundaryBias
 import org.tiqian.core.TextRange
-import org.tiqian.core.sourceGraphemeBoundaries
+import org.tiqian.core.SourceInteractionBoundaries
 
 internal const val RenderOnlyInlineObjectTag = "tiqian:render-only-inline-object"
 private const val LegacyInlineProjectionOffsetTag = "tiqian:inline-projection-offset"
@@ -72,7 +72,7 @@ internal class CjkInlineObjectOffsetMapping(
             AnnotatedString(text, annotations)
         }
     private val logicalBoundaries by lazy {
-        logicalText.text.sourceGraphemeBoundaries(TextRange(0, logicalLength))
+        SourceInteractionBoundaries.sourceGraphemeBoundaries(logicalText.text, TextRange(0, logicalLength))
     }
 
     fun toLayout(

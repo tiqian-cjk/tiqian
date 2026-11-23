@@ -183,8 +183,9 @@ class CoreLayoutQueriesGapsTest {
                 CoreLayoutQueriesGapsTestHelpers.line(glyphRange, 0, 0, 15.0, 0.0, 20.0, 20.0, null)
             ], null);
         final positioned:Array<PositionedCluster> = LayoutQueries.positionedClusters(result);
-        TracedAssertions.assertEqualsInt(3, positioned[0].sourceStops == null ? 0 : positioned[0].sourceStops.length);
-        TracedAssertions.assertTrue(positioned[0].sourceStops != null);
+        final sourceStops = positioned[0].sourceStops;
+        TracedAssertions.assertEqualsInt(3, sourceStops == null ? 0 : sourceStops.length);
+        TracedAssertions.assertTrue(sourceStops != null);
     }
 
     @:test

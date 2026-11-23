@@ -1,4 +1,5 @@
 package org.tiqian.shaping;
+import org.tiqian.shaping.TextShaper.ShapingIssue;
 
 import org.tiqian.font.FontRole;
 import org.tiqian.shaping.TextShaper.ShapingSource;
@@ -102,9 +103,9 @@ class TextShaperCoverageTest {
         TracedAssertions.assertEqualsString("ExplainableStubTextShaper:nominal-em-advance", result.decisions[0].reason);
         TracedAssertions.assertEqualsString(Type.enumConstructor(ShapingSource.Stub), result.decisions[0].source);
         TracedAssertions.recordRenderedNotNull(
-            "'" + TextShaper.UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE_ISSUE + "'");
+            "'" + ShapingIssue.UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE_ISSUE + "'");
         TracedAssertions.recordRenderedNotNull(
-            "'" + TextShaper.PLATFORM_MULTI_FACE_STRING_DRAW_ISSUE + "'");
+            "'" + ShapingIssue.PLATFORM_MULTI_FACE_STRING_DRAW_ISSUE + "'");
     }
 
     public static function flushTestTrace():Void {

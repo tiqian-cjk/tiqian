@@ -35,7 +35,7 @@ import org.tiqian.core.LayoutResult
 import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.TextRange
 import org.tiqian.core.getCursorRect
-import org.tiqian.core.ic
+import org.tiqian.core.Ic
 import org.tiqian.core.positionedClusters
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -189,12 +189,12 @@ class CjkInlineObjectReviewRegressionTest {
                     Column {
                         CjkSelectionScope("a") {
                             CjkText(document.fragments[0].text, modifier = Modifier.width(340.dp).testTag("first-text"),
-                                textStyle = style(), paragraphStyle = ParagraphStyle(firstLineIndent = 0.ic), onTextLayout = { first = it })
+                                textStyle = style(), paragraphStyle = ParagraphStyle(firstLineIndent = Ic.Zero), onTextLayout = { first = it })
                         }
                         CjkSelectionScope("b") {
                             CjkText(marked(if (slot == 0) "\uFFFCb" else "b\uFFFC", slot),
                                 modifier = Modifier.width(24.dp).testTag("second-text"), textStyle = style(),
-                                paragraphStyle = ParagraphStyle(firstLineIndent = 0.ic), inlineObjects = listOf(objectAt(slot)),
+                                paragraphStyle = ParagraphStyle(firstLineIndent = Ic.Zero), inlineObjects = listOf(objectAt(slot)),
                                 onTextLayout = { second = it })
                         }
                     }
@@ -269,6 +269,24 @@ class CjkInlineObjectReviewRegressionTest {
         }
     }
 
+    @Test
+    fun copyingPastRenderOnlySlotOmitsOnlyTaggedWbrAndKeepsRuby() {
+        val clipboard = RecordingClipboard()
+        val text = buildAnnotatedString {
+            append("先\uFFFC")
+            addCjkRenderOnlyInlineObject(1, 2)
+            wbr()
+            ruby("提椠", "tíqiàn")
+            append("\u200B末")
+        }
+        withText(text, clipboard = clipboard) { _, state, _ ->
+            assertTrue(state.selectAll())
+            assertEquals("先\u200B提椠\u200B末", state.selectedText?.text)
+            assertTrue(state.copySelection())
+            assertEquals("先提椠（tíqiàn）\u200B末", clipboard.value?.text)
+        }
+    }
+
     private fun marked(
         source: String,
         slot: Int = 1,
@@ -317,7 +335,7 @@ class CjkInlineObjectReviewRegressionTest {
                         text,
                         modifier = Modifier.testTag("review-text"),
                         textStyle = style(),
-                        paragraphStyle = ParagraphStyle(firstLineIndent = 0.ic),
+                        paragraphStyle = ParagraphStyle(firstLineIndent = Ic.Zero),
                         inlineObjects = listOf(objectAt(slot)),
                         onTextLayout = { layout = it },
                     )

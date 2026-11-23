@@ -1,9 +1,9 @@
 # `@tiqian/astro`
 
-Static Astro integration for `@tiqian/prose`.
+Static Astro integration for `@tiqian/web-component`.
 
 ```shell
-npm install @tiqian/prose@alpha @tiqian/astro@alpha
+npm install @tiqian/web-component@alpha @tiqian/astro@alpha
 ```
 
 For semantic SSR plus live-width browser enhancement, add `tiqian()` to

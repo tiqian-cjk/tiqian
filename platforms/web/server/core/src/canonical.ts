@@ -1,7 +1,7 @@
 // The TypeScript adapter of the single-source canonical encoder (ADR 0052).
 // The byte form itself lives in the Haxe module org.tiqian.protocol.Canonical
-// and arrives through the generated tree under ./protocol-gen (copied by
-// scripts/copy-protocol-gen.sh from engine-haxe/out/protocol-ts). The bytes
+// and arrives through the generated tree in the @tiqian/protocol package
+// (driver bundle protocol-ts). The bytes
 // are the hash preimage of the cache layers and the content of the binary
 // bridge; golden vectors in test/canonical.test.ts pin the same hex strings
 // the Haxe-generated test and the Rust unit tests assert.
@@ -14,9 +14,9 @@
 
 import { createHash } from "node:crypto";
 
-import { Canonical } from "./protocol-gen/org/tiqian/protocol/Canonical.js";
-import type { WireField } from "./protocol-gen/org/tiqian/protocol/WireField.js";
-import type { WireValue } from "./protocol-gen/org/tiqian/protocol/WireValue.js";
+import { Canonical } from "@tiqian/protocol/org/tiqian/protocol/Canonical";
+import type { WireField } from "@tiqian/protocol/org/tiqian/protocol/WireField";
+import type { WireValue } from "@tiqian/protocol/org/tiqian/protocol/WireValue";
 
 /** Snapshot paragraph submission: carries `maxWidthPx`. */
 export const KIND_SNAPSHOT = 0;
@@ -74,7 +74,22 @@ export function encodeCanonicalInput(
   if (result.kind === "CErr") {
     throw new Error(result.issue);
   }
-  return Buffer.from(result.bytes);
+  const base = Buffer.from(result.bytes);
+  const spans = memberOf(input, "textSpans");
+  if (!Array.isArray(spans)) return base;
+  const numeric = spans.map((span: unknown) => {
+    const value = memberOf(span, "fontVariantNumeric") ?? null;
+    if (value !== null && typeof value !== "string") throw new Error("UnsupportedFontVariantNumeric");
+    return value;
+  });
+
+  // Preserve the upstream byte form for existing inputs. Numeric overrides
+  // use an optional trailer that participates in both cache hashes and transport.
+  if (numeric.every((value) => value === null)) return base;
+  const payload = Buffer.from(JSON.stringify(numeric));
+  const length = Buffer.alloc(4);
+  length.writeUInt32LE(payload.length);
+  return Buffer.concat([base, Buffer.from("TQNV"), length, payload]);
 }
 
 /** Raw SHA-256 digest, the cache-layer content hash of the canonical bytes. */

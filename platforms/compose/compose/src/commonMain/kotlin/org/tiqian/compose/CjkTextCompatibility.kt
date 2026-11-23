@@ -108,6 +108,7 @@ fun AnnotatedString.cjkTextCompatibility(
         add(CjkRubyTag)
         add(CjkBopomofoTag)
         add(CjkRichTextTag)
+        add(CjkWbrTag)
         if (composeInlineAnnotationsAreModeled) add(ComposeInlineContentTag)
         val renderOnlySlots = getStringAnnotations(RenderOnlyInlineObjectTag, 0, length)
         if (renderOnlySlots.all { slot ->

@@ -6,7 +6,7 @@ import org.tiqian.core.PunctuationDecisionInfo;
 import std.UString;
 import org.tiqian.clreq.*;
 import org.tiqian.font.FontRole;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import org.tiqian.shaping.TextShaper.ShapingInput;
 import org.tiqian.shaping.TextShaper.ShapingResult;
 import org.tiqian.shaping.TextShaper.ExplainableStubTextShaper;
@@ -175,7 +175,7 @@ class QuoteClassificationEngineTestSupport {
     }
 }
 
-class ProportionalQuoteTextShaper implements ITextShaper {
+class ProportionalQuoteTextShaper implements TextShaper {
     private final delegate:ExplainableStubTextShaper;
 
     public function new()

@@ -59,7 +59,7 @@ ADR 记录已经做出的架构与排版决定。它们按编号保留当时的 
 - [0036 Compose TextStyle interop 与 capability report](0036-compose-text-interop.md)
 - [0037 Source-faithful plain text 与 mandatory breaks](0037-source-faithful-plain-text.md)
 - [0038 邻行均摊](0038-neighbor-amortized-adjustment.md)
-- [0039 Web 渲染路径与真实站点接入](0039-web-rendering-path.md)
+- [0039 Web 渲染路径与站点接入](0039-web-rendering-path.md)
 - [0040 构建期 Web 字体证据与最大版心快照](0040-build-time-web-font-snapshots.md)
 - [0041 全段动态规划断行](0041-paragraph-dp-line-breaking.md)
 - [0042 Web 框架集成包与无宽度字体证据](0042-framework-web-integrations.md)
@@ -69,29 +69,36 @@ ADR 记录已经做出的架构与排版决定。它们按编号保留当时的 
 - [0049 虚拟正文选区使用逻辑文档坐标](0049-logical-document-selection.md)
 - [0050 原生 precompute 引擎绑定与 Rust / npm 双生态分发](0050-native-precompute-rust-bindings.md)
 - [0051 API<31 自然簇串合并绘制](0051-natural-run-coalesced-draw.md)
-- [0052 precompute 缓存分层、批量渲染器与二进制过桥协议](0052-precompute-cache-and-batch-renderer.md)
+- [0052 precompute 缓存分层、批量渲染器与二进制传输协议](0052-precompute-cache-and-batch-renderer.md)
 - [0053 Web prose 宿主收敛：装配规格、TS 宿主与统一执行装置](0053-web-prose-host-consolidation.md)
 - [0054 行长计量统一与格数区间表](0054-measure-quantization-and-band-table.md)
 - [0055 Maven Central 文件配额：native 发布过滤与 SNAPSHOT 通道](0055-maven-central-file-quota.md)
 - [0056 engine 单模块合并与按平台的仓库重组](0056-engine-module-and-platform-reorg.md)
-- [0057 纵轴退出缓存与装饰层 em 化](0057-vertical-axis-exits-cache.md)
+- [0057 纵向退出缓存与装饰层 em 化](0057-vertical-axis-exits-cache.md)
 - [0058 Android View 一级前端与共享原生 renderer](0058-android-view-frontend.md)
+- [0060 单一发版入口与发版前总检查](0060-single-release-entry-and-gate.md)
+
+## 工程组织
+
+- [0061 仓库脚本与工具的分工](0061-scripts-tools-boundary.md)（已由 0063 取代）
+- [0062 删除 platforms/jvm 分组，Skia 模块移入 Compose，探针集中到 engine-probes](0062-platform-jvm-dissolution-and-probe-home.md)
+- [0063 可执行文件只保留 tools/ 一个目录](0063-single-tools-directory.md)
 
 ## 早期状态说明
 
 以下早期 ADR 的核心决定仍然有效，但其中“当前”“后续”等实施状态已经被后续工作推进：
 
-- 0002 的字体声明度量与 OpenType BASE 后续由 0014、0033、0034 及平台 resolver 落地；
-- 0004、0008、0011 中的 stub / placeholder ink 说明由 0013–0016 的真实 shaping 与
+- 0002 的字体声明度量与 OpenType BASE 后续由 0014、0033、0034 及平台 resolver 实现；
+- 0004、0008、0011 中的 stub / placeholder ink 说明由 0013–0016 的 shaping 与
   0014 的 ink-bounds 几何取代；
 - 0016 最初的 API 31 TextPaint 正确性边界已由 2026-08-05 amendment 改为 API 23+
   HarfBuzz / FreeType 同源后端；平台 glyph API 只保留为 oracle / 可选优化；
-- 0009 的 Insert 模式由 Slice 10 落地；
+- 0009 的 Insert 模式由 Slice 10 实现；
 - 0021 中的 `firstLineIndentEm` / `blockIndentEm` 命名由 0034 改为 `Ic` 类型的
   `firstLineIndent` / `blockIndent`；
 - 0017 的 Desktop-only 前端由 0035 扩展到 Android，并由 0039 增加 Web 前端。
 - 0039 的客户端实时度量路径由 0040 增加构建期最大版心快照与服务器 shaping / metrics 回放；
-  快照失配但证据仍有效时继续走回放，证据不可用时才保留原生正文或回到 0039 的具名降级路径。
+  快照不一致但证据仍有效时继续走回放，证据不可用时才保留原生正文或回到 0039 的具名降级路径。
 - 0042 把 0040 的字体证据与固定版心几何拆成两个公共输入：字体回放不要求宿主宽度，只有显式快照
   继续使用 `maxWidthPx`；SvelteKit / Astro 生命周期由同仓库独立 npm adapter 持有。
 - 0049 的逻辑文档选区模型由 0058 在 Android View 前端复用。

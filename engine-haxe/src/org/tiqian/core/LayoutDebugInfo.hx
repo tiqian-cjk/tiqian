@@ -47,6 +47,9 @@ class LayoutDebugInfo {
     public final breakOpportunityDecisions:ReadOnlyArray<BreakOpportunityDecisionInfo>;
     public final emergencyTrackingEligibilityDecisions:ReadOnlyArray<EmergencyTrackingEligibilityDecisionInfo>;
 
+    /** The published no-argument default, used by LayoutResult's debug parameter. */
+    public static final Default:LayoutDebugInfo = new LayoutDebugInfo(null);
+
     public function new(maxLinesDecision:Null<MaxLinesDecisionInfo>, ?metricDecisions:Array<MetricDecisionInfo>,
             ?geometryDecisions:Array<ClusterGeometryDecisionInfo>, ?autoSpaceDecisions:Array<AutoSpaceDecisionInfo>, ?rubyDecisions:Array<RubyDecisionInfo>,
             ?bopomofoDecisions:Array<BopomofoDecisionInfo>, ?fontDecisions:Array<FontDecisionInfo>, ?shapingDecisions:Array<ShapingDecisionInfo>,

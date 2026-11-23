@@ -1,5 +1,6 @@
 package org.tiqian.font;
 
+@:mainOnly
 class InlineShapingStylePolicy {
     public static final unsupportedInlineShapingProperties:std.ReadOnlyArray<String> = [
         "font-feature-settings",

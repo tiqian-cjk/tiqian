@@ -296,16 +296,47 @@ class IntervalOverlapIndex {
         final sorted = new Array<TextRange>();
         for (i in 0...ranges.length)
             sorted.push(ranges[i]);
-        var rIdx = 1;
-        while (rIdx < sorted.length) {
-            final curr = sorted[rIdx];
-            var j = rIdx - 1;
-            while (j >= 0 && sorted[j].start > curr.start) {
-                sorted[j + 1] = sorted[j];
-                j--;
+        // Bottom-up merge sort by start. The previous insertion sort cost
+        // ranges squared, which dominated paragraphs with many break ranges;
+        // the Kotlin backend rejects comparator sorts, so the merge is explicit.
+        final count = sorted.length;
+        final buffer = new Array<TextRange>();
+        for (i in 0...count)
+            buffer.push(sorted[i]);
+        var width = 1;
+        while (width < count) {
+            var base = 0;
+            while (base < count) {
+                final mid = Std.int(Math.min(base + width, count));
+                final stop = Std.int(Math.min(base + 2 * width, count));
+                var left = base;
+                var right = mid;
+                var out = base;
+                while (left < mid && right < stop) {
+                    if (sorted[right].start < sorted[left].start) {
+                        buffer[out] = sorted[right];
+                        right++;
+                    } else {
+                        buffer[out] = sorted[left];
+                        left++;
+                    }
+                    out++;
+                }
+                while (left < mid) {
+                    buffer[out] = sorted[left];
+                    left++;
+                    out++;
+                }
+                while (right < stop) {
+                    buffer[out] = sorted[right];
+                    right++;
+                    out++;
+                }
+                base = stop;
             }
-            sorted[j + 1] = curr;
-            rIdx++;
+            for (i in 0...count)
+                sorted[i] = buffer[i];
+            width *= 2;
         }
         this.byStart = sorted;
         this.prefixMaxEnd = new Array<Int>();

@@ -7,15 +7,23 @@ import std.SortedMap;
 import std.SortedSet;
 
 /** Stable identity of one physical SFNT face, collection index and variation instance. */
+@:mainOnly
+@:valueType
 abstract FontFaceId(String) {
-    public static function of(value:String):FontFaceId {
+    public function new(value:String) {
         if (value == null || StringTools.trim(value).length == 0)
             throw new TiqianIllegalArgumentException(Message("FontFaceId must not be blank"));
-        return cast(value, FontFaceId);
+        this = value;
     }
 
+    public static function of(value:String):FontFaceId
+        return new FontFaceId(value);
+
+    // Both factories construct directly: a return of another static on this
+    // value-type abstract reaches the Rust target without the callee's Result
+    // propagation, so the generated crate stops with E0308.
     @:from public static function fromString(value:String):FontFaceId
-        return of(value);
+        return new FontFaceId(value);
 
     public var value(get, never):String;
 
@@ -26,6 +34,7 @@ abstract FontFaceId(String) {
         return this;
 }
 
+@:mainOnly
 class ReplayableFontFaceDescriptor {
     public final id:FontFaceId;
     public final familyAliases:SortedSet<String>;
@@ -49,6 +58,7 @@ class ReplayableFontFaceDescriptor {
     }
 }
 
+@:mainOnly
 class ReplayableFontFaceRequest {
     public final role:FontRole;
     public final preferredFamilies:Array<String>;
@@ -71,6 +81,7 @@ class ReplayableFontFaceRequest {
     }
 }
 
+@:mainOnly
 class FontBackendCapabilityIssue {
     public final code:String;
     public final detail:String;
@@ -81,6 +92,7 @@ class FontBackendCapabilityIssue {
     }
 }
 
+@:mainOnly
 class FontBackendCapabilityReport {
     public final backend:String;
     public final sourceKind:String;
@@ -107,6 +119,7 @@ class FontBackendCapabilityReport {
 }
 
 /** Platform-neutral catalog contract shared by shaping, metrics and replay. */
+@:mainOnly
 interface ReplayableFontCatalog {
     public var faces(get, never):Array<ReplayableFontFaceDescriptor>;
     public var capabilityReport(get, never):FontBackendCapabilityReport;

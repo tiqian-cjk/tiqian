@@ -1,4 +1,3 @@
-import org.tiqian.layout.RecordedEvidenceGoldenParityTest;
 import org.tiqian.layout.QuoteClassificationEngineTest;
 import org.tiqian.layout.LineGeometryDirectTailTest;
 import org.tiqian.layout.PunctuationGeometryLedgerCoverageTest;
@@ -1714,8 +1713,6 @@ class Main {
         run("relayoutWithDifferentWidthHitsCacheAndSkipsShaper",
             org.tiqian.layout.WidthIndependentAnnotationCacheTest.relayoutWithDifferentWidthHitsCacheAndSkipsShaper);
         TestTraceRecorder.flushClass("WidthIndependentAnnotationCacheTest");
-        run("layoutDecisionDumpsMatchEmbeddedGolden", org.tiqian.layout.LayoutDumpGoldenParityTest.layoutDecisionDumpsMatchEmbeddedGolden);
-        TestTraceRecorder.flushClass("LayoutDumpGoldenParityTest");
         run("attachedRunExposesTheProseClustersOnItsTwoSides",
             org.tiqian.layout.AttachedInlineVirtualAdjacencyTest.attachedRunExposesTheProseClustersOnItsTwoSides);
         run("attachedRunAtParagraphEndHasNoVirtualRightNeighbor",
@@ -1962,8 +1959,6 @@ class Main {
             org.tiqian.layout.SpacingAndLineGeometryEngineTest.mourningSpanWiderThanMeasureSplitsWithOpenEdges);
         run("usesFontDeclaredTypoBoxForCjkLineBox", org.tiqian.layout.SpacingAndLineGeometryEngineTest.usesFontDeclaredTypoBoxForCjkLineBox);
         TestTraceRecorder.flushClass("SpacingAndLineGeometryEngineTest");
-        run("recordedEvidenceLayoutMatchesGolden", RecordedEvidenceGoldenParityTest.recordedEvidenceLayoutMatchesGolden);
-        TestTraceRecorder.flushClass("RecordedEvidenceGoldenParityTest");
 
         run("emphasisDotGapEmMustBeFiniteAndNonNegative",
             org.tiqian.layout.ParagraphLayoutEngineValidationCoverageTest.emphasisDotGapEmMustBeFiniteAndNonNegative);

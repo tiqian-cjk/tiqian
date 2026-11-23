@@ -4,7 +4,7 @@ using org.tiqian.layout.ProgressiveBreakTierPriority;
 
 import org.tiqian.core.*;
 import org.tiqian.clreq.*;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import org.tiqian.shaping.TextShaper.ShapingInput;
 import org.tiqian.shaping.TextShaper.ShapingResult;
 import org.tiqian.shaping.TextShaper.ExplainableStubTextShaper;
@@ -24,7 +24,7 @@ class WidthIndependentAnnotationCacheCoverageTestSupport {
     public static function emptyTiers():SortedMap<TextRange, SortedSet<Int>>
         return SortedMap.builder().build();
 
-    public static function engine(?clreqProfileResolver:ClreqProfileResolver, ?textShaper:ITextShaper):ExplainableStubParagraphLayoutEngine
+    public static function engine(?clreqProfileResolver:ClreqProfileResolver, ?textShaper:TextShaper):ExplainableStubParagraphLayoutEngine
         return new ExplainableStubParagraphLayoutEngine(null, null, clreqProfileResolver, null, null, null, null, null, null, null, textShaper);
 
     public static function key(input:LayoutInput):WidthIndependentAnnotationKey
@@ -185,7 +185,7 @@ class TiqianClreqFixedResolver implements ClreqProfileResolver {
 
 /** Shaper emitting two glyph runs with distinct OpenType features, which the
  *  engine rejects as conflicting. */
-class ConflictingOpenTypeFeaturesShaper implements ITextShaper {
+class ConflictingOpenTypeFeaturesShaper implements TextShaper {
     public function new() {}
 
     public function shape(input:ShapingInput):ShapingResult {
@@ -200,7 +200,7 @@ class ConflictingOpenTypeFeaturesShaper implements ITextShaper {
 
 /** Shaper that narrows every glyph's ink bounds; used to force a centered
  *  punctuation boundary to degenerate to zero paired capacity. */
-class NarrowInkShaper implements ITextShaper {
+class NarrowInkShaper implements TextShaper {
     final delegate:ExplainableStubTextShaper;
 
     public function new()

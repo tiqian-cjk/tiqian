@@ -14,7 +14,7 @@ SW09 原文位于 boring-docs-archive 仓库 `investigations/architecture-round-
 
 round-2 E 复核位于 boring-docs-archive 仓库 `investigations/architecture-round-2/e-swift-runtime-closure-review.md`，确认 `TiqianArray` 与 `ReadOnlyArray` 位于 `ARRAY_SOURCE`，并记录「Existing branded mutable-array and exception names remain separate recorded migration work」。
 
-异常改名的决定记录在 `engine-haxe/PROGRESS.md` L213-L248（2026-08-30）。
+异常改名的决定（2026-08-30）保存在本文「异常名迁移保留 `Tiqian` 前缀」一节；当初记录该决定的迁移期进度文件已随 `4edb2ac7c` 从本仓库删除，决定条文以本文为准。
 
 ## 清点表逐项列出带 `Tiqian` 前缀的公开 API 名及其处置
 
@@ -47,11 +47,11 @@ Tiqian 仓源码不含 `TiqianArray`。该名仅出现在 `bundle-logs/swift-f32
 
 ## 异常名迁移保留 `Tiqian` 前缀
 
-异常改名的决定（`engine-haxe/PROGRESS.md` L234-L248）规定：engine 侧不改名，移植侧全部抛出位置使用 `Tiqian` 开头的类名；不带前缀的 `IllegalArgumentException` 与 `NoSuchElementException` 两个移植类已删除；engine golden 记录的 Kotlin 内建异常名与移植侧 `Tiqian` 名的差异由 `engine-haxe/tools/compare-traces.py` 的 `EXCEPTION_NAME_ALIASES` 字典（L37）处理。
+异常改名的决定规定：engine 侧不改名，移植侧全部抛出位置使用 `Tiqian` 开头的类名；不带前缀的 `IllegalArgumentException` 与 `NoSuchElementException` 两个移植类已删除，`engine-haxe/src/org/tiqian/core/` 下现在只有 `TiqianIllegalArgumentException.hx`、`TiqianNoSuchElementException.hx` 与 `IllegalStateException.hx` 三个异常类；engine 侧 Kotlin 内建异常名与移植侧 `Tiqian` 名的差异由 `engine-haxe/tools/compare-traces.py` 的 `EXCEPTION_NAME_ALIASES` 字典处理，跨目标 f64 比对以 L1 判据共用该字典（`engine-haxe/tools/compare-f64-traces.py`）。
 
 `EXCEPTION_NAME_ALIASES` 字典只在 `raises exception=` 行把 `IllegalArgumentException` 与 `TiqianIllegalArgumentException`、`NoSuchElementException` 与 `TiqianNoSuchElementException` 当作同一个名字，其余名字差异与消息差异仍判失败。每次比对输出 `exception-alias=` 计数。
 
-engine 侧收敛状态：
+engine 侧的收敛状态按 2026-08-30 的记录如下；`engine/` 目录已在 Kotlin 割接中解散，下列 `engine/src/` 路径现在都不存在，Kotlin 引擎源码现由 boring 从 `engine-haxe/src` 生成：
 
 - `engine/src/commonMain/kotlin/org/tiqian/core/` 下 `TiqianIllegalArgumentException.kt`、`TextRange.kt`、`UnicodeNumber.kt`、`UnicodeWordCharacter.kt`、`EastAsianSpacingData.kt`、`LayoutConstraints.kt` 使用 `TiqianIllegalArgumentException`，这六处是生成代码替换已完成的部分。
 - `engine/src/commonTest` 有 6 个文件使用 `TiqianIllegalArgumentException`（对应已替换类的测试），28 个文件使用 Kotlin 内建 `IllegalArgumentException`（对应未替换类的测试）。
@@ -65,7 +65,7 @@ engine 侧收敛状态：
 ## 共存窗口的结束条件如下
 
 1. boring 侧保持 `TiqianArray`（可变存储）直到公开视图为 `ReadOnlyArray`。Tiqian 仓记录本窗口判断，不改 boring 仓。
-2. `EXCEPTION_NAME_ALIASES` 字典的删除条件：engine 手写 Kotlin 文件被生成代码逐个替换、golden 不再出现 Kotlin 内建异常名（`engine-haxe/PROGRESS.md` L247-L248）。
+2. `EXCEPTION_NAME_ALIASES` 字典的删除条件原本是「engine 手写 Kotlin 文件被生成代码逐个替换、golden 不再出现 Kotlin 内建异常名」；这两个前提随 Kotlin 割接消失（`engine/` 解散、基准轨迹删除），字典仍在 `engine-haxe/tools/compare-traces.py`，跨目标 f64 比对的 L1 判据继续调用它。
 3. `ReadOnlyArray`（`std.ReadOnlyArray`）已作为新视图名使用，无改动。
 
 ## 本清单的 boring 观测修订如下

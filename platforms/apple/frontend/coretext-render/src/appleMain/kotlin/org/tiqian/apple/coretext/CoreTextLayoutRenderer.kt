@@ -11,7 +11,8 @@ import kotlinx.cinterop.set
 import org.tiqian.core.BopomofoGlyphRole
 import org.tiqian.core.ColorSpan
 import org.tiqian.core.LayoutResult
-import org.tiqian.core.RichTextRole
+import org.tiqian.core.Link
+import org.tiqian.core.Underline
 import org.tiqian.core.RichTextSpan
 import org.tiqian.core.TextRange
 import org.tiqian.core.TextSpan
@@ -19,7 +20,7 @@ import org.tiqian.core.TextStyle
 import org.tiqian.core.positionedClusters
 import org.tiqian.core.positionedRichTextSegments
 import org.tiqian.core.richTextDecorationLineY
-import org.tiqian.core.trimmedRichTextDecorationSegments
+import org.tiqian.core.richTextDecorationSegments
 import org.tiqian.font.fontRoleNameUsesLatinFace
 import org.tiqian.shaping.coretext.CoreTextSupport
 import platform.CoreFoundation.CFArrayGetCount
@@ -399,7 +400,7 @@ class CoreTextLayoutRenderer(
 
     /**
      * `AppleNativeLinkUnderline`: native `AttributedString.link` ranges remain semantic
-     * [RichTextRole.Link] spans. The Apple renderer supplies their ordinary solid underline using
+     * [Link] spans. The Apple renderer supplies their ordinary solid underline using
      * the same source boxes, punctuation-glue trim and recorded glyph ink used by other frontends.
      */
     private fun drawLinkUnderlines(
@@ -411,10 +412,10 @@ class CoreTextLayoutRenderer(
         richTextSpans: List<RichTextSpan>,
     ) {
         val underlines = richTextSpans.mapNotNull { span ->
-            if (span.role is RichTextRole.Link) span.copy(role = RichTextRole.Underline) else null
+            if (span.role is Link) span.copy(role = Underline.instance) else null
         }
         if (underlines.isEmpty()) return
-        val segments = result.trimmedRichTextDecorationSegments(
+        val segments = result.richTextDecorationSegments(
             result.positionedRichTextSegments(underlines),
         )
         val stroke = (result.input.textStyle.fontSize / 16f).coerceAtLeast(1f)

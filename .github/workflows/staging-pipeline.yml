@@ -1,0 +1,461 @@
+name: Staging pipeline
+
+# The release entrypoints run only on a v*.*.* tag (release.yml,
+# release-registry.yml) or a published release (publish.yml), so every step
+# they drive stays unverified until the first real release. This workflow runs
+# the same steps on every push to main with a staging version, writes every
+# output below one staging directory and publishes nothing: no tag, no push to
+# an official registry, no R2 upload and no Central deployment.
+#
+# The work lives in tools/staging-pipeline.sh so the same commands also run
+# in a developer checkout.
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-pipeline-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Derive the bundle shards
+    runs-on: ubuntu-latest
+    outputs:
+      pack_shards: ${{ steps.shards.outputs.pack_shards }}
+      test_shards: ${{ steps.shards.outputs.test_shards }}
+      short: ${{ steps.shards.outputs.short }}
+      staging_version: ${{ steps.shards.outputs.staging_version }}
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Split the bundle list
+        id: shards
+        shell: bash
+        run: |
+          set -euo pipefail
+          short="${GITHUB_SHA::7}"
+          bundles="$(python3 tools/release-matrix.py --list-bundles | paste -sd' ' -)"
+          pack_shards="$(python3 tools/shard-bundles.py --bundles "$bundles" --phase pack --json)"
+          test_shards="$(python3 tools/shard-bundles.py --bundles "$bundles" --phase test --json)"
+          echo "pack_shards=${pack_shards}" >> "$GITHUB_OUTPUT"
+          echo "test_shards=${test_shards}" >> "$GITHUB_OUTPUT"
+          echo "short=${short}" >> "$GITHUB_OUTPUT"
+          echo "staging_version=0.0.0-staging.${short}" >> "$GITHUB_OUTPUT"
+          python3 tools/shard-bundles.py --bundles "$bundles" --phase pack
+          python3 tools/shard-bundles.py --bundles "$bundles" --phase test
+
+  packs:
+    name: Pack ${{ matrix.shard }}
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.pack_shards) }}
+    env:
+      STAGING_VERSION: ${{ needs.plan.outputs.staging_version }}
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+
+      - name: Install CMake 4.3.2 for Android native font
+        run: |
+          python3 -m venv "$HOME/cmake-venv"
+          "$HOME/cmake-venv/bin/pip" install --quiet "cmake==4.3.2"
+          cmake_bin_dir="$("$HOME/cmake-venv/bin/python" -c 'import cmake, os; print(os.path.join(os.path.dirname(cmake.__file__), "data", "bin"))')"
+          echo "$cmake_bin_dir" >> "$GITHUB_PATH"
+          "$cmake_bin_dir/cmake" --version
+
+      - name: Install Nix
+        id: nix-installer
+        continue-on-error: true
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Install Nix with the install script when the action fails
+        if: steps.nix-installer.outcome != 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL \
+              https://install.determinate.systems/nix \
+              | sh -s -- install --no-confirm; then
+              exit 0
+            fi
+            echo "nix install attempt ${attempt} failed; retrying" >&2
+            sleep 15
+          done
+          exit 1
+
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Stage the pinned generation inputs
+        shell: bash
+        run: |
+          nix develop -c bash -c "mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/"
+          ls -l tools/unicode-data
+
+      - name: Pack this shard
+        shell: bash
+        run: |
+          unset ANDROID_SDK_ROOT
+          export RUNNER_TEMP
+          nix develop -c bash tools/staging-pipeline.sh \
+            --stages 'align pack collect-artifacts' \
+            --bundles '${{ matrix.bundles }}'
+
+      - name: Upload the shard staging tree
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-packs-${{ matrix.shard }}
+          path: ${{ runner.temp }}/tiqian-staging-*/
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Upload the shard build outputs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-out-${{ matrix.shard }}
+          path: engine-haxe/out
+          if-no-files-found: warn
+          retention-days: 3
+
+  verify-tests:
+    name: Test ${{ matrix.shard }}
+    needs: [plan, packs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.test_shards) }}
+    env:
+      STAGING_VERSION: ${{ needs.plan.outputs.staging_version }}
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install Nix
+        id: nix-installer
+        continue-on-error: true
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Install Nix with the install script when the action fails
+        if: steps.nix-installer.outcome != 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL \
+              https://install.determinate.systems/nix \
+              | sh -s -- install --no-confirm; then
+              exit 0
+            fi
+            echo "nix install attempt ${attempt} failed; retrying" >&2
+            sleep 15
+          done
+          exit 1
+
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Stage the pinned generation inputs
+        shell: bash
+        run: |
+          nix develop -c bash -c "mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/"
+
+      - name: Generate and run this shard's suites
+        shell: bash
+        run: |
+          unset ANDROID_SDK_ROOT
+          export RUNNER_TEMP
+          nix develop -c bash tools/staging-pipeline.sh \
+            --stages 'verify-shard' \
+            --bundles '${{ matrix.bundles }}'
+
+      - name: Upload the suite results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-results-${{ matrix.shard }}
+          path: engine-haxe/out/test-results
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Upload the suite log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-suite-log-${{ matrix.shard }}
+          path: ${{ runner.temp }}/tiqian-staging-*/logs
+          if-no-files-found: warn
+          retention-days: 3
+
+  checks:
+    name: Run the artifact checks
+    needs: [plan, packs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      STAGING_VERSION: ${{ needs.plan.outputs.staging_version }}
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install Nix
+        id: nix-installer
+        continue-on-error: true
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Install Nix with the install script when the action fails
+        if: steps.nix-installer.outcome != 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL \
+              https://install.determinate.systems/nix \
+              | sh -s -- install --no-confirm; then
+              exit 0
+            fi
+            echo "nix install attempt ${attempt} failed; retrying" >&2
+            sleep 15
+          done
+          exit 1
+
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Stage the pinned generation inputs
+        shell: bash
+        run: |
+          nix develop -c bash -c "mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/"
+
+      - name: Download the shard staging trees
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-packs-*
+          merge-multiple: true
+          path: ${{ runner.temp }}
+
+      - name: Download the shard build outputs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-out-*
+          merge-multiple: true
+          path: engine-haxe/out
+
+      - name: Run the checks
+        shell: bash
+        run: |
+          unset ANDROID_SDK_ROOT
+          export RUNNER_TEMP
+          nix develop -c bash tools/staging-pipeline.sh \
+            --stages 'collect-artifacts compile-bundles publish-contract registry-tree staging-isolation maven-artifact-ids cargo-consume'
+
+      - name: Upload the checks result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-checks
+          path: ${{ runner.temp }}/tiqian-staging-*/
+          if-no-files-found: warn
+          retention-days: 3
+
+  maven:
+    name: Publish the Maven artifacts
+    needs: [plan, packs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      STAGING_VERSION: ${{ needs.plan.outputs.staging_version }}
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Install Nix
+        id: nix-installer
+        continue-on-error: true
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Install Nix with the install script when the action fails
+        if: steps.nix-installer.outcome != 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL \
+              https://install.determinate.systems/nix \
+              | sh -s -- install --no-confirm; then
+              exit 0
+            fi
+            echo "nix install attempt ${attempt} failed; retrying" >&2
+            sleep 15
+          done
+          exit 1
+
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Stage the pinned generation inputs
+        shell: bash
+        run: |
+          nix develop -c bash -c "mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/"
+
+      - name: Download the shard staging trees
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-packs-*
+          merge-multiple: true
+          path: ${{ runner.temp }}
+
+      - name: Download the shard build outputs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-out-*
+          merge-multiple: true
+          path: engine-haxe/out
+
+      - name: Run the Maven publication
+        shell: bash
+        run: |
+          unset ANDROID_SDK_ROOT
+          export RUNNER_TEMP
+          nix develop -c bash tools/staging-pipeline.sh \
+            --stages 'maven-local-publish maven-local-repo'
+
+      - name: Upload the checks result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-maven
+          path: ${{ runner.temp }}/tiqian-staging-*/
+          if-no-files-found: warn
+          retention-days: 3
+
+  assemble:
+    name: Assemble and verify the staging set
+    needs: [plan, packs, verify-tests, checks, maven]
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      STAGING_VERSION: ${{ needs.plan.outputs.staging_version }}
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Install Nix
+        id: nix-installer
+        continue-on-error: true
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Install Nix with the install script when the action fails
+        if: steps.nix-installer.outcome != 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL \
+              https://install.determinate.systems/nix \
+              | sh -s -- install --no-confirm; then
+              exit 0
+            fi
+            echo "nix install attempt ${attempt} failed; retrying" >&2
+            sleep 15
+          done
+          exit 1
+
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Stage the pinned generation inputs
+        shell: bash
+        run: |
+          nix develop -c bash -c "mkdir -p tools/unicode-data && cp -a .haxelib/boring/git/tools/unicode-data/. tools/unicode-data/"
+          ls -l tools/unicode-data
+
+      - name: Download the shard staging trees
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-packs-*
+          merge-multiple: true
+          path: ${{ runner.temp }}
+
+      - name: Download the shard build outputs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-out-*
+          merge-multiple: true
+          path: engine-haxe/out
+
+      - name: Download the suite results
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-results-*
+          merge-multiple: true
+          path: engine-haxe/out/test-results
+
+      - name: Download the checks result
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-checks
+          merge-multiple: true
+          path: ${{ runner.temp }}
+
+      - name: Download the Maven publication
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-maven
+          merge-multiple: true
+          path: ${{ runner.temp }}
+
+      - name: Run the remaining stages
+        shell: bash
+        run: |
+          unset ANDROID_SDK_ROOT
+          export RUNNER_TEMP
+          nix develop -c bash tools/staging-pipeline.sh \
+            --stages 'verify-compare summary'
+
+      - name: Upload the staging report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-report
+          path: |
+            ${{ runner.temp }}/tiqian-staging-*/logs
+            ${{ runner.temp }}/tiqian-staging-*/report.md
+            ${{ runner.temp }}/tiqian-staging-*/registry-tree
+          if-no-files-found: warn
+          retention-days: 7

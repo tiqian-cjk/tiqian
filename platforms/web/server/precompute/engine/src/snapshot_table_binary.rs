@@ -6,7 +6,9 @@
 // into the generated input shape, the canonical-JSON text serialization the
 // shell owns per the Stage1-P2 boundary ruling, and the materialization of
 // the decoded stored form back into the Json rows SnapshotTables restores.
+use std::cell::RefCell;
 use std::collections::HashSet;
+use std::rc::Rc;
 
 use tiqian::NamedError;
 use tiqian_protocol_gen::org::tiqian::protocol::snapshot_table_binary::SnapshotTableBinary;
@@ -81,7 +83,7 @@ pub(crate) fn encode(tables: &SnapshotTables) -> Result<Vec<u8>, NamedError> {
         .into_iter()
         .map(|row| string_of(&row).map(|text| text.to_string()))
         .collect::<Result<Vec<String>, NamedError>>()?;
-    let mut metrics: Vec<TableMetricRow> = Vec::with_capacity(tables.metrics.len());
+    let mut metrics: Vec<Rc<RefCell<TableMetricRow>>> = Vec::with_capacity(tables.metrics.len());
     for row in &tables.metrics {
         let Json::Arr(values) = row else {
             return Err(invalid());
@@ -131,7 +133,7 @@ pub(crate) fn encode(tables: &SnapshotTables) -> Result<Vec<u8>, NamedError> {
         ));
     }
 
-    let mut probes: Vec<TableProbe> = Vec::with_capacity(tables.probes.len());
+    let mut probes: Vec<Rc<RefCell<TableProbe>>> = Vec::with_capacity(tables.probes.len());
     for probe in &tables.probes {
         let mut features: Vec<String> = Vec::new();
         for feature in arr_of(Some(field(probe, "features").ok_or_else(invalid)?)).ok_or_else(invalid)? {
@@ -213,11 +215,12 @@ pub(crate) struct DecodedTable {
 /// validates every region boundary and the stored shapes; this shell
 /// parses the JSON text regions and rebuilds the canonical row shapes.
 pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedTable, NamedError> {
-    let mut data = TableData::new();
-    let issue = SnapshotTableBinary::snapshot_table_binary_decode_into(bytes, &mut data);
+    let data = TableData::new();
+    let issue = SnapshotTableBinary::snapshot_table_binary_decode_into(bytes, Rc::clone(&data));
     if !issue.is_empty() {
         return Err(invalid());
     }
+    let data = data.borrow();
 
     let strings: Vec<Json> = data
         .strings
@@ -234,10 +237,12 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedTable, NamedError> {
     };
     let mut metrics: Vec<Json> = Vec::with_capacity(data.metric_rows.len());
     for row in &data.metric_rows {
+        let row = row.borrow();
         let pool = data
             .value_pool
             .get(usize::try_from(row.value_pool_ref).map_err(|_| invalid())?)
             .ok_or_else(invalid)?;
+        let pool = pool.borrow();
         let mut values: Vec<Json> = Vec::with_capacity(10);
         values.push(Json::Num(f64::from(row.families_ref)));
         values.push(Json::Num(row.weight));

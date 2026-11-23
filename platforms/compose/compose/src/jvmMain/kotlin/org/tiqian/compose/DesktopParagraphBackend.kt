@@ -3,6 +3,8 @@ package org.tiqian.compose
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import org.tiqian.clreq.ClreqProfile
+import org.tiqian.clreq.ClreqProfileResolver
+import org.tiqian.core.LayoutProfileId
 import org.tiqian.layout.ExplainableStubParagraphLayoutEngine
 import org.tiqian.layout.LookaheadLineBreaker
 import org.tiqian.shaping.skia.SkiaFontMetricsResolver
@@ -29,7 +31,9 @@ actual fun createPlatformParagraphMeasurer(
                 delegate = SkiaFontMetricsResolver(),
                 sharedCache = session?.metricsCache,
             ),
-            clreqProfileResolver = { profile },
+            clreqProfileResolver = object : ClreqProfileResolver {
+                override fun resolve(profileId: LayoutProfileId): ClreqProfile = profile
+            },
         ),
     )
 

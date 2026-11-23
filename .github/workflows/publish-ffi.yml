@@ -1,40 +1,47 @@
 name: Publish ffi package
 
+# Both npm lanes and the registry lane are called by .github/workflows/release.yml
+# from one v*.*.* tag, and each lane runs the release gate first. The lane can
+# also be dispatched on the release tag to re-publish a failed run.
 on:
-  push:
-    tags:
-      - "@tiqian/ffi@*"
+  workflow_call:
+    inputs:
+      web-inputs:
+        description: Shared Web build artifact from this release run
+        type: string
+        default: ""
+  workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: publish-tiqian-ffi
   cancel-in-progress: false
 
 jobs:
+  release-gate:
+    uses: ./.github/workflows/release-gate.yml
+
   publish-alpha:
     name: Verify and publish alpha
+    needs: [release-gate]
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
       id-token: write
     outputs:
       version: ${{ steps.release.outputs.version }}
     defaults:
       run:
-        working-directory: ffi/js/npm
+        working-directory: platforms/web/client/engine-runtime
     steps:
       - name: Check out the tagged commit
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
-
-      - name: Set up JDK 25
-        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
-        with:
-          distribution: temurin
-          java-version: "25"
 
       - name: Set up Node.js 24
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
@@ -51,12 +58,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="$(node -p "require('./package.json').version")"
-          expected_tag="@tiqian/ffi@${version}"
-          if [[ "${GITHUB_REF_NAME}" != "${expected_tag}" ]]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match package version ${version}"
+          if [[ "${GITHUB_REF_TYPE}" != "tag" || "${GITHUB_REF_NAME}" != v*.*.* ]]; then
+            echo "::error::This lane runs only from a v*.*.* release tag, received ${GITHUB_REF_NAME}."
             exit 1
           fi
+          version="$(node -p "require('./package.json').version")"
           if [[ "$(git cat-file -t "${GITHUB_REF_NAME}")" != "tag" ]]; then
             echo "::error::Release tag must be annotated"
             exit 1
@@ -73,24 +79,44 @@ jobs:
           fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
-      - name: Accept Android SDK licenses
-        shell: bash
-        run: yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-
-      - name: Install workspace dependencies
-        working-directory: .
-        # npm install, not npm ci: the platform binary optional deps of the
-        # precompute member are not on the registry, so no lockfile can carry
-        # resolved entries for them and npm ci (npm >= 11) rejects the gap.
-        run: npm install --no-audit --no-fund
+      - name: Prepare the Web release workspace
+        uses: ./.github/actions/prepare-release-web-workspace
+        with:
+          artifact: ${{ inputs.web-inputs }}
+          version: ${{ steps.release.outputs.version }}
 
       - name: Build and verify the release tarball
         env:
           TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-ffi-release
-        run: npm run verify:release --workspace @tiqian/ffi
+        run: npm run verify:prepared-release --workspace @tiqian/ffi
+
+      - name: Inspect the release package the way a consumer receives it
+        # The build step above proves the tarball matches its own checks. This
+        # step installs the archive into an empty project and imports the entry
+        # a consumer uses, so a manifest or file-list defect fails here instead
+        # of at a registry.
+        shell: bash
+        env:
+          TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-ffi-release
+        run: |
+          set -euo pipefail
+          tarball="$(find "${TIQIAN_RELEASE_ARTIFACT_DIR}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          bash "${GITHUB_WORKSPACE}/tools/check-npm-package.sh" "${tarball}" --expect @tiqian/ffi --entry @tiqian/ffi
+
+      - name: Fix the release tarball for this run
+        # The first attempt of the release run keeps the verified tarball as an
+        # artifact and a re-run publishes that kept file instead of its rebuild,
+        # so npm and the registry receive the same bytes.
+        uses: ./.github/actions/keep-release-files
+        with:
+          name: npm-tarball-ffi
+          root: ${{ runner.temp }}/tiqian-ffi-release
+          path: ${{ runner.temp }}/tiqian-ffi-release/*.tgz
 
       - name: Publish the verified tarball to alpha
         shell: bash
+        env:
+          NPM_PUBLISH_DIVERGED_LOG: ${{ runner.temp }}/npm-diverged.txt
         run: |
           set -euo pipefail
           tarball="$(find "${RUNNER_TEMP}/tiqian-ffi-release" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
@@ -98,15 +124,38 @@ jobs:
             echo "::error::Verified release tarball is missing"
             exit 1
           fi
-          npm publish "${tarball}" --ignore-scripts --access public --tag alpha
+          bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
+
+      - name: Report a version npm already holds with other bytes
+        # npm-publish.sh keeps a published copy that differs from this run's
+        # tarball, which happens when an earlier run of the same version
+        # published it. The registry lane refuses to describe such a tarball.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-diverged-ffi
+          path: ${{ runner.temp }}/npm-diverged.txt
+          if-no-files-found: ignore
+          overwrite: true
 
   sync-latest:
     name: Synchronize latest dist-tag
     needs: publish-alpha
+    # A trusted publisher whose connection lacks the dist-tag switch
+    # answers 403; the version is already published, so this job reports it
+    # without blocking the remaining lanes.
+    continue-on-error: true
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Trusted publishing authenticates the dist-tag write; no token is read.
+      id-token: write
     steps:
+      - name: Check out the release commit
+        # The dist-tag step runs tools/npm-dist-tag.sh from the repository, so
+        # this job needs the checkout the publish job has.
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
       - name: Set up Node.js 24
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
@@ -119,16 +168,12 @@ jobs:
 
       - name: Point latest at the published alpha
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_DIST_TAG_TOKEN }}
           RELEASE_VERSION: ${{ needs.publish-alpha.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "${NODE_AUTH_TOKEN}" ]]; then
-            echo "::error::NPM_DIST_TAG_TOKEN is not configured"
-            exit 1
-          fi
-          npm dist-tag add "@tiqian/ffi@${RELEASE_VERSION}" latest
+          npm install --global npm@11.21.0
+          bash "${GITHUB_WORKSPACE}/tools/npm-dist-tag.sh" --package @tiqian/ffi --version "${RELEASE_VERSION}" --tag latest
 
       - name: Verify alpha and latest
         env:

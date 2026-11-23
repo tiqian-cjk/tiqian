@@ -16,8 +16,8 @@ class ParagraphDpTierPromotionPoolTest {
         t.section("foreignSpanCandidateSurvivesThePromotionPoolPurge");
         final c = ParagraphDpTierPromotionPoolTestSupport.latinClusters();
         final span = new TextRange(0, c.length);
-        final s = new ParagraphDpLineBreaker().breakLines(c, c, 80, [new ShrinkOpportunity(2, 2, 5, ShrinkChannel.RawAdvance)], null, null, null, null, null,
-            null, null, null, null, null, null, true, null, null, null, ParagraphDpTierPromotionPoolTestSupport.opp([1, 2, 3], [
+        final s = new ParagraphDpLineBreaker().breakLines(c, c, 80, [new ShrinkOpportunity(2, 2, 5, ShrinkChannel.RawAdvance)], null, 0.0, null, null, null,
+            null, null, null, null, null, 0.0, true, 1.0, null, null, ParagraphDpTierPromotionPoolTestSupport.opp([1, 2, 3], [
                 new ProgressiveBreakOpportunity(ProgressiveBreakTier.Emergency, new TextRange(0, 1)),
                 new ProgressiveBreakOpportunity(ProgressiveBreakTier.Emergency, span),
                 new ProgressiveBreakOpportunity(ProgressiveBreakTier.Whitespace, span)

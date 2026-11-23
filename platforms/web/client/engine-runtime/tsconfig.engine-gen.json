@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "rewriteRelativeImportExtensions": true,
+    "noEmit": false,
+    "declaration": true,
+    "skipLibCheck": true,
+    "outDir": "runtime/engine-gen",
+    "rootDir": "engine-gen"
+  },
+  "include": ["engine-gen/**/*.ts"]
+}

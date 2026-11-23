@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-23
+- Amended: 2026-11-12（Kotlin 割接删除了 golden 机制与 `engine/src/jvmTest/resources/golden/`；本文中的 golden 与 trace 脚手架表述是当时的验证记录，见 ADR 0059）
 
 ## Context
 

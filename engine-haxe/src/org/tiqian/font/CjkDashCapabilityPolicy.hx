@@ -1,5 +1,6 @@
 package org.tiqian.font;
 
+@:mainOnly
 class CjkDashCapabilityPolicy {
     public static inline final NoConformingCjkDashGlyph:String = "NoConformingCjkDashGlyph";
     public static inline final ConformingCjkDashRequiresExactFontSession:String = "ConformingCjkDashRequiresExactFontSession";

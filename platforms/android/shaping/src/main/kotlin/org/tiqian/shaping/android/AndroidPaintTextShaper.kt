@@ -82,7 +82,7 @@ class AndroidPaintTextShaper(
             val startX = measured.glyphXs[glyphIndex]
             val endX = if (glyphIndex + 1 < glyphCount) measured.glyphXs[glyphIndex + 1] else advance
             Glyph(
-                id = measured.glyphIds[glyphIndex].toUInt(),
+                id = measured.glyphIds[glyphIndex],
                 clusterRange = input.range,
                 advance = max(0f, endX - startX),
                 x = startX,

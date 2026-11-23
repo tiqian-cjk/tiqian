@@ -19,7 +19,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            api(project(":engine"))
+            api(project(":boring-kotlin-f32"))
             // runtime + ui carry public-signature types (@Composable, Modifier,
             // AnnotatedString, TextUnit/Color/FontFamily via CjkTextStyle) → api
             // so consumers resolve the Tiqian API without re-declaring them.
@@ -30,7 +30,7 @@ kotlin {
         }
 
         jvmMain.dependencies {
-            implementation(project(":platforms:jvm:skia"))
+            implementation(project(":platforms:compose:skia-jvm"))
         }
 
         androidMain.dependencies {

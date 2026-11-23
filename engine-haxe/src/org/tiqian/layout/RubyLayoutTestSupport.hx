@@ -3,7 +3,7 @@ package org.tiqian.layout;
 import org.tiqian.core.*;
 import org.tiqian.layout.ParagraphLayoutEngine.ExplainableStubParagraphLayoutEngine;
 import org.tiqian.shaping.TextShaper.ExplainableStubTextShaper;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import org.tiqian.shaping.TextShaper.ShapingInput;
 import org.tiqian.shaping.TextShaper.ShapingResult;
 import org.tiqian.test.trace.TracedAssertions;
@@ -68,7 +68,7 @@ class RubyLayoutTestSupport {
     }
 }
 
-class ContradictoryInkShaper implements ITextShaper {
+class ContradictoryInkShaper implements TextShaper {
     final delegate:ExplainableStubTextShaper;
 
     public function new() {

@@ -53,10 +53,10 @@ class ParagraphDpLineBreaker implements LineBreaker {
         return "paragraph-dp";
 
     public function breakLines(naturalClusters:Array<Cluster>, adjustedClusters:Array<Cluster>, maxWidth:Float, ?shrinkOpportunities:Array<ShrinkOpportunity>,
-            ?unbreakableRanges:UnbreakableRanges, ?firstLineIndent:Float, ?hangableClusters:SortedSet<Int>, ?extendableHangRanges:Array<IntRange>,
+            ?unbreakableRanges:UnbreakableRanges, firstLineIndent:Float = 0.0, ?hangableClusters:SortedSet<Int>, ?extendableHangRanges:Array<IntRange>,
             ?forbiddenLineStartClusters:Null<SortedSet<Int>>, ?forbiddenLineEndClusters:SortedSet<Int>, ?hyphenBreakClusters:SortedSet<Int>,
-            ?cjkInterCharBoundaries:SortedSet<Int>, ?maxCjkStretchPerGap:Float, ?sinoWesternBoundaries:SortedSet<Int>, ?sinoWesternStretchCap:Float,
-            ?lineAdjustmentPushIn:Bool, ?lineAdjustmentCompressBias:Float, ?hardBreakAfterClusters:SortedSet<Int>,
+            ?cjkInterCharBoundaries:SortedSet<Int>, ?maxCjkStretchPerGap:Float, ?sinoWesternBoundaries:SortedSet<Int>, sinoWesternStretchCap:Float = 0.0,
+            lineAdjustmentPushIn:Bool = false, lineAdjustmentCompressBias:Float = 1.0, ?hardBreakAfterClusters:SortedSet<Int>,
             ?nonRenderingControlClusters:SortedSet<Int>, ?progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>):LineSolution {
         if (adjustedClusters.length == 0)
             return new LineSolution([]);
@@ -64,7 +64,7 @@ class ParagraphDpLineBreaker implements LineBreaker {
             throw new org.tiqian.core.TiqianIllegalArgumentException(org.tiqian.core.TextRangeError.Message("naturalClusters and adjustedClusters must align cluster-for-cluster."));
         final shrink = shrinkOpportunities == null ? [] : shrinkOpportunities;
         final ranges = unbreakableRanges == null ? new UnbreakableRanges([]) : unbreakableRanges;
-        final indent = firstLineIndent == null ? 0.0 : firstLineIndent;
+        final indent = firstLineIndent;
         final forbidStart = forbiddenLineStartClusters;
         final forbidEnd = forbiddenLineEndClusters == null ? SortedSet.builder().build() : forbiddenLineEndClusters;
         final hyphens = hyphenBreakClusters == null ? SortedSet.builder().build() : hyphenBreakClusters;
@@ -81,7 +81,7 @@ class ParagraphDpLineBreaker implements LineBreaker {
         final hard = hardBreakAfterClusters == null ? SortedSet.builder().build() : hardBreakAfterClusters;
         final hangables = hangableClusters == null ? SortedSet.builder().build() : hangableClusters;
         final maxStretch = maxCjkStretchPerGap == null ? Math.POSITIVE_INFINITY : maxCjkStretchPerGap;
-        final sinoCap = sinoWesternStretchCap == null ? 0.0 : sinoWesternStretchCap;
+        final sinoCap = sinoWesternStretchCap;
         final context = new DpContext(naturalClusters, adjustedClusters, maxWidth, shrink, ranges, indent, forbiddenLineStartClusters, forbidEnd, hyphens,
             cjk, maxStretch, sino, sinoCap, controls, gapBoundaries, maxStretch, lineAdjustmentPushIn == true, progressive);
         final committed:Array<LineCandidate> = [];

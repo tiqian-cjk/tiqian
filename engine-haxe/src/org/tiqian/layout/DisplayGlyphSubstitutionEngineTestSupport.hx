@@ -4,7 +4,7 @@ import org.tiqian.clreq.*;
 import org.tiqian.core.*;
 import org.tiqian.layout.LineBreaker.LookaheadLineBreaker;
 import org.tiqian.layout.ParagraphLayoutEngine.ExplainableStubParagraphLayoutEngine;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import org.tiqian.shaping.TextShaper.ShapingInput;
 import org.tiqian.shaping.TextShaper.ShapingResult;
 import org.tiqian.shaping.TextShaper.ExplainableStubTextShaper;
@@ -22,11 +22,11 @@ class DisplayGlyphSubstitutionEngineTestSupport {
         return new ExplainableStubParagraphLayoutEngine(null, null, new GlyphPolicyResolver(policy, coalesce));
     }
 
-    public static function shaperEngine(shaper:ITextShaper):ExplainableStubParagraphLayoutEngine {
+    public static function shaperEngine(shaper:TextShaper):ExplainableStubParagraphLayoutEngine {
         return new ExplainableStubParagraphLayoutEngine(null, null, null, null, null, null, null, null, null, null, shaper);
     }
 
-    public static function lookaheadShaperEngine(shaper:ITextShaper):ExplainableStubParagraphLayoutEngine {
+    public static function lookaheadShaperEngine(shaper:TextShaper):ExplainableStubParagraphLayoutEngine {
         return new ExplainableStubParagraphLayoutEngine(null, null, null, null, null, null, null, null, new LookaheadLineBreaker(), null, shaper);
     }
 
@@ -173,7 +173,7 @@ class GlyphPolicyResolver implements ClreqProfileResolver {
     }
 }
 
-class PerGlyphQuoteRunShaper implements ITextShaper {
+class PerGlyphQuoteRunShaper implements TextShaper {
     final delegate:ExplainableStubTextShaper;
 
     public function new() {
@@ -201,7 +201,7 @@ class PerGlyphQuoteRunShaper implements ITextShaper {
     }
 }
 
-class SingleClusterNoBoundsShaper implements ITextShaper {
+class SingleClusterNoBoundsShaper implements TextShaper {
     public function new() {}
 
     public function shape(input:ShapingInput):ShapingResult {
@@ -213,7 +213,7 @@ class SingleClusterNoBoundsShaper implements ITextShaper {
     }
 }
 
-class SingleClusterAmbiguousShaper implements ITextShaper {
+class SingleClusterAmbiguousShaper implements TextShaper {
     public function new() {}
 
     public function shape(input:ShapingInput):ShapingResult {
@@ -225,7 +225,7 @@ class SingleClusterAmbiguousShaper implements ITextShaper {
     }
 }
 
-class MissingGlyphReportingShaper implements ITextShaper {
+class MissingGlyphReportingShaper implements TextShaper {
     final delegate:ExplainableStubTextShaper;
 
     public function new() {
@@ -247,7 +247,7 @@ class MissingGlyphReportingShaper implements ITextShaper {
     }
 }
 
-class UnverifiedCoverageReportingShaper implements ITextShaper {
+class UnverifiedCoverageReportingShaper implements TextShaper {
     final delegate:ExplainableStubTextShaper;
 
     public function new() {
@@ -270,7 +270,7 @@ class UnverifiedCoverageReportingShaper implements ITextShaper {
     }
 }
 
-class DashInkOverrideShaper implements ITextShaper {
+class DashInkOverrideShaper implements TextShaper {
     final delegate:ExplainableStubTextShaper;
     final overrideAdvance:Float;
     final ink:Rect;
@@ -320,7 +320,7 @@ class DashInkOverrideShaper implements ITextShaper {
     }
 }
 
-class TwoGlyphEllipsisShaper implements ITextShaper {
+class TwoGlyphEllipsisShaper implements TextShaper {
     final delegate:ExplainableStubTextShaper;
 
     public function new() {

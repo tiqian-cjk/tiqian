@@ -1,12 +1,12 @@
 // The snapshot-table binary view of ADR 0052. The byte contract (magic,
 // header counts, region order and lengths, delta decoding, f64 bit patterns)
-// is single-sourced in Haxe and arrives generated under ./protocol-gen; this
+// is single-sourced in Haxe and arrives generated in @tiqian/protocol; this
 // file is only the consumer shell on top: the public view surface, the lazy
 // row caches, and the JSON interpretation of the text regions, which the
 // Stage1-P2 boundary ruling keeps platform-side. A damaged file fails with
 // the named issue before any row is handed out.
-import { SnapshotTableBinary } from "./protocol-gen/org/tiqian/protocol/SnapshotTableBinary.js";
-import { TableData } from "./protocol-gen/org/tiqian/protocol/TableData.js";
+import { SnapshotTableBinary } from "@tiqian/protocol/org/tiqian/protocol/SnapshotTableBinary";
+import { TableData } from "@tiqian/protocol/org/tiqian/protocol/TableData";
 
 const MAGIC = "TIQTBL03";
 

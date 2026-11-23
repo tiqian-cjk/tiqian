@@ -54,6 +54,18 @@ function artifactText(artifact: Uint8Array): string {
   return Buffer.from(artifact).toString("utf8");
 }
 
+/**
+ * The entry as the native side stores it. The JSON lanes add html and its
+ * digest from the shared renderer after the native call, and a cache artifact
+ * carries the native bytes, so the comparison drops those two derived fields.
+ */
+function storedEntry<T>(entry: T): T {
+  const copy = { ...(entry as Record<string, unknown>) };
+  delete copy.html;
+  delete copy.renderArtifactSha256;
+  return copy as T;
+}
+
 test("submission bytes equal the JSON lane entry bytes", { skip: precompute === null }, async () => {
   assert.ok(precompute);
   assert.ok(cacheModule);
@@ -67,7 +79,7 @@ test("submission bytes equal the JSON lane entry bytes", { skip: precompute === 
   assert.equal(outcomes.length, 1);
   assert.equal(outcomes[0]?.status, "computed");
   if (outcomes[0]?.status !== "computed") return;
-  const lane = JSON.stringify(await precomputer.prepareParagraph(snapshotInput));
+  const lane = JSON.stringify(storedEntry(await precomputer.prepareParagraph(snapshotInput)));
   assert.equal(artifactText(outcomes[0].artifact), lane);
 
   const contractInput = { key: "fc-0", text: "字体样本段落" };
@@ -76,7 +88,7 @@ test("submission bytes equal the JSON lane entry bytes", { skip: precompute === 
   ]);
   assert.equal(contractOutcomes[0]?.status, "computed");
   if (contractOutcomes[0]?.status !== "computed") return;
-  const contractLane = JSON.stringify(await precomputer.prepareFontContract(contractInput));
+  const contractLane = JSON.stringify(storedEntry(await precomputer.prepareFontContract(contractInput)));
   assert.equal(artifactText(contractOutcomes[0].artifact), contractLane);
   precomputer.close();
 });
@@ -152,7 +164,7 @@ test("prefilled content resolves through the waiting lane", { skip: precompute =
   const outcomes = precomputer.cache.submitContents([item]);
   assert.equal(outcomes[0]?.status, "computed");
   if (outcomes[0]?.status !== "computed") return;
-  const lane = JSON.stringify(await precomputer.prepareParagraph(input));
+  const lane = JSON.stringify(storedEntry(await precomputer.prepareParagraph(input)));
   assert.equal(artifactText(outcomes[0].artifact), lane);
   precomputer.close();
 });

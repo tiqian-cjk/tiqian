@@ -66,11 +66,23 @@ import std.SortedMap;
     public static function from(naturalClusters:Array<Cluster>, punctuationAtoms:Array<PunctuationAtom>,
             spacingPlan:PunctuationSpacingCompressionResult):PunctuationGeometryLedger {
         final geometryBuilder = SortedMap.builder();
+        // Both arrays are ordered by source position, so one forward cursor
+        // replaces the nested scan. The nested form cost clusters x atoms,
+        // which is what made punctuation-heavy paragraphs quadratic.
+        var atomCursor = 0;
         for (i in 0...naturalClusters.length) {
+            final clusterRange = naturalClusters[i].range;
+            while (atomCursor < punctuationAtoms.length
+                && punctuationAtoms[atomCursor].range.end <= clusterRange.start)
+                atomCursor++;
             final atomsForCluster:Array<PunctuationAtom> = [];
-            for (atom in punctuationAtoms)
-                if (isInside(atom.range, naturalClusters[i].range))
-                    atomsForCluster.push(atom);
+            var atomIndex = atomCursor;
+            while (atomIndex < punctuationAtoms.length
+                && punctuationAtoms[atomIndex].range.start < clusterRange.end) {
+                if (isInside(punctuationAtoms[atomIndex].range, clusterRange))
+                    atomsForCluster.push(punctuationAtoms[atomIndex]);
+                atomIndex++;
+            }
             if (atomsForCluster.length > 0) {
                 final bodyTerms:Array<Float> = [];
                 for (atom in atomsForCluster)
@@ -124,35 +136,35 @@ import std.SortedMap;
         return Math.max(0, g.bodyWidth + box + b.leadingRemaining + b.trailingRemaining + d + sp + att - raw);
     }
 
-    public function withInlineBoxAdvances(m:SortedMap<Int, Float>):PunctuationGeometryLedger
-        return m.size() == 0 ? this : replace(this, null, null, null, m);
+    public function withInlineBoxAdvances(advanceByCluster:SortedMap<Int, Float>):PunctuationGeometryLedger
+        return advanceByCluster.size() == 0 ? this : replace(this, null, null, null, advanceByCluster);
 
-    public function withRubySpread(m:SortedMap<Int, Float>):PunctuationGeometryLedger
-        return m.size() == 0 ? this : replace(this, null, null, m);
+    public function withRubySpread(spreadByCluster:SortedMap<Int, Float>):PunctuationGeometryLedger
+        return spreadByCluster.size() == 0 ? this : replace(this, null, null, spreadByCluster);
 
-    public function withRawEdgeTrims(m:SortedMap<Int, Float>):PunctuationGeometryLedger {
-        if (m.size() == 0)
+    public function withRawEdgeTrims(trimByCluster:SortedMap<Int, Float>):PunctuationGeometryLedger {
+        if (trimByCluster.size() == 0)
             return this;
         var n:SortedMap<Int, Float> = cloneF(rawEdgeTrimByCluster);
-        for (i in 0...m.size()) {
-            final k = m.keyAt(i);
+        for (i in 0...trimByCluster.size()) {
+            final k = trimByCluster.keyAt(i);
             final b = SortedMap.builder();
             for (j in 0...n.size())
                 b.put(n.keyAt(j), n.valueAt(j));
-            b.put(k, (n.has(k) ? n.get(k) : 0) + m.valueAt(i));
+            b.put(k, (n.has(k) ? n.get(k) : 0) + trimByCluster.valueAt(i));
             n = b.build();
         }
         return replace(this, null, n);
     }
 
-    public function addJustificationDeltas(m:SortedMap<Int, Float>):PunctuationGeometryLedger
-        return replace(this, m);
+    public function addJustificationDeltas(deltaByCluster:SortedMap<Int, Float>):PunctuationGeometryLedger
+        return replace(this, deltaByCluster);
 
-    function consumeSide(m:SortedMap<Int, Float>, lead:Bool):PunctuationGeometryLedger {
+    function consumeSide(deltaByCluster:SortedMap<Int, Float>, lead:Bool):PunctuationGeometryLedger {
         var n:SortedMap<Int, GlueBudget> = cloneB(budgets);
-        for (i in 0...m.size()) {
-            final k = m.keyAt(i);
-            final amount = m.valueAt(i);
+        for (i in 0...deltaByCluster.size()) {
+            final k = deltaByCluster.keyAt(i);
+            final amount = deltaByCluster.valueAt(i);
             if (n.has(k) && amount > 0) {
                 final q = n.get(k);
                 final replacement = lead ? new GlueBudget(q.leadingNatural, Math.min(q.leadingNatural, q.leadingConsumed + amount), q.trailingNatural,
@@ -168,11 +180,11 @@ import std.SortedMap;
         return replace(this, null, null, null, null, null, n);
     }
 
-    public function consumeLeadingByCluster(m:SortedMap<Int, Float>):PunctuationGeometryLedger
-        return consumeSide(m, true);
+    public function consumeLeadingByCluster(consumptionByCluster:SortedMap<Int, Float>):PunctuationGeometryLedger
+        return consumeSide(consumptionByCluster, true);
 
-    public function consumeTrailingByCluster(m:SortedMap<Int, Float>):PunctuationGeometryLedger
-        return consumeSide(m, false);
+    public function consumeTrailingByCluster(consumptionByCluster:SortedMap<Int, Float>):PunctuationGeometryLedger
+        return consumeSide(consumptionByCluster, false);
 
     public function glueCapacities():SortedMap<Int, GlueCapacity> {
         final b = SortedMap.builder();
@@ -200,43 +212,76 @@ import std.SortedMap;
     }
 
     function consumeSpacing(p:PunctuationSpacingCompressionResult):PunctuationGeometryLedger {
-        var n = cloneB(budgets);
+        // Keys are the cluster indices present in budgets, ascending. Updating
+        // the values in place and rebuilding the map once replaces the previous
+        // rebuild-per-adjustment, which cost adjustments x clusters.
+        final keys = new Array<Int>();
+        final values = new Array<GlueBudget>();
+        for (i in 0...budgets.size()) {
+            keys.push(budgets.keyAt(i));
+            values.push(budgets.valueAt(i));
+        }
         for (a in p.adjustments) {
             var idx = -1;
-            for (i in 0...naturalClusters.length)
-                if (PunctuationGeometryLedger.isInside(a.reductionTargetRange, naturalClusters[i].range)) {
-                    idx = i;
+            var low = 0;
+            var high = naturalClusters.length - 1;
+            while (low <= high) {
+                final middle = (low + high) >> 1;
+                final clusterRange = naturalClusters[middle].range;
+                if (a.reductionTargetRange.start < clusterRange.start)
+                    high = middle - 1;
+                else if (a.reductionTargetRange.start >= clusterRange.end)
+                    low = middle + 1;
+                else {
+                    if (PunctuationGeometryLedger.isInside(a.reductionTargetRange, clusterRange))
+                        idx = middle;
                     break;
                 }
-            if (idx >= 0 && n.has(idx)) {
-                final q = n.get(idx);
-                var replacement:GlueBudget;
-                if (geometries.get(idx).anchor == PunctuationAnchor.Center) {
-                    final x = Math.min(a.reduction / 2, Math.min(q.leadingRemaining, q.trailingRemaining));
-                    replacement = new GlueBudget(q.leadingNatural, q.leadingConsumed + x, q.trailingNatural, q.trailingConsumed + x);
-                } else if (q.trailingRemaining >= q.leadingRemaining)
-                    replacement = new GlueBudget(q.leadingNatural, q.leadingConsumed, q.trailingNatural,
-                        Math.min(q.trailingNatural, q.trailingConsumed + a.reduction));
-                else
-                    replacement = new GlueBudget(q.leadingNatural, Math.min(q.leadingNatural, q.leadingConsumed + a.reduction), q.trailingNatural,
-                        q.trailingConsumed);
-                final b = SortedMap.builder();
-                for (j in 0...n.size())
-                    b.put(n.keyAt(j), n.valueAt(j));
-                b.put(idx, replacement);
-                n = b.build();
             }
+            if (idx < 0)
+                continue;
+            var pos = -1;
+            var lo = 0;
+            var hi = keys.length - 1;
+            while (lo <= hi) {
+                final mid = (lo + hi) >> 1;
+                if (keys[mid] < idx)
+                    lo = mid + 1;
+                else if (keys[mid] > idx)
+                    hi = mid - 1;
+                else {
+                    pos = mid;
+                    break;
+                }
+            }
+            if (pos < 0)
+                continue;
+            final q = values[pos];
+            var replacement:GlueBudget;
+            if (geometries.get(idx).anchor == PunctuationAnchor.Center) {
+                final x = Math.min(a.reduction / 2, Math.min(q.leadingRemaining, q.trailingRemaining));
+                replacement = new GlueBudget(q.leadingNatural, q.leadingConsumed + x, q.trailingNatural, q.trailingConsumed + x);
+            } else if (q.trailingRemaining >= q.leadingRemaining)
+                replacement = new GlueBudget(q.leadingNatural, q.leadingConsumed, q.trailingNatural,
+                    Math.min(q.trailingNatural, q.trailingConsumed + a.reduction));
+            else
+                replacement = new GlueBudget(q.leadingNatural, Math.min(q.leadingNatural, q.leadingConsumed + a.reduction), q.trailingNatural,
+                    q.trailingConsumed);
+            values[pos] = replacement;
         }
-        return replace(this, null, null, null, null, null, n);
+        final b = SortedMap.builder();
+        for (i in 0...keys.length)
+            b.put(keys[i], values[i]);
+        return replace(this, null, null, null, null, null, b.build());
     }
 
-    public function consumeLineEdgeGlue(lines:Array<LineCandidate>, ?force:Null<Bool>):LineEdgeTrimResult {
+    public function consumeLineEdgeGlue(lines:Array<LineCandidate>, ?forceLineEndHalfWidth:Null<Bool>):LineEdgeTrimResult {
         if (lines.length == 0 || budgets.size() == 0)
             return new LineEdgeTrimResult(this, []);
         var lead:SortedMap<Int, Float> = emptyF();
         var trail:SortedMap<Int, Float> = emptyF();
         final ds:Array<LineEdgeTrimDecisionInfo> = [];
-        final forceEnd = force == null ? true : force;
+        final forceEnd = forceLineEndHalfWidth == null ? true : forceLineEndHalfWidth;
         function consumeAtEdge(line:LineCandidate, index:Int, edge:String):Void {
             if (!budgets.has(index))
                 return;
@@ -287,14 +332,14 @@ import std.SortedMap;
         return new LineEdgeTrimResult(consumeLeadingByCluster(lead).consumeTrailingByCluster(trail), ds);
     }
 
-    public function resolveAttachedInlinePunctuationBoundaries(a:Array<InlineAttachment>, atoms:Array<PunctuationAtom>,
+    public function resolveAttachedInlinePunctuationBoundaries(inlineAttachments:Array<InlineAttachment>, punctuationAtoms:Array<PunctuationAtom>,
             em:Float):AttachedInlinePunctuationBoundaryResult {
-        if (a.length != naturalClusters.length)
+        if (inlineAttachments.length != naturalClusters.length)
             throw new org.tiqian.core.TiqianIllegalArgumentException(org.tiqian.core.TextRangeError.Message("Inline attachments must align with punctuation geometry clusters."));
         if (budgets.size() == 0)
             return new AttachedInlinePunctuationBoundaryResult(this, emptyF(), []);
         var hasPrevious = false;
-        for (x in a)
+        for (x in inlineAttachments)
             if (x == InlineAttachment.Previous)
                 hasPrevious = true;
         if (!hasPrevious)
@@ -302,7 +347,7 @@ import std.SortedMap;
         var updated = cloneB(budgets);
         var trailing:SortedMap<Int, Float> = emptyF();
         var decisions:Array<SpacingDecisionInfo> = [];
-        final boundaries = UnicodePunctuationBoundaryResolver.resolveAttachedInlineVirtualBoundaries(a);
+        final boundaries = UnicodePunctuationBoundaryResolver.resolveAttachedInlineVirtualBoundaries(inlineAttachments);
         for (boundary in boundaries) {
             final previous = boundary.previousClusterIndex;
             final end = boundary.attachedClusterRange.end;
@@ -314,12 +359,12 @@ import std.SortedMap;
             final nextBudget = next != null && updated.has(next) ? updated.get(next) : null;
             final right = nextBudget == null ? 0 : nextBudget.leadingRemaining;
             var leftAtom:PunctuationAtom = null;
-            for (atom in atoms)
+            for (atom in punctuationAtoms)
                 if (isInside(atom.range, naturalClusters[previous].range))
                     leftAtom = atom;
             var rightAtom:PunctuationAtom = null;
             if (next != null)
-                for (atom in atoms)
+                for (atom in punctuationAtoms)
                     if (isInside(atom.range, naturalClusters[next].range)) {
                         rightAtom = atom;
                         break;

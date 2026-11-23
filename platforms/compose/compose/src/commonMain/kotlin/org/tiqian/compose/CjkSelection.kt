@@ -26,7 +26,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import org.tiqian.core.SourceBoundaryBias
 import org.tiqian.core.TextRange
-import org.tiqian.core.sourceGraphemeBoundaries
+import org.tiqian.core.SourceInteractionBoundaries
 import kotlin.math.abs
 
 /** Observable state for one [CjkSelectionContainer]. */
@@ -128,8 +128,8 @@ class CjkSelectionState internal constructor() {
 
     /**
      * Copies the Web-compatible plain-text projection of the current selection. Selection state
-     * and accessibility semantics stay source-faithful; only fully selected ruby / 注音 readings
-     * are appended to the clipboard text.
+     * stays source-faithful; only fully selected ruby / 注音 readings are appended to the clipboard
+     * text, and characters appended by [wbr] are left out of it.
      */
     fun copySelection(): Boolean {
         if (!hasSelection) return false
@@ -143,7 +143,7 @@ class CjkSelectionState internal constructor() {
         val currentDocument = document ?: return false
         val fragment = currentDocument.fragments[currentDocument.indexByKey[fragmentKey] ?: return false]
         if (start < 0 || start >= end || end > fragment.text.length) return false
-        val boundaries = fragment.text.text.sourceGraphemeBoundaries(TextRange(0, fragment.text.length))
+        val boundaries = SourceInteractionBoundaries.sourceGraphemeBoundaries(fragment.text.text, TextRange(0, fragment.text.length))
         val range = TextRange(boundaries.last { it <= start }, boundaries.first { it >= end })
         gestureInitialSelection = null
         handleFixedAnchor = null
@@ -640,9 +640,9 @@ class CjkSelectionState internal constructor() {
                 val end = if (index == endIndex) normalized.second.offset else fragment.text.length
                 if (end > start) {
                     if (start == 0 && end == fragment.text.length) {
-                        append(fragment.textForCopy)
+                        append(fragment.textForCopy.withoutCjkWbr())
                     } else {
-                        append(fragment.text, start, end)
+                        append(fragment.text.withoutCjkWbr(start, end))
                     }
                 }
                 if (index < endIndex) append(fragment.separatorAfter)

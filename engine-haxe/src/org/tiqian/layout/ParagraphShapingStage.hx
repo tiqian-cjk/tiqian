@@ -1,4 +1,5 @@
 package org.tiqian.layout;
+import org.tiqian.shaping.TextShaper.ShapingIssue;
 
 using org.tiqian.layout.ProgressiveBreakTierPriority;
 
@@ -494,7 +495,19 @@ class ParagraphShapingStage {
             }
         }
 
+        // Segments are shaped in text order, so the entry a range needs is the
+        // last one, and a range past it is new. Both cases are constant; only an
+        // out-of-order range falls back to the scan. The unconditional scans
+        // cost segments x keys.
         function getCachedSegmentShaping(r:TextRange):Null<ShapingResult> {
+            final keyCount = segmentShapingCacheKeys.length;
+            if (keyCount > 0) {
+                final lastKey = segmentShapingCacheKeys[keyCount - 1];
+                if (lastKey.start == r.start && lastKey.end == r.end)
+                    return segmentShapingCacheValues[keyCount - 1];
+                if (r.start > lastKey.start)
+                    return null;
+            }
             for (i in 0...segmentShapingCacheKeys.length) {
                 final k = segmentShapingCacheKeys[i];
                 if (k.start == r.start && k.end == r.end)
@@ -504,6 +517,19 @@ class ParagraphShapingStage {
         }
 
         function putCachedSegmentShaping(r:TextRange, v:ShapingResult):Void {
+            final keyCount = segmentShapingCacheKeys.length;
+            if (keyCount > 0) {
+                final lastKey = segmentShapingCacheKeys[keyCount - 1];
+                if (lastKey.start == r.start && lastKey.end == r.end) {
+                    segmentShapingCacheValues[keyCount - 1] = v;
+                    return;
+                }
+                if (r.start > lastKey.start) {
+                    segmentShapingCacheKeys.push(r);
+                    segmentShapingCacheValues.push(v);
+                    return;
+                }
+            }
             for (i in 0...segmentShapingCacheKeys.length) {
                 final k = segmentShapingCacheKeys[i];
                 if (k.start == r.start && k.end == r.end) {
@@ -516,6 +542,19 @@ class ParagraphShapingStage {
         }
 
         function putSubstitutionRollback(r:TextRange, v:String):Void {
+            final keyCount = substitutionRollbackKeys.length;
+            if (keyCount > 0) {
+                final lastKey = substitutionRollbackKeys[keyCount - 1];
+                if (lastKey.start == r.start && lastKey.end == r.end) {
+                    substitutionRollbackValues[keyCount - 1] = v;
+                    return;
+                }
+                if (r.start > lastKey.start) {
+                    substitutionRollbackKeys.push(r);
+                    substitutionRollbackValues.push(v);
+                    return;
+                }
+            }
             for (i in 0...substitutionRollbackKeys.length) {
                 final k = substitutionRollbackKeys[i];
                 if (k.start == r.start && k.end == r.end) {
@@ -568,7 +607,7 @@ class ParagraphShapingStage {
                 var hasMissing = false;
                 for (i in 0...shaped.decisions.length) {
                     final d = shaped.decisions[i];
-                    if (d.capabilityIssue == TextShaper.UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE_ISSUE) {
+                    if (d.capabilityIssue == ShapingIssue.UNVERIFIED_DISPLAY_SUBSTITUTION_COVERAGE_ISSUE) {
                         hasUnverified = true;
                     }
                     if (d.missingGlyphs > 0) {

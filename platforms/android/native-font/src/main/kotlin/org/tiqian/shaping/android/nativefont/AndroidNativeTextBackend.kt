@@ -11,9 +11,9 @@ import org.tiqian.font.FontMetricsRequest
 import org.tiqian.font.FontMetricsResolver
 import org.tiqian.font.FontRole
 import org.tiqian.font.RawFontMetrics
-import org.tiqian.shaping.PLATFORM_MULTI_FACE_STRING_DRAW_ISSUE
 import org.tiqian.shaping.ReplayableFontFaceRequest
 import org.tiqian.shaping.ShapingInput
+import org.tiqian.shaping.ShapingIssue
 import org.tiqian.shaping.ShapingResult
 import org.tiqian.shaping.ShapingSource
 import org.tiqian.shaping.TextShaper
@@ -53,7 +53,7 @@ class AndroidNativeTextShaper(
                 PlatformStringDrawCause.NoCoveringFace ->
                     platformStringDrawResult(input, sourceText, displayText, face, "NoCoveringFacePlatformDegrade", NO_COVERING_FACE_STRING_DRAW_ISSUE)
                 else ->
-                    platformStringDrawResult(input, sourceText, displayText, face, "PlatformMultiFaceStringDrawDegrade", PLATFORM_MULTI_FACE_STRING_DRAW_ISSUE)
+                    platformStringDrawResult(input, sourceText, displayText, face, "PlatformMultiFaceStringDrawDegrade", ShapingIssue.PLATFORM_MULTI_FACE_STRING_DRAW_ISSUE)
             }
         }
         val shaped = face.nativeFace.shape(
@@ -77,7 +77,7 @@ class AndroidNativeTextShaper(
                 }
             }
             Glyph(
-                id = shaped.glyphIds[index].toUInt(),
+                id = shaped.glyphIds[index],
                 clusterRange = input.range,
                 advance = shaped.positions[p + 2],
                 x = shaped.positions[p],
@@ -146,7 +146,7 @@ class AndroidNativeTextShaper(
      * platform-measured advance — which the Android renderer already draws with
      * `Canvas.drawTextRun` through the same platform text stack that produced the advance. The
      * base face resolved for metrics stays correct for line height; only glyph-granular ink is
-     * given up, reported as [PLATFORM_MULTI_FACE_STRING_DRAW_ISSUE].
+     * given up, reported as [ShapingIssue.PLATFORM_MULTI_FACE_STRING_DRAW_ISSUE].
      */
     private fun platformStringDrawResult(
         input: ShapingInput,
@@ -159,7 +159,7 @@ class AndroidNativeTextShaper(
         val advance = face.degradedRunAdvance
         val faceKey = face.descriptor.id.value
         val glyph = Glyph(
-            id = 0u,
+            id = 0,
             clusterRange = input.range,
             advance = advance,
             renderFontKey = null,
@@ -233,7 +233,7 @@ class AndroidNativeTextShaper(
         applicationContext,
         ReplayableFontFaceRequest(
             role = role,
-            preferredFamilies = families,
+            preferredFamilies = families.toMutableList(),
             fontSize = fontSize,
             weight = weight,
             italic = italic,
@@ -253,7 +253,7 @@ class AndroidNativeFontMetricsResolver(
             applicationContext,
             ReplayableFontFaceRequest(
                 role = request.role,
-                preferredFamilies = request.fontFamilies,
+                preferredFamilies = request.fontFamilies.toMutableList(),
                 fontSize = request.fontSize,
                 weight = request.fontWeight,
                 italic = request.italic,

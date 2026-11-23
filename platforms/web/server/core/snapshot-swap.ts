@@ -33,7 +33,7 @@ const manifestPaths: readonly string[] = [
   join(root, "../../client/react/package.json"),
   join(root, "../../client/astro/package.json"),
   join(root, "../../client/sveltekit/package.json"),
-  join(root, "../../../../ffi/js/npm/package.json"),
+  join(root, "../../client/engine-runtime/package.json"),
 ];
 // Source roots whose text files may embed the rescope set below. node_modules
 // is excluded everywhere so the workspace symlinks into the client packages
@@ -45,17 +45,17 @@ const sourceRoots: readonly string[] = [
   join(root, "../../client/astro"),
   join(root, "../../client/sveltekit"),
   root,
-  join(root, "../../../../ffi/js/npm"),
+  join(root, "../../client/engine-runtime"),
 ];
 const excludedDirectories: readonly Set<string> = new Set(["node_modules", ".parcel-cache", ".git"]);
-const sourceExtensions: readonly string[] = [".js", ".cjs", ".mjs", ".ts", ".mts"];
+const sourceExtensions: readonly string[] = [".js", ".cjs", ".mjs", ".ts", ".mts", ".astro", ".svelte"];
 // The package names that appear as specifiers in shipped sources and as
 // dependency keys in the snapshot manifests. Each entry is rescoped to the
 // fork scope and pinned to the snapshot version.
 const rescopeSet: readonly string[] = [
   "@tiqian/ffi",
   "@tiqian/core",
-  "@tiqian/prose",
+  "@tiqian/web-component",
   "@tiqian/precompute",
 ];
 
@@ -148,8 +148,7 @@ const apply = (version: string, scope: string, repository: string): void => {
     const manifest: PackageManifest = JSON.parse(original) as PackageManifest;
     manifest.name = swapScope(manifest.name, scope);
     manifest.version = version;
-    // react ships a private marker in the working tree; a publishable
-    // snapshot tarball must not carry it.
+    // The restored workspace manifest keeps any private marker.
     delete manifest.private;
     if (manifest.dependencies !== undefined) {
       manifest.dependencies = swapDependencyMap(manifest.dependencies, scope, version);

@@ -1,5 +1,6 @@
 package org.tiqian.linebreak;
 
+@:mainOnly
 interface LineBreakAnalyzer {
     public function analyze(text:String):std.ReadOnlyArray<BreakOpportunity>;
 }

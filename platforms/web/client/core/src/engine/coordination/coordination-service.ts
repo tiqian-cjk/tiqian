@@ -24,6 +24,8 @@ import type {
   PageWorkerCoordinator,
   PlanRecord,
   PendingRequest,
+  WorkerLayoutRequestBody,
+  WorkerPlanLookup,
   WorkerResponseEnvelope,
 } from "../web-worker/worker-channel.js";
 
@@ -44,6 +46,7 @@ export type LayoutWorkerReleaseFn = (sessionKey?: string) => boolean;
 export interface TiqianLayoutWorkerInstance {
   readonly version: number;
   readonly semanticReplayRevision: number;
+  lookup?(sessionKey: string, request: WorkerLayoutRequestBody): WorkerPlanLookup;
   take: LayoutWorkerTakeFn;
   issue: LayoutWorkerIssueFn;
   release: LayoutWorkerReleaseFn;

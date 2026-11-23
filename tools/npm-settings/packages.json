@@ -1,0 +1,106 @@
+{
+  "organization": "tiqian-cjk",
+  "repository": "tiqian",
+  "workflow": "release.yml",
+  "note": "Every package the release publishes through the release.yml entrypoint. The trusted publisher must allow npm publish and npm dist-tag for the OIDC dist-tag step to work without a token.",
+  "packages": [
+    {
+      "name": "@tiqian/ffi",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
+    },
+    {
+      "name": "@tiqian/core",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
+    },
+    {
+      "name": "@tiqian/web-component",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
+    },
+    {
+      "name": "@tiqian/precompute",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
+    },
+    {
+      "name": "@tiqian/precompute-darwin-arm64",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
+    },
+    {
+      "name": "@tiqian/precompute-linux-arm64-gnu",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
+    },
+    {
+      "name": "@tiqian/precompute-linux-x64-gnu",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
+    },
+    {
+      "name": "@tiqian/precompute-win32-x64-msvc",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
+    },
+    {
+      "name": "@tiqian/engine",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
+    },
+    {
+      "name": "@tiqian/protocol",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
+    },
+    {
+      "name": "@tiqian/shared",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
+    },
+    {
+      "name": "@tiqian/astro",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
+    },
+    {
+      "name": "@tiqian/sveltekit",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
+    },
+    {
+      "name": "@tiqian/react",
+      "actions": [
+        "publish",
+        "dist-tag"
+      ]
+    }
+  ]
+}

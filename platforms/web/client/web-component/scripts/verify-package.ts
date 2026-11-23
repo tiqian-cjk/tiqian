@@ -21,7 +21,7 @@ interface PackageManifest {
   readonly exports?: Readonly<Record<string, unknown>>;
 }
 
-const EXPECTED_NAME: string = "@tiqian/prose";
+const EXPECTED_NAME: string = "@tiqian/web-component";
 const REQUIRED_FILES: readonly string[] = [
   "LICENSE",
   "README.md",
@@ -56,17 +56,17 @@ export async function verifyPackage(packageRoot: URL = new URL("../", import.met
   if (manifest.license !== "MPL-2.0") fail("manifest must declare MPL-2.0");
 
   if (!manifest.dependencies?.["@tiqian/core"]) {
-    fail("@tiqian/prose must declare dependency on @tiqian/core");
+    fail("@tiqian/web-component must declare dependency on @tiqian/core");
   }
 
   for (const forbidden of FORBIDDEN_FILES) {
     if (manifest.files.includes(forbidden)) {
-      fail(`${forbidden} must not be included in @tiqian/prose files`);
+      fail(`${forbidden} must not be included in @tiqian/web-component files`);
     }
   }
 
   if (manifest.files.includes("styles.css")) {
-    fail("styles.css must not be included in @tiqian/prose files; stylesheet ships from @tiqian/core");
+    fail("styles.css must not be included in @tiqian/web-component files; stylesheet ships from @tiqian/core");
   }
   if (manifest.exports?.["./styles.css"] !== undefined) {
     fail('exports["./styles.css"] must be deleted; the stylesheet resolves from @tiqian/core');

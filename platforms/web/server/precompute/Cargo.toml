@@ -1,8 +1,12 @@
 # ADR 0050: web-domain Rust precompute stack (font session, orchestration, Neon).
-# Depends on the neutral engine binding via path + version.
+# Depends on the neutral engine binding via path + version. The binding crate
+# (`tiqian`) and its generated engine (`engine-gen`) moved here from the
+# dissolved top-level ffi directory; engine-gen stays excluded so its generated
+# test suite is not part of this workspace's acceptance surface.
 [workspace]
 resolver = "2"
-members = ["engine", "binding", "protocol-gen"]
+members = ["engine", "binding", "tiqian"]
+exclude = ["engine-gen", "protocol-gen"]
 
 [workspace.package]
 version = "0.1.0"

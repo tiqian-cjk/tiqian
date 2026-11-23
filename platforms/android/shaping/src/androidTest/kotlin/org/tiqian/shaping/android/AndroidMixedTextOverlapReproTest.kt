@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.tiqian.core.Cluster
+import org.tiqian.core.Ic
 import org.tiqian.core.LayoutConstraints
 import org.tiqian.core.LayoutInput
 import org.tiqian.core.LayoutResult
@@ -14,7 +15,6 @@ import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.TextRange
 import org.tiqian.core.TextStyle
 import org.tiqian.core.TiqianTextContent
-import org.tiqian.core.ic
 import org.tiqian.core.positionedClusters
 import org.tiqian.font.CjkFontRoleClassifier
 import org.tiqian.font.FontRole
@@ -50,7 +50,7 @@ class AndroidMixedTextOverlapReproTest {
                     content = TiqianTextContent(paragraph),
                     textStyle = TextStyle(fontSize = fontSize, locale = "zh-Hans"),
                     paragraphStyle = ParagraphStyle(
-                        firstLineIndent = 0.ic,
+                        firstLineIndent = Ic.Zero,
                         lineHeight = fontSize * 1.6f,
                     ),
                     constraints = LayoutConstraints(maxWidth = cells * fontSize),

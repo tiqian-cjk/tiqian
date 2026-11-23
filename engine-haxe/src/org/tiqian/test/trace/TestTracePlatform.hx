@@ -1,15 +1,5 @@
 package org.tiqian.test.trace;
 
-private typedef MkdirOptions = {
-    final recursive:Bool;
-}
-
-@:jsRequire("node:fs")
-private extern class NodeFileSystem {
-    static function mkdirSync(path:String, options:MkdirOptions):Void;
-    static function writeFileSync(path:String, text:String, encoding:String):Void;
-}
-
 class TestTracePlatform {
     public static final updateMode:Bool = true;
     public static final doubleArithmetic:Bool = true;
@@ -31,7 +21,11 @@ class TestTracePlatform {
     #end
 
     public static function writeGolden(className:String, text:String):Void {
-        NodeFileSystem.mkdirSync(directory, {recursive: true});
-        NodeFileSystem.writeFileSync(directory + "/" + className + ".txt", text, "utf8");
+        try {
+            std.Fs.makeDirs(directory);
+            std.Fs.writeText(directory + "/" + className + ".txt", text);
+        } catch (e:std.FsException) {
+            // Golden writing is best-effort; missing directories are non-fatal.
+        }
     }
 }

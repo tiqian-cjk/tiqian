@@ -180,7 +180,7 @@ lookahead;下一步是把观察到的具体段落纳入候选对比语料复现�
 
 归档停用后恢复的 web `lineBreakStrategy` 选项与 demo 对照区,把一个仍在调优、
 明确「还不能替代 lookahead」的实验求解器接进了发布路径。实测
-`@tiqian/prose` 的 `runtime/tiqian-web.js` 确实带着它:去掉分支后 Kotlin/JS
+`@tiqian/web-component` 的 `runtime/tiqian-web.js` 确实带着它:去掉分支后 Kotlin/JS
 DCE 把 `ParagraphDpLineBreaker` / `DpContext` / `EdgeGeometry` 全部摘除,
 bundle 从 498,013 降到 486,314 字节(gzip 165,981 → 161,238),其中约
 2.9 KB gzip 是 DP 本身。默认断行器不变不足以成为理由:未定稿的策略不应该

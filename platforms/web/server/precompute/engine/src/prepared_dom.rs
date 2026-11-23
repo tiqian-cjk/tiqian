@@ -32,7 +32,10 @@ const SPACING_EPSILON: f64 = 0.01;
 // thousandths of a pixel per cluster boundary; zeroing those breaks the line
 // flow identity once they accumulate. Only arithmetic dust zeroes here.
 // SPACING_EPSILON still gates merge tolerance and carrier visibility.
-const SPACING_DUST_EPSILON: f64 = 1e-6;
+// Subtracting float32 plan coordinates can leave a tiny gap in CSS pixels.
+const SPACING_DUST_EPSILON: f64 = 1e-4;
+// Preserve small gaps when the wider threshold would break line flow.
+const FALLBACK_SPACING_DUST_EPSILON: f64 = 1e-6;
 const RENDER_FLOW_EPSILON_PX: f64 = 0.01;
 const LIVE_SEMANTIC_INDEX_ATTRIBUTE: &str = "data-tq-live-semantic-index";
 /// Fallback annotation ascent ratio, mirroring the Kotlin no-metrics branch.
@@ -539,6 +542,27 @@ impl Semantics {
         self.indices(|span_start, span_end| offset > span_start && offset < span_end)
     }
 
+    /// Mark both sides of a semantic boundary while keeping the run advance intact.
+    fn mark_spacing_ends(&self, draft: &mut Draft, run: &CellRun) -> String {
+        let mut tags = Vec::new();
+        for (depth, &index) in run.semantic_path.iter().enumerate() {
+            let (end, tag) = match self {
+                Self::Snapshot(spans) => (spans[index].end, &spans[index].tag_name),
+                Self::Live(spans) => (spans[index].end, &spans[index].tag_name),
+            };
+            if end != i64::from(run.range_end) {
+                continue;
+            }
+
+            let wrapper = draft.active_containers[depth];
+            if let NodeDraft::Element { entries, .. } = &mut draft.nodes[wrapper] {
+                set_attribute(entries, "data-tq-spacing-end", Some(px(run.spacing.px)));
+            }
+            tags.push(tag.as_str());
+        }
+        tags.join(" ")
+    }
+
     fn indices(&self, covers: impl Fn(i64, i64) -> bool) -> Vec<usize> {
         let bounds: Vec<(i64, i64)> = match self {
             Semantics::Snapshot(spans) => spans.iter().map(|span| (span.start, span.end)).collect(),
@@ -957,7 +981,7 @@ fn is_safe_integer(value: f64) -> bool {
 }
 
 fn prepared_spacing(display: &str, natural_width: f64, trailing_gap: f64) -> Spacing {
-    if trailing_gap.abs() < SPACING_DUST_EPSILON {
+    if trailing_gap == 0.0 {
         return Spacing {
             kind: SpacingKind::None,
             px: 0.0,
@@ -1136,80 +1160,6 @@ fn render_line(
             )));
         }
     }
-    let mut cells: Vec<CellRun> = Vec::with_capacity(line.cells.len());
-    for (index, cell) in line.cells.iter().enumerate() {
-        cells.push(prepared_cell(
-            line,
-            index,
-            cell,
-            semantics,
-            render_text_spans,
-            inline_start_by_offset,
-            inline_end_by_offset,
-            emphasis_ranges,
-            bopomofo_by_base_end,
-        )?);
-    }
-    for cell in &mut cells {
-        cell.semantic_signature = semantics.signature(&cell.semantic_path);
-    }
-    let mut children: Vec<LineChild> = Vec::new();
-    let mut pending_run: Option<CellRun> = None;
-    for cell in cells {
-        let range_end = cell.range_end;
-        let bopomofo_advance_width = cell.bopomofo_advance_width;
-        let semantic_path = cell.semantic_path.clone();
-        if cell.inline_object_advance.is_some() {
-            if let Some(run) = pending_run.take() {
-                children.push(LineChild::Run(run));
-            }
-            children.push(LineChild::InlineObject {
-                carrier_margin: cell.trailing_gap,
-                semantic_path,
-                cell,
-            });
-            continue;
-        }
-        let mut merged = false;
-        if let Some(pending) = pending_run.as_mut() {
-            if can_merge_prepared_run(pending, &cell) {
-                merge_prepared_run(pending, &cell);
-                merged = true;
-            }
-        }
-        if !merged {
-            if let Some(run) = pending_run.take() {
-                children.push(LineChild::Run(run));
-            }
-            pending_run = Some(cell);
-        }
-        let ruby_at_end = ruby_by_base_end.get(&normalized_key(f64::from(range_end)));
-        let bopomofo_at_end = bopomofo_by_base_end.get(&normalized_key(f64::from(range_end)));
-        if ruby_at_end.is_some() || bopomofo_at_end.is_some() {
-            if let Some(run) = pending_run.take() {
-                children.push(LineChild::Run(run));
-            }
-        }
-        if let Some(ruby) = ruby_at_end {
-            children.push(LineChild::Ruby {
-                ruby: ruby.clone(),
-                line_top: line.top,
-                semantic_path: semantic_path.clone(),
-            });
-        }
-        for z in bopomofo_at_end.iter().flat_map(|list| list.iter()) {
-            children.push(LineChild::Bopomofo {
-                z: z.clone(),
-                width: bopomofo_advance_width,
-                line_top: line.top,
-                line_height: height,
-                semantic_path: semantic_path.clone(),
-            });
-        }
-    }
-    if let Some(run) = pending_run.take() {
-        children.push(LineChild::Run(run));
-    }
     let last = line.cells.last();
     let flow_end = last
         .map(|cell| {
@@ -1229,15 +1179,39 @@ fn render_line(
                 + edge_at(inline_end_by_offset, cell.range_end)
         })
         .sum();
-    let children_flow: f64 = children.iter().map(LineChild::flow_width).sum();
-    let expected_flow_width =
-        flow_start + inline_edge_width + children_flow + hyphen_leading_gap + line.hyphen_advance;
     let core_line_width = line.indent + line.visual_width + line.hyphen_advance;
-    if (expected_flow_width - core_line_width).abs() > RENDER_FLOW_EPSILON_PX {
-        return Err(NamedError(format!(
-            "SnapshotRenderFlowMismatch:line={line_index}"
-        )));
-    }
+    let mut dust_epsilon = SPACING_DUST_EPSILON;
+    let (children, expected_flow_width) = loop {
+        let children = prepare_line_children(
+            line,
+            semantics,
+            render_text_spans,
+            inline_start_by_offset,
+            inline_end_by_offset,
+            emphasis_ranges,
+            ruby_by_base_end,
+            bopomofo_by_base_end,
+            dust_epsilon,
+        )?;
+        let children_flow: f64 = children.iter().map(LineChild::flow_width).sum();
+        let expected_flow_width = flow_start
+            + inline_edge_width
+            + children_flow
+            + hyphen_leading_gap
+            + line.hyphen_advance;
+
+        // Preserve the old spacing when the wider threshold drops too much of the line width.
+        if (expected_flow_width - core_line_width).abs() > RENDER_FLOW_EPSILON_PX {
+            if dust_epsilon == FALLBACK_SPACING_DUST_EPSILON {
+                return Err(NamedError(format!(
+                    "SnapshotRenderFlowMismatch:line={line_index}"
+                )));
+            }
+            dust_epsilon = FALLBACK_SPACING_DUST_EPSILON;
+            continue;
+        }
+        break (children, expected_flow_width);
+    };
     let mut marker_styles = vec![
         format!("--tq-line-height:{}!important", px(height)),
         format!(
@@ -1302,9 +1276,11 @@ fn render_line(
     draft.append_child(marker_container, marker);
 
     for child in &children {
-        let path = child.semantic_path().to_vec();
+        let container = draft.semantic_container_for(child.semantic_path(), |index| {
+            semantics.wrapper_with_cjk(index, cjk_strong_semantics)
+        });
         let node = match child {
-            LineChild::Run(run) => render_run(draft, run, style_class_for)?,
+            LineChild::Run(run) => render_run(draft, run, semantics, style_class_for)?,
             LineChild::InlineObject {
                 cell,
                 carrier_margin,
@@ -1323,9 +1299,6 @@ fn render_line(
                 bopomofo_annotation_span(draft, z, *width, *line_top, *line_height, style_class_for)
             }
         };
-        let container = draft.semantic_container_for(&path, |index| {
-            semantics.wrapper_with_cjk(index, cjk_strong_semantics)
-        });
         draft.append_child(container, node);
     }
 
@@ -1409,6 +1382,97 @@ fn render_line(
 }
 
 #[allow(clippy::too_many_arguments)]
+fn prepare_line_children(
+    line: &PlanLine,
+    semantics: &Semantics,
+    render_text_spans: &[RenderTextSpan],
+    inline_start_by_offset: &HashMap<i64, f64>,
+    inline_end_by_offset: &HashMap<i64, f64>,
+    emphasis_ranges: &[(f64, f64)],
+    ruby_by_base_end: &HashMap<i64, PlanRuby>,
+    bopomofo_by_base_end: &HashMap<i64, Vec<PlanBopomofo>>,
+    dust_epsilon: f64,
+) -> Result<Vec<LineChild>, NamedError> {
+    let height = line.bottom - line.top;
+    let mut cells: Vec<CellRun> = Vec::with_capacity(line.cells.len());
+    for (index, cell) in line.cells.iter().enumerate() {
+        cells.push(prepared_cell(
+            line,
+            index,
+            cell,
+            semantics,
+            render_text_spans,
+            inline_start_by_offset,
+            inline_end_by_offset,
+            emphasis_ranges,
+            bopomofo_by_base_end,
+            dust_epsilon,
+        )?);
+    }
+    for cell in &mut cells {
+        cell.semantic_signature = semantics.signature(&cell.semantic_path);
+    }
+    let mut children: Vec<LineChild> = Vec::new();
+    let mut pending_run: Option<CellRun> = None;
+    for cell in cells {
+        let range_end = cell.range_end;
+        let bopomofo_advance_width = cell.bopomofo_advance_width;
+        let semantic_path = cell.semantic_path.clone();
+        if cell.inline_object_advance.is_some() {
+            if let Some(run) = pending_run.take() {
+                children.push(LineChild::Run(run));
+            }
+            children.push(LineChild::InlineObject {
+                carrier_margin: cell.trailing_gap,
+                semantic_path,
+                cell,
+            });
+            continue;
+        }
+        let mut merged = false;
+        if let Some(pending) = pending_run.as_mut() {
+            if can_merge_prepared_run(pending, &cell) {
+                merge_prepared_run(pending, &cell);
+                merged = true;
+            }
+        }
+        if !merged {
+            if let Some(run) = pending_run.take() {
+                children.push(LineChild::Run(run));
+            }
+            pending_run = Some(cell);
+        }
+        let ruby_at_end = ruby_by_base_end.get(&normalized_key(f64::from(range_end)));
+        let bopomofo_at_end = bopomofo_by_base_end.get(&normalized_key(f64::from(range_end)));
+        if ruby_at_end.is_some() || bopomofo_at_end.is_some() {
+            if let Some(run) = pending_run.take() {
+                children.push(LineChild::Run(run));
+            }
+        }
+        if let Some(ruby) = ruby_at_end {
+            children.push(LineChild::Ruby {
+                ruby: ruby.clone(),
+                line_top: line.top,
+                semantic_path: semantic_path.clone(),
+            });
+        }
+        for z in bopomofo_at_end.iter().flat_map(|list| list.iter()) {
+            children.push(LineChild::Bopomofo {
+                z: z.clone(),
+                width: bopomofo_advance_width,
+                line_top: line.top,
+                line_height: height,
+                semantic_path: semantic_path.clone(),
+            });
+        }
+    }
+    if let Some(run) = pending_run.take() {
+        children.push(LineChild::Run(run));
+    }
+    Ok(children)
+}
+
+#[allow(clippy::too_many_arguments)]
 fn prepared_cell(
     line: &PlanLine,
     index: usize,
@@ -1419,6 +1483,7 @@ fn prepared_cell(
     inline_end_by_offset: &HashMap<i64, f64>,
     emphasis_ranges: &[(f64, f64)],
     bopomofo_by_base_end: &HashMap<i64, Vec<PlanBopomofo>>,
+    dust_epsilon: f64,
 ) -> Result<CellRun, NamedError> {
     let next = line.cells.get(index + 1);
     let trailing_inline_edge = edge_at(inline_end_by_offset, cell.range_end);
@@ -1441,7 +1506,7 @@ fn prepared_cell(
                 - trailing_inline_edge
         }
     };
-    let layout_trailing_gap = if raw_trailing_gap.abs() < SPACING_DUST_EPSILON {
+    let layout_trailing_gap = if raw_trailing_gap.abs() < dust_epsilon {
         0.0
     } else {
         raw_trailing_gap
@@ -1570,6 +1635,7 @@ fn render_font_families_for(
 fn render_run(
     draft: &mut Draft,
     run: &CellRun,
+    semantics: &Semantics,
     style_class_for: &mut Option<&mut dyn FnMut(&str) -> String>,
 ) -> Result<usize, NamedError> {
     let feature_signature = feature_signature(run);
@@ -1602,16 +1668,25 @@ fn render_run(
         ("data-tq-geometry".to_string(), Some("true".to_string())),
         ("data-tq-x".to_string(), Some(js_number_string(run.draw_x))),
     ];
+    let boundary = if run.spacing.px > 0.0 {
+        semantics.mark_spacing_ends(draft, run)
+    } else {
+        String::new()
+    };
+    if !boundary.is_empty() {
+        set_attribute(
+            &mut attributes,
+            "data-tq-spacing-boundary",
+            Some(boundary.clone()),
+        );
+    }
     if run.shaping_boundary || !feature_signature.is_empty() {
         attributes.push(("data-tq-shaping-boundary".to_string(), Some(String::new())));
     }
     if !feature_signature.is_empty() {
-        // The renderer replays exactly the feature sets the engine emits:
-        // Latin curly quotes shape proportional (pwid,palt), CJK-context
-        // curly quotes shape full-width (fwid,
-        // CjkContextCurlyQuoteFullWidthVariant). Any other signature has no
-        // CSS replay rule and must not be silently painted.
-        if feature_signature != "pwid,palt" && feature_signature != "fwid" {
+        // Numeric overrides and contextual punctuation must have exact CSS replay.
+        // Reject unknown feature sets instead of painting different glyph advances.
+        if crate::numeric::prepared_variant(&run.open_type_features).is_err() {
             return Err(NamedError(format!(
                 "UnsupportedPreparedOpenTypeFeatures: {feature_signature}"
             )));
@@ -1658,7 +1733,7 @@ fn render_run(
             ));
         }
     }
-    let mut styles = Vec::new();
+    let mut styles = crate::numeric::prepared_styles(&run.open_type_features)?;
     if !render_font_families.is_empty() || run.evidence_render_font_family.is_some() {
         attributes.push((
             "data-tq-render-font-projection".to_string(),
@@ -1718,6 +1793,15 @@ fn render_run(
                 Some("true".to_string()),
             ),
         ];
+        if !boundary.is_empty() {
+            set_attribute(
+                &mut carrier_attributes,
+                "data-tq-spacing-boundary",
+                Some(boundary),
+            );
+        }
+
+        // Host decoration can stop at the semantic boundary without changing the gap.
         apply_dynamic_styles(
             &mut carrier_attributes,
             &[

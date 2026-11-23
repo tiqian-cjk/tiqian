@@ -8,7 +8,7 @@
 应用生成一个 `tiqian-android-font-evidence-*.zip`：
 
 - `manifest.json`：schema、采集器版本、设备、API 能力以及包内条目的 SHA-256；
-- `observations.jsonl`：每个探针、locale、家族和样式请求的一条独立观测；
+- `observations.jsonl`：每个探针、locale、font family 和样式请求的一条独立观测；
 - `font-config.json`：从可读配置解析出的 family、alias、fallback、locale、TTC 与 axis 声明；
 - `system-fonts.json`：公开 `SystemFonts` API 返回的字体集合；
 - `font-directories.json`：应用沙箱可以看到的字体目录元数据；
@@ -23,16 +23,16 @@
 | 能力 | 最低 API | 低版本如何记录 |
 | --- | ---: | --- |
 | `Paint` 宽度、run advance、栅格摘要、`hasGlyph` | 23 | — |
-| `Paint` 可变轴请求 | 26 | `unsupported` |
+| `Paint` variable font axis 请求 | 26 | `unsupported` |
 | 精确 `Typeface` 字重请求 | 28 | `unsupported`，另采集 legacy normal/bold |
 | `SystemFonts` 枚举 | 29 | `unsupported` |
 | 逐 glyph 字体、位置、glyph id 与 bounds | 31 | `glyphReadback.status=unsupported` |
 | 合成粗斜体与 weight/italic override 读回 | 35 | `styleApplication.status=unsupported` |
 
-`unsupported` 是未知，不是 `false`、相同或没有变化。某一层不可用时，报告仍可保留同次请求里
+`unsupported` 表示未知；它既不等于 `false`，也不表示相同或没有变化。某一层不可用时，报告仍可保留同次请求里
 确实观测到的宽度、栅格或覆盖信号。
 
-字体配置是声明证据；`SystemFonts` 是无家族关系和 fallback 次序的集合。两者都不能替代 API 31+
+字体配置是声明证据；`SystemFonts` 是一个集合，不记录 font family 关系与 fallback 次序。两者都不能替代 API 31+
 平台 shaping 后逐 glyph 读回的实际字体。
 
 ## 采集
@@ -57,7 +57,7 @@ Android 字体选择做出的源码审计见
 
 ## 主机端校验与比较
 
-`tools/android-font-evidence/evidence.py` 只使用 Python 标准库，负责三件事：
+`platforms/android/font-evidence/evidence.py` 只使用 Python 标准库，负责三件事：
 
 - `validate`：校验 schema、ZIP 条目安全性、manifest 完整性、条目大小与 SHA-256、
   observation ID 唯一性、状态计数、PNG 引用和辅助清单计数；
@@ -66,14 +66,14 @@ Android 字体选择做出的源码审计见
 - `catalog`：按**整份 ZIP 的 SHA-256**连接经过人工审阅的采集条件，生成机器目录和中文审计表。
 
 ```shell
-python3 tools/android-font-evidence/evidence.py validate /path/to/evidence-*.zip
+python3 platforms/android/font-evidence/evidence.py validate /path/to/evidence-*.zip
 
-python3 tools/android-font-evidence/evidence.py compare \
+python3 platforms/android/font-evidence/evidence.py compare \
   /path/to/before.zip /path/to/after.zip \
   --json-output /tmp/font-comparison.json \
   --markdown-output /tmp/font-comparison.md
 
-python3 tools/android-font-evidence/evidence.py catalog \
+python3 platforms/android/font-evidence/evidence.py catalog \
   /path/to/evidence-*.zip \
   --labels /path/to/private-labels.json \
   --json-output /path/to/private-catalog.json \
@@ -81,6 +81,6 @@ python3 tools/android-font-evidence/evidence.py catalog \
 ```
 
 人工标签只记录采集者明确提供的条件，例如同一台设备在「系统默认」与「启用字体模块」下的两次
-采集。`/data` 字体、`Overlay` 文件名、默认可变轴实例等由工具列为观测信号，但不会自动推断成某个
+采集。`/data` 字体、`Overlay` 文件名、可变字体默认实例等由工具列为观测信号，但不会自动推断成某个
 主题、无障碍设置或 OEM 策略。原始 ZIP、archive SHA-256 标签和完整机器目录都可能保留可识别的
 设备组合，只能放在本地私有研究工作区；Git 中只保留无法回连单份原包的人工脱敏汇总。

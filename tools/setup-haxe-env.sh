@@ -1,54 +1,71 @@
 #!/usr/bin/env bash
-# Copy the local data inputs used by Haxe generation into this checkout.
-# The source must be a tiqian checkout whose inputs have been prepared and
-# reviewed. Unicode files come from Unicode 17.0.0; baseline-goldens are
-# recorded outputs of the original Kotlin engine. The flake provides the
-# matching boring compiler and driver; this script only supplies local data.
+# Stage the local data inputs that Haxe generation reads at compile time.
 #
-# Usage: bash tools/setup-haxe-env.sh [path/to/prepared/tiqian]
+# One input lives outside git:
+#   tools/unicode-data/            read by reflaxe.unicode.GraphemeData
+#
+# It has two in-tree sources, so a fresh clone needs no prepared checkout:
+#   .haxelib/boring/git/tools/unicode-data/  the pinned boring checkout
+#   $BORING_SOURCE/tools/unicode-data/       the boring flake input source
+#
+# Usage:
+#   bash tools/setup-haxe-env.sh              # stage from the in-repo sources
+#   bash tools/setup-haxe-env.sh <checkout>   # stage from a prepared checkout
 set -euo pipefail
 
-TARGET="$(git rev-parse --show-toplevel)"
+TARGET="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 SOURCE="${1:-}"
 
-if [ -z "$SOURCE" ]; then
-  SOURCE="$(git worktree list --porcelain | sed -n 's/^worktree //p' | head -1)"
-fi
+# The pinned boring checkout carries the Unicode 17.0.0 data files.
+UNICODE_SOURCE=".haxelib/boring/git/tools/unicode-data"
 
-if [ -z "$SOURCE" ] || [ ! -d "$SOURCE" ]; then
-  echo "Usage: bash tools/setup-haxe-env.sh [path/to/prepared/tiqian]" >&2
-  exit 2
-fi
-
-SOURCE="$(cd "$SOURCE" && pwd -P)"
-
-required=(
-  engine-haxe/baseline-goldens/layout-dumps
-  engine-haxe/baseline-goldens/layout-dumps-recorded
-  engine-haxe/baseline-goldens/test-traces
-  engine-haxe/baseline-goldens/shaping-evidence.json
-  tools/unicode-data/DerivedCoreProperties-17.0.0.txt
-  tools/unicode-data/GraphemeBreakProperty-17.0.0.txt
-  tools/unicode-data/GraphemeBreakTest-17.0.0.txt
-  tools/unicode-data/emoji-data-17.0.0.txt
-)
-
-for rel in "${required[@]}"; do
-  if [ ! -e "$SOURCE/$rel" ]; then
-    echo "setup-haxe-env: missing source input: $SOURCE/$rel" >&2
-    exit 2
-  fi
-done
-
-echo "setup-haxe-env: source $SOURCE"
-echo "setup-haxe-env: target $TARGET"
-
-for rel in engine-haxe/baseline-goldens tools/unicode-data; do
+stage() {
+  local rel="$1" src="$2"
   if [ -e "$TARGET/$rel" ] || [ -L "$TARGET/$rel" ]; then
     echo "  = $rel (already present)"
-    continue
+    return 0
+  fi
+  if [ ! -e "$src" ]; then
+    echo "setup-haxe-env: missing source input: $src" >&2
+    return 1
   fi
   mkdir -p "$(dirname "$TARGET/$rel")"
-  cp -pR "$SOURCE/$rel" "$TARGET/$rel"
-  echo "  + $rel (copied from $SOURCE/$rel)"
+  cp -pR "$src" "$TARGET/$rel"
+  # The boring flake source in the nix store is read-only; make the staged
+  # copy writable so it matches the .haxelib checkout path.
+  chmod -R u+w "$TARGET/$rel"
+  echo "  + $rel (copied from $src)"
+  return 0
+}
+
+echo "setup-haxe-env: target $TARGET"
+
+# Candidate sources, tried in order: explicit argument, the in-repo pinned
+# boring checkout, then the boring flake input source.
+candidates=()
+if [ -n "$SOURCE" ]; then
+  if [ -d "$SOURCE" ]; then
+    candidates+=("$(cd "$SOURCE" && pwd -P)/tools/unicode-data")
+  else
+    candidates+=("$SOURCE/tools/unicode-data")
+  fi
+fi
+candidates+=("$TARGET/$UNICODE_SOURCE")
+if [ -n "${BORING_SOURCE:-}" ]; then
+  candidates+=("$BORING_SOURCE/tools/unicode-data")
+fi
+
+tried=()
+for src in "${candidates[@]}"; do
+  tried+=("$src")
+  echo "setup-haxe-env: trying source $src"
+  if stage tools/unicode-data "$src"; then
+    exit 0
+  fi
 done
+
+echo "setup-haxe-env: no usable source input; tried:" >&2
+for p in "${tried[@]}"; do
+  echo "  - $p" >&2
+done
+exit 1

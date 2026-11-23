@@ -1,5 +1,6 @@
 package org.tiqian.clreq;
 
+@:mainOnly
 class ClreqPunctuationAdvancePolicy {
     public static function advanceEm(sourceText:String, displayText:String):Float {
         if (displayText == TWO_EM_DASH) {

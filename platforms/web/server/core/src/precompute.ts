@@ -1,5 +1,5 @@
 // The precompute entry over the native addon (ADR 0050). The exported
-// surface matches the former `@tiqian/prose/precompute` module; every
+// surface matches the former `@tiqian/web-component/precompute` module; every
 // computation runs in Rust behind registry handles, and this file owns the
 // object shapes the js API promises. File reading and URL resolution stay
 // here: the crate never touches the filesystem.
@@ -14,10 +14,10 @@ import { addon } from "./load.js";
 import {
   renderPreparedParagraph as sharedRenderPreparedParagraph,
   renderPreparedParagraphArtifact as sharedRenderPreparedParagraphArtifact,
-} from "@tiqian/prose/prepared-dom";
-import { Revision } from "./protocol-gen/Revision.js";
-import { SnapshotValueStyle } from "./shared-gen/org/tiqian/shared/SnapshotValueStyle.js";
-import { ValueStyleInterner } from "./shared-gen/org/tiqian/shared/ValueStyleInterner.js";
+} from "@tiqian/web-component/prepared-dom";
+import { Revision } from "@tiqian/protocol/org/tiqian/protocol/Revision";
+import { SnapshotValueStyle } from "@tiqian/shared/org/tiqian/shared/SnapshotValueStyle";
+import { ValueStyleInterner } from "@tiqian/shared/org/tiqian/shared/ValueStyleInterner";
 import { sha256Hex, stableStringify } from "./stable-stringify.js";
 import { createCacheBridge } from "./cache.js";
 import type { CacheBridge } from "./cache.js";
@@ -237,6 +237,8 @@ export interface SnapshotTextSpan {
   readonly fontWeight?: number;
   readonly italic?: boolean;
   readonly baselineShiftPx?: number;
+  /** Complete CSS numeric variant for this run, replacing paragraph defaults. */
+  readonly fontVariantNumeric?: string;
 }
 
 export interface SnapshotInlineBox {
@@ -438,11 +440,10 @@ function computeRenderArtifact(
 
 /**
  * Overwrites the render fields of a prepared entry with the Node-computed
- * values, then freezes the entry. Unsupported entries pass through untouched;
- * the font-contract lanes keep their own freezeEntry call and never reach this
- * helper.
+ * values, then freezes the entry. This applies to snapshots and font contracts.
+ * Unsupported entries are frozen without adding render fields.
  */
-function backfillRenderFields(entry: PreparedEntry): PreparedEntry {
+export function backfillRenderFields(entry: PreparedEntry): PreparedEntry {
   if (entry.status !== "prepared") {
     return freezeEntry(entry);
   }
@@ -480,7 +481,10 @@ export async function createPrecomputer(options: CreatePrecomputerOptions): Prom
       ).map(backfillRenderFields);
     },
     async prepareFontContract(input: FontContractInput): Promise<PreparedEntry> {
-      return freezeEntry(
+      // A contract entry joins the same corpus as the snapshot entries, and
+      // the corpus gate requires the derived render fields on every member, so
+      // this lane derives them the same way.
+      return backfillRenderFields(
         parse<PreparedEntry>(addon.prepareFontContract(handle, JSON.stringify(input ?? {}))),
       );
     },
@@ -489,7 +493,7 @@ export async function createPrecomputer(options: CreatePrecomputerOptions): Prom
     ): Promise<PreparedEntry[]> {
       return parse<PreparedEntry[]>(
         addon.prepareFontContracts(handle, JSON.stringify(Array.from(inputs ?? []))),
-      ).map(freezeEntry);
+      ).map(backfillRenderFields);
     },
     close(): void {
       addon.closePrecomputer(handle);
@@ -521,7 +525,7 @@ function toSharedTypography(typography: SnapshotTypography): Record<string, unkn
 
 /**
  * Renders one prepared plan to prepared DOM. The implementation is the exact
- * browser-shared module `@tiqian/prose` ships, so server embedders and the
+ * browser-shared module `@tiqian/web-component` ships, so server embedders and the
  * browser agree on every revision.
  */
 export function renderPreparedParagraph(plan: unknown, typography: SnapshotTypography): string {

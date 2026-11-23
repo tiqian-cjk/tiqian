@@ -1,3 +1,5 @@
+import type { WorkerLayoutRequest } from "@tiqian/ffi";
+
 const FAMILY_SEPARATOR = "\u001f";
 const RECORD_SEPARATOR = "\u001e";
 const FIELD_SEPARATOR = "\u001d";
@@ -44,14 +46,11 @@ export interface WorkerTextSpan {
   baselineShiftPx: number;
 }
 
-/** The layout-worker font contract request this module consumes. */
-export interface WorkerFontContractRequest {
-  text: unknown;
-  fontFamilies: unknown;
-  fontSizePx: unknown;
-  fontWeight: unknown;
-  italic: unknown;
-  textSpans: unknown;
+/** Font selection fields from the Worker request, with legacy benchmark input. */
+export interface WorkerFontContractRequest
+  extends Pick<WorkerLayoutRequest, "text" | "fontSizePx" | "fontWeight" | "italic"> {
+  fontFamilies: WorkerLayoutRequest["fontFamilies"] | string;
+  textSpans: WorkerLayoutRequest["textSpans"] | string | null | undefined;
 }
 
 interface SelectedMetadataFace extends FontFaceRecord {
@@ -232,13 +231,44 @@ function selectMetadataFace(
   );
 }
 
-function workerTextSpans(value: unknown): WorkerTextSpan[] {
+function validateWorkerTextSpan(span: WorkerTextSpan): WorkerTextSpan {
+  if (
+    !Number.isSafeInteger(span.start) || !Number.isSafeInteger(span.end) ||
+    span.start < 0 || span.end <= span.start ||
+    span.fontFamilies.length === 0 ||
+    !Number.isFinite(span.fontSizePx) || span.fontSizePx <= 0 ||
+    !Number.isFinite(span.fontWeight) ||
+    !Number.isFinite(span.baselineShiftPx) ||
+    typeof span.italic !== "boolean"
+  ) throw new Error("InvalidLayoutWorkerTextSpan");
+  return span;
+}
+
+function workerTextSpans(value: WorkerFontContractRequest["textSpans"]): WorkerTextSpan[] {
   if (value == null || value === "") return [];
-  return String(value).split(RECORD_SEPARATOR).map((record) => {
+
+  // Map the structured Worker fields to the style used for face selection.
+  if (typeof value !== "string") {
+    if (!Array.isArray(value)) throw new Error("InvalidLayoutWorkerTextSpan");
+    return value.map((span) => validateWorkerTextSpan({
+      start: span.start,
+      end: span.end,
+      fontFamilies: Array.isArray(span.fontFamilies) ? span.fontFamilies.filter(Boolean) : [],
+      fontSizePx: span.fontSize,
+      fontWeight: span.fontWeight,
+      italic: span.italic,
+      baselineShiftPx: span.baselineShift,
+    }));
+  }
+
+  // The benchmark still supplies the original delimited records.
+  return value.split(RECORD_SEPARATOR).map((record) => {
     const fields = record.split(FIELD_SEPARATOR);
-    if (fields.length !== 7) throw new Error("InvalidLayoutWorkerTextSpan");
     const [start, end, families, fontSize, fontWeight, italic, baselineShift] = fields;
-    const span: WorkerTextSpan = {
+    if (fields.length !== 7 || (italic !== "true" && italic !== "false")) {
+      throw new Error("InvalidLayoutWorkerTextSpan");
+    }
+    return validateWorkerTextSpan({
       start: Number(start),
       end: Number(end),
       fontFamilies: families.split(FAMILY_SEPARATOR).filter(Boolean),
@@ -246,17 +276,7 @@ function workerTextSpans(value: unknown): WorkerTextSpan[] {
       fontWeight: Number(fontWeight),
       italic: italic === "true",
       baselineShiftPx: Number(baselineShift),
-    };
-    if (
-      !Number.isSafeInteger(span.start) || !Number.isSafeInteger(span.end) ||
-      span.start < 0 || span.end <= span.start ||
-      span.fontFamilies.length === 0 ||
-      !Number.isFinite(span.fontSizePx) || span.fontSizePx <= 0 ||
-      !Number.isFinite(span.fontWeight) ||
-      !Number.isFinite(span.baselineShiftPx) ||
-      (italic !== "true" && italic !== "false")
-    ) throw new Error("InvalidLayoutWorkerTextSpan");
-    return span;
+    });
   });
 }
 
@@ -269,8 +289,11 @@ export function workerSnapshotSubsetSourceBoundaries(
     ...face,
     unicodeRanges: parseUnicodeRange(face.unicodeRange),
   }));
+  const fontFamilies = typeof request.fontFamilies === "string"
+    ? request.fontFamilies.split(FAMILY_SEPARATOR)
+    : request.fontFamilies;
   const baseStyle: FontFaceStyle = {
-    fontFamilies: String(request.fontFamilies ?? "").split(FAMILY_SEPARATOR).filter(Boolean),
+    fontFamilies: Array.isArray(fontFamilies) ? fontFamilies.filter(Boolean) : [],
     fontSizePx: Number(request.fontSizePx),
     fontWeight: Number(request.fontWeight),
     italic: Boolean(request.italic),

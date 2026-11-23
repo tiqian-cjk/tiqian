@@ -22,38 +22,14 @@ permissions:
   contents: read
 
 jobs:
-  native-tests-linux:
-    name: Kotlin/Native linuxX64 module tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
-        with:
-          distribution: temurin
-          java-version: "25"
-      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
-      - name: Accept Android SDK licenses
-        run: yes | sdkmanager --licenses > /dev/null
-      - name: Install Android platform pieces
-        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0" > /dev/null
-      - name: Cache Gradle
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'gradle/gradle-daemon-jvm.properties', '**/*.gradle.kts') }}
-          restore-keys: gradle-${{ runner.os }}-
-      - name: Cache Kotlin/Native toolchains
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ~/.konan
-          key: konan-${{ runner.os }}-tests-linux-${{ hashFiles('**/*.gradle.kts') }}
-          restore-keys: |
-            konan-${{ runner.os }}-tests-linux-
-            konan-${{ runner.os }}-
-      - name: Run linuxX64 module tests
-        run: ./gradlew :engine:linuxX64Test
+  # The linuxX64 module-test job ran the engine module's linuxX64Test task.
+  # That module declared no test source sets (its only tracked source was the
+  # Android baseline profile), so the task discovered no tests; the generated
+  # suite is hosted by the boring checkout. The job is gone with the module and
+  # no platform module carries Kotlin/Native test sources.
+  # The engine publication moved to boring: the kotlin-f32 bundle publishes the
+  # nine tiqian-engine Maven coordinates through kmpPublication, so no job here
+  # has an engine publication to check.
 
   js-node:
     name: Kotlin/JS engine export node tests (boring-generated TS)
@@ -81,14 +57,63 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
+      # The flake devShell is the only source of the boring driver, and the
+      # manifest and engine trees the install consumes need it. npm test stays
+      # on the setup-node Node 24; wrapping it in `nix develop` would shadow
+      # that toolchain with the devShell's Node 22.
+      - name: Install Nix
+        id: nix-installer
+        continue-on-error: true
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Install Nix with the install script when the action fails
+        if: steps.nix-installer.outcome != 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL \
+              https://install.determinate.systems/nix \
+              | sh -s -- install --no-confirm; then
+              exit 0
+            fi
+            echo "nix install attempt ${attempt} failed; retrying" >&2
+            sleep 15
+          done
+          exit 1
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+      # engine-gen/ is a build product. Generating it before the install keeps
+      # build:runtime from regenerating the protocol-ts tree, which would drop
+      # the package manifest written below.
+      - name: Generate the TypeScript engine tree with the flake toolchain
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs ts'
+      # tiqian-protocol and tiqian-shared are workspace members at
+      # engine-haxe/out/{protocol-ts,shared-ts}/gen. boring gen writes source
+      # only; the package.json each member needs is written by boring pack, so
+      # pack runs before the install resolves the members. Both bundles are
+      # TypeScript, so the pack step's package-tsc runs the pinned TypeScript
+      # through the devShell's bun.
+      - name: Write the protocol and shared package manifests
+        run: |
+          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
+          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
+          chmod +x "$BORING_PACKAGE_TSC"
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
       - name: Install workspace dependencies
         working-directory: .
-        run: npm install --no-audit --no-fund
-      - name: Build and test the boring-generated @tiqian/ffi runtime
-        working-directory: ffi/js/npm
-        run: |
-          npm run build:runtime
-          npm test
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and drop its manifest;
+        # build:runtime below builds the runtime this job needs.
+        run: nix develop -c bun install --ignore-scripts
+      - name: Build the @tiqian/ffi runtime with the flake toolchain
+        working-directory: platforms/web/client/engine-runtime
+        run: nix develop -c npm run build:runtime
+      - name: Test the boring-generated @tiqian/ffi runtime
+        working-directory: platforms/web/client/engine-runtime
+        run: npm test
 
   rust:
     name: Rust workspaces build and test
@@ -96,19 +121,48 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
-      - name: Build and test both workspaces
+      - name: Install Nix
+        id: nix-installer
+        continue-on-error: true
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Install Nix with the install script when the action fails
+        if: steps.nix-installer.outcome != 'success'
+        shell: bash
         run: |
-          cargo build --manifest-path ffi/rust/Cargo.toml
-          cargo test --manifest-path ffi/rust/Cargo.toml
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL \
+              https://install.determinate.systems/nix \
+              | sh -s -- install --no-confirm; then
+              exit 0
+            fi
+            echo "nix install attempt ${attempt} failed; retrying" >&2
+            sleep 15
+          done
+          exit 1
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: Generate the precompute engine tree with the flake toolchain
+        # The precompute crates read tiqian-engine-gen from the gitignored
+        # engine-gen/ tree, and the boring driver reads tools/unicode-data/
+        # at compile time, so stage it from the pinned checkout first.
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs'
+      - name: Build and test the precompute workspace
+        run: |
           cargo build --manifest-path platforms/web/server/precompute/Cargo.toml
           cargo test --manifest-path platforms/web/server/precompute/Cargo.toml
+      - name: Test the generated engine with the f32 cargo feature
+        # One generated tree serves both precisions: the second round selects
+        # f32 through the cargo feature, so no second generation is needed.
+        run: bash tools/test-engine-rust.sh platforms/web/server/precompute/engine-gen
 
   # ADR 0053 F4 (DualLoweringStance): the shared golden corpus binds both
   # prepared-dom implementations to the same bytes. The rust lane runs inside
   # the rust job above; this job regenerates the fixture from the js oracle and
   # fails on drift, then replays the same fixture through the js test.
   # Workspace install (root npm ci) hoists @tiqian/* packages as symlinks;
-  # prose and precompute resolve them without link scripts.
+  # web-component and precompute resolve them without link scripts.
   prepared-dom-corpus:
     name: Shared prepared-dom corpus
     runs-on: ubuntu-latest
@@ -117,19 +171,57 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24"
-      # Workspace install hoists @tiqian/* packages as symlinks; prose and
+      # The flake devShell is the only source of the boring driver, and the
+      # manifest the install consumes needs it.
+      - name: Install Nix
+        id: nix-installer
+        continue-on-error: true
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Install Nix with the install script when the action fails
+        if: steps.nix-installer.outcome != 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL \
+              https://install.determinate.systems/nix \
+              | sh -s -- install --no-confirm; then
+              exit 0
+            fi
+            echo "nix install attempt ${attempt} failed; retrying" >&2
+            sleep 15
+          done
+          exit 1
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+      # tiqian-protocol and tiqian-shared are workspace members at
+      # engine-haxe/out/{protocol-ts,shared-ts}/gen. boring gen writes source
+      # only; the package.json each member needs is written by boring pack, so
+      # pack runs before the install resolves the members. Both bundles are
+      # TypeScript, so the pack step's package-tsc runs the pinned TypeScript
+      # through the devShell's bun.
+      - name: Write the protocol and shared package manifests
+        run: |
+          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
+          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
+          chmod +x "$BORING_PACKAGE_TSC"
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+      # Workspace install hoists @tiqian/* packages as symlinks; web-component and
       # precompute resolve them without link scripts. The build runs with
-      # --noCheck: the @tiqian/ffi type declarations are gradle products
-      # (ffi/js/npm/runtime) that a fresh checkout does not have, and this
+      # --noCheck: the @tiqian/ffi type declarations are npm build products
+      # (platforms/web/client/engine-runtime/runtime) that a fresh checkout does not have, and this
       # lane verifies corpus bytes, not types. Full type checking requires
       # the ffi runtime build and stays with the local package suites (npm
       # test in both packages) and the release lanes.
       - name: Install workspace dependencies
         working-directory: .
-        # npm install, not npm ci: the platform binary optional deps of the
-        # precompute member are not on the registry, so no lockfile can carry
-        # resolved entries for them and npm ci (npm >= 11) rejects the gap.
-        run: npm install --no-audit --no-fund
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and drop its manifest;
+        # this lane builds no ffi runtime.
+        run: nix develop -c bun install --ignore-scripts
       - name: Build the TypeScript packages
         working-directory: platforms/web/client/web-component
         run: npx tsc -b --noCheck
@@ -141,11 +233,11 @@ jobs:
         run: node --test platforms/web/client/web-component/tests/prepared-dom-corpus.test.js
 
   # The former engine-linked lane (C ABI static link into the Rust tests via
-  # TIQIAN_NATIVE_LIB_DIR) is gone: ffi/native was removed and the Rust crates
+  # TIQIAN_NATIVE_LIB_DIR) is gone: the native FFI module was removed and the Rust crates
   # consume the boring-generated types directly. What remains of this job is
   # the full-type-checked npm suite over the web precompute server: build the
   # @tiqian/ffi runtime (its .d.mts declarations feed the core type check),
-  # then type-check core and prose, then build the Neon addon from cargo and
+  # then type-check core and web-component, then build the Neon addon from cargo and
   # run the precompute npm suite.
   rust-engine-linked:
     name: Web precompute npm suite (full type checks)
@@ -174,19 +266,70 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
+      # The flake devShell is the only source of the boring driver, and the
+      # manifest and engine trees the install consumes need it. The npx tsc -b
+      # and npm test steps stay on the setup-node Node 24; wrapping them in
+      # `nix develop` would shadow that toolchain with the devShell's Node 22.
+      - name: Install Nix
+        id: nix-installer
+        continue-on-error: true
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Install Nix with the install script when the action fails
+        if: steps.nix-installer.outcome != 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL \
+              https://install.determinate.systems/nix \
+              | sh -s -- install --no-confirm; then
+              exit 0
+            fi
+            echo "nix install attempt ${attempt} failed; retrying" >&2
+            sleep 15
+          done
+          exit 1
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+      # engine-gen/ is a build product. Generating it before the install keeps
+      # build:runtime from regenerating the protocol-ts tree, which would drop
+      # the package manifest written below; the core type check after
+      # build:runtime resolves tiqian-protocol through that manifest.
+      - name: Generate the TypeScript engine tree with the flake toolchain
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs ts'
+      # tiqian-protocol and tiqian-shared are workspace members at
+      # engine-haxe/out/{protocol-ts,shared-ts}/gen. boring gen writes source
+      # only; the package.json each member needs is written by boring pack, so
+      # pack runs before the install resolves the members. Both bundles are
+      # TypeScript, so the pack step's package-tsc runs the pinned TypeScript
+      # through the devShell's bun.
+      - name: Write the protocol and shared package manifests
+        run: |
+          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
+          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
+          chmod +x "$BORING_PACKAGE_TSC"
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
       - name: Install workspace dependencies
         working-directory: .
-        # npm install, not npm ci: the platform binary optional deps of the
-        # precompute member are not on the registry, so no lockfile can carry
-        # resolved entries for them and npm ci (npm >= 11) rejects the gap.
-        run: npm install --no-audit --no-fund
-      - name: Build the @tiqian/ffi runtime
-        working-directory: ffi/js/npm
-        run: npm run build:runtime
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and drop its manifest;
+        # build:runtime below builds the runtime this job needs.
+        run: nix develop -c bun install --ignore-scripts
+      - name: Generate the precompute engine tree with the flake toolchain
+        # The precompute crates read tiqian-engine-gen from the gitignored
+        # engine-gen/ tree, and the boring driver reads tools/unicode-data/
+        # at compile time, so stage it from the pinned checkout first.
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs'
+      - name: Build the @tiqian/ffi runtime with the flake toolchain
+        working-directory: platforms/web/client/engine-runtime
+        run: nix develop -c npm run build:runtime
       - name: Build core with full type checks
         working-directory: platforms/web/client/core
         run: npx tsc -b
-      - name: Emit the prose package
+      - name: Emit the web-component package
         working-directory: platforms/web/client/web-component
         run: npx tsc -b --noCheck
       - name: Run the npm suite over the built addon

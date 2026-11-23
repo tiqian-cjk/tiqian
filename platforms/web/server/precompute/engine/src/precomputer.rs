@@ -421,11 +421,18 @@ fn capture(
     // is total; Equal covers a NaN that cannot occur.
     boundaries.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
 
+    // Match browser lowering: prose link labels use word shaping rather than
+    // the character fallback intended for URLs and inline code.
+    let source_units: Vec<u16> = text.encode_utf16().collect();
     let line_break_spans: Vec<LineBreakSpanInput> = semantics
         .iter()
         .filter(|span| {
             let tag = span.tag_name.to_lowercase();
-            tag == "a" || tag == "code"
+            tag == "code"
+                || (tag == "a"
+                    && !source_units[span.start as usize..span.end as usize]
+                        .iter()
+                        .any(|unit| matches!(unit, 9 | 10 | 12 | 13 | 32)))
         })
         .map(|span| {
             // Offsets were validated against the text length; the error arm
@@ -458,22 +465,15 @@ fn capture(
         line_break_spans,
         inline_boxes: inline_boxes.to_vec(),
     };
-    let plan = engine_call(session, &mut evidence_window, &request)?;
+    let numeric_spans = crate::numeric::spans(input.text_spans, text_spans)?;
+    let plan = crate::engine_bridge::precompute_paragraph_with_numeric_spans(
+        session, &mut evidence_window, &request, &numeric_spans,
+    ).map_err(NamedError)?;
     let evidence = evidence_window.snapshot();
     if evidence.faces.is_empty() {
         return Err(named("MissingShapingFontEvidence"));
     }
     Ok((plan, evidence))
-}
-
-/// `runtime.precomputeParagraph`: the generated engine runs with the session
-/// and the paragraph capture window as its shaping and metrics components.
-fn engine_call(
-    session: &FontSession,
-    evidence: &mut crate::session::CaptureEvidence,
-    request: &ParagraphRequest,
-) -> Result<crate::plan::Plan, NamedError> {
-    crate::engine_bridge::precompute_paragraph(session, evidence, request).map_err(NamedError)
 }
 
 /// The catch of the js try blocks: a listed capability issue lowers to an

@@ -3,12 +3,12 @@ package org.tiqian.shaping.android
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.tiqian.core.Ic
 import org.tiqian.core.LayoutConstraints
 import org.tiqian.core.LayoutInput
 import org.tiqian.core.ParagraphStyle
 import org.tiqian.core.TextStyle
 import org.tiqian.core.TiqianTextContent
-import org.tiqian.core.ic
 import org.tiqian.layout.ExplainableStubParagraphLayoutEngine
 import org.tiqian.layout.LookaheadLineBreaker
 import kotlin.test.assertEquals
@@ -37,7 +37,7 @@ class AndroidMissingGlyphTofuTest {
             LayoutInput(
                 content = TiqianTextContent("中􏿽文"),
                 textStyle = TextStyle(fontSize = fontSize, locale = "zh-Hans"),
-                paragraphStyle = ParagraphStyle(firstLineIndent = 0.ic),
+                paragraphStyle = ParagraphStyle(firstLineIndent = Ic.Zero),
                 constraints = LayoutConstraints(maxWidth = 2000f),
             ),
         )

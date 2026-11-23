@@ -13,7 +13,7 @@ import org.tiqian.font.FontMetrics.FontMetricsResolver;
 import org.tiqian.font.RawFontMetrics;
 import org.tiqian.shaping.TextShaper.ShapingInput;
 import org.tiqian.shaping.TextShaper.ShapingResult;
-import org.tiqian.shaping.TextShaper.ITextShaper;
+import org.tiqian.shaping.TextShaper;
 import std.SortedMap;
 
 @:dataClass
@@ -301,7 +301,7 @@ class RecordedFontMetrics {
     }
 }
 
-class RecordedEvidenceTextShaper implements ITextShaper {
+class RecordedEvidenceTextShaper implements TextShaper {
     private final evidence:ShapingEvidence;
 
     public function new(evidence:ShapingEvidence) {
