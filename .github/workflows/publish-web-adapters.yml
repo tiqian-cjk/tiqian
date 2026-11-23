@@ -76,7 +76,7 @@ jobs:
         # artifact and a re-run publishes that kept file instead of its rebuild,
         # so npm and the registry receive the same bytes.
         # The publish jobs download this artifact.
-        uses: ./.github/actions/keep-npm-tarballs
+        uses: ./.github/actions/keep-release-files
         with:
           name: npm-tarball-web-adapters
           root: ${{ runner.temp }}/web-adapters

@@ -120,7 +120,7 @@ registry 元数据由同一次 pack 写出（`release.yml:99` 的 `--registry-ou
 
 ### 6.5 过渡态
 
-Maven 的目标形态等 `t-mwgpst5a-8rxn` 完成后进入。在此之前，Maven 按 6.2 表运行：Gradle 发布 7 个模块到 Central，`boring pack` 只把单 jar 写进 registry。这一状态在本文与后续脚本中以过渡态标注，`t-mwgpst5a-8rxn` 完成后删除标注。 matrix 的 maven 实例当前不发布到 Central：它只核对 pack 制品并打印交接说明（`release.yml:286-294`），Central 仍由 `release.yml` 的 maven job（`publish.yml`，Gradle 的 7 个模块）发布。按 bundle 重复运行该发布会重复上传同一批坐标。
+Maven 的目标形态等 `t-mwgpst5a-8rxn` 完成后进入。在此之前，Maven 按 6.2 表运行：Gradle 发布 7 个模块到 Central，`boring pack` 只把单 jar 写进 registry。这一状态在本文与后续脚本中以过渡态标注，`t-mwgpst5a-8rxn` 完成后删除标注。 registry 一侧已不再是单 jar：pack 写出 `tiqian-engine` 的 9 个坐标，Gradle 的 7 个模块由 `publish.yml` 的 Maven Local 预检收集、registry 作业写入（`docs/release-pipeline.md` 的「Gradle 的 Maven 模块进入 registry」）。 matrix 的 maven 实例当前不发布到 Central：它只核对 pack 制品并打印交接说明（`release.yml:286-294`），Central 仍由 `release.yml` 的 maven job（`publish.yml`，Gradle 的 7 个模块）发布。按 bundle 重复运行该发布会重复上传同一批坐标。
 
 ## 7. 四点结论
 

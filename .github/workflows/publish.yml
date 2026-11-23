@@ -190,6 +190,18 @@ jobs:
               --no-daemon
           '
 
+      # The registry serves the module files this preflight wrote. The Central
+      # upload below runs the same publications in the same workspace, where
+      # Gradle finds the jar, AAR, POM and module tasks up to date, so it is
+      # expected to send these files plus their signatures (not compared byte
+      # for byte yet). Collecting before the upload stops a release that lacks
+      # a module before anything reaches Central.
+      - name: Collect the Gradle modules for the registry
+        run: |
+          python3 tools/write-maven-registry-tree.py collect \
+            --maven-local "$RUNNER_TEMP/tiqian-maven-preflight" --version "$TIQIAN_VERSION" \
+            --out "$RUNNER_TEMP/tiqian-maven-release" --expect-manifest release-manifest.json
+
       # The Central upload publishes the same Android modules, so this step
       # needs the same SDK and the same unset.
       - name: Upload Tiqian modules
@@ -197,6 +209,18 @@ jobs:
         run: |
           unset ANDROID_SDK_ROOT
           nix develop -c bash -c './gradlew publishTiqianToCentral --no-daemon'
+
+      - name: Fix the Gradle modules for this run
+        # Runs after the Central upload, so the attempt that keeps the artifact
+        # has sent the same build to Central, and the registry describes that
+        # build. A later re-run restores the artifact instead of its rebuild;
+        # its own Central upload sends the rebuild, which the Portal shows as
+        # another staging deployment.
+        uses: ./.github/actions/keep-release-files
+        with:
+          name: maven-gradle-publication
+          root: ${{ runner.temp }}/tiqian-maven-release
+          path: ${{ runner.temp }}/tiqian-maven-release/*/*
 
       - name: Create Central Portal deployment
         env:
