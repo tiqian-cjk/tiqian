@@ -231,7 +231,7 @@ Web 的 npm 包不经过 `boring pack`：`@tiqian/ffi`、`@tiqian/core`、`@tiqi
 记录的 integrity 在两个来源之间通用。
 
 1. 固定本次运行的 tarball：每个发布作业校验完 tarball 后、发布到 npm 之前，运行
-   `.github/actions/keep-npm-tarballs`。第一次尝试把 tarball 上传为构建产物（例如
+   `.github/actions/keep-release-files`。第一次尝试把 tarball 上传为构建产物（例如
    `npm-tarball-core`）；重跑的尝试删除重新打出的 tarball，下载第一次尝试的构建产物再发布。构建产物
    属于整次运行，后续尝试可以下载之前尝试上传的产物（`v0.1.0-alpha.9` 的发布运行
    44670336838 第 2 次尝试的 registry 作业下载了第 1 次尝试上传的 `release-artifacts`）。
@@ -266,6 +266,36 @@ python3 tools/merge-registry-tree.py --tree npm-registry-tree --owner tiqian-cjk
 ```
 
 然后在 registry 仓库检出里提交并推送，再用 `PAGES_DEPLOY_HOOK` 触发部署（见下一段）。
+
+### Gradle 的 Maven 模块进入 registry
+
+`build.gradle.kts` 的 `publishedModules` 发布 7 个模块：`tiqian-jvm-skia`、四个 Android 模块、
+`tiqian-compose` 与 `tiqian-compose-material3`。Kotlin Multiplatform 模块除根坐标外还发布
+每个 target 的坐标（例如 `tiqian-compose-android`、`tiqian-compose-jvm`）。一个模块拥有与
+模块同名的根坐标，以及根坐标的 Gradle 模块元数据（`.module`）通过 `available-at` 指向的坐标。
+只看名字前缀分不清：`tiqian-compose-material3` 以 `tiqian-compose-` 开头。
+
+1. 收集：`publish.yml` 的 Maven Local 预检之后，`tools/write-maven-registry-tree.py collect`
+   从 `$RUNNER_TEMP/tiqian-maven-preflight` 复制这些模块的文件。`tiqian-engine` 的 9 个坐标
+   由 pack 负责，不在其中；签名、校验和与 `maven-metadata` 文件也不复制。`release-manifest.json`
+   的 `maven` 单元列出的模块缺一个，或出现不属于任何模块的 artifactId，该步骤失败。
+2. 固定本次运行的文件：Central 上传之后，`.github/actions/keep-release-files` 把收集结果
+   保存为 `maven-gradle-publication` 构建产物。之后的重跑换回这份构建产物；重跑的 Central
+   上传仍发送重跑的构建，Portal 里会多出一个 staging deployment。与 registry 一致的是保存了
+   构建产物的那次尝试上传的 deployment。Central 上传与 Maven Local 预检在同一个工作区运行，
+   Gradle 判定打包任务为最新，预期两者是同一份文件（Central 另有签名），尚未逐字节比对。
+3. 写入 registry 树：registry 作业下载该构建产物，`write-maven-registry-tree.py write` 为
+   每个模块写一个包目录，`artifacts` 列出根坐标与各 target 坐标的文件，`groupId` 与许可证
+   取自 POM；文件以原名放进同一个目录并写出 `SHA256SUMS`，`tools/check-registry-tree.py`
+   核对写出的树。
+4. 上传与合并：`tools/upload-release-assets.sh` 把文件上传到标签的 GitHub Release（规则与
+   Web 包相同），`tools/merge-registry-tree.py` 合并这棵树。这些坐标与 pack 写的
+   `tiqian-engine` 同属 `org.tiqian`、来自同一个仓库，registry 的重定向仍是这个 groupId 的
+   一条规则。
+
+`tools/staging-pipeline.sh` 的 maven-local-publish 阶段在每次推送时用 staging 版本运行第 1、3 步的
+同一组命令（`collect`、`write` 与 `check-registry-tree.py`），模块清单与 Gradle 输出不一致时
+在合入时失败，不等到发版。
 
 提交之后执行 Deploy the registry site 一步，用 `PAGES_DEPLOY_HOOK` 触发 Cloudflare
 Pages 构建。registry 工具在 boring 仓库构建并随发布资产上传

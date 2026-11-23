@@ -387,10 +387,29 @@ EOF
 # The Gradle set runs before the driver test lane: a break in a module that only
 # assemble compiles has to surface now, and the generated suite is red on the
 # pinned driver until the next boring re-pin (the lane still runs on every pass).
+# The registry describes the modules publishTiqianToMavenLocal writes with the
+# commands publish.yml ("Collect the Gradle modules for the registry") and
+# release-registry.yml ("Describe the Gradle modules in the registry tree")
+# run. Both run only on a release tag, so this stage runs them on every push: a
+# module build.gradle.kts publishes that the maven unit of release-manifest.json
+# does not list, or a layout the collector cannot read, fails here instead of on
+# the next release.
+maven_registry_check() {
+  local out="$ROOT/maven-registry"
+  rm -rf "${out:?}"
+  python3 tools/write-maven-registry-tree.py collect --maven-local "$MAVEN_REPO" \
+    --version "$STAGING_VERSION" --out "$out/publication" --expect-manifest release-manifest.json || return 1
+  python3 tools/write-maven-registry-tree.py write --publication "$out/publication" --assets "$out/assets" \
+    --tree "$out/tree" --owner "$OWNER" --repository tiqian-cjk/tiqian --version "$STAGING_VERSION" \
+    --expect-manifest release-manifest.json || return 1
+  python3 tools/check-registry-tree.py --tree "$out/tree" --artifacts "$out/assets"
+}
+
 step_maven_publish() {
   in_devshell "bash tools/setup-haxe-env.sh && boring gen kotlin-f32 --project boring.json" || return 1
   TIQIAN_VERSION="$STAGING_VERSION" ./gradlew "${RELEASE_GRADLE_TASKS[@]}" \
     -Dmaven.repo.local="$MAVEN_REPO" --no-daemon || return 1
+  maven_registry_check || return 1
   # Same command as publish.yml's "Run the generated Kotlin test suite" step.
   in_devshell "boring test kotlin-f32 --project boring.json"
 }
