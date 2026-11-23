@@ -6,10 +6,12 @@ The platform modules build.gradle.kts publishes (the maven unit of
 release-manifest.json: tiqian-jvm-skia, the four Android modules,
 tiqian-compose and tiqian-compose-material3) come from Gradle instead. A
 Kotlin Multiplatform module publishes a root coordinate and one coordinate per
-target (tiqian-compose, tiqian-compose-android, tiqian-compose-jvm), so a
-module owns every artifactId that equals its name or extends it with
-"-<target>"; the longest matching module name wins, which keeps
-tiqian-compose-material3-jvm out of tiqian-compose.
+target (tiqian-compose, tiqian-compose-android, tiqian-compose-jvm). A module
+owns its root coordinate, named after the module, and the coordinates the
+variants of that root's Gradle module metadata (.module) point at through
+available-at. Names alone cannot decide this: tiqian-compose-material3 extends
+the name tiqian-compose, and would pass as a tiqian-compose target if the
+manifest dropped the material3 module.
 
 collect runs in the Maven release job right after the Maven Local preflight.
 It copies the module files from the Maven Local repository into
@@ -80,28 +82,48 @@ def expected_modules(manifest: Path) -> list:
     return sorted(set(names))
 
 
-def module_of(artifact_id: str, modules: list):
-    """The module that owns artifact_id: the longest module name it equals or extends with -<target>."""
-    owners = [name for name in modules if artifact_id == name or artifact_id.startswith(name + "-")]
-    return max(owners, key=len) if owners else None
+def target_coordinates(module_file: Path) -> list:
+    """The coordinates the variants of a root .module file point at through available-at."""
+    if not module_file.is_file():
+        return []
+    document = json.loads(module_file.read_text(encoding="utf-8"))
+    targets = set()
+    for variant in document.get("variants", []):
+        location = variant.get("available-at")
+        if location and location.get("group") == ".".join(GROUP_PATH):
+            targets.add(location["module"])
+    return sorted(targets)
 
 
 def published_file(name: str) -> bool:
     return not name.endswith(SKIPPED_SUFFIXES) and not name.startswith("maven-metadata")
 
 
-def assign(artifact_ids: list, modules: list) -> dict:
-    """Map each module to its artifactIds, requiring every module and refusing an unknown artifactId."""
-    owned = {name: [] for name in modules}
-    for artifact_id in sorted(artifact_ids):
-        module = module_of(artifact_id, modules)
-        if module is None:
-            raise PublicationError("%s belongs to no module of the Gradle release unit" % artifact_id)
-        owned[module].append(artifact_id)
-    missing = [name for name in modules if name not in owned[name]]
+def assign(artifact_ids: list, modules: list, module_file) -> dict:
+    """Map each module to its root coordinate and the targets its root .module lists.
+
+    module_file(name) is the path of the root coordinate's .module file. Every
+    module needs its root coordinate, every target a root lists must be in the
+    publication, and every artifactId must belong to exactly one module.
+    """
+    present = set(artifact_ids)
+    missing = [name for name in modules if name not in present]
     if missing:
         raise PublicationError("the publication has no root coordinate for %s" % ", ".join(missing))
-    return owned
+    owned = {name: [name] for name in modules}
+    owner = {name: name for name in modules}
+    for name in modules:
+        for target in target_coordinates(module_file(name)):
+            if target not in present:
+                raise PublicationError("%s points at %s, which the publication lacks" % (name, target))
+            if target in owner:
+                raise PublicationError("%s is claimed by both %s and %s" % (target, owner[target], name))
+            owner[target] = name
+            owned[name].append(target)
+    stray = sorted(present - set(owner))
+    if stray:
+        raise PublicationError("no module of the Gradle release unit owns %s" % ", ".join(stray))
+    return {name: sorted(ids) for name, ids in owned.items()}
 
 
 def collect(maven_local: Path, version: str, out: Path, modules: list) -> int:
@@ -110,7 +132,7 @@ def collect(maven_local: Path, version: str, out: Path, modules: list) -> int:
         raise PublicationError("%s holds no %s group" % (maven_local, ".".join(GROUP_PATH)))
     artifact_ids = sorted(path.name for path in group_dir.iterdir()
                           if path.is_dir() and not path.name.startswith(PACK_OWNED_PREFIX))
-    assign(artifact_ids, modules)
+    assign(artifact_ids, modules, lambda name: group_dir / name / version / ("%s-%s.module" % (name, version)))
     count = 0
     for artifact_id in artifact_ids:
         version_dir = group_dir / artifact_id / version
@@ -143,7 +165,7 @@ def pom_facts(pom: Path) -> tuple:
 
 def write(publication: Path, assets: Path, tree: Path, owner: str, repository: str, version: str, modules: list) -> int:
     artifact_ids = sorted(path.name for path in publication.iterdir() if path.is_dir())
-    owned = assign(artifact_ids, modules)
+    owned = assign(artifact_ids, modules, lambda name: publication / name / ("%s-%s.module" % (name, version)))
     assets.mkdir(parents=True, exist_ok=True)
     sums = []
     described = []
@@ -211,10 +233,11 @@ def selftest() -> int:
             "tiqian-android-view": [".aar", ".pom", "-sources.jar", ".pom.asc"],
             "tiqian-compose": [".jar", ".pom", ".module", "-kotlin-tooling-metadata.json"],
             "tiqian-compose-jvm": [".jar", ".pom", ".module.sha1"],
-            "tiqian-compose-material3": [".jar", ".pom"],
+            "tiqian-compose-material3": [".jar", ".pom", ".module"],
             "tiqian-compose-material3-android": [".aar", ".pom"],
             "tiqian-engine-jvm": [".jar", ".pom"],
         }
+        targets = {"tiqian-compose": ["tiqian-compose-jvm"], "tiqian-compose-material3": ["tiqian-compose-material3-android"]}
         for artifact_id, suffixes in layout.items():
             version_dir = group / artifact_id / version
             version_dir.mkdir(parents=True)
@@ -223,33 +246,42 @@ def selftest() -> int:
                 name = "%s-%s%s" % (artifact_id, version, suffix)
                 if suffix == ".pom":
                     fake_pom(version_dir / name, artifact_id, version)
+                elif suffix == ".module":
+                    variants = [{"name": "%sElements" % target, "available-at": {"group": "org.tiqian", "module": target, "version": version}}
+                                for target in targets.get(artifact_id, [])]
+                    (version_dir / name).write_text(json.dumps({"formatVersion": "1.1", "variants": variants}))
                 else:
                     (version_dir / name).write_text(name)
         out = root / "publication"
-        assert collect(repo, version, out, modules) == 13
+        assert collect(repo, version, out, modules) == 14
         assert not (out / "tiqian-engine-jvm").exists()
         assert not list(out.rglob("*.asc")) and not list(out.rglob("*.sha1"))
         assets = root / "assets"
         tree = root / "tree"
-        assert write(out, assets, tree, "tiqian-cjk", "tiqian-cjk/tiqian", version, modules) == 13
+        assert write(out, assets, tree, "tiqian-cjk", "tiqian-cjk/tiqian", version, modules) == 14
         compose = json.loads((tree / "tiqian-cjk" / "tiqian-compose" / version / "maven" / "metadata.json").read_text())
         assert compose["groupId"] == "org.tiqian" and compose["license"] == "MPL-2.0"
         assert sorted({item["artifactId"] for item in compose["artifacts"]}) == ["tiqian-compose", "tiqian-compose-jvm"]
         material = json.loads((tree / "tiqian-cjk" / "tiqian-compose-material3" / version / "maven" / "metadata.json").read_text())
         assert sorted({item["artifactId"] for item in material["artifacts"]}) == ["tiqian-compose-material3", "tiqian-compose-material3-android"]
         assert compose["artifacts"][0]["url"].startswith("https://github.com/tiqian-cjk/tiqian/releases/download/v1.0.0/")
-        assert len((assets / "SHA256SUMS").read_text().splitlines()) == 13
+        assert len((assets / "SHA256SUMS").read_text().splitlines()) == 14
         try:
             collect(repo, version, root / "partial", modules + ["tiqian-android-shaping"])
             raise AssertionError("a missing module was accepted")
         except PublicationError as error:
             assert "tiqian-android-shaping" in str(error)
+        try:
+            collect(repo, version, root / "dropped", ["tiqian-android-view", "tiqian-compose"])
+            raise AssertionError("a module missing from the manifest passed as a target of another")
+        except PublicationError as error:
+            assert "tiqian-compose-material3" in str(error)
         (group / "tiqian-stray" / version).mkdir(parents=True)
         try:
             collect(repo, version, root / "stray", modules)
             raise AssertionError("an unknown artifactId was accepted")
         except PublicationError as error:
-            assert "tiqian-stray" in str(error)
+            assert "owns tiqian-stray" in str(error)
     print("selftest: OK")
     return EXIT_OK
 

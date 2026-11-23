@@ -271,8 +271,9 @@ python3 tools/merge-registry-tree.py --tree npm-registry-tree --owner tiqian-cjk
 
 `build.gradle.kts` 的 `publishedModules` 发布 7 个模块：`tiqian-jvm-skia`、四个 Android 模块、
 `tiqian-compose` 与 `tiqian-compose-material3`。Kotlin Multiplatform 模块除根坐标外还发布
-每个 target 的坐标（例如 `tiqian-compose-android`、`tiqian-compose-jvm`），一个模块拥有
-与模块名相同或在其后接 `-<target>` 的全部 artifactId，取最长匹配的模块名。
+每个 target 的坐标（例如 `tiqian-compose-android`、`tiqian-compose-jvm`）。一个模块拥有与
+模块同名的根坐标，以及根坐标的 Gradle 模块元数据（`.module`）通过 `available-at` 指向的坐标。
+只看名字前缀分不清：`tiqian-compose-material3` 以 `tiqian-compose-` 开头。
 
 1. 收集：`publish.yml` 的 Maven Local 预检之后，`tools/write-maven-registry-tree.py collect`
    从 `$RUNNER_TEMP/tiqian-maven-preflight` 复制这些模块的文件。`tiqian-engine` 的 9 个坐标
