@@ -71,12 +71,16 @@ jobs:
         run: |
           bash tools/pack-web-adapters.sh "$RUNNER_TEMP/web-adapters" "${RELEASE_VERSION}"
 
-      - name: Upload the verified npm tarballs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - name: Fix the adapter tarballs for this run
+        # The first attempt of the release run keeps the verified tarball as an
+        # artifact and a re-run publishes that kept file instead of its rebuild,
+        # so npm and the registry receive the same bytes.
+        # The publish jobs download this artifact.
+        uses: ./.github/actions/keep-npm-tarballs
         with:
-          name: web-adapter-packages
+          name: npm-tarball-web-adapters
+          root: ${{ runner.temp }}/web-adapters
           path: ${{ runner.temp }}/web-adapters/*.tgz
-          if-no-files-found: error
 
   publish:
     name: Publish @tiqian/${{ matrix.adapter }}
@@ -106,12 +110,25 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: web-adapter-packages
+          name: npm-tarball-web-adapters
           path: ${{ runner.temp }}/web-adapters
 
       - name: Publish the verified tarball to alpha
+        env:
+          NPM_PUBLISH_DIVERGED_LOG: ${{ runner.temp }}/npm-diverged.txt
         run: |
           npm install --global npm@11.12.1 semver@7.8.6
           export NODE_PATH="$(npm root --global)"
           node tools/check-npm-release-order.cjs "@tiqian/${ADAPTER}" "$RELEASE_VERSION"
           bash tools/npm-publish.sh "$RUNNER_TEMP/web-adapters/tiqian-${ADAPTER}-${RELEASE_VERSION}.tgz" --tag alpha
+
+      - name: Report a version npm already holds with other bytes
+        # npm-publish.sh keeps a published copy that differs from this run's
+        # tarball, which happens when an earlier run of the same version
+        # published it. The registry lane refuses to describe such a tarball.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-diverged-web-adapters-${{ matrix.adapter }}
+          path: ${{ runner.temp }}/npm-diverged.txt
+          if-no-files-found: ignore
+          overwrite: true

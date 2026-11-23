@@ -60,7 +60,105 @@ jobs:
         # so a tree entry without an uploaded asset cannot pass.
         run: python3 tools/check-registry-tree.py --tree "$RUNNER_TEMP/registry-tree" --artifacts release-artifacts
 
+      - name: Download the npm divergence reports
+        # A Web lane uploads npm-diverged-* when npm already held a version with
+        # other bytes, which happens when an earlier run of the same version
+        # published it. The download goes through the same artifact service as
+        # the tarballs, so a report from this attempt is never missed.
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: npm-diverged-*
+          path: ${{ runner.temp }}/npm-diverged
+
+      - name: Hold back the Web packages npm holds from an earlier run
+        # This run's tarball would carry a different integrity than npm
+        # records, so a lockfile written against one source would fail against
+        # the other. The Web packages depend on each other, so none of them is
+        # written for this version; the pack tree is still committed and
+        # deployed, and the job fails at its end. The lanes publish to npm
+        # regardless.
+        id: diverged
+        shell: bash
+        run: |
+          set -euo pipefail
+          reports="$(find "$RUNNER_TEMP/npm-diverged" -type f -name 'npm-diverged.txt' 2>/dev/null || true)"
+          if [[ -n "${reports}" ]]; then
+            while IFS= read -r report; do
+              while IFS= read -r line; do
+                echo "::error::${line}"
+              done < "${report}"
+            done <<< "${reports}"
+            echo "found=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "found=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Download the published Web tarballs
+        if: steps.diverged.outputs.found != 'true'
+        # Each Web npm lane keeps the tarball it handed to npm as an
+        # npm-tarball-* artifact, so the registry serves those bytes and npm
+        # and the registry agree on every integrity a lockfile records.
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: npm-tarball-*
+          merge-multiple: true
+          path: npm-tarballs
+
+      - name: Describe the Web tarballs in the registry tree
+        if: steps.diverged.outputs.found != 'true'
+        # The precompute artifact keeps its package directories; the release
+        # assets and the tree check use bare file names, so the tarballs move
+        # to one level first, and a name two lanes share stops the step. The
+        # npm units of release-manifest.json name every package the tarballs
+        # must pack, so a lane that kept no tarball stops the step as well.
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' tarball; do
+            if [[ -e "npm-tarballs/$(basename "$tarball")" ]]; then
+              echo "::error::two Web tarballs are named $(basename "$tarball")"
+              exit 1
+            fi
+            mv "$tarball" npm-tarballs/
+          done < <(find npm-tarballs -mindepth 2 -type f -name '*.tgz' -print0)
+          python3 tools/write-npm-registry-tree.py --tarballs npm-tarballs --tree "$RUNNER_TEMP/npm-registry-tree" \
+            --owner "${{ github.repository_owner }}" --repository "${{ github.repository }}" --version "${GITHUB_REF_NAME#v}" \
+            --expect-manifest release-manifest.json
+          python3 tools/check-registry-tree.py --tree "$RUNNER_TEMP/npm-registry-tree" --artifacts npm-tarballs
+
+      - name: Upload the Web tarballs to the release
+        if: steps.diverged.outputs.found != 'true'
+        # The metadata names these files as release assets. A re-run finds the
+        # assets already uploaded: the same bytes are left in place, and
+        # different bytes stop the lane, because the published metadata would
+        # no longer describe the asset.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The assets endpoint pages; a release carries more assets than one
+          # page as the Maven modules grow.
+          release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" --jq '.id')"
+          present="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?per_page=100" --jq '.[].name')"
+          for tarball in npm-tarballs/*.tgz; do
+            name="$(basename "$tarball")"
+            if grep -qxF "$name" <<<"$present"; then
+              existing="$RUNNER_TEMP/existing-$name"
+              gh release download "$GITHUB_REF_NAME" --pattern "$name" --output "$existing" --clobber
+              if ! cmp -s "$tarball" "$existing"; then
+                echo "::error::$name is already a release asset with different bytes"
+                exit 1
+              fi
+              echo "$name is already uploaded"
+            else
+              gh release upload "$GITHUB_REF_NAME" "$tarball"
+            fi
+          done
+
       - name: Commit metadata to registry repo
+        env:
+          WEB_HELD_BACK: ${{ steps.diverged.outputs.found }}
         run: |
           git clone https://x-access-token:${{ secrets.REGISTRY_REPO_TOKEN }}@github.com/${{ env.REGISTRY_REPO }}.git /tmp/registry
           VERSION=${GITHUB_REF_NAME#v}
@@ -72,6 +170,9 @@ jobs:
           # been notified, and it outranks 0.1.0-alpha.8, so the registry site
           # would otherwise keep pointing latest at it.
           python3 tools/merge-registry-tree.py --tree "$RUNNER_TEMP/registry-tree" --owner "$OWNER" --registry /tmp/registry --retire 0.1.0-alpha07
+          if [[ "$WEB_HELD_BACK" != "true" ]]; then
+            python3 tools/merge-registry-tree.py --tree "$RUNNER_TEMP/npm-registry-tree" --owner "$OWNER" --registry /tmp/registry
+          fi
           cd /tmp/registry
           git config user.name "Release Bot"
           git config user.email "release@tiqian.dev"
@@ -96,3 +197,9 @@ jobs:
             exit 0
           fi
           curl -fsS -X POST "$PAGES_DEPLOY_HOOK" | head -c 200
+
+      - name: Fail for the held back Web packages
+        if: steps.diverged.outputs.found == 'true'
+        run: |
+          echo "::error::npm holds Web packages of this version from an earlier run, so the registry did not describe this version's Web packages; add them from the npm copy as the section 'Web npm 包进入 registry' of docs/release-pipeline.md describes"
+          exit 1

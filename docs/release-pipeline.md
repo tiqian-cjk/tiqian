@@ -92,7 +92,7 @@ npm 清单，`release-manifest.json` 中各发布单元与 `notInRelease` 列出
 
 首次发布新包时，npm 要求包名先存在，维护者才能配置可信发布者。如果同版本的依赖已在
 npm 公共仓库，维护者可在推送发布标签前用 `tools/pack-web-adapters.sh` 打包验证，并用具备
-`@tiqian` 发布权限的身份发布压缩包。维护者也可以使用首次发布运行的 `web-adapter-packages`
+`@tiqian` 发布权限的身份发布压缩包。维护者也可以使用首次发布运行的 `npm-tarball-web-adapters`
 构建产物。两种方式都将包发布到 `alpha` 标签，并将 `latest` 指向同一版本。
 重跑失败的发布作业时，作业会识别已发布的版本和标签。下一个新版本发布前，维护者为该包
 配置 `tiqian-cjk/tiqian` 的 `release.yml`，允许发布和更新标签。npm 要求该配置在创建后
@@ -222,6 +222,50 @@ bundle 的测试语料与 baseline 不同。它们的生成测试仍由 `boring 
 Kotlin 分组和 Maven 发布读取 `ci-native-precompute.yml` 在主分支保存的 Gradle 依赖。
 `build-neon-precompute.yml` 缓存生成的两棵原生源码树，缓存键包含运行环境、flake 锁文件、
 `boring.json` 和生成输入的摘要。发版时命中这份缓存的原生源码作业可跳过 Nix 安装和源码生成。
+
+### Web npm 包进入 registry
+
+Web 的 npm 包不经过 `boring pack`：`@tiqian/ffi`、`@tiqian/core`、`@tiqian/web-component`、
+`@tiqian/precompute` 及其四个平台包、`@tiqian/astro`、`@tiqian/sveltekit`、`@tiqian/react`
+由各自的发布作业打包并发布到 npm。registry 提供与 npm 相同字节的 tarball，lockfile
+记录的 integrity 在两个来源之间通用。
+
+1. 固定本次运行的 tarball：每个发布作业校验完 tarball 后、发布到 npm 之前，运行
+   `.github/actions/keep-npm-tarballs`。第一次尝试把 tarball 上传为构建产物（例如
+   `npm-tarball-core`）；重跑的尝试删除重新打出的 tarball，下载第一次尝试的构建产物再发布。构建产物
+   属于整次运行，后续尝试可以下载之前尝试上传的产物（`v0.1.0-alpha.9` 的发布运行
+   44670336838 第 2 次尝试的 registry 作业下载了第 1 次尝试上传的 `release-artifacts`）。
+2. 拒绝与 npm 字节不同的版本：npm 已有同一版本而字节不同时（同一版本的另一次发布运行
+   先发布过），`tools/npm-publish.sh` 保留 npm 上的那份，并把差异写入
+   `NPM_PUBLISH_DIVERGED_LOG`，发布作业将其上传为 `npm-diverged-*` 构建产物。npm 发布照常
+   继续。registry 作业发现这类构建产物时报出每个版本，本版本的 Web 包一个都不写入：
+   它们互相依赖，只写一部分会让依赖解析失败。pack 的树照常提交并部署，作业在最后失败。
+3. 写入 registry 树：registry 作业下载 `npm-tarball-*`，把 precompute 构建产物里按包分目录
+   的 tarball 移到同一层，`tools/write-npm-registry-tree.py` 从每个 tarball 的
+   `package/package.json` 读取名字、版本、许可证和 `manifest` 字段并计算 `sha512`，
+   `tools/check-registry-tree.py` 核对写出的树。`--expect-manifest release-manifest.json`
+   要求 tarball 的包名集合等于 `npm-*` 发布单元列出的包，缺一个或多一个都不写入。
+4. 上传发布资产：tarball 以原文件名上传到标签的 GitHub Release。资产已存在时比较字节，
+   相同则跳过，不同则停止。registry 作业依赖 `release-assets`，上传时 Release 已经存在。
+5. 合并：`tools/merge-registry-tree.py` 在合并 pack 的树之后合并这棵树。
+
+第 2 步跳过 Web 包时，从 npm 下载该版本的全部 Web 包，按第 3 至 5 步手动补录。npm 上的
+字节就是消费者安装的字节，补录后两个来源的 integrity 一致。包名取自 `release-manifest.json`
+的 `npm-*` 发布单元：
+
+```bash
+version=<版本>
+mkdir -p npm-tarballs
+for package in $(python3 -c 'import json; print(" ".join(p for u in json.load(open("release-manifest.json"))["units"] if (u.get("packageSource") or {}).get("kind") == "npm" for p in u["packages"]))'); do
+  npm pack "${package}@${version}" --pack-destination npm-tarballs
+done
+python3 tools/write-npm-registry-tree.py --tarballs npm-tarballs --tree npm-registry-tree --owner tiqian-cjk --repository tiqian-cjk/tiqian --version "${version}" --expect-manifest release-manifest.json
+python3 tools/check-registry-tree.py --tree npm-registry-tree --artifacts npm-tarballs
+gh release upload "v${version}" npm-tarballs/*.tgz --repo tiqian-cjk/tiqian
+python3 tools/merge-registry-tree.py --tree npm-registry-tree --owner tiqian-cjk --registry <registry 仓库检出>
+```
+
+然后在 registry 仓库检出里提交并推送，再用 `PAGES_DEPLOY_HOOK` 触发部署（见下一段）。
 
 提交之后执行 Deploy the registry site 一步，用 `PAGES_DEPLOY_HOOK` 触发 Cloudflare
 Pages 构建。registry 工具在 boring 仓库构建并随发布资产上传
