@@ -188,6 +188,7 @@ internal class CjkTextLayoutNode(
     private var cachedLayout: CachedLayout? = null
     private var replayIndex: LayoutResultReplayIndex? = null
     private var drawCache: ParagraphDrawCache? = null
+    private var fontSource = currentPlatformFontSource()
     private var drawClipWidth: Float = 0f
     private var drawClipHeight: Float = 0f
     private var drawClipLeft: Float = 0f
@@ -216,6 +217,7 @@ internal class CjkTextLayoutNode(
     }
 
     override fun onAttach() {
+        fontSource = currentPlatformFontSource()
         drawCache = createParagraphDrawCache()
         selectionBridge.selectable = this
         selectionBridge.coordinates?.let(::updateSelectionCoordinates)
@@ -282,7 +284,16 @@ internal class CjkTextLayoutNode(
             this.richTextSpans.layoutLineBreakSpans(this.text)
         val autoSpaceSuppressionChanged = richTextSpans.layoutAutoSpaceSuppressedRanges() !=
             this.richTextSpans.layoutAutoSpaceSuppressedRanges()
-        val layoutChanged = text != this.text || textStyle != this.textStyle ||
+        val currentFontSource = currentPlatformFontSource()
+        val fontSourceChanged = currentFontSource !== fontSource
+        if (fontSourceChanged) {
+            // The retained renderer captures the font source independently of the measurer.
+            fontSource = currentFontSource
+            cachedLayout = null
+            drawCache?.dispose()
+            drawCache = if (isAttached) createParagraphDrawCache() else null
+        }
+        val layoutChanged = fontSourceChanged || text != this.text || textStyle != this.textStyle ||
             paragraphStyle != this.paragraphStyle || decorations != this.decorations ||
             spans != this.spans || rubySpans != this.rubySpans ||
             inlineObjects != this.inlineObjects ||
