@@ -123,7 +123,8 @@
         "--macro", "kotlincompiler.Compiler.use()",
         "-D", "runtime-import=org.tiqian.boring.runtime",
         "-D", "runtime-emit=runtime",
-        "-D", "package-artifact-stem=tiqian-engine-f64"
+        "-D", "package-artifact-stem=tiqian-engine-f64",
+        "-D", "package-group=org.tiqian"
       ],
       "package": { "name": "tiqian-engine", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {
@@ -410,6 +411,7 @@
         "--macro", "kotlincompiler.Compiler.use()",
         "-D", "runtime-import=org.tiqian.boring.runtime",
         "-D", "runtime-emit=runtime",
+        "-D", "package-group=org.tiqian",
         "org.tiqian.protocol.Revision",
         "org.tiqian.protocol.RevisionTest",
         "org.tiqian.protocol.NamedError",
