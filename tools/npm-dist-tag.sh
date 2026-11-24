@@ -29,7 +29,11 @@ if [ -z "$package" ] || [ -z "$version" ]; then
   exit 2
 fi
 
-current="$(npm view "$package" dist-tags --json 2>/dev/null || echo '{}')"
+read_tags() {
+  npm view "$package" dist-tags --json --prefer-online --fetch-retries=0 --fetch-timeout=10000 2>/dev/null || echo '{}'
+}
+
+current="$(read_tags)"
 converged() {
   PACKAGE="$package" VERSION="$version" TAG="$tag" TAGS="$1" node --input-type=module -e '
     const tags = JSON.parse(process.env.TAGS || "{}");
@@ -46,6 +50,9 @@ if converged "$current"; then
 fi
 
 echo "current dist-tags: $current"
+if ! bash "$(dirname "$0")/npm-wait-version.sh" "$package@$version"; then
+  exit 1
+fi
 if ! npm dist-tag add "$package@$version" "$tag"; then
   echo "::error::npm dist-tag add $package@$version $tag failed"
   exit 1
@@ -55,14 +62,15 @@ fi
 # the change only after that. From alpha.9 to alpha.13 this took 75 to 309
 # seconds (median 126), and the five-minute window used before missed
 # @tiqian/engine 0.1.0-alpha.13 by eight seconds. The poll waits ten minutes.
-attempts=60
-for attempt in $(seq 1 "$attempts"); do
-  current="$(npm view "$package" dist-tags --json 2>/dev/null || echo '{}')"
+deadline=$((SECONDS + 600))
+while true; do
+  current="$(read_tags)"
   if converged "$current"; then
     echo "$package dist-tags converged: $current"
     exit 0
   fi
-  [ "$attempt" -lt "$attempts" ] && sleep 10
+  if [ "$SECONDS" -ge "$deadline" ]; then break; fi
+  sleep 10
 done
 echo "::error::$package dist-tags did not converge on $version (last: $current)"
 exit 1

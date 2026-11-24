@@ -106,7 +106,9 @@ registry 元数据里的 `sha512`，否则 `check-registry-tree` 会因摘要不
 
 npm 发布新版本或写入 dist-tag 后，`npm view` 要过一段时间才能读到新版本和新的
 dist-tag。alpha.9 到 alpha.13 的 59 次发布，这段时间在 75 到 309 秒之间，中位数
-126 秒，所以 `tools/npm-dist-tag.sh` 写入后最多等十分钟。
+126 秒。`tools/npm-dist-tag.sh` 在写入前用 `tools/npm-wait-version.sh` 检查精确版本，
+写入后再检查标签。每个阶段每隔十秒查询，最多等待十分钟。Web 适配器在下载原生插件前
+用同一个脚本检查原生插件、预计算主包和生成的 TypeScript 依赖版本。
 
 npm 目标在 `boring.json` 的 `package` 块里有两个名字：`name` 是自建 registry 的
 目录名（例如 `tiqian-engine`），`npmName` 是 registry.npmjs.org 上的包名（例如

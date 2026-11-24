@@ -55,7 +55,12 @@ jobs:
         env:
           RELEASE_VERSION: ${{ needs.release-gate.outputs.version }}
         run: |
-          archive="$(npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP" "@tiqian/precompute-linux-x64-gnu@${RELEASE_VERSION}")"
+          addon="@tiqian/precompute-linux-x64-gnu@${RELEASE_VERSION}"
+          bash tools/npm-wait-version.sh "$addon" \
+            "@tiqian/precompute@${RELEASE_VERSION}" \
+            "@tiqian/protocol@${RELEASE_VERSION}" \
+            "@tiqian/shared@${RELEASE_VERSION}"
+          archive="$(npm pack --prefer-online --ignore-scripts --pack-destination "$RUNNER_TEMP" "$addon")"
           tar -xOf "$RUNNER_TEMP/$archive" package/index.node > platforms/web/server/core/platforms/linux-x64-gnu/index.node
           (
             cd platforms/web/server/core
