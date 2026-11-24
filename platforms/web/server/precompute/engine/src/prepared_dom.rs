@@ -980,32 +980,38 @@ fn is_safe_integer(value: f64) -> bool {
     value.fract() == 0.0 && value.abs() <= MAX_SAFE_INTEGER
 }
 
-fn prepared_spacing(display: &str, natural_width: f64, trailing_gap: f64) -> Spacing {
+fn prepared_spacing(
+    display: &str,
+    natural_width: f64,
+    trailing_gap: f64,
+    boxed_shaping_boundary: bool,
+) -> Spacing {
     if trailing_gap == 0.0 {
         return Spacing {
             kind: SpacingKind::None,
             px: 0.0,
         };
     }
-    // NegativeSingleCellFlowAdvance: browsers clamp the border-box width of a
-    // one-character inline span at zero when negative letter-spacing exceeds
-    // the glyph advance. Preserve the selectable source glyph at its natural
-    // width and carry the overtake in margin-right.
-    if utf16_length(display) == 1 && natural_width + trailing_gap >= 0.0 {
-        return Spacing {
-            kind: SpacingKind::Letter,
-            px: trailing_gap,
-        };
-    }
+    // Firefox can place half of a negative letter-spacing before the glyph.
+    // Carry the compression after the run to preserve the glyph origin.
     if trailing_gap < 0.0 {
         return Spacing {
             kind: SpacingKind::Overlap,
             px: trailing_gap,
         };
     }
-    // MultiCharacterSelectableGapCarrier: the gap follows the whole shaping
-    // cluster. A dedicated selectable carrier owns the full flow advance;
-    // splitting off the final grapheme would break kerning.
+
+    // Firefox can apply only half of a positive letter-spacing at an isolated
+    // shaping boundary. Use the selectable gap for the full trailing advance.
+    if !boxed_shaping_boundary && utf16_length(display) == 1 && natural_width + trailing_gap >= 0.0
+    {
+        return Spacing {
+            kind: SpacingKind::Letter,
+            px: trailing_gap,
+        };
+    }
+    // The selectable gap follows the whole shaping cluster. Splitting off
+    // the final grapheme of a multi-character cluster would break kerning.
     Spacing {
         kind: SpacingKind::TrailingLetter,
         px: trailing_gap,
@@ -1544,7 +1550,12 @@ fn prepared_cell(
         open_type_features: cell.open_type_features.clone(),
         render_font_families,
         trailing_gap,
-        spacing: prepared_spacing(&cell.display, cell.natural_width, trailing_gap),
+        spacing: prepared_spacing(
+            &cell.display,
+            cell.natural_width,
+            trailing_gap,
+            cell.shaping_boundary || !cell.open_type_features.is_empty(),
+        ),
         semantic_path: semantics.path_for(cell.range_start, cell.range_end),
         semantic_signature: String::new(),
         dash_strategy: cell.dash_strategy.clone(),

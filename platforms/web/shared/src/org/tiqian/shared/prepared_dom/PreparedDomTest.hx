@@ -55,7 +55,7 @@ class PreparedDomTest {
         TracedAssertions.assertEqualsString("letter", r.kind, "spacing 字/14/0.5" + " kind");
         TracedAssertions.assertEqualsString("0.5px", Markup.px(r.px), "spacing 字/14/0.5" + " px");
         var r = PreparedDom.preparedSpacing("字", 14, -0.5);
-        TracedAssertions.assertEqualsString("letter", r.kind, "spacing 字/14/-0.5" + " kind");
+        TracedAssertions.assertEqualsString("overlap", r.kind, "spacing 字/14/-0.5" + " kind");
         TracedAssertions.assertEqualsString("-0.5px", Markup.px(r.px), "spacing 字/14/-0.5" + " px");
         var r = PreparedDom.preparedSpacing("字", 14, -20);
         TracedAssertions.assertEqualsString("overlap", r.kind, "spacing 字/14/-20" + " kind");

@@ -50,13 +50,16 @@ class PreparedDom {
      * Byte-critical: the kind string drives data-tq-advance / margin-right
      * lowering in renderRun, and px feeds the px() serializer.
      */
-    public static function preparedSpacing(display:String, naturalWidth:Float, trailingGap:Float, ?dustEpsilon:Float):PreparedSpacingResult {
+    public static function preparedSpacing(display:String, naturalWidth:Float, trailingGap:Float, ?dustEpsilon:Float,
+            boxedShapingBoundary:Bool = false):PreparedSpacingResult {
         final epsilon = dustEpsilon != null ? dustEpsilon : SPACING_DUST_EPSILON;
         if (Math.abs(trailingGap) < epsilon) return { kind: "none", px: 0.0 };
-        if (display.length == 1 && naturalWidth + trailingGap >= 0) {
+
+        // Keep compression after the glyph and use a gap inside a shaping box.
+        if (trailingGap < 0) return { kind: "overlap", px: trailingGap };
+        if (!boxedShapingBoundary && display.length == 1 && naturalWidth + trailingGap >= 0) {
             return { kind: "letter", px: trailingGap };
         }
-        if (trailingGap < 0) return { kind: "overlap", px: trailingGap };
         return { kind: "trailing-letter", px: trailingGap };
     }
 
