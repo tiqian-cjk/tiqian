@@ -144,7 +144,9 @@ CLI 版本按步骤分：打包与发布步骤保持 `npm@11.12.1`，因为 `npm
 两个脚本承担可重跑：
 
 - `tools/npm-publish.sh`：先读 `<name>@<version>` 的 `dist.shasum`。已发布且与本地
-  tarball 的 sha1 相同则跳过上传；不同则报错终止，因为重跑不能送上另一个产物。
+  tarball 的 sha1 相同则跳过上传；不同则保留 npm 上的那份，发出警告后继续。npm 不允许
+  覆盖已发布的版本，用户安装的就是那一份；字节不同的情况由 registry 作业处理，见
+  “Web npm 包进入 registry”一节第 2 步。
 - `tools/npm-dist-tag.sh`：先读 dist-tags。已经指向该版本就不写，重跑一次已发布但后续
   失败的发布因此不会卡在鉴权上。写入失败直接报错；写入后最多等十分钟，直到 `npm view`
   读到新的 dist-tag。
