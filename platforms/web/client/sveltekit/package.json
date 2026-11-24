@@ -1,6 +1,6 @@
 {
   "name": "@tiqian/sveltekit",
-  "version": "0.1.0-alpha.14",
+  "version": "0.1.0-alpha.15",
   "description": "SvelteKit integration for @tiqian/web-component.",
   "license": "MPL-2.0",
   "type": "module",
@@ -33,18 +33,18 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@tiqian/core": "0.1.0-alpha.14"
+    "@tiqian/core": "0.1.0-alpha.15"
   },
   "peerDependencies": {
     "@sveltejs/kit": "^2.0.0 || ^3.0.0",
-    "@tiqian/precompute": "0.1.0-alpha.14",
-    "@tiqian/web-component": "0.1.0-alpha.14",
+    "@tiqian/precompute": "0.1.0-alpha.15",
+    "@tiqian/web-component": "0.1.0-alpha.15",
     "svelte": ">=5"
   },
   "devDependencies": {
     "@sveltejs/kit": "3.2.0",
-    "@tiqian/precompute": "0.1.0-alpha.14",
-    "@tiqian/web-component": "0.1.0-alpha.14",
+    "@tiqian/precompute": "0.1.0-alpha.15",
+    "@tiqian/web-component": "0.1.0-alpha.15",
     "svelte": "5.57.1"
   },
   "scripts": {
