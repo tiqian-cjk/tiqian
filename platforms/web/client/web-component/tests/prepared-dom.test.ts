@@ -636,7 +636,7 @@ test("prepared positive spacing participates in native selection instead of usin
 
   const lowered = renderPreparedParagraphArtifact(plan, "zh-Hans");
 
-  assert.match(lowered.html, /letter-spacing:2px!important/u);
+  assert.match(lowered.html, /inline-size:2px!important/u);
   assert.doesNotMatch(lowered.html, /margin-right:2px!important/u);
   assert.match(lowered.html, /data-tq-advance="20"/u);
   assert.match(lowered.html, /<\/span>文<span/u);
@@ -695,7 +695,7 @@ test("a multi-character cluster preserves shaping and carries selectable trailin
   }];
 
   const lowered = renderPreparedParagraphArtifact(plan, "zh-Hans");
-  assert.match(lowered.html, /letter-spacing:3px!important/u);
+  assert.match(lowered.html, /word-spacing:3px!important/u);
   assert.match(lowered.html, /inline-size:3px!important/u);
   assert.match(lowered.html, /height:0!important/u);
   assert.match(lowered.html, /line-height:0!important/u);

@@ -42,53 +42,53 @@ class PreparedDomTest {
 
     @:test
     public static function preparedSpacingMatchesTs():Void {
-        var r = PreparedDom.preparedSpacing("字", 14, 0);
+        var r = PreparedDom.preparedSpacing(0);
         TracedAssertions.assertEqualsString("none", r.kind, "spacing 字/14/0" + " kind");
         TracedAssertions.assertEqualsString("0px", Markup.px(r.px), "spacing 字/14/0" + " px");
-        var r = PreparedDom.preparedSpacing("字", 14, 0.000099);
+        var r = PreparedDom.preparedSpacing(0.000099);
         TracedAssertions.assertEqualsString("none", r.kind, "spacing 字/14/0.000099" + " kind");
         TracedAssertions.assertEqualsString("0px", Markup.px(r.px), "spacing 字/14/0.000099" + " px");
-        var r = PreparedDom.preparedSpacing("字", 14, 0.0001);
-        TracedAssertions.assertEqualsString("letter", r.kind, "spacing 字/14/0.0001" + " kind");
+        var r = PreparedDom.preparedSpacing(0.0001);
+        TracedAssertions.assertEqualsString("trailing-letter", r.kind, "spacing 字/14/0.0001" + " kind");
         TracedAssertions.assertEqualsString("0.0001px", Markup.px(r.px), "spacing 字/14/0.0001" + " px");
-        var r = PreparedDom.preparedSpacing("字", 14, 0.5);
-        TracedAssertions.assertEqualsString("letter", r.kind, "spacing 字/14/0.5" + " kind");
+        var r = PreparedDom.preparedSpacing(0.5);
+        TracedAssertions.assertEqualsString("trailing-letter", r.kind, "spacing 字/14/0.5" + " kind");
         TracedAssertions.assertEqualsString("0.5px", Markup.px(r.px), "spacing 字/14/0.5" + " px");
-        var r = PreparedDom.preparedSpacing("字", 14, -0.5);
+        var r = PreparedDom.preparedSpacing(-0.5);
         TracedAssertions.assertEqualsString("overlap", r.kind, "spacing 字/14/-0.5" + " kind");
         TracedAssertions.assertEqualsString("-0.5px", Markup.px(r.px), "spacing 字/14/-0.5" + " px");
-        var r = PreparedDom.preparedSpacing("字", 14, -20);
+        var r = PreparedDom.preparedSpacing(-20);
         TracedAssertions.assertEqualsString("overlap", r.kind, "spacing 字/14/-20" + " kind");
         TracedAssertions.assertEqualsString("-20px", Markup.px(r.px), "spacing 字/14/-20" + " px");
-        var r = PreparedDom.preparedSpacing("字", 14, 2);
-        TracedAssertions.assertEqualsString("letter", r.kind, "spacing 字/14/2" + " kind");
+        var r = PreparedDom.preparedSpacing(2);
+        TracedAssertions.assertEqualsString("trailing-letter", r.kind, "spacing 字/14/2" + " kind");
         TracedAssertions.assertEqualsString("2px", Markup.px(r.px), "spacing 字/14/2" + " px");
-        var r = PreparedDom.preparedSpacing("ab", 14, 0.5);
+        var r = PreparedDom.preparedSpacing(0.5);
         TracedAssertions.assertEqualsString("trailing-letter", r.kind, "spacing ab/14/0.5" + " kind");
         TracedAssertions.assertEqualsString("0.5px", Markup.px(r.px), "spacing ab/14/0.5" + " px");
-        var r = PreparedDom.preparedSpacing("ab", 14, -0.5);
+        var r = PreparedDom.preparedSpacing(-0.5);
         TracedAssertions.assertEqualsString("overlap", r.kind, "spacing ab/14/-0.5" + " kind");
         TracedAssertions.assertEqualsString("-0.5px", Markup.px(r.px), "spacing ab/14/-0.5" + " px");
-        var r = PreparedDom.preparedSpacing("ab", 14, -20);
+        var r = PreparedDom.preparedSpacing(-20);
         TracedAssertions.assertEqualsString("overlap", r.kind, "spacing ab/14/-20" + " kind");
         TracedAssertions.assertEqualsString("-20px", Markup.px(r.px), "spacing ab/14/-20" + " px");
-        var r = PreparedDom.preparedSpacing("", 14, 0.5);
+        var r = PreparedDom.preparedSpacing(0.5);
         TracedAssertions.assertEqualsString("trailing-letter", r.kind, "spacing /14/0.5" + " kind");
         TracedAssertions.assertEqualsString("0.5px", Markup.px(r.px), "spacing /14/0.5" + " px");
-        var r = PreparedDom.preparedSpacing("字", -14, 14);
-        TracedAssertions.assertEqualsString("letter", r.kind, "spacing 字/-14/14" + " kind");
+        var r = PreparedDom.preparedSpacing(14);
+        TracedAssertions.assertEqualsString("trailing-letter", r.kind, "spacing 字/-14/14" + " kind");
         TracedAssertions.assertEqualsString("14px", Markup.px(r.px), "spacing 字/-14/14" + " px");
-        var r = PreparedDom.preparedSpacing("字", -14, 14.0000001);
-        TracedAssertions.assertEqualsString("letter", r.kind, "spacing 字/-14/14.0000001" + " kind");
+        var r = PreparedDom.preparedSpacing(14.0000001);
+        TracedAssertions.assertEqualsString("trailing-letter", r.kind, "spacing 字/-14/14.0000001" + " kind");
         TracedAssertions.assertEqualsString("14px", Markup.px(r.px), "spacing 字/-14/14.0000001" + " px");
-        var r = PreparedDom.preparedSpacing("字", -14, 13.9999999);
+        var r = PreparedDom.preparedSpacing(13.9999999);
         TracedAssertions.assertEqualsString("trailing-letter", r.kind, "spacing 字/-14/13.9999999" + " kind");
         TracedAssertions.assertEqualsString("14px", Markup.px(r.px), "spacing 字/-14/13.9999999" + " px");
-        var r = PreparedDom.preparedSpacing("abc", 0, 0);
+        var r = PreparedDom.preparedSpacing(0);
         TracedAssertions.assertEqualsString("none", r.kind, "spacing abc/0/0" + " kind");
         TracedAssertions.assertEqualsString("0px", Markup.px(r.px), "spacing abc/0/0" + " px");
-        var r = PreparedDom.preparedSpacing("a", 0, 0.0001);
-        TracedAssertions.assertEqualsString("letter", r.kind, "spacing a/0/0.0001" + " kind");
+        var r = PreparedDom.preparedSpacing(0.0001);
+        TracedAssertions.assertEqualsString("trailing-letter", r.kind, "spacing a/0/0.0001" + " kind");
         TracedAssertions.assertEqualsString("0.0001px", Markup.px(r.px), "spacing a/0/0.0001" + " px");
     }
     @:test
@@ -226,8 +226,8 @@ class PreparedDomTest {
             { kind: "trailing-letter", px: 2.5 }, null, false, null, null, null,
             null, null, null, null, null);
         final node = PreparedDom.renderRun(run, null);
-        TracedAssertions.assertEqualsString("<span data-tq-advance=\"5\" data-tq-geometry=\"true\" data-tq-x=\"0\">a<span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-spacing-carrier=\"true\" style=\"display:inline-block!important;inline-size:2.5px!important;height:0!important;line-height:0!important;letter-spacing:2.5px!important;overflow:hidden!important;vertical-align:baseline!important;white-space:pre!important\">\u00A0</span></span>", node.html, "renderRunTrailingLetterMatchesTs html");
-        TracedAssertions.assertEqualsString("[\"span\",[[\"data-tq-advance\",\"5\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-x\",\"0\"]],[[\"#\",\"a\"],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-spacing-carrier\",\"true\"],[\"style\",\"display:inline-block!important;inline-size:2.5px!important;height:0!important;line-height:0!important;letter-spacing:2.5px!important;overflow:hidden!important;vertical-align:baseline!important;white-space:pre!important\"]],[[\"#\",\"\u00A0\"]]]]]", PreparedDomTestSupport.artifactToJson(node.artifact), "renderRunTrailingLetterMatchesTs artifact");
+        TracedAssertions.assertEqualsString("<span data-tq-advance=\"5\" data-tq-geometry=\"true\" data-tq-x=\"0\">a<span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-spacing-carrier=\"true\" style=\"display:inline-block!important;inline-size:2.5px!important;height:0!important;line-height:0!important;word-spacing:2.5px!important;overflow:hidden!important;vertical-align:baseline!important;white-space:pre!important\">\u00A0</span></span>", node.html, "renderRunTrailingLetterMatchesTs html");
+        TracedAssertions.assertEqualsString("[\"span\",[[\"data-tq-advance\",\"5\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-x\",\"0\"]],[[\"#\",\"a\"],[\"span\",[[\"aria-hidden\",\"true\"],[\"data-tq-copy-ignore\",\"true\"],[\"data-tq-geometry\",\"true\"],[\"data-tq-spacing-carrier\",\"true\"],[\"style\",\"display:inline-block!important;inline-size:2.5px!important;height:0!important;line-height:0!important;word-spacing:2.5px!important;overflow:hidden!important;vertical-align:baseline!important;white-space:pre!important\"]],[[\"#\",\"\u00A0\"]]]]]", PreparedDomTestSupport.artifactToJson(node.artifact), "renderRunTrailingLetterMatchesTs artifact");
     }
 
     @:test

@@ -112,7 +112,6 @@ pub struct PreparedParagraphRender {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SpacingKind {
     None,
-    Letter,
     Overlap,
     TrailingLetter,
 }
@@ -980,12 +979,7 @@ fn is_safe_integer(value: f64) -> bool {
     value.fract() == 0.0 && value.abs() <= MAX_SAFE_INTEGER
 }
 
-fn prepared_spacing(
-    display: &str,
-    natural_width: f64,
-    trailing_gap: f64,
-    boxed_shaping_boundary: bool,
-) -> Spacing {
+fn prepared_spacing(trailing_gap: f64) -> Spacing {
     if trailing_gap == 0.0 {
         return Spacing {
             kind: SpacingKind::None,
@@ -1001,15 +995,6 @@ fn prepared_spacing(
         };
     }
 
-    // Firefox can apply only half of a positive letter-spacing at an isolated
-    // shaping boundary. Use the selectable gap for the full trailing advance.
-    if !boxed_shaping_boundary && utf16_length(display) == 1 && natural_width + trailing_gap >= 0.0
-    {
-        return Spacing {
-            kind: SpacingKind::Letter,
-            px: trailing_gap,
-        };
-    }
     // The selectable gap follows the whole shaping cluster. Splitting off
     // the final grapheme of a multi-character cluster would break kerning.
     Spacing {
@@ -1042,12 +1027,7 @@ fn can_merge_prepared_run(left: &CellRun, right: &CellRun) -> bool {
     {
         return false;
     }
-    if left.spacing.kind == SpacingKind::None && right.spacing.kind == SpacingKind::None {
-        return true;
-    }
-    left.spacing.kind == SpacingKind::Letter
-        && right.spacing.kind == SpacingKind::Letter
-        && (left.spacing.px - right.spacing.px).abs() < SPACING_EPSILON
+    left.spacing.kind == SpacingKind::None && right.spacing.kind == SpacingKind::None
 }
 
 fn merge_prepared_run(left: &mut CellRun, right: &CellRun) {
@@ -1550,12 +1530,7 @@ fn prepared_cell(
         open_type_features: cell.open_type_features.clone(),
         render_font_families,
         trailing_gap,
-        spacing: prepared_spacing(
-            &cell.display,
-            cell.natural_width,
-            trailing_gap,
-            cell.shaping_boundary || !cell.open_type_features.is_empty(),
-        ),
+        spacing: prepared_spacing(trailing_gap),
         semantic_path: semantics.path_for(cell.range_start, cell.range_end),
         semantic_signature: String::new(),
         dash_strategy: cell.dash_strategy.clone(),
@@ -1664,9 +1639,7 @@ fn render_run(
     if !needs_element {
         return Ok(draft.push_text(&run.display));
     }
-    let advance = if run.spacing.kind == SpacingKind::Letter
-        || run.spacing.kind == SpacingKind::TrailingLetter
-    {
+    let advance = if run.spacing.kind == SpacingKind::TrailingLetter {
         run.natural_width + run.trailing_gap
     } else {
         run.natural_width
@@ -1782,9 +1755,6 @@ fn render_run(
         None => {}
     }
     match run.spacing.kind {
-        SpacingKind::Letter => {
-            styles.push(format!("letter-spacing:{}!important", px(run.spacing.px)))
-        }
         SpacingKind::Overlap => {
             styles.push(format!("margin-right:{}!important", px(run.spacing.px)))
         }
@@ -1820,7 +1790,7 @@ fn render_run(
                 format!("inline-size:{}!important", px(run.spacing.px)),
                 "height:0!important".to_string(),
                 "line-height:0!important".to_string(),
-                format!("letter-spacing:{}!important", px(run.spacing.px)),
+                format!("word-spacing:{}!important", px(run.spacing.px)),
                 "overflow:hidden!important".to_string(),
                 "vertical-align:baseline!important".to_string(),
                 "white-space:pre!important".to_string(),

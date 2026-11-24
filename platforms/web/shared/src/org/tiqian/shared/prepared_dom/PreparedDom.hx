@@ -50,16 +50,12 @@ class PreparedDom {
      * Byte-critical: the kind string drives data-tq-advance / margin-right
      * lowering in renderRun, and px feeds the px() serializer.
      */
-    public static function preparedSpacing(display:String, naturalWidth:Float, trailingGap:Float, ?dustEpsilon:Float,
-            boxedShapingBoundary:Bool = false):PreparedSpacingResult {
+    public static function preparedSpacing(trailingGap:Float, ?dustEpsilon:Float):PreparedSpacingResult {
         final epsilon = dustEpsilon != null ? dustEpsilon : SPACING_DUST_EPSILON;
         if (Math.abs(trailingGap) < epsilon) return { kind: "none", px: 0.0 };
 
-        // Keep compression after the glyph and use a gap inside a shaping box.
+        // Apply spacing after the glyph so the browser keeps its drawing origin.
         if (trailingGap < 0) return { kind: "overlap", px: trailingGap };
-        if (!boxedShapingBoundary && display.length == 1 && naturalWidth + trailingGap >= 0) {
-            return { kind: "letter", px: trailingGap };
-        }
         return { kind: "trailing-letter", px: trailingGap };
     }
 
@@ -252,7 +248,7 @@ class PreparedDom {
                 "inline-size:" + Markup.px(input.spacing.px) + "!important",
                 "height:0!important",
                 "line-height:0!important",
-                "letter-spacing:" + Markup.px(input.spacing.px) + "!important",
+                "word-spacing:" + Markup.px(input.spacing.px) + "!important",
                 "overflow:hidden!important",
                 "vertical-align:baseline!important",
                 "white-space:pre!important",
