@@ -29,7 +29,7 @@ const enginePunctuationFeatureStyle = `
 
 function lastTextLeaf(paragraph: FakeElement) {
   const leaves = Array.from(paragraph.querySelectorAll("[data-tq-geometry]"))
-    .filter((element) => !element.classList.contains("tq-line") && element.textContent.length > 0);
+    .filter((element) => !element.hasAttribute("data-tq-copy-ignore") && element.textContent.length > 0);
   return leaves.length === 0 ? null : leaves[leaves.length - 1];
 }
 
@@ -272,7 +272,7 @@ test("rendererSourceFidelity_emitsFinalAndLatinAdjacentPunctuationSpacingWithout
   const last = lastTextLeaf(paragraph);
   assert.ok(last);
   assert.ok(
-    cssPx(computedStyleValue(last, "letter-spacing")) < -0.1,
+    cssPx(computedStyleValue(last, "margin-right")) < -0.1,
     `expected final-cluster compression: ${paragraph.innerHTML}`,
   );
 });
@@ -296,23 +296,17 @@ test("rendererSourceFidelity_browserPunctuationTrimDoesNotDoubleCompressClosingC
   assert.equal(TiqianWeb.enhance(probe<Element>(root), testOptions()), 1);
 
   const paragraph = root.querySelector("p")!;
-  const closingCommaRun = geometryLeafWithText(paragraph, "」、");
-  assert.ok(closingCommaRun);
-  assert.equal(computedStyleValue(closingCommaRun, "text-spacing-trim"), "space-all");
   assertEnginePunctuationFeatureLock(paragraph);
-  assertEnginePunctuationFeatureLock(closingCommaRun);
-  const characterWidths = textNodeCharacterWidths(closingCommaRun)
-    .split(",")
-    .map((value) => Number.parseFloat(value))
-    .filter((value) => Number.isFinite(value));
-  assert.equal(characterWidths.length, 2);
-  assert.ok(
-    characterWidths.every((width) => width >= 8.25),
-    `browser punctuation trimming consumed a second half-em: ${characterWidths}; ${paragraph.innerHTML}`,
-  );
-  assert.ok(
-    Math.abs(elementWidth(closingCommaRun) - 18.0) < 0.75,
-    `closing-comma run must replay one em, was ${elementWidth(closingCommaRun)}; ${paragraph.innerHTML}`,
-  );
+  let totalAdvance = 0;
+  for (const punctuation of ["」", "、"]) {
+    const run = geometryLeafWithText(paragraph, punctuation);
+    assert.ok(run);
+    assert.equal(computedStyleValue(run, "text-spacing-trim"), "space-all");
+    assertEnginePunctuationFeatureLock(run);
+    const width = Number.parseFloat(textNodeCharacterWidths(run));
+    assert.ok(Math.abs(width - 18) < 0.75, `unexpected glyph width for ${punctuation}: ${width}`);
+    totalAdvance += width + cssPx(computedStyleValue(run, "margin-right"));
+  }
+  assert.ok(Math.abs(totalAdvance - 18) < 0.75, `closing-comma advance: ${totalAdvance}`);
   assert.equal(copySelection(paragraph), source);
 });

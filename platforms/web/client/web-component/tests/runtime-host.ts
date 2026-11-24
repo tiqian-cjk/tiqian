@@ -1350,7 +1350,9 @@ function getHorizontalPadding(element: FakeElement): HorizontalPadding {
 
 function getElementExplicitWidth(element: FakeElement): number | null {
   if (!element || element.nodeType !== 1) return null;
-  const inlineSize = element.style?.getPropertyValue?.("inline-size") || probe<StylePropertyView>(element.style).inlineSize;
+  const inlineSize = element.style?.getPropertyValue?.("inline-size") ||
+    probe<StylePropertyView>(element.style).inlineSize ||
+    (element.hasAttribute("data-tq-spacing-carrier") ? preparedValueStyleProperty(element, "inline-size") : "");
   if (inlineSize) {
     const parsed = Number.parseFloat(inlineSize);
     if (!Number.isNaN(parsed) && parsed > 0) return parsed;
