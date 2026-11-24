@@ -104,8 +104,9 @@ provenance 校验要求清单里的 `repository.url` 与仓库一致。打包器
 写入 `@tiqian/engine`、`@tiqian/protocol`、`@tiqian/shared` 三个归档，并同步刷新
 registry 元数据里的 `sha512`，否则 `check-registry-tree` 会因摘要不一致失败。
 
-dist-tag 写入后 registry 读取有延迟，`tools/npm-dist-tag.sh` 的收敛轮询允许五分钟；
-三个 npm 作业并发时一分钟窗口会误报未收敛。
+npm 发布新版本或写入 dist-tag 后，`npm view` 要过一段时间才能读到新版本和新的
+dist-tag。alpha.9 到 alpha.13 的 59 次发布，这段时间在 75 到 309 秒之间，中位数
+126 秒，所以 `tools/npm-dist-tag.sh` 写入后最多等十分钟。
 
 npm 目标在 `boring.json` 的 `package` 块里有两个名字：`name` 是自建 registry 的
 目录名（例如 `tiqian-engine`），`npmName` 是 registry.npmjs.org 上的包名（例如
@@ -144,8 +145,9 @@ CLI 版本按步骤分：打包与发布步骤保持 `npm@11.12.1`，因为 `npm
 
 - `tools/npm-publish.sh`：先读 `<name>@<version>` 的 `dist.shasum`。已发布且与本地
   tarball 的 sha1 相同则跳过上传；不同则报错终止，因为重跑不能送上另一个产物。
-- `tools/npm-dist-tag.sh`：先读 dist-tags。已经不指向该版本才写，写入后用最多 12 次
-  读取确认收敛。重跑一次已发布但后续失败的发布因此不会卡在鉴权上。
+- `tools/npm-dist-tag.sh`：先读 dist-tags。已经指向该版本就不写，重跑一次已发布但后续
+  失败的发布因此不会卡在鉴权上。写入失败直接报错；写入后最多等十分钟，直到 `npm view`
+  读到新的 dist-tag。
 
 `snapshot-precompute.yml` 是 fork 快照工作流，发布 `-snapshot` 版本的集成包，触发标签与
 scope 都和本流程不同，不在这一套 trusted publisher 配置内。

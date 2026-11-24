@@ -46,18 +46,23 @@ if converged "$current"; then
 fi
 
 echo "current dist-tags: $current"
-npm dist-tag add "$package@$version" "$tag"
+if ! npm dist-tag add "$package@$version" "$tag"; then
+  echo "::error::npm dist-tag add $package@$version $tag failed"
+  exit 1
+fi
 
-# Registry reads lag the write, so the poll is generous: the publish matrix
-# runs three npm jobs at once and a one-minute window reported a failure while
-# the tags were already correct a few seconds later.
-for attempt in $(seq 1 30); do
+# npm accepts a publish or a dist-tag write and applies it later; reads see
+# the change only after that. From alpha.9 to alpha.13 this took 75 to 309
+# seconds (median 126), and the five-minute window used before missed
+# @tiqian/engine 0.1.0-alpha.13 by eight seconds. The poll waits ten minutes.
+attempts=60
+for attempt in $(seq 1 "$attempts"); do
   current="$(npm view "$package" dist-tags --json 2>/dev/null || echo '{}')"
   if converged "$current"; then
     echo "$package dist-tags converged: $current"
     exit 0
   fi
-  [ "$attempt" -lt 30 ] && sleep 10
+  [ "$attempt" -lt "$attempts" ] && sleep 10
 done
 echo "::error::$package dist-tags did not converge on $version (last: $current)"
 exit 1
