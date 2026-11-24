@@ -1,6 +1,6 @@
 {
   "name": "@tiqian/react",
-  "version": "0.1.0-alpha.13",
+  "version": "0.1.0-alpha.14",
   "description": "Reference React binding for Tiqian's CJK paragraph layout engine, held directly over the neutral core.",
   "keywords": [
     "cjk",
@@ -45,7 +45,7 @@
     }
   },
   "dependencies": {
-    "@tiqian/core": "0.1.0-alpha.13"
+    "@tiqian/core": "0.1.0-alpha.14"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0"
