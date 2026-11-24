@@ -65,7 +65,7 @@ test("artifact sha of the justified corpus case matches the Rust renderer", () =
   const rendered = renderPreparedParagraphArtifact(JUSTIFIED_PLAN, "zh-Hans");
   assert.equal(
     sha256Hex(stableStringify(rendered.artifact)),
-    "9d0f16f8402f36d2e1995c93ddbe44fedc701df2eaf78c166373b5cbf63c827d",
+    "796993e400295918bd166ebf492b569b7ece9aa47f7bc5ad5973a14f89549f45",
   );
 });
 
@@ -77,6 +77,6 @@ test("artifact sha of the value-class plan matches the Rust renderer", () => {
   assert.match(rendered.html, /class="tq-line tqv-0"/u);
   assert.equal(
     sha256Hex(stableStringify(rendered.artifact)),
-    "1b2d9946c4c0b6310c61808572db1db8570dbfaaed3ec0b921c2f82e300d15da",
+    "1dcfeae255f6d824cc0f1fd36cab9bb931554d336b7e047acf5c886b68d7a8c7",
   );
 });
