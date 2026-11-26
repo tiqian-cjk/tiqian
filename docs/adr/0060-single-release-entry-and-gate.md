@@ -49,7 +49,7 @@ GitHub Actions 的运行记录与 npm 仓库的查询结果如下：
 
 - 一个 v 标签要求所有 required workflows 在同一个 commit 上通过；新增的 required
   workflow 必须先在 main 上运行通过。
-- npm 包继续使用各自 `package.json` 的版本：`@tiqian/ffi` 为 0.1.0-alpha.1，
+- npm 包继续使用各自 `package.json` 的版本：`@tiqian/ffi` 为 0.1.0-alpha.1（该包已按 [ADR 0064](0064-retire-ffi-engine-face.md) 删除），
   `@tiqian/core` 与 `@tiqian/prose` 为 0.1.0-alpha.6，`@tiqian/precompute`
   为 0.1.0-alpha.3。本次不改变版本策略，发布顺序按依赖关系固定。
 - `publish-web-adapters.yml` 在同版本的依赖发布后构建并测试
