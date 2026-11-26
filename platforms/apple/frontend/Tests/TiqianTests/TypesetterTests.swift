@@ -179,6 +179,33 @@ final class TypesetterTests: XCTestCase {
         XCTAssertEqual(document.selectionBoundary(offset: 1, forward: true), 2)
     }
 
+    /// `AppleParallelParagraphLayout` must produce the same geometry as one engine laying the same
+    /// inputs out in order, on cold and warm caches.
+    func testParallelLayoutMatchesSingleEngineLayout() throws {
+        let texts = (0..<24).map { "第\($0)段：提椠在多个线程上并行排版，标点挤压、避头尾与两端对齐的结果必须与单线程一致。Latin \($0) words." }
+        let inputs = try texts.map { text in
+            LayoutInput(
+                TiqianTextContent(text.engineText),
+                TextStyle(BoringArray(), 18),
+                ParagraphStyle(),
+                try LayoutConstraints(18 * 17),
+            )
+        }
+        let sequential = try AppleParagraphEngines(count: 1).layout(inputs)
+        let parallel = AppleParagraphEngines(count: 8)
+        for _ in 0..<3 {
+            let results = try parallel.layout(inputs)
+            XCTAssertEqual(results.count, sequential.count)
+            for (a, b) in zip(results, sequential) {
+                XCTAssertEqual(a.size.width, b.size.width)
+                XCTAssertEqual(a.size.height, b.size.height)
+                XCTAssertEqual(a.lines.count, b.lines.count)
+                XCTAssertEqual(a.positionedClusters().map(\.drawX), b.positionedClusters().map(\.drawX))
+                XCTAssertEqual(a.positionedClusters().map(\.baseline), b.positionedClusters().map(\.baseline))
+            }
+        }
+    }
+
     func testCJKNumeralFormatting() {
         XCTAssertEqual(ListMarkerFormat.cjkNumeral(0), "零")
         XCTAssertEqual(ListMarkerFormat.cjkNumeral(10), "十")

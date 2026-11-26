@@ -116,6 +116,10 @@ enum ListMarkerFormat {
 
 /// Lays authored blocks out and stacks them vertically; a marker column offsets list bodies
 /// (CLREQ 凸排). This is generic document layout, not sample content.
+///
+/// Paragraphs are independent engine inputs, so layout runs in two concurrent rounds
+/// (`AppleParallelParagraphLayout`): body paragraphs and list markers first, then list bodies,
+/// whose measure depends on the widest marker of their list. Stacking then runs in block order.
 private struct DocumentLayout {
     let typesetter: Typesetter
     let width: Float
@@ -125,32 +129,109 @@ private struct DocumentLayout {
     /// `DocumentSectionGap`: one blank line of 中文正文 leading (1.5 em).
     private var sectionGap: Float { baseSize * 1.5 }
 
+    /// One authored block with the indices of its first-round layout inputs.
+    private enum Slot {
+        case section
+        case paragraph(input: Int, lowered: LoweredParagraph)
+        case list(markers: Range<Int>, items: [ParagraphContent])
+    }
+
     func layout(_ blocks: [AuthoredBlock]) throws -> Document {
-        var placed: [PlacedBlock] = []
-        var cursorY: Float = 0
+        // Round 1: body paragraphs and list markers.
+        var firstRound: [LayoutInput] = []
+        var slots: [Slot] = []
         for block in blocks {
             switch block {
             case .section:
-                cursorY += sectionGap
+                slots.append(.section)
             case let .paragraph(content, indent):
-                let (result, lowered) = try layoutParagraph(content, indent: indent, columnWidth: width)
+                let lowered = try content.lowered(baseSize: baseSize)
+                firstRound.append(try paragraphInput(lowered, indent: indent, columnWidth: width))
+                slots.append(.paragraph(input: firstRound.count - 1, lowered: lowered))
+            case let .list(items, marker):
+                let start = firstRound.count
+                for index in items.indices {
+                    firstRound.append(try markerInput(marker.format(index + 1)))
+                }
+                slots.append(.list(markers: start..<firstRound.count, items: items))
+            }
+        }
+        let firstResults = typesetter.layout(firstRound)
+
+        // Round 2: list bodies, measured beside their list's marker column.
+        var secondRound: [LayoutInput] = []
+        var bodies: [LoweredParagraph] = []
+        var gutters: [Float] = []
+        for case let .list(markers, items) in slots {
+            // `ListMarkerColumnWidth`: the widest marker rounded up to whole 字, so every body and
+            // its continuation lines align in one column.
+            let widest = firstResults[markers].map(\.size.width).max() ?? 0
+            let gutter = Float(max(1, Int(ceil(widest / baseSize)))) * baseSize
+            gutters.append(gutter)
+            // `ListBodyMinimumMeasure`: a native view narrower than its marker column keeps the
+            // gutter and lets the body overflow; the engine never receives a non-positive width.
+            let bodyWidth = max(width - gutter, 1)
+            for item in items {
+                let lowered = try item.lowered(baseSize: baseSize)
+                bodies.append(lowered)
+                secondRound.append(try paragraphInput(lowered, indent: .flush, columnWidth: bodyWidth))
+            }
+        }
+        let bodyResults = typesetter.layout(secondRound)
+
+        // Stacking, in block order.
+        var placed: [PlacedBlock] = []
+        var cursorY: Float = 0
+        var listIndex = 0
+        var bodyIndex = 0
+        for slot in slots {
+            switch slot {
+            case .section:
+                cursorY += sectionGap
+            case let .paragraph(input, lowered):
+                let result = firstResults[input]
                 placed.append(PlacedBlock(result: result, lowered: lowered, x: 0, yTop: Double(cursorY)))
                 cursorY += result.size.height
-            case let .list(items, marker):
-                try layoutList(items, marker: marker, cursorY: &cursorY, placed: &placed)
+            case let .list(markers, items):
+                let gutter = gutters[listIndex]
+                listIndex += 1
+                for offset in items.indices {
+                    let markerResult = firstResults[markers.lowerBound + offset]
+                    let bodyResult = bodyResults[bodyIndex]
+                    let lowered = bodies[bodyIndex]
+                    bodyIndex += 1
+                    // `ListFirstBaselineAlignment`: marker and body are separate paragraphs whose
+                    // first-line boxes may differ (•/decimal vs CJK). Align their baselines, then
+                    // grow the row around whichever block extends farther.
+                    let markerBaseline = markerResult.lines.first?.baseline ?? 0
+                    let bodyBaseline = bodyResult.lines.first?.baseline ?? 0
+                    let markerOffset = bodyBaseline - markerBaseline
+                    let rowTopOffset = min(0, markerOffset)
+                    // Marker alignment follows its occupied typographic box; the glyph's side
+                    // bearings are content, so no ink-edge correction applies.
+                    placed.append(PlacedBlock(
+                        result: markerResult,
+                        lowered: nil,
+                        x: 0,
+                        yTop: Double(cursorY + markerOffset - rowTopOffset),
+                    ))
+                    placed.append(PlacedBlock(
+                        result: bodyResult,
+                        lowered: lowered,
+                        x: Double(gutter),
+                        yTop: Double(cursorY - rowTopOffset),
+                        sourceSeparatorBefore: "",
+                    ))
+                    cursorY += max(markerOffset - rowTopOffset + markerResult.size.height, -rowTopOffset + bodyResult.size.height)
+                }
             }
         }
         return Document(blocks: placed, width: Double(width), height: Double(cursorY), renderer: typesetter.renderer)
     }
 
-    private func layoutParagraph(
-        _ content: ParagraphContent,
-        indent: BlockIndent,
-        columnWidth: Float,
-    ) throws -> (LayoutResult, LoweredParagraph) {
-        let lowered = try content.lowered(baseSize: baseSize)
+    private func paragraphInput(_ lowered: LoweredParagraph, indent: BlockIndent, columnWidth: Float) throws -> LayoutInput {
         let (blockIndent, firstLineIndent) = indent.resolve()
-        let result = typesetter.layout(LayoutInput(
+        return LayoutInput(
             TiqianTextContent(lowered.text, lowered.spans.boringArray, lowered.sourceBoundaries.boringArray),
             TextStyle(BoringArray(), baseSize, lowered.locale.engineText),
             Self.paragraphStyle(firstLineIndent: firstLineIndent, blockIndent: blockIndent),
@@ -158,8 +239,29 @@ private struct DocumentLayout {
             BuiltInLayoutProfiles.ClreqHorizontal,
             lowered.decorations.readOnlyArray,
             lowered.rubySpans.readOnlyArray,
-        ))
-        return (result, lowered)
+        )
+    }
+
+    /// A list marker paragraph. The marker column already is the list's indent, so marker
+    /// paragraphs never take the adaptive body first-line indent; with it, the measured marker width
+    /// would grow by two 字 and shift the whole body column.
+    private func markerInput(_ text: String) throws -> LayoutInput {
+        let defaults = ParagraphStyle()
+        let markerStyle = ParagraphStyle(
+            defaults.lastLineAlignment,
+            defaults.writingMode,
+            defaults.lineHeight,
+            Ic.Zero,
+            Ic.Zero,
+            defaults.firstLineIndentPolicy,
+            LineLengthGrid(false),
+        )
+        return LayoutInput(
+            TiqianTextContent(text.engineText),
+            TextStyle(BoringArray(), baseSize),
+            markerStyle,
+            try LayoutConstraints(width),
+        )
     }
 
     /// The engine's default paragraph style with the given indents. The generated initializer has
@@ -173,68 +275,5 @@ private struct DocumentLayout {
             firstLineIndent,
             blockIndent,
         )
-    }
-
-    private func layoutList(
-        _ items: [ParagraphContent],
-        marker: ListMarkerFormat,
-        cursorY: inout Float,
-        placed: inout [PlacedBlock],
-    ) throws {
-        // The marker column already is the list's indent, so marker paragraphs never take the
-        // adaptive body first-line indent; with it, the measured marker width would grow by two 字
-        // and shift the whole body column.
-        let defaults = ParagraphStyle()
-        let markerStyle = ParagraphStyle(
-            defaults.lastLineAlignment,
-            defaults.writingMode,
-            defaults.lineHeight,
-            Ic.Zero,
-            Ic.Zero,
-            defaults.firstLineIndentPolicy,
-            LineLengthGrid(false),
-        )
-        let markerResults = try items.indices.map { index in
-            typesetter.layout(LayoutInput(
-                TiqianTextContent(marker.format(index + 1).engineText),
-                TextStyle(BoringArray(), baseSize),
-                markerStyle,
-                try LayoutConstraints(width),
-            ))
-        }
-        // `ListMarkerColumnWidth`: the widest marker rounded up to whole 字, so every body and its
-        // continuation lines align in one column.
-        let widest = markerResults.map(\.size.width).max() ?? 0
-        let gutter = Float(max(1, Int(ceil(widest / baseSize)))) * baseSize
-        for (index, item) in items.enumerated() {
-            let markerResult = markerResults[index]
-            // `ListBodyMinimumMeasure`: a native view narrower than its marker column keeps the
-            // gutter and lets the body overflow; the engine never receives a non-positive width.
-            let bodyWidth = max(width - gutter, 1)
-            let (bodyResult, lowered) = try layoutParagraph(item, indent: .flush, columnWidth: bodyWidth)
-            // `ListFirstBaselineAlignment`: marker and body are separate paragraphs whose first-line
-            // boxes may differ (•/decimal vs CJK). Align their baselines, then grow the row around
-            // whichever block extends farther.
-            let markerBaseline = markerResult.lines.first?.baseline ?? 0
-            let bodyBaseline = bodyResult.lines.first?.baseline ?? 0
-            let markerOffset = bodyBaseline - markerBaseline
-            let rowTopOffset = min(0, markerOffset)
-            // Marker alignment follows its occupied typographic box; the glyph's side bearings are
-            // content, so no ink-edge correction applies.
-            placed.append(PlacedBlock(
-                result: markerResult,
-                lowered: nil,
-                x: 0,
-                yTop: Double(cursorY + markerOffset - rowTopOffset),
-            ))
-            placed.append(PlacedBlock(
-                result: bodyResult,
-                lowered: lowered,
-                x: Double(gutter),
-                yTop: Double(cursorY - rowTopOffset),
-                sourceSeparatorBefore: "",
-            ))
-            cursorY += max(markerOffset - rowTopOffset + markerResult.size.height, -rowTopOffset + bodyResult.size.height)
-        }
     }
 }

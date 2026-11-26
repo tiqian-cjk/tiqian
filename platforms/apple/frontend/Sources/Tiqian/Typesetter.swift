@@ -11,7 +11,7 @@ import TiqianEngine
 /// real Core Text measurements. The caller owns the content; this type owns the typesetting.
 public final class Typesetter {
     let fontSize: Float
-    let engine: ParagraphLayoutEngine
+    let engines: AppleParagraphEngines
     let renderer: CoreTextLayoutRenderer
 
     public init(
@@ -21,14 +21,14 @@ public final class Typesetter {
     ) {
         self.fontSize = fontSize
         // The same families reach the engine (measure) and the renderer (draw).
-        engine = appleParagraphEngine(cjkFamily: cjkFamily, latinFamily: latinFamily)
+        engines = AppleParagraphEngines(cjkFamily: cjkFamily, latinFamily: latinFamily)
         renderer = CoreTextLayoutRenderer(cjkFamily: cjkFamily, latinFamily: latinFamily)
     }
 
     /// Lays plain `text` out into a column `width` points wide.
     public func layout(_ text: String, width: Float) -> Paragraph {
         let result = EngineInvariant.call("ParagraphLayoutEngine.layout") {
-            try engine.layout(LayoutInput(
+            try engines.engines[0].layout(LayoutInput(
                 TiqianTextContent(text.engineText),
                 TextStyle(BoringArray(), fontSize),
                 ParagraphStyle(),
@@ -43,8 +43,9 @@ public final class Typesetter {
         DocBuilder(typesetter: self)
     }
 
-    func layout(_ input: LayoutInput) -> LayoutResult {
-        EngineInvariant.call("ParagraphLayoutEngine.layout") { try engine.layout(input) }
+    /// Lays out independent paragraphs concurrently; results keep the input order.
+    func layout(_ inputs: [LayoutInput]) -> [LayoutResult] {
+        EngineInvariant.call("ParagraphLayoutEngine.layout") { try engines.layout(inputs) }
     }
 }
 
