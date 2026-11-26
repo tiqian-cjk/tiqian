@@ -172,7 +172,7 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: generated-trees
-          path: .
+          path: engine-haxe/out
 
       - name: Use a bun CLI for the workspace install
         # The pinned bun lives in the flake devShell; the Windows and macOS
@@ -259,7 +259,7 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: generated-trees
-          path: .
+          path: engine-haxe/out
 
       - name: Use a bun CLI for the workspace install
         # The pinned bun lives in the flake devShell; this job keeps its Node
