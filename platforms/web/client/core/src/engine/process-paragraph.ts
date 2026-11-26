@@ -32,9 +32,8 @@ import {
 import {
   classifyRole as classifyFontRole,
   classifyRoles as classifyFontRoles,
-  firstDivergentInlineShapingProperty,
-  unsupportedInlineShapingProperties,
 } from "./font-role.js";
+import { InlineShapingStylePolicy } from "@tiqian/engine/org/tiqian/font/InlineShapingStylePolicy";
 import type { EnhancedElementContext } from "./context/enhance-context.js";
 import type { DiagnosisIssueRecord } from "./context/diagnosis-manager.js";
 import type { TrackedParagraph } from "./enhance/context-state.js";
@@ -111,10 +110,10 @@ interface ProcessInlineShapingDecisionResult {
       classifyRole: classifyFontRole,
       classifyRoles: classifyFontRoles,
       inlineShapingDecision: function (tag: string, elementValues: string[], paragraphValues: string[]): ProcessInlineShapingDecisionResult | null {
-        const property = firstDivergentInlineShapingProperty(elementValues, paragraphValues);
+        const property = InlineShapingStylePolicy.firstDivergentProperty(elementValues, paragraphValues);
         return property == null ? null : { name: 'UnsupportedInlineShapingStyle', detail: tag + ':' + property };
       },
-      inlineShapingProperties: unsupportedInlineShapingProperties(),
+      inlineShapingProperties: InlineShapingStylePolicy.unsupportedInlineShapingProperties.slice(),
     };
   }
 

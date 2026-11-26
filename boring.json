@@ -47,7 +47,8 @@
         "runtime.TestCore",
         "org.tiqian.protocol.NamedErrorNames",
         "org.tiqian.core.FittedLinePatternGeometry",
-        "org.tiqian.core.RichTextLayoutProjection"
+        "org.tiqian.core.RichTextLayoutProjection",
+        "org.tiqian.font.FontRoleClassification"
       ],
       "discover": [
         {

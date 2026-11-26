@@ -17,7 +17,7 @@ import {
   workerLayoutRequest,
 } from "../src/engine/worker-request.js";
 import { effectiveLineMeasure } from "../src/engine/responsive-measure.js";
-import { firstDivergentInlineShapingProperty, unsupportedInlineShapingProperties } from "../src/engine/font-role.js";
+import { InlineShapingStylePolicy } from "@tiqian/engine/org/tiqian/font/InlineShapingStylePolicy";
 
 function asType<T>(value: unknown): T {
   return value as T;
@@ -1015,11 +1015,11 @@ test("workerLayoutRequestForRoot inlineShapingDecision wraps the ffi divergence 
     // 15th property (index 14), so a divergent element value there fails the
     // inline element, the paragraph lowers with ok !== true, and the root
     // overload reports null.
-    const unsupportedProps: string[] = unsupportedInlineShapingProperties();
+    const unsupportedProps: string[] = InlineShapingStylePolicy.unsupportedInlineShapingProperties.slice();
     const paragraphValues: string[] = Array(unsupportedProps.length).fill("");
     const elementValues: string[] = Array(unsupportedProps.length).fill("");
     elementValues[14] = "uppercase";
-    assert.equal(firstDivergentInlineShapingProperty(elementValues, paragraphValues), "text-transform");
+    assert.equal(InlineShapingStylePolicy.firstDivergentProperty(elementValues, paragraphValues), "text-transform");
     const paragraphEl: FakeNode = rootParagraph({
       childNodes: [inlineChild("EM", "x", { "text-transform": "uppercase" })],
     });

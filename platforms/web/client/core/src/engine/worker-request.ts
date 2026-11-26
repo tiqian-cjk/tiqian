@@ -20,9 +20,8 @@ import { allowsSnapshotLayout, conformingSnapshotFontSessionId, withRootDefaults
 import {
   classifyRole as classifyFontRole,
   classifyRoles as classifyFontRoles,
-  firstDivergentInlineShapingProperty,
-  unsupportedInlineShapingProperties,
 } from "./font-role.js";
+import { InlineShapingStylePolicy } from "@tiqian/engine/org/tiqian/font/InlineShapingStylePolicy";
 import type { WorkerLayoutRequest } from "./web-worker/wire-types.js";
 import {
   inlineBoxWires,
@@ -281,10 +280,10 @@ export function workerLayoutRequestForRoot(root: Element, paragraph: Element, op
       // MarkdownParagraphLowering.kt: a null divergence property returns null,
       // otherwise the inlineShapingDecisionResultJs shape is built.
       inlineShapingDecision: function (tag: string, elementValues: string[], paragraphValues: string[]): WorkerInlineShapingDecisionResult | null {
-        const property = firstDivergentInlineShapingProperty(elementValues, paragraphValues);
+        const property = InlineShapingStylePolicy.firstDivergentProperty(elementValues, paragraphValues);
         return property == null ? null : { name: 'UnsupportedInlineShapingStyle', detail: tag + ':' + property };
       },
-      inlineShapingProperties: unsupportedInlineShapingProperties(),
+      inlineShapingProperties: InlineShapingStylePolicy.unsupportedInlineShapingProperties.slice(),
     });
     if (result && result.ok === true) lowered = result.lowered;
   } catch (error) { lowered = null; }
