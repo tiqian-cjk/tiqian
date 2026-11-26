@@ -298,6 +298,10 @@ caret/selection 几何；平台 tokenizer 不参与 shaping、断行或字位计
 `LayoutResult` 几何。SwiftUI 交给环境 `OpenURLAction`，AppKit/UIKit 原生入口可通过 `onOpenURL`
 接管，未接管时使用平台 URL opener；拖动选择不会触发导航。
 两端都不经 TextKit 重排文字，也不维护第二份字符几何；编辑器和 IME 仍不属于这条静态正文路径。
+`Tiqian` 模块按段落并行排版：`AppleParagraphEngines` 持有至多 8 个引擎，每个引擎带自己的 shaping、度量与
+annotation 缓存，第 i 个段落固定交给第 `i % N` 个引擎，列表正文在列表标记排完之后的第二轮排版。
+`Document` 在首次绘制时为每个段落生成 `CoreTextDisplayList`，记录字形 id、坐标、字体与颜色，之后的重绘
+直接回放，并跳过墨迹外框与重绘区域不相交的段落；macOS 视图在拖动改变宽度时按整字栏宽即时重排。
 
 ## 模块职责
 
