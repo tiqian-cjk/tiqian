@@ -8,20 +8,22 @@ import { lowerMarkdown } from "@tiqian/core/src/engine/markdown-lowering.js";
 import { cleanupMounted, mount } from "./runtime-host.js";
 import type { FakeElement } from "./snapshot-dom-fixtures.js";
 import { initializeGlobalServices } from "@tiqian/core/src/services/global-services.js";
+import { FontRole } from "@tiqian/engine/org/tiqian/font/FontRole";
+import type { FontRole as FontRoleValue } from "@tiqian/engine/org/tiqian/font/FontRole";
 initializeGlobalServices();
 
 
-type ClassifyRoleFn = (text: string, start: number, end: number) => string;
+type ClassifyRoleFn = (text: string, start: number, end: number) => FontRoleValue;
 type ActionFn<T> = () => T;
 
 // Controllable role stub: CJK ideographs are cjk-text, full-width punctuation
 // is cjk-punctuation, everything else is a latin run. The engine only treats
 // the first two as CJK.
-function cjkRoleStub(text: string, start: number, end: number) {
+function cjkRoleStub(text: string, start: number, end: number): FontRoleValue {
   const slice = text.slice(start, end);
-  if (/[一-鿿]/.test(slice)) return "cjk-text";
-  if (/[，。、！？；：（）《》「」『』]/.test(slice)) return "cjk-punctuation";
-  return "latin";
+  if (/[一-鿿]/.test(slice)) return FontRole.CjkText;
+  if (/[，。、！？；：（）《》「」『』]/.test(slice)) return FontRole.CjkPunctuation;
+  return FontRole.LatinText;
 }
 
 function lowerParagraph(html: string, options: Record<string, unknown> = {}, roleStub: ClassifyRoleFn = cjkRoleStub) {

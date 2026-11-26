@@ -1,12 +1,18 @@
 import type { DecorationSpan, TextSpan, TextStyle } from "./lowered-paragraph.js";
 import { textStylesEqual } from "./lowered-paragraph.js";
 
+import type { FontRole } from "@tiqian/engine/org/tiqian/font/FontRole";
+
+function isCjkRole(role: FontRole): boolean {
+  return role.kind === "CjkText" || role.kind === "CjkPunctuation";
+}
+
 export type ClassifyRolesFn = (
   text: string,
   starts: number[],
   ends: number[],
   locale: string,
-) => string[];
+) => FontRole[];
 
 export interface PendingStrongTextRange {
   start: number;
@@ -82,7 +88,7 @@ export function appendProjectedStrongStyles(
   }
   if (clusters.length === 0) return;
 
-  const roles = new Array<string>(clusters.length);
+  const roles: FontRole[] = new Array<FontRole>(clusters.length);
   const clusterIndexesByLocale = new Map<string, number[]>();
   for (let index = 0; index < clusters.length; index++) {
     const locale = pendingRanges[clusters[index].pendingIndex].style.locale;
@@ -120,12 +126,12 @@ export function appendProjectedStrongStyles(
   };
 
   let runStart = 0;
-  let runIsCjk = roles[0] === "cjk-text" || roles[0] === "cjk-punctuation";
+  let runIsCjk = isCjkRole(roles[0]);
   for (let index = 1; index <= clusters.length; index++) {
     const samePending = index < clusters.length &&
       clusters[index].pendingIndex === clusters[runStart].pendingIndex;
     const isCjk = index < clusters.length &&
-      (roles[index] === "cjk-text" || roles[index] === "cjk-punctuation");
+      isCjkRole(roles[index]);
     if (!samePending || isCjk !== runIsCjk) {
       appendRun(runStart, index, runIsCjk);
       runStart = index;

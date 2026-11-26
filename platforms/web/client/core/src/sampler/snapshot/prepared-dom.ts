@@ -20,7 +20,7 @@ import type {
   LiveSemanticSpan,
   SnapshotSemanticSpan,
 } from "./snapshot-source.js";
-import type { PlanCell, PlanEmphasisRange, PlanLine } from "@tiqian/ffi/engine-gen/org/tiqian/protocol/Plan.js";
+import type { PlanCell, PlanEmphasisRange, PlanLine } from "@tiqian/protocol/org/tiqian/protocol/Plan";
 import { EvidenceDecorationKind } from "@tiqian/shared/org/tiqian/shared/prepared_dom/EvidenceDecorationKind";
 import { PreparedArtifact } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedArtifact";
 import { PreparedDom as GeneratedPreparedDom } from "@tiqian/shared/org/tiqian/shared/prepared_dom/PreparedDom";

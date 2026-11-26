@@ -24,6 +24,7 @@ import {
   type ClassifyRolesFn,
   type PendingStrongTextRange,
 } from "./strong-emphasis-lowering.js";
+import { FontRole } from "@tiqian/engine/org/tiqian/font/FontRole";
 
 // --- Internal types (module-scoped) ---
 
@@ -59,7 +60,7 @@ interface LoweringOptions {
   [key: string]: unknown;
 }
 
-type ClassifyRoleFn = (text: string, start: number, end: number, locale: string) => string;
+type ClassifyRoleFn = (text: string, start: number, end: number, locale: string) => FontRole;
 interface InlineShapingDecisionResult {
   name: string;
   detail: string;
@@ -1266,10 +1267,10 @@ export function lowerMarkdown(paragraph: Element, options: LoweringOptions, help
   const locale = resolveLocale(options);
   const classifyRole = (helpers && typeof helpers.classifyRole === "function")
     ? helpers.classifyRole
-    : function (): string { return "other"; };
+    : function (): FontRole { return FontRole.Unknown; };
   const classifyRoles = (helpers && typeof helpers.classifyRoles === "function")
     ? helpers.classifyRoles
-    : function (text: string, starts: number[], ends: number[], locale: string): string[] {
+    : function (text: string, starts: number[], ends: number[], locale: string): FontRole[] {
         return starts.map(function (start, index) {
           return classifyRole(text, start, ends[index], locale);
         });

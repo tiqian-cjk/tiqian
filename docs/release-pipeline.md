@@ -12,12 +12,12 @@ CI 打包五个目标生态的产物，写入 registry 仓库并部署站点。�
 `main` 和版本标签。发版前检查每 30 秒查询尚未通过的作业，最多等待五小时。全部检查通过后
 开始打包。任一检查完成但失败，或等待到期时仍有检查未通过，发布作业会停止。
 
-检查通过后，`release.yml` 按依赖顺序调用 `publish-ffi.yml`、`publish-core.yml`、
+检查通过后，`release.yml` 按依赖顺序调用 `publish-core.yml`、
 `publish-web-component.yml`、`publish-precompute.yml`、`publish-web-adapters.yml`、
 `publish.yml`、`release-assets.yml` 与 `release-registry.yml`。
 `pack-release-bundles.yml` 将 Web、Kotlin、Swift 及 Cargo 和 pub 归档分成四组并行打包。
-Web 分组交付本次发布的 FFI runtime 和两个生成的 npm 工作区包，几个 npm 作业直接下载这些产物。
-Web 分组还优先复用检查通过的 `Build Neon precompute` 运行生成的 FFI 源码。
+Web 分组交付本次生成的 npm 工作区包（engine、protocol、shared），几个 npm 作业直接下载这些产物。
+Web 分组还优先复用检查通过的 `Build Neon precompute` 运行生成的 TypeScript 引擎树。
 `build-precompute-release.yml` 从同一次检查下载四个平台包和主包，核对包名、版本及文件清单，
 并在已有的主包 JavaScript 上改写依赖版本后重新打包。产物缺失或校验失败时重新构建。
 `publish-precompute.yml` 等待这些包及其 npm 依赖就绪后发布。

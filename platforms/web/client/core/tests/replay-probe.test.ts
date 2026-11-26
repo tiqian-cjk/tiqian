@@ -29,6 +29,10 @@ import {
   shapeReplayKey,
 } from "../src/sampler/snapshot/snapshot-schema.js";
 import { initializeGlobalServices } from "../src/services/global-services.js";
+import { metricsRequest, shapingInput } from "./engine-input.js";
+import type { ShapingInput, ShapingResult } from "@tiqian/engine/org/tiqian/shaping/TextShaper";
+import type { FontMetricsRequest } from "@tiqian/engine/org/tiqian/font/FontMetrics";
+import type { RawFontMetrics } from "@tiqian/engine/org/tiqian/font/RawFontMetrics";
 initializeGlobalServices();
 
 
@@ -131,13 +135,11 @@ interface SimpleAdvanceShapeResponse {
   glyphRuns: readonly SimpleAdvanceGlyphRun[];
 }
 
-type ShapeJsonFn = (requestJson: string) => string;
-type MetricsJsonFn = (requestJson: string) => string;
 type CloseFn = () => void;
 
 interface TestSession {
-  shapeJson: ShapeJsonFn;
-  metricsJson: MetricsJsonFn;
+  shape: (input: ShapingInput) => ShapingResult;
+  resolve: (request: FontMetricsRequest) => RawFontMetrics;
   close: CloseFn;
 }
 
@@ -173,7 +175,7 @@ test("shape miss with valid probe measures canvas, backfills session, and return
       return { width: 16 };
     },
   });
-  const shapeRequest: string = JSON.stringify({
+  const shapeRequest = shapingInput({
     text: "测",
     range: { start: 0, end: 1 },
     style: { fontFamilies: ["Noto Sans SC", "serif"], fontSize: 32, fontWeight: 400, italic: false, locale: "zh-Hans" },
@@ -181,7 +183,7 @@ test("shape miss with valid probe measures canvas, backfills session, and return
     displayText: "测",
     openTypeFeatures: [],
   });
-  const shapeResponse: unknown = JSON.parse(session.shapeJson(shapeRequest));
+  const shapeResponse: unknown = session.shape(shapeRequest);
   const response: ShapeResponse = shapeResponse as ShapeResponse;
   assert.equal(measureCount, 1);
   assert.equal(response.glyphRuns[0].glyphs.length, 1);
@@ -208,7 +210,7 @@ test("subsequent shape requests for probed key hit the session table without cal
     },
   });
   const families: string = ["Noto Sans SC", "serif"].join("\u001f");
-  const shapeRequest: string = JSON.stringify({
+  const shapeRequest = shapingInput({
     text: "复",
     range: { start: 0, end: 1 },
     style: { fontFamilies: ["Noto Sans SC", "serif"], fontSize: 32, fontWeight: 400, italic: false, locale: "zh-Hans" },
@@ -216,10 +218,10 @@ test("subsequent shape requests for probed key hit the session table without cal
     displayText: "复",
     openTypeFeatures: [],
   });
-  const shapeResponse1: unknown = JSON.parse(session.shapeJson(shapeRequest));
+  const shapeResponse1: unknown = session.shape(shapeRequest);
   const response1: SimpleShapeResponse = shapeResponse1 as SimpleShapeResponse;
   assert.equal(measureCount, 1);
-  const shapeResponse2: unknown = JSON.parse(session.shapeJson(shapeRequest));
+  const shapeResponse2: unknown = session.shape(shapeRequest);
   const response2: SimpleShapeResponse = shapeResponse2 as SimpleShapeResponse;
   assert.equal(measureCount, 1);
   assert.equal(response1.glyphRuns[0].advance, response2.glyphRuns[0].advance);
@@ -233,7 +235,7 @@ test("shape miss with probe failure throws MissingServerShapingReplay verbatim",
     },
   });
   const key: string = shapeReplayKey("缺", "Noto Sans SC", 400, false, "zh-Hans", "CjkText", "缺");
-  const shapeRequest: string = JSON.stringify({
+  const shapeRequest = shapingInput({
     text: "缺",
     range: { start: 0, end: 1 },
     style: { fontFamilies: ["Noto Sans SC"], fontSize: 32, fontWeight: 400, italic: false, locale: "zh-Hans" },
@@ -242,7 +244,7 @@ test("shape miss with probe failure throws MissingServerShapingReplay verbatim",
     openTypeFeatures: [],
   });
   assert.throws(
-    () => JSON.parse(session.shapeJson(shapeRequest)),
+    () => session.shape(shapeRequest),
     (err: unknown): boolean => err instanceof Error && err.message === `MissingServerShapingReplay:shape:${key}`,
   );
 
@@ -252,7 +254,7 @@ test("shape miss with probe failure throws MissingServerShapingReplay verbatim",
     },
   });
   assert.throws(
-    () => JSON.parse(session2.shapeJson(shapeRequest)),
+    () => session2.shape(shapeRequest),
     (err: unknown): boolean => err instanceof Error && err.message === `MissingServerShapingReplay:shape:${key}`,
   );
   session.close();
@@ -262,7 +264,7 @@ test("shape miss with probe failure throws MissingServerShapingReplay verbatim",
 test("session without probe throws MissingServerShapingReplay on miss", async () => {
   const session = await createTestSession(null);
   const key: string = shapeReplayKey("无", "Noto Sans SC", 400, false, "zh-Hans", "CjkText", "无");
-  const shapeRequest: string = JSON.stringify({
+  const shapeRequest = shapingInput({
     text: "无",
     range: { start: 0, end: 1 },
     style: { fontFamilies: ["Noto Sans SC"], fontSize: 32, fontWeight: 400, italic: false, locale: "zh-Hans" },
@@ -271,14 +273,14 @@ test("session without probe throws MissingServerShapingReplay on miss", async ()
     openTypeFeatures: [],
   });
   assert.throws(
-    () => JSON.parse(session.shapeJson(shapeRequest)),
+    () => session.shape(shapeRequest),
     (err: unknown): boolean => err instanceof Error && err.message === `MissingServerShapingReplay:shape:${key}`,
   );
-  const metricKey: string = metricReplayKey("Noto Sans SC", 400, false, "BodyText", "");
-  const metricsRequest: string = JSON.stringify({
+  const metricKey: string = metricReplayKey("Noto Sans SC", 400, false, "Unknown", "");
+  const metricsInput = metricsRequest({
     fontKey: "cjk-primary",
     fontSize: 32,
-    role: "BodyText",
+    role: "Unknown",
     locale: "zh-Hans",
     fontFamilies: ["Noto Sans SC"],
     fontWeight: 400,
@@ -286,7 +288,7 @@ test("session without probe throws MissingServerShapingReplay on miss", async ()
     faceSelectionText: "",
   });
   assert.throws(
-    () => JSON.parse(session.metricsJson(metricsRequest)),
+    () => session.resolve(metricsInput),
     (err: unknown): boolean => err instanceof Error && err.message === `MissingServerShapingReplay:metrics:${metricKey}`,
   );
   session.close();
@@ -304,17 +306,17 @@ test("metric miss with latin role probe populates ascent/descent and keeps typo 
       };
     },
   });
-  const metricsRequest: string = JSON.stringify({
+  const metricsInput = metricsRequest({
     fontKey: "cjk-primary",
     fontSize: 16,
-    role: "BodyText",
+    role: "Unknown",
     locale: "zh-Hans",
     fontFamilies: ["Roboto"],
     fontWeight: 400,
     italic: false,
     faceSelectionText: "",
   });
-  const metricsResponse: unknown = JSON.parse(session.metricsJson(metricsRequest));
+  const metricsResponse: unknown = session.resolve(metricsInput);
   const response: MetricsResponse = metricsResponse as MetricsResponse;
   assert.equal(probedText, LATIN_METRIC_PROBE_TEXT);
   assert.equal(response.ascent, 24);
@@ -338,7 +340,7 @@ test("metric miss with CJK role probe calculates typo metrics from ideographic b
       };
     },
   });
-  const metricsRequest: string = JSON.stringify({
+  const metricsInput = metricsRequest({
     fontKey: "cjk-primary",
     fontSize: 32,
     role: "CjkText",
@@ -348,7 +350,7 @@ test("metric miss with CJK role probe calculates typo metrics from ideographic b
     italic: false,
     faceSelectionText: "",
   });
-  const metricsResponse: unknown = JSON.parse(session.metricsJson(metricsRequest));
+  const metricsResponse: unknown = session.resolve(metricsInput);
   const response: CjkMetricsResponse = metricsResponse as CjkMetricsResponse;
   assert.equal(probedText, CJK_METRIC_PROBE_TEXT);
   assert.equal(response.ascent, 30);
@@ -390,7 +392,7 @@ test("metric miss with measure width <= epsilon throws MissingServerShapingRepla
     },
   });
   const key: string = metricReplayKey("Noto Sans SC", 400, false, "CjkText", "");
-  const metricsRequest: string = JSON.stringify({
+  const metricsInput = metricsRequest({
     fontKey: "cjk-primary",
     fontSize: 32,
     role: "CjkText",
@@ -401,7 +403,7 @@ test("metric miss with measure width <= epsilon throws MissingServerShapingRepla
     faceSelectionText: "",
   });
   assert.throws(
-    () => JSON.parse(session.metricsJson(metricsRequest)),
+    () => session.resolve(metricsInput),
     (err: unknown): boolean => err instanceof Error && err.message === `MissingServerShapingReplay:metrics:${key}`,
   );
   session.close();
@@ -417,7 +419,7 @@ test("metric miss with missing ascent in measure throws MissingServerShapingRepl
     },
   });
   const key: string = metricReplayKey("Noto Sans SC", 400, false, "CjkText", "");
-  const metricsRequest: string = JSON.stringify({
+  const metricsInput = metricsRequest({
     fontKey: "cjk-primary",
     fontSize: 32,
     role: "CjkText",
@@ -428,7 +430,7 @@ test("metric miss with missing ascent in measure throws MissingServerShapingRepl
     faceSelectionText: "",
   });
   assert.throws(
-    () => JSON.parse(session.metricsJson(metricsRequest)),
+    () => session.resolve(metricsInput),
     (err: unknown): boolean => err instanceof Error && err.message === `MissingServerShapingReplay:metrics:${key}`,
   );
   session.close();
@@ -441,7 +443,7 @@ test("measure function throwing an error fails closed without leaking exception"
     },
   });
   const shapeKey: string = shapeReplayKey("崩", "Noto Sans SC", 400, false, "zh-Hans", "CjkText", "崩");
-  const shapeRequest: string = JSON.stringify({
+  const shapeRequest = shapingInput({
     text: "崩",
     range: { start: 0, end: 1 },
     style: { fontFamilies: ["Noto Sans SC"], fontSize: 32, fontWeight: 400, italic: false, locale: "zh-Hans" },
@@ -450,11 +452,11 @@ test("measure function throwing an error fails closed without leaking exception"
     openTypeFeatures: [],
   });
   assert.throws(
-    () => JSON.parse(session.shapeJson(shapeRequest)),
+    () => session.shape(shapeRequest),
     (err: unknown): boolean => err instanceof Error && err.message === `MissingServerShapingReplay:shape:${shapeKey}`,
   );
   const metricKey: string = metricReplayKey("Noto Sans SC", 400, false, "CjkText", "");
-  const metricsRequest: string = JSON.stringify({
+  const metricsInput = metricsRequest({
     fontKey: "cjk-primary",
     fontSize: 32,
     role: "CjkText",
@@ -465,7 +467,7 @@ test("measure function throwing an error fails closed without leaking exception"
     faceSelectionText: "",
   });
   assert.throws(
-    () => JSON.parse(session.metricsJson(metricsRequest)),
+    () => session.resolve(metricsInput),
     (err: unknown): boolean => err instanceof Error && err.message === `MissingServerShapingReplay:metrics:${metricKey}`,
   );
   session.close();
@@ -479,7 +481,7 @@ test("zero-width display text probing succeeds, records 0 advance, and hits cach
       return { width: 0 };
     },
   });
-  const shapeRequest: string = JSON.stringify({
+  const shapeRequest = shapingInput({
     text: "\u200B",
     range: { start: 0, end: 1 },
     style: { fontFamilies: ["Noto Sans SC"], fontSize: 32, fontWeight: 400, italic: false, locale: "zh-Hans" },
@@ -487,13 +489,13 @@ test("zero-width display text probing succeeds, records 0 advance, and hits cach
     displayText: "\u200B",
     openTypeFeatures: [],
   });
-  const shapeResponse1: unknown = JSON.parse(session.shapeJson(shapeRequest));
+  const shapeResponse1: unknown = session.shape(shapeRequest);
   const response1: ZeroWidthShapeResponse = shapeResponse1 as ZeroWidthShapeResponse;
   assert.equal(measureCount, 1);
   assert.equal(response1.glyphRuns[0].advance, 0);
   assert.equal(response1.glyphRuns[0].glyphs[0].advance, 0);
 
-  const shapeResponse2: unknown = JSON.parse(session.shapeJson(shapeRequest));
+  const shapeResponse2: unknown = session.shape(shapeRequest);
   const response2: SimpleAdvanceShapeResponse = shapeResponse2 as SimpleAdvanceShapeResponse;
   assert.equal(measureCount, 1);
   assert.equal(response2.glyphRuns[0].advance, 0);

@@ -210,7 +210,7 @@ TalkBack character-location 能力不属于当前静态正文路径。
 ### Web
 
 `platforms/web/client` 发布 ESM 包 `@tiqian/web-component` 与 light-DOM `<tiqian-prose>`。服务器输出的
-HTML 先保持可读，TS runtime（`@tiqian/core` 宿主模块与 `@tiqian/ffi` 引擎）与字体就绪后按 viewport 距离逐段原子增强。原 `<p>`、链接、代码、强调、自定义
+HTML 先保持可读，TS runtime（`@tiqian/core` 宿主模块与 `@tiqian/engine` 引擎树）与字体就绪后按 viewport 距离逐段原子增强。原 `<p>`、链接、代码、强调、自定义
 inline 与 CSS 仍由宿主持有；引擎只写入断行和 spacing geometry。
 `strong-as-emphasis` lowering 先保留 source range，等整段文本完成空白投影后再通过 FFI 批量取得
 字体角色；不能在单个 DOM text node 上提前决定着重号或字重，否则跨节点的破折号、省略号会失去
@@ -228,8 +228,8 @@ Web 列表保留原生 marker 与语义，只把列表正文交给 Tiqian 排版
 
 构建期 precompute 由 `platforms/web/server/precompute` 的 Rust 编排承担：从站点明确发布的字体文件建立
 HarfBuzz session，并调用同一个 `layout` 生成宽度无关的字体回放证据，以及可选的最大版心预排结果。
-引擎的 Kotlin/JS 出口在 `ffi/js` 编译，服务浏览器 exact-font 回退 worker；
-Kotlin/Native 出口在 `ffi/native`，以引擎层面的 C ABI 供 Rust 编排调用（ADR 0050）。纯文本与受控语义 inline
+引擎的 Web 出口由 Haxe 源码经 `boring gen ts` 生成 TypeScript 树，作为 `@tiqian/engine` 工作区成员服务浏览器排版与回退 worker；
+Rust 预计算绑定读取同一 Haxe 源码生成的 Rust 树（ADR 0050）。纯文本与受控语义 inline
 共用 source / semantic artifact / typography / font / width 证据；prepared DOM 留在正文之外的 inert
 template，SSR 正文始终是可响应的 native semantic backing。浏览器只有在 live width、字体与 artifact
 证据全部匹配时才整批采用快照；窄屏等 snapshot miss 使用构建期捕获的字号无关 shaping / metrics
@@ -310,8 +310,8 @@ caret/selection 几何；平台 tokenizer 不参与 shaping、断行或字位计
 - `platforms/apple/frontend/coretext-render`：Apple 内部 Core Text renderer 与 paragraph backend。
 - `platforms/apple/frontend`：生产 Swift facade、静态 XCFramework、`AttributedString` authoring 与 Apple
   原生 view package；不拥有示例内容或排版规则。
-- `ffi/native`：引擎层面 packed C ABI 的 Kotlin/Native 对外接口；不拥有排版规则。
-- `ffi/js`：引擎的 Kotlin/JS 对外接口（`@JsExport` wire 与 HarfBuzz session 后端）；不拥有排版规则。
+- `@tiqian/engine`：Haxe 引擎源码生成的 TypeScript 树（`engine-haxe/out/ts/gen`），不拥有排版规则。
+- `@tiqian/protocol` 与 `@tiqian/shared`：协议与共享模型的生成树，不拥有排版规则。
 - `platforms/web/server`：Rust workspace（`tiqian-precompute`、`tiqian-precompute-neon`）与
   `@tiqian/precompute` npm 包；Node exact-font session 与构建期编排；不拥有排版规则。
 - `platforms/web/client/astro`、`platforms/web/client/sveltekit`：框架 SSR / build / navigation transport；消费 `@tiqian/web-component` 的公共

@@ -128,8 +128,8 @@
             shellHook = ''
               # HAXELIB_PATH and the boring dev checkout belong to the flake
               # root: boring.json states the `.haxelib/boring/git/...` classpaths
-              # relative to it, and CI runs `nix develop` from
-              # platforms/web/client/engine-runtime. Resolve the root from the
+              # relative to it, and CI runs `nix develop` from the repository
+              # root. Resolve the root from the
               # invocation directory so a subdirectory invocation still stages
               # the haxelib tree those classpaths point at.
               tq_flake_root="$PWD"

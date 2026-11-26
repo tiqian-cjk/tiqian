@@ -5,6 +5,7 @@
     "lib": ["es2022", "dom", "dom.iterable"],
     "module": "nodenext",
     "moduleResolution": "nodenext",
+    "rewriteRelativeImportExtensions": true,
     "strict": true,
     "erasableSyntaxOnly": true,
     "declaration": true,

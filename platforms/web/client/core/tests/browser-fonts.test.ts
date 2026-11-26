@@ -1,5 +1,6 @@
 import { globalServices } from "../src/services/global-services.js";
 import { snapshotSessionCallbacks } from "../src/measurement/browser-font-replay.js";
+import { metricsRequest, shapingInput } from "./engine-input.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -1237,20 +1238,19 @@ test("the default browser session scales server shaping evidence without loading
   // The default session resolves through the coordination registry, so the
   // callbacks for the prepared handle id address the same replay tables the
   // former handle-based global backend exposed.
-  const { shapeJson, metricsJson } = snapshotSessionCallbacks(handle.id);
-  const shapeResponse = JSON.parse(shapeJson(JSON.stringify({
+  const { shape, resolve } = snapshotSessionCallbacks(handle.id);
+  const shapeResponse = shape(shapingInput({
     text: "正文",
-    sourceText: "正文",
     range: { start: 0, end: 2 },
     style: { fontFamilies: [families], fontSize: 20, fontWeight: 400, italic: false, locale: "zh-Hans" },
     fontDecision: { role: "CjkText", candidateKey: "cjk-primary" },
     displayText: "正文",
     openTypeFeatures: [],
-  })));
-  assert.equal(shapeResponse.glyphRuns[0].advance, 40);
-  assert.equal(shapeResponse.glyphRuns[0].glyphs[0].advance, 40);
-  assert.equal(shapeResponse.glyphRuns[0].glyphs[0].bounds.top, -16);
-  const metricsResponse = JSON.parse(metricsJson(JSON.stringify({
+  }));
+  assert.equal(shapeResponse.glyphRuns[0]!.advance, 40);
+  assert.equal(shapeResponse.glyphRuns[0]!.glyphs[0]!.advance, 40);
+  assert.equal(shapeResponse.glyphRuns[0]!.glyphs[0]!.x, 0);
+  const metricsResponse = resolve(metricsRequest({
     fontFamilies: [families],
     fontSize: 20,
     fontWeight: 400,
@@ -1258,7 +1258,7 @@ test("the default browser session scales server shaping evidence without loading
     role: "CjkText",
     locale: "zh-Hans",
     faceSelectionText: "正文",
-  })));
+  }));
   assert.deepEqual(
     [metricsResponse.ascent, metricsResponse.descent, metricsResponse.leading,
      metricsResponse.typoAscent, metricsResponse.typoDescent],

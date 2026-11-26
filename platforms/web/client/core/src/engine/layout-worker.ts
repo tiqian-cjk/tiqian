@@ -10,8 +10,8 @@ import type {
   WorkerRequestEnvelope,
   WorkerResponseEnvelope,
 } from "./web-worker/worker-channel.js";
-import { precomputeParagraphPlan } from "@tiqian/ffi";
-import type { DecorationWire } from "@tiqian/ffi";
+import { preparedParagraphPlan } from "./engine-access/prepared-paragraph.js";
+import type { DecorationWire } from "./engine-access/wire-types.js";
 import { prepareParagraphRequestWire } from "./wire-construction.js";
 import type { WorkerLayoutRequestBody } from "./web-worker/worker-channel.js";
 import { initializeGlobalServices } from "../services/global-services.js";
@@ -95,12 +95,10 @@ function errorDetail(error: unknown): string {
       emphasisDotGapEm: null,
       renderEvidenceOverride: request.renderEvidence,
     });
-    const plan = precomputeParagraphPlan(
-      requestDto,
-      0.0,
-      session.shapeJson,
-      session.metricsJson,
-    );
+    const plan = preparedParagraphPlan(requestDto, {
+      shape: session.shape,
+      resolve: session.resolve,
+    });
     (globalThis as LayoutWorkerMessageScope).postMessage({ id, ok: true, plan });
   } catch (error) {
     (globalThis as LayoutWorkerMessageScope).postMessage({ id, ok: false, error: errorDetail(error) });

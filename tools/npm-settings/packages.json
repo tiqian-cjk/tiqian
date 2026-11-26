@@ -5,13 +5,6 @@
   "note": "Every package the release publishes through the release.yml entrypoint. The trusted publisher must allow npm publish and npm dist-tag for the OIDC dist-tag step to work without a token.",
   "packages": [
     {
-      "name": "@tiqian/ffi",
-      "actions": [
-        "publish",
-        "dist-tag"
-      ]
-    },
-    {
       "name": "@tiqian/core",
       "actions": [
         "publish",

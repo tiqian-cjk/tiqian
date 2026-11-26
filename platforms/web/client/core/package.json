@@ -137,7 +137,7 @@
     }
   },
   "dependencies": {
-    "@tiqian/ffi": "0.1.0-alpha.15",
+    "@tiqian/engine": "workspace:*",
     "@tiqian/protocol": "workspace:*",
     "@tiqian/shared": "workspace:*"
   },

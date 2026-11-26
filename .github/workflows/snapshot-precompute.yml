@@ -73,8 +73,8 @@ jobs:
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
           echo "commit=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
 
-  ffi-runtime:
-    name: Build the ffi runtime
+  generate-trees:
+    name: Generate the engine trees and package manifests
     runs-on: ubuntu-latest
     needs: [stamp]
     steps:
@@ -89,12 +89,13 @@ jobs:
           node-version: "24"
           package-manager-cache: false
 
-      # tiqian-protocol and tiqian-shared are workspace:* members under
-      # engine-haxe/out/{protocol-ts,shared-ts}/gen; the trees are generated and
-      # their package.json is written by boring pack, which needs the flake
-      # driver. npm cannot resolve workspace:* (EUNSUPPORTEDPROTOCOL), so this
-      # job generates and packs them, then installs with bun. The Windows and
-      # macOS legs have no Nix, so this job also publishes the trees they need.
+      # tiqian-protocol, tiqian-shared and tiqian-engine are workspace:*
+      # members under engine-haxe/out/{protocol-ts,shared-ts,ts}/gen; the trees
+      # are generated and their package.json is written by boring pack, which
+      # needs the flake driver. npm cannot resolve workspace:*
+      # (EUNSUPPORTEDPROTOCOL), so this job generates and packs them, then
+      # installs with bun. The Windows and macOS legs have no Nix, so this job
+      # also publishes the trees they need.
       - name: Install Nix
         id: nix-installer
         continue-on-error: true
@@ -118,27 +119,21 @@ jobs:
       - name: Allow unprivileged user namespaces
         run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
       - name: Generate the Rust and TypeScript engine trees with the flake toolchain
-        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs && node tools/generate-engine-gen.mjs ts'
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs'
       - name: Write the protocol and shared package manifests
         run: |
           export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts ts --project boring.json'
       - name: Install workspace dependencies
         working-directory: .
         # bun, not npm: the web consumers declare tiqian-protocol and
         # tiqian-shared as workspace:*, and npm refuses that protocol with
         # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
         # which would regenerate the protocol-ts tree and delete the manifest
-        # boring pack wrote; build:runtime below assembles the runtime.
+        # boring pack wrote.
         run: nix develop -c bun install --ignore-scripts
-
-      - name: Assemble the ffi npm runtime
-        # The skipped install hook used to assemble runtime/, which the matrix
-        # legs and the artifact below consume.
-        working-directory: platforms/web/client/engine-runtime
-        run: nix develop -c npm run build:runtime
 
       - name: Upload the generated trees and manifests
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -149,21 +144,14 @@ jobs:
             engine-haxe/out/shared-ts
             platforms/web/server/precompute/engine-gen
             platforms/web/server/precompute/protocol-gen
-            platforms/web/client/engine-runtime/engine-gen
+            engine-haxe/out/ts
           if-no-files-found: error
           retention-days: 7
 
-      - name: Upload the ffi npm runtime
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ffi-runtime
-          path: platforms/web/client/engine-runtime/runtime
-          if-no-files-found: error
-          retention-days: 7
 
   binaries:
     name: Build addon (${{ matrix.platform }})
-    needs: [stamp, ffi-runtime]
+    needs: [stamp, generate-trees]
     strategy:
       fail-fast: false
       matrix:
@@ -193,16 +181,6 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
-
-      # The smoke test's pretest build consumes the ffi type declarations, a
-      # Gradle product. The runtime is host-independent JS, so reuse the
-      # archive built once on linux instead of installing a JDK and the
-      # Android SDK on every matrix leg.
-      - name: Download the ffi npm runtime
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ffi-runtime
-          path: platforms/web/client/engine-runtime/runtime
 
       - name: Download the generated trees and package manifests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -360,28 +338,20 @@ jobs:
           exit 1
       - name: Allow unprivileged user namespaces
         run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
-      - name: Generate the TypeScript engine tree with the flake toolchain
-        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs ts'
       - name: Write the protocol and shared package manifests
         run: |
           export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts ts --project boring.json'
       - name: Install workspace dependencies
         working-directory: .
         # bun, not npm: the web consumers declare tiqian-protocol and
         # tiqian-shared as workspace:*, and npm refuses that protocol with
         # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
         # which would regenerate the protocol-ts tree and delete the manifest
-        # boring pack wrote; the runtime is assembled explicitly below.
+        # boring pack wrote.
         run: nix develop -c bun install --ignore-scripts
-
-      - name: Assemble the ffi npm runtime
-        # The skipped install hook used to compile the @tiqian/ffi runtime/
-        # declarations this build chain resolves.
-        working-directory: platforms/web/client/engine-runtime
-        run: nix develop -c npm run build:runtime
 
       # The precompute build consumes web-component's prepared-dom, whose project
       # references consume core's declarations; a fresh checkout carries
@@ -507,28 +477,20 @@ jobs:
           exit 1
       - name: Allow unprivileged user namespaces
         run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
-      - name: Generate the TypeScript engine tree with the flake toolchain
-        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs ts'
       - name: Write the protocol and shared package manifests
         run: |
           export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts ts --project boring.json'
       - name: Install workspace dependencies
         working-directory: .
         # bun, not npm: the web consumers declare tiqian-protocol and
         # tiqian-shared as workspace:*, and npm refuses that protocol with
         # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
         # which would regenerate the protocol-ts tree and delete the manifest
-        # boring pack wrote; the runtime is assembled explicitly below.
+        # boring pack wrote.
         run: nix develop -c bun install --ignore-scripts
-
-      - name: Assemble the ffi npm runtime
-        # The skipped install hook used to compile the @tiqian/ffi runtime/
-        # declarations this build chain resolves.
-        working-directory: platforms/web/client/engine-runtime
-        run: nix develop -c npm run build:runtime
 
       # The precompute build consumes web-component's prepared-dom, whose project
       # references consume core's declarations; a fresh checkout carries
@@ -627,7 +589,7 @@ jobs:
           retention-days: 7
 
   client-packages:
-    name: Pack ffi, core, web-component, and react packages
+    name: Pack core, web-component, and react packages
     needs: [stamp]
     runs-on: ubuntu-latest
     env:
@@ -693,14 +655,12 @@ jobs:
           exit 1
       - name: Allow unprivileged user namespaces
         run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
-      - name: Generate the TypeScript engine tree with the flake toolchain
-        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs ts'
       - name: Write the protocol and shared package manifests
         run: |
           export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts ts --project boring.json'
       # Root install covers every workspace member; each package's pretest
       # then emits the .js/.d.ts build products its tarball ships.
       - name: Install workspace dependencies
@@ -708,16 +668,8 @@ jobs:
         # tiqian-shared as workspace:*, and npm refuses that protocol with
         # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
         # which would regenerate the protocol-ts tree and delete the manifest
-        # boring pack wrote; the runtime is assembled explicitly below.
+        # boring pack wrote.
         run: nix develop -c bun install --ignore-scripts
-
-      # The ffi package ships the generated TypeScript runtime that
-      # `npm run build:runtime` assembles into the gitignored runtime
-      # directory; a checkout carries none of it, and the --ignore-scripts
-      # pack below never rebuilds it.
-      - name: Assemble the ffi npm runtime
-        working-directory: platforms/web/client/engine-runtime
-        run: npm run build:runtime
 
       # The suites assert the canonical @tiqian manifests and resolve the
       # workspace dev links, so they all run before the swap. The order
@@ -735,10 +687,6 @@ jobs:
         working-directory: platforms/web/client/react
         run: npm test
 
-      - name: Test @tiqian/ffi
-        working-directory: platforms/web/client/engine-runtime
-        run: npm test
-
       - name: Apply the snapshot manifest swap
         id: swap
         working-directory: platforms/web/server/core
@@ -750,30 +698,26 @@ jobs:
           repository="$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
           node snapshot-swap.ts apply "${SNAPSHOT_VERSION}" "${scope}" "${repository}"
 
-      # web-component and ffi declare verify prepacks that assert the canonical
+      # web-component declares a verify prepack that asserts the canonical
       # manifest set, and every package's emitted build products were made
       # before the swap, so all four pack without scripts. The content
       # assertions grep a saved listing: piping tar straight into grep -q
       # lets grep exit on the match while tar still writes, and pipefail
       # turns the resulting SIGPIPE into a step failure.
-      - name: Pack the four packages
+      - name: Pack the three packages
         shell: bash
         run: |
           set -euo pipefail
           out="${GITHUB_WORKSPACE}/client-pack-output"
           mkdir -p "${out}"
-          (cd platforms/web/client/engine-runtime && npm pack --ignore-scripts --pack-destination "${out}")
           (cd platforms/web/client/core && npm pack --ignore-scripts --pack-destination "${out}")
           (cd platforms/web/client/web-component && npm pack --ignore-scripts --pack-destination "${out}")
           (cd platforms/web/client/react && npm pack --ignore-scripts --pack-destination "${out}")
-          test "$(find "${out}" -name '*.tgz' | wc -l)" -eq 4
-          ffi_tarball="$(find "${out}" -name '*ffi*.tgz' -print -quit)"
+          test "$(find "${out}" -name '*.tgz' | wc -l)" -eq 3
           core_tarball="$(find "${out}" -name '*core*.tgz' -print -quit)"
           web_component_tarball="$(find "${out}" -name '*web-component*.tgz' -print -quit)"
           react_tarball="$(find "${out}" -name '*react*.tgz' -print -quit)"
           listing="${out}/listing.txt"
-          tar -tzf "${ffi_tarball}" > "${listing}"
-          grep -q '^package/runtime/Tiqian-tiqian-ffi-js.mjs$' "${listing}"
           tar -tzf "${core_tarball}" > "${listing}"
           grep -q '^package/src/' "${listing}"
           tar -tzf "${web_component_tarball}" > "${listing}"
@@ -837,8 +781,8 @@ jobs:
           done < <(find packages -name '*.tgz' -print0)
 
       # Publish in dependency order so every version resolves as it lands:
-      # ffi first (core imports it at runtime), then core (web-component and react
-      # depend on it), then the platform binaries (the main package lists
+      # core first (web-component and react
+      # depend on it, then the platform binaries (the main package lists
       # them as optional dependencies at the same version), then the main
       # package, and finally the integrations that peer on the snapshot
       # precompute and web-component.

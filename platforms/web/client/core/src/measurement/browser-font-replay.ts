@@ -21,6 +21,10 @@ import type { ProbeMeasure } from "./replay-probe.js";
 import type { SnapshotManifestFace } from "../sampler/snapshot/snapshot-manifest.js";
 import type { SnapshotProbe } from "../sampler/snapshot/snapshot-table-binary.js";
 import { globalServices } from "../services/global-services.js";
+import { toEngineFontMetrics, toEngineShapingResult } from "../engine/engine-access/host-result.js";
+import type { ShapingInput, ShapingResult } from "@tiqian/engine/org/tiqian/shaping/TextShaper";
+import type { FontMetricsRequest } from "@tiqian/engine/org/tiqian/font/FontMetrics";
+import type { RawFontMetrics } from "@tiqian/engine/org/tiqian/font/RawFontMetrics";
 
 export interface ReplayProbe {
   measure: ProbeMeasure;
@@ -56,15 +60,15 @@ export interface ReplayFontSessionFace {
   probe?: SnapshotProbe | undefined;
 }
 
-// Named wire callback types: the ffi entries take the shaping supply as call
-// parameters, and every descriptor that carries the pair references these
-// names instead of repeating an inline function type.
-export type ShapeJsonFn = (requestJson: string) => string;
-export type MetricsJsonFn = (requestJson: string) => string;
+// The engine's two host callbacks, as typed adapters. Every descriptor that
+// carries the pair references these names instead of repeating an inline
+// function type.
+export type ShapeFn = (input: ShapingInput) => ShapingResult;
+export type MetricsFn = (request: FontMetricsRequest) => RawFontMetrics;
 
 export interface SnapshotSessionCallbacks {
-  shapeJson: ShapeJsonFn;
-  metricsJson: MetricsJsonFn;
+  shape: ShapeFn;
+  resolve: MetricsFn;
 }
 
 export interface ServerReplayFontSession {
@@ -73,8 +77,8 @@ export interface ServerReplayFontSession {
   harfbuzzVersion: string;
   faces: ReplayFontSessionFace[];
   close: SessionCloser;
-  shapeJson: ShapeJsonFn;
-  metricsJson: MetricsJsonFn;
+  shape: ShapeFn;
+  resolve: MetricsFn;
 }
 
 interface ReplaySession {
@@ -155,21 +159,20 @@ function replayIndex<T extends { key: string }>(items: T[], kind: string): Map<s
   return index;
 }
 
-function createShapeJsonCallback(registry: ReplayRegistry, sessionId: string): ShapeJsonFn {
-  return (requestJson: string): string => {
-    const request = JSON.parse(requestJson);
+function createShapeCallback(registry: ReplayRegistry, sessionId: string): ShapeFn {
+  return (input: ShapingInput): ShapingResult => {
     const session = registry.sessions.get(sessionId);
     if (!session) throw new Error(`UnknownFontSession:${sessionId}`);
 
     // Match the server's key for display substitutions by using the source range.
-    const sourceText = request.text.substring(request.range.start, request.range.end);
-    const displayText = request.displayText;
-    const serializedFamilies = request.style.fontFamilies.join("\u001f");
-    const fontSize = request.style.fontSize;
-    const fontWeight = request.style.fontWeight;
-    const italic = request.style.italic;
-    const locale = request.style.locale;
-    const role = request.fontDecision.role;
+    const sourceText = input.text.substring(input.range.start, input.range.end);
+    const displayText = input.displayText;
+    const serializedFamilies = input.style.fontFamilies.join("\u001f");
+    const fontSize = input.style.fontSize;
+    const fontWeight = input.style.fontWeight;
+    const italic = input.style.italic;
+    const locale = input.style.locale;
+    const role = input.fontDecision.role.kind;
 
     const key = shapeReplayKey(
       displayText,
@@ -194,54 +197,53 @@ function createShapeJsonCallback(registry: ReplayRegistry, sessionId: string): S
     if (!item) throw new Error(`MissingServerShapingReplay:shape:${key}`);
     const handle = registry.nextResultId++;
     registry.shapeResults.set(handle, scaleShapeReplayItem(item, fontSize));
-
-    // Build response JSON matching the shaping result format
     const glyphs = registry.shapeResults.get(handle)!;
-    return JSON.stringify({
+
+    const range = { start: input.range.start, end: input.range.end };
+    const fontKey = input.fontDecision.candidate.key;
+    return toEngineShapingResult({
       clusters: [{
-        range: request.range,
+        range,
         text: sourceText,
         displayText,
-        fontKey: request.fontDecision.candidateKey,
+        fontKey,
         advance: glyphs.advance,
       }],
       glyphRuns: [{
-        range: request.range,
-        fontKey: request.fontDecision.candidateKey,
-        glyphs: glyphs.glyphs.map((g, i) => ({
+        range,
+        fontKey,
+        glyphs: glyphs.glyphs.map((g) => ({
           id: g.id,
-          clusterRange: request.range,
+          clusterRange: range,
           advance: g.advance,
           x: g.x,
           y: g.y,
-          bounds: g.bounds ? { left: g.bounds[0], top: g.bounds[1], right: g.bounds[2], bottom: g.bounds[3] } : null,
         })),
         advance: glyphs.advance,
         openTypeFeatures: glyphs.features,
       }],
       decisions: [{
-        range: request.range,
+        range,
         sourceText,
         displayText,
-        fontKey: request.fontDecision.candidateKey,
+        fontKey,
         glyphCount: glyphs.glyphs.length,
         advance: glyphs.advance,
         source: "HarfBuzz",
         reason: `SharedHarfBuzzSession:face=${glyphs.faceId}; instance=${glyphs.fontInstanceId}; current-segment-context; features=${glyphs.features.join(",").replace(/^$/, "default")}; unsafeToBreakGlyphs=${glyphs.unsafeBreakCount}`,
-        glyphsWithoutInkBounds: glyphs.glyphs.filter(g => g.bounds === null).length,
-        missingGlyphs: glyphs.glyphs.filter(g => g.id === 0).length,
+        glyphsWithoutInkBounds: glyphs.glyphs.filter((g) => g.bounds === null).length,
+        missingGlyphs: glyphs.glyphs.filter((g) => g.id === 0).length,
         resolvedFace: glyphs.faceId,
         script: glyphs.script,
-        language: request.style.locale,
+        language: input.style.locale,
         featureEvidence: glyphs.features.length > 0 ? glyphs.features.join(",") : null,
       }],
     });
   };
 }
 
-function createMetricsJsonCallback(registry: ReplayRegistry, sessionId: string): MetricsJsonFn {
-  return (requestJson: string): string => {
-    const request = JSON.parse(requestJson);
+function createMetricsCallback(registry: ReplayRegistry, sessionId: string): MetricsFn {
+  return (request: FontMetricsRequest): RawFontMetrics => {
     const session = registry.sessions.get(sessionId);
     if (!session) throw new Error(`UnknownFontSession:${sessionId}`);
 
@@ -249,7 +251,7 @@ function createMetricsJsonCallback(registry: ReplayRegistry, sessionId: string):
     const fontSize = request.fontSize;
     const fontWeight = request.fontWeight;
     const italic = request.italic;
-    const role = request.role;
+    const role = request.role.kind;
     const faceSelectionText = request.faceSelectionText;
 
     const key = metricReplayKey(
@@ -275,7 +277,7 @@ function createMetricsJsonCallback(registry: ReplayRegistry, sessionId: string):
     registry.metricResults.set(handle, scaleMetricReplayItem(item, fontSize));
 
     const metrics = registry.metricResults.get(handle)!;
-    return JSON.stringify({
+    return toEngineFontMetrics({
       ascent: metrics[0],
       descent: metrics[1],
       leading: metrics[2],
@@ -295,8 +297,8 @@ function createMetricsJsonCallback(registry: ReplayRegistry, sessionId: string):
 export function snapshotSessionCallbacks(sessionId: string): SnapshotSessionCallbacks {
   const registry = replayRegistry();
   return {
-    shapeJson: createShapeJsonCallback(registry, sessionId),
-    metricsJson: createMetricsJsonCallback(registry, sessionId),
+    shape: createShapeCallback(registry, sessionId),
+    resolve: createMetricsCallback(registry, sessionId),
   };
 }
 
@@ -330,8 +332,8 @@ export async function createServerReplayFontSession(
   const sessionId = `${prefix}-${registry.nextSessionId++}`;
   registry.sessions.set(sessionId, { shapes, metrics, probe });
   let closed = false;
-  const shapeJson = createShapeJsonCallback(registry, sessionId);
-  const metricsJson = createMetricsJsonCallback(registry, sessionId);
+  const shape = createShapeCallback(registry, sessionId);
+  const resolve = createMetricsCallback(registry, sessionId);
   return Object.freeze({
     id: sessionId,
     backendRevision: FONT_BACKEND_REVISION,
@@ -347,7 +349,7 @@ export async function createServerReplayFontSession(
       closed = true;
       registry.sessions.delete(sessionId);
     },
-    shapeJson,
-    metricsJson,
+    shape,
+    resolve,
   });
 }
