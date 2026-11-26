@@ -698,7 +698,7 @@ class LineAdjustmentStage {
         }
         final justifyDeltaByCluster = justifyDeltaBuilder.build();
         final finalGeometry = trimmedGeometry.addJustificationDeltas(justifyDeltaByCluster);
-        final resolvedFinalClusters = finalGeometry.resolveClusters();
+        final resolvedFinalClusters = finalGeometry.resolveClustersChangedFrom(trimmedClusters, trimmedGeometry.justificationDeltaByCluster);
         // `FinishClusterLookups`: entry `i` of `resolvedFinalClusters` and `finalClusters` is
         // natural cluster `i`, so the per-cluster values below are read by index.
         final lookupsKey = WidthIndependentAnnotationCacheFns.kinsokuLevelMemoKey(prep.resolvedKinsoku.level);

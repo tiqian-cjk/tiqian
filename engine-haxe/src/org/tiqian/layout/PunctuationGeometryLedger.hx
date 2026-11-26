@@ -105,15 +105,40 @@ import std.SortedMap;
 
     public function resolveClusters():Array<Cluster> {
         final result:Array<Cluster> = [];
-        for (i in 0...naturalClusters.length) {
-            final c = naturalClusters[i];
-            final v = resolvedAdvance(i, c);
-            final geometry = geometries.get(i);
-            final sh = geometry == null ? 0 : geometry.glyphInlineShift;
-            result.push(v == c.advance
-                && sh == 0 ? c : new Cluster(c.range, c.text, c.fontKey, v, c.displayText, c.baselineShift, c.leadingLayoutAdvance, c.glyphInlineShift + sh));
+        for (i in 0...naturalClusters.length)
+            result.push(resolveCluster(i));
+        return result;
+    }
+
+    /**
+     * `resolveClusters()` of this ledger, given `previous`, the `resolveClusters()` of a ledger
+     * that differs from this one only in its justification deltas, `previousDeltas`
+     * (`addJustificationDeltas` replaces nothing else). A cluster with a delta in neither ledger
+     * reads the same values in both, so its entry is the entry of `previous`; every cluster with a
+     * delta in either ledger is resolved again.
+     */
+    public function resolveClustersChangedFrom(previous:Array<Cluster>, previousDeltas:SortedMap<Int, Float>):Array<Cluster> {
+        final result:Array<Cluster> = [];
+        for (i in 0...previous.length)
+            result.push(previous[i]);
+        for (i in 0...previousDeltas.size()) {
+            final k = previousDeltas.keyAt(i);
+            result[k] = resolveCluster(k);
+        }
+        for (i in 0...justificationDeltaByCluster.size()) {
+            final k = justificationDeltaByCluster.keyAt(i);
+            result[k] = resolveCluster(k);
         }
         return result;
+    }
+
+    function resolveCluster(i:Int):Cluster {
+        final c = naturalClusters[i];
+        final v = resolvedAdvance(i, c);
+        final geometry = geometries.get(i);
+        final sh = geometry == null ? 0 : geometry.glyphInlineShift;
+        return v == c.advance
+            && sh == 0 ? c : new Cluster(c.range, c.text, c.fontKey, v, c.displayText, c.baselineShift, c.leadingLayoutAdvance, c.glyphInlineShift + sh);
     }
 
     function resolvedAdvance(i:Int, c:Cluster):Float {
