@@ -62,12 +62,17 @@ class KinsokuDependentPlanning {
     public final cjkInterCharBoundaries:SortedSet<Int>;
     public final sinoWesternBoundaries:SortedSet<Int>;
 
+    /** `LineBreakerLines.unionLineGapBoundaries(cjkInterCharBoundaries, sinoWesternBoundaries)`, passed to the line breaker. */
+    public final lineGapBoundaries:SortedSet<Int>;
+
     public function new(forbiddenLineStartCoreClusters:SortedSet<Int>, forbiddenLineEndClusters:SortedSet<Int>,
-            noStretchBoundaryAfterClusters:SortedSet<Int>, cjkInterCharBoundaries:SortedSet<Int>, sinoWesternBoundaries:SortedSet<Int>) {
+            noStretchBoundaryAfterClusters:SortedSet<Int>, cjkInterCharBoundaries:SortedSet<Int>, sinoWesternBoundaries:SortedSet<Int>,
+            lineGapBoundaries:SortedSet<Int>) {
         this.forbiddenLineStartCoreClusters = forbiddenLineStartCoreClusters;
         this.forbiddenLineEndClusters = forbiddenLineEndClusters;
         this.noStretchBoundaryAfterClusters = noStretchBoundaryAfterClusters;
         this.cjkInterCharBoundaries = cjkInterCharBoundaries;
         this.sinoWesternBoundaries = sinoWesternBoundaries;
+        this.lineGapBoundaries = lineGapBoundaries;
     }
 }

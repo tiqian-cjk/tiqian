@@ -30,6 +30,7 @@ import org.tiqian.core.LineLengthGridDecisionInfo;
 import org.tiqian.layout.LineGeometryStage.ClusterMetricDecision;
 import org.tiqian.layout.LineGeometryStage.ResolvedLineMetrics;
 import org.tiqian.layout.LineBreakPlanningParts.KinsokuDependentPlanning;
+import org.tiqian.layout.LineBreaker.LineBreakerLines;
 import org.tiqian.layout.LineBreakPlanningParts.LineBreakPlanningBase;
 import org.tiqian.layout.WidthIndependentAnnotationCache.WidthIndependentAnnotationCacheFns;
 import org.tiqian.core.LineSpacingDecisionInfo;
@@ -731,7 +732,7 @@ class LineBreakPlanningStage {
         final sinoWesternBoundaries = sinoWesternBoundariesBuilder.build();
 
         return new KinsokuDependentPlanning(forbiddenLineStartCoreClusters, forbiddenLineEndClusters, noStretchBoundaryAfterClusters,
-            cjkInterCharBoundaries, sinoWesternBoundaries);
+            cjkInterCharBoundaries, sinoWesternBoundaries, LineBreakerLines.unionLineGapBoundaries(cjkInterCharBoundaries, sinoWesternBoundaries));
     }
 
     /**
@@ -957,7 +958,7 @@ class LineBreakPlanningStage {
                 forbiddenLineEndClusters, hyphenBreakClusters, cjkInterCharBoundaries, HYPHEN_LAST_RESORT_CJK_STRETCH_EM * prep.fontSize,
                 sinoWesternBoundaries, HYPHEN_SINO_WESTERN_STRETCH_CAP_EM * prep.fontSize,
                 prep.adjustmentStyle.lineAdjustment != LineAdjustmentStrategy.PushOutOnly, lineAdjustmentCompressBias, prep.mandatoryBreakClusters,
-                prep.zeroWidthBreakClusters, progressiveBreakOpportunities);
+                prep.zeroWidthBreakClusters, progressiveBreakOpportunities, kinsokuPlanning.lineGapBoundaries);
         }
 
         return new LineBreakPlanningStageResult(metricDecisions, metricDecisionByRange, baseAscent, baseDescent, baseBoxDescent, baseFaceHeight,

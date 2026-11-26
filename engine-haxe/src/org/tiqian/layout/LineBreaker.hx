@@ -32,7 +32,8 @@ interface LineBreaker {
         ?forbiddenLineStartClusters:Null<SortedSet<Int>>, ?forbiddenLineEndClusters:SortedSet<Int>, ?hyphenBreakClusters:SortedSet<Int>,
         ?cjkInterCharBoundaries:SortedSet<Int>, ?maxCjkStretchPerGap:Float, ?sinoWesternBoundaries:SortedSet<Int>, sinoWesternStretchCap:Float = 0.0,
         lineAdjustmentPushIn:Bool = false, lineAdjustmentCompressBias:Float = 1.0, ?hardBreakAfterClusters:SortedSet<Int>, ?nonRenderingControlClusters:SortedSet<Int>,
-        ?progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>):LineSolution;
+        ?progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>,
+            ?lineGapBoundaries:SortedSet<Int>):LineSolution;
 }
 
 /**
@@ -67,7 +68,8 @@ class GreedyLineBreaker implements LineBreaker {
             ?forbiddenLineStartClusters:Null<SortedSet<Int>>, ?forbiddenLineEndClusters:SortedSet<Int>, ?hyphenBreakClusters:SortedSet<Int>,
             ?cjkInterCharBoundaries:SortedSet<Int>, ?maxCjkStretchPerGap:Float, ?sinoWesternBoundaries:SortedSet<Int>, sinoWesternStretchCap:Float = 0.0,
             lineAdjustmentPushIn:Bool = false, lineAdjustmentCompressBias:Float = 1.0, ?hardBreakAfterClusters:SortedSet<Int>,
-            ?nonRenderingControlClusters:SortedSet<Int>, ?progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>):LineSolution {
+            ?nonRenderingControlClusters:SortedSet<Int>, ?progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>,
+            ?lineGapBoundaries:SortedSet<Int>):LineSolution {
         if (a.length == 0)
             return new LineSolution([]);
         if (n.length != a.length)
@@ -89,18 +91,7 @@ class GreedyLineBreaker implements LineBreaker {
         final greedy = greedyFill(n, a, maxWidth, ranges, indent, forbidEnd, hyphens, cjk, maxStretch, sino, sinoCap, hard, controls, progressive);
         final repaired = LineRepair.applyKinsokuRepairs(greedy, n, a, maxWidth, this.kinsoku, shrinkOps, pushInPenalty, carryPreviousPenalty,
             leaveRaggedPenalty, ranges, indent, hangables, extendables, 5, forbiddenLineStartClusters);
-        final gapBuilder = SortedSet.builder();
-        var gi = 0;
-        while (gi < cjk.size()) {
-            gapBuilder.put(cjk.at(gi));
-            gi++;
-        }
-        var si = 0;
-        while (si < sino.size()) {
-            gapBuilder.put(sino.at(si));
-            si++;
-        }
-        final gapBoundaries = gapBuilder.build();
+        final gapBoundaries = lineGapBoundaries == null ? LineBreakerLines.unionLineGapBoundaries(cjk, sino) : lineGapBoundaries;
         final pushIn = lineAdjustmentPushIn;
         final compressBias = lineAdjustmentCompressBias;
         return LineRepair.withFillPushIn(repaired, pushIn, n, a, maxWidth, shrinkOps, indent, compressBias, forbiddenLineStartClusters, forbidEnd, ranges,
@@ -193,7 +184,8 @@ class LookaheadLineBreaker implements LineBreaker {
             ?forbiddenLineStartClusters:Null<SortedSet<Int>>, ?forbiddenLineEndClusters:SortedSet<Int>, ?hyphenBreakClusters:SortedSet<Int>,
             ?cjkInterCharBoundaries:SortedSet<Int>, ?maxCjkStretchPerGap:Float, ?sinoWesternBoundaries:SortedSet<Int>, sinoWesternStretchCap:Float = 0.0,
             lineAdjustmentPushIn:Bool = false, lineAdjustmentCompressBias:Float = 1.0, ?hardBreakAfterClusters:SortedSet<Int>,
-            ?nonRenderingControlClusters:SortedSet<Int>, ?progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>):LineSolution {
+            ?nonRenderingControlClusters:SortedSet<Int>, ?progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>,
+            ?lineGapBoundaries:SortedSet<Int>):LineSolution {
         if (adjustedClusters.length == 0)
             return new LineSolution([]);
         if (naturalClusters.length != adjustedClusters.length)
@@ -223,18 +215,7 @@ class LookaheadLineBreaker implements LineBreaker {
         final committed:Array<LineCandidate> = [];
         var lineStart = 0;
 
-        final gapBuilder = SortedSet.builder();
-        var gi = 0;
-        while (gi < cjk.size()) {
-            gapBuilder.put(cjk.at(gi));
-            gi++;
-        }
-        var si = 0;
-        while (si < sino.size()) {
-            gapBuilder.put(sino.at(si));
-            si++;
-        }
-        final gapBoundaries = gapBuilder.build();
+        final gapBoundaries = lineGapBoundaries == null ? LineBreakerLines.unionLineGapBoundaries(cjk, sino) : lineGapBoundaries;
         final dRef = maxStretch;
         var committedDensity = 0.0;
         var committedSyntheticHyphenRun = 0;
@@ -484,6 +465,22 @@ class LineBreakerLines {
         return new LineCandidate(new IntRange(1, 0), new TextRange(sourceOffset, sourceOffset), 0, 0, endReason);
     }
 
+    /**
+     * The line gap boundaries: the boundaries whose gaps line adjustment may stretch, the union of
+     * the CJK inter-character and Sino-Western boundaries. A breaker receives the union as its
+     * `lineGapBoundaries` argument (`KinsokuDependentPlanning.lineGapBoundaries`) or builds it with
+     * this function. The name differs from that parameter because boring's Dart target emits the
+     * static call without its class name.
+     */
+    public static function unionLineGapBoundaries(cjkInterCharBoundaries:SortedSet<Int>, sinoWesternBoundaries:SortedSet<Int>):SortedSet<Int> {
+        final builder = SortedSet.builder();
+        for (i in 0...cjkInterCharBoundaries.size())
+            builder.put(cjkInterCharBoundaries.at(i));
+        for (i in 0...sinoWesternBoundaries.size())
+            builder.put(sinoWesternBoundaries.at(i));
+        return builder.build();
+    }
+
     public static function emptyIntSet():SortedSet<Int> {
         final b = SortedSet.builder();
         return b.build();
@@ -506,18 +503,33 @@ class LineBreakerLines {
             && opportunities.get(candidate.clusterRange.end + 1) != null;
     }
 
+    /**
+     * The number of gap boundaries `g` with `range.start <= g < range.end`. The set is sorted, so
+     * the count is the difference of two binary searches instead of one membership test per
+     * cluster of the line.
+     */
     @:topLevel
     public static function lineGapCount(range:IntRange, gapBoundaries:SortedSet<Int>):Int {
         if (range.isEmpty)
             return 0;
-        var n = 0;
-        var i = range.start;
-        while (i < range.end) {
-            if (gapBoundaries.has(i))
-                n++;
-            i++;
+        return countSortedBelow(gapBoundaries, range.end) - countSortedBelow(gapBoundaries, range.start);
+    }
+
+    /**
+     * The number of elements of `values` that are less than `bound`. Public because boring emits
+     * the `@:topLevel` caller `lineGapCount` outside the class.
+     */
+    public static function countSortedBelow(values:SortedSet<Int>, bound:Int):Int {
+        var low = 0;
+        var high = values.size();
+        while (low < high) {
+            final middle = low + Std.int((high - low) / 2);
+            if (values.at(middle) < bound)
+                low = middle + 1;
+            else
+                high = middle;
         }
-        return n;
+        return low;
     }
 
     @:topLevel

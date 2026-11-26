@@ -57,7 +57,8 @@ class ParagraphDpLineBreaker implements LineBreaker {
             ?forbiddenLineStartClusters:Null<SortedSet<Int>>, ?forbiddenLineEndClusters:SortedSet<Int>, ?hyphenBreakClusters:SortedSet<Int>,
             ?cjkInterCharBoundaries:SortedSet<Int>, ?maxCjkStretchPerGap:Float, ?sinoWesternBoundaries:SortedSet<Int>, sinoWesternStretchCap:Float = 0.0,
             lineAdjustmentPushIn:Bool = false, lineAdjustmentCompressBias:Float = 1.0, ?hardBreakAfterClusters:SortedSet<Int>,
-            ?nonRenderingControlClusters:SortedSet<Int>, ?progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>):LineSolution {
+            ?nonRenderingControlClusters:SortedSet<Int>, ?progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>,
+            ?lineGapBoundaries:SortedSet<Int>):LineSolution {
         if (adjustedClusters.length == 0)
             return new LineSolution([]);
         if (naturalClusters.length != adjustedClusters.length)
@@ -70,12 +71,7 @@ class ParagraphDpLineBreaker implements LineBreaker {
         final hyphens = hyphenBreakClusters == null ? SortedSet.builder().build() : hyphenBreakClusters;
         final cjk = cjkInterCharBoundaries == null ? SortedSet.builder().build() : cjkInterCharBoundaries;
         final sino = sinoWesternBoundaries == null ? SortedSet.builder().build() : sinoWesternBoundaries;
-        final gapBoundariesBuilder = SortedSet.builder();
-        for (i in 0...cjk.size())
-            gapBoundariesBuilder.put(cjk.at(i));
-        for (i in 0...sino.size())
-            gapBoundariesBuilder.put(sino.at(i));
-        final gapBoundaries = gapBoundariesBuilder.build();
+        final gapBoundaries = lineGapBoundaries == null ? LineBreakerLines.unionLineGapBoundaries(cjk, sino) : lineGapBoundaries;
         final controls = nonRenderingControlClusters == null ? SortedSet.builder().build() : nonRenderingControlClusters;
         final progressive = progressiveBreakOpportunities == null ? SortedMap.builder().build() : progressiveBreakOpportunities;
         final hard = hardBreakAfterClusters == null ? SortedSet.builder().build() : hardBreakAfterClusters;

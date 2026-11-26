@@ -130,6 +130,6 @@ class CustomBreaker implements LineBreaker {
     public function breakLines(n:Array<Cluster>, a:Array<Cluster>, w:Float, ?s:Array<ShrinkOpportunity>, ?u:UnbreakableRanges, i:Float = 0.0,
             ?h:std.SortedSet<Int>, ?e:Array<IntRange>, ?fs:Null<std.SortedSet<Int>>, ?fe:std.SortedSet<Int>, ?hy:std.SortedSet<Int>, ?cj:std.SortedSet<Int>,
             ?mc:Float, ?sw:std.SortedSet<Int>, sc:Float = 0.0, p:Bool = false, bias:Float = 1.0, ?hb:std.SortedSet<Int>, ?nc:std.SortedSet<Int>,
-            ?pr:SortedMap<Int, ProgressiveBreakOpportunity>):LineSolution
+            ?pr:SortedMap<Int, ProgressiveBreakOpportunity>, ?gb:std.SortedSet<Int>):LineSolution
         return new LineSolution([]);
 }

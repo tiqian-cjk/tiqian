@@ -142,7 +142,7 @@ class LineBreakerCoverage2TestCustomBreaker implements LineBreaker {
     public function breakLines(n:Array<Cluster>, a:Array<Cluster>, maxWidth:Float, ?s:Array<ShrinkOpportunity>, ?u:UnbreakableRanges, i:Float = 0.0,
             ?h:SortedSet<Int>, ?e:Array<IntRange>, ?fs:Null<SortedSet<Int>>, ?fe:SortedSet<Int>, ?hy:SortedSet<Int>, ?cj:SortedSet<Int>, ?mc:Float,
             ?sw:SortedSet<Int>, sc:Float = 0.0, p:Bool = false, bias:Float = 1.0, ?hb:SortedSet<Int>, ?nc:SortedSet<Int>,
-            ?pr:SortedMap<Int, ProgressiveBreakOpportunity>):LineOptimization.LineSolution {
+            ?pr:SortedMap<Int, ProgressiveBreakOpportunity>, ?gb:SortedSet<Int>):LineOptimization.LineSolution {
         return new LineOptimization.LineSolution([]);
     }
 }
