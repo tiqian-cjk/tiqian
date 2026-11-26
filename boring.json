@@ -533,6 +533,11 @@
       "target": "rust",
       "sourceSet": "shared",
       "dependsOn": ["engine-rust", "protocol-rust"],
+      "dependencyMode": "path",
+      "dependencyPaths": {
+        "engine-rust": "../../../../platforms/web/server/precompute/engine-gen",
+        "protocol-rust": "../../../../platforms/web/server/precompute/protocol-gen"
+      },
       "compare": false,
       "haxeArgs": [
         "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/rust/std-shadow",
