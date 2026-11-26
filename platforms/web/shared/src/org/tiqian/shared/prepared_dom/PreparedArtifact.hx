@@ -645,6 +645,7 @@ class PreparedArtifact {
     }
 
     private static function runChild(run:PreparedRunTyped):PreparedLineChild {
+        final semanticPath = run.semanticPath.copy();
         return {
             kind: "run",
             run: run,
@@ -655,22 +656,24 @@ class PreparedArtifact {
             width: 0.0,
             lineTop: 0.0,
             lineHeight: 0.0,
-            semanticPath: run.semanticPath
+            semanticPath: semanticPath
         };
     }
 
     private static function inlineObjectChild(cell:PreparedRunTyped):PreparedLineChild {
+        final semanticPath = cell.semanticPath.copy();
+        final carrierMargin = cell.trailingGap;
         return {
             kind: "inlineObject",
             run: null,
             cell: cell,
-            carrierMargin: cell.trailingGap,
+            carrierMargin: carrierMargin,
             ruby: null,
             zone: null,
             width: 0.0,
             lineTop: 0.0,
             lineHeight: 0.0,
-            semanticPath: cell.semanticPath
+            semanticPath: semanticPath
         };
     }
 
@@ -685,7 +688,7 @@ class PreparedArtifact {
             width: 0.0,
             lineTop: lineTop,
             lineHeight: 0.0,
-            semanticPath: semanticPath
+            semanticPath: semanticPath.copy()
         };
     }
 
@@ -700,7 +703,7 @@ class PreparedArtifact {
             width: width,
             lineTop: lineTop,
             lineHeight: lineHeight,
-            semanticPath: semanticPath
+            semanticPath: semanticPath.copy()
         };
     }
 }
