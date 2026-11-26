@@ -93,17 +93,18 @@ module_test_probe_classes() {
 #                                        Kotlin Multiplatform Android targets:
 #                                        :platforms:compose:compose. Instrumented
 #                                        for the same reason as androidTest.
-#   compileTestKotlinMacosArm64          the appleTest source set of
-#   compileTestKotlinIosArm64            :platforms:apple:shaping,
-#   compileTestKotlinIosSimulatorArm64   :platforms:apple:frontend and
-#                                        :platforms:apple:frontend:coretext-render
-#                                        for each Apple Kotlin/Native target. The
+#   compileTestKotlinMacosArm64          the generated engine test sources of
+#   compileTestKotlinIosArm64            :boring-kotlin-f32 for each Apple
+#   compileTestKotlinIosSimulatorArm64   Kotlin/Native target it publishes. The
 #                                        Kotlin/Native backend emits the test
 #                                        klib on Linux, but linking the test
 #                                        binary and running it needs macOS and
 #                                        the Apple linker, which no Linux runner
 #                                        has. The lane compiles the klib and
-#                                        never runs the tests.
+#                                        never runs the tests. The Apple
+#                                        frontend is a SwiftPM package under
+#                                        platforms/apple (ADR 0064) and is not a
+#                                        Gradle module.
 #
 # The androidTest and androidDeviceTest modules are also why the lane is not a
 # release lane: it runs without a device by design, and a green run says the

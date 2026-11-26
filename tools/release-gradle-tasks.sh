@@ -11,10 +11,8 @@
 # command in its maven-local-publish stage.
 #
 # assemble is what compiles the modules outside publishedModules in
-# build.gradle.kts: :demo, :demo:android, :demo:font-diagnostics,
-# :tools:engine-probes, :platforms:apple:shaping, :platforms:apple:frontend and
-# :platforms:apple:frontend:coretext-render. publishTiqianToMavenLocal touches
-# none of them, so a staging run that only publishes reports green for a release
+# build.gradle.kts: :demo, :demo:android, :demo:font-diagnostics and
+# :tools:engine-probes. publishTiqianToMavenLocal touches none of them, so a staging run that only publishes reports green for a release
 # path it never executed.
 #
 # A Gradle task the release verifies belongs here rather than in either caller.

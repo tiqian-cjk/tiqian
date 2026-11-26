@@ -376,7 +376,7 @@ EOF
 # suite through the driver and runs the shared release task set against an
 # isolated repository, so a clean checkout compiles real sources rather than an
 # empty source set and the modules only assemble reaches (demo,
-# tools:engine-probes, platforms:apple) break here instead of on the release tag.
+# tools:engine-probes) break here instead of on the release tag.
 #
 # publishTiqianToMavenLocal writes only the modules build.gradle.kts still
 # publishes (publishedModules: platforms:compose:skia-jvm through

@@ -49,9 +49,9 @@ jobs:
   module-tests:
     name: Execute the host-runnable module tests and compile the rest
     runs-on: ubuntu-latest
-    # A cold run generates the Kotlin engine tree, compiles 16 modules, executes
-    # the JVM suites and compiles three Apple Kotlin/Native test klibs per Apple
-    # module.
+    # A cold run generates the Kotlin engine tree, compiles the Gradle modules,
+    # executes the JVM suites and compiles the engine's Apple Kotlin/Native test
+    # klib for each of its three Apple targets.
     timeout-minutes: 120
     steps:
       - name: Check out the commit
