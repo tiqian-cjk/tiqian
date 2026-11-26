@@ -14,11 +14,11 @@ class PreparedParagraphPlanConstructionTestSupport {
     }
 
     static function result(content:TiqianTextContent, clusters:Array<Cluster>, runs:Array<GlyphRun>, lines:Array<LineBox>, ?decorations:Array<DecorationSpan>,
-            ?boxes:Array<InlineBoxSpan>, ?objects:Array<InlineObjectSpan>, ?debug:LayoutDebugInfo, ?width:Null<Float>, ?height:Null<Float>):LayoutResult {
+            ?boxes:Array<InlineBoxSpan>, ?objects:Array<InlineObjectSpan>, ?presentation:LayoutPresentationDecisions, ?width:Null<Float>, ?height:Null<Float>):LayoutResult {
         final w = width == null ? 480.0 : width;
         final h = height == null ? 24.0 : height;
         return new LayoutResult(new LayoutInput(content, new TextStyle(), null, new LayoutConstraints(w), null, decorations, null, boxes, objects),
-            new Size(w, h), clusters, runs, lines, debug == null ? new LayoutDebugInfo(null) : debug);
+            new Size(w, h), clusters, runs, lines, null, presentation == null ? new LayoutPresentationDecisions() : presentation);
     }
 
     static function one(text:String, ?font:String, ?advance:Null<Float>):LayoutResult {
@@ -80,7 +80,7 @@ class PreparedParagraphPlanConstructionTestSupport {
             new GlyphRun(a, "cjk", [new Glyph(1, a, 16)], 16),
             new GlyphRun(b, "cjk", [new Glyph(9, b, 32, null, null, "Noto Sans CJK"), new Glyph(10, b, 0)], 32)
         ],
-            [line(new TextRange(0, 3), new IntRange(0, 1), 48)], null, null, null, new LayoutDebugInfo(null, null, null, null, null, null, null, [d]));
+            [line(new TextRange(0, 3), new IntRange(0, 1), 48)], null, null, null, new LayoutPresentationDecisions(null, null, null, null, null, null, [d]));
     }
 
     public static function punctuationInkFloorAndLatinRoleMarkCells():LayoutResult {
@@ -102,7 +102,7 @@ class PreparedParagraphPlanConstructionTestSupport {
             new GlyphRun(b, "latin", [new Glyph(2, b, 10)], 10),
             new GlyphRun(c, "cjk", [new Glyph(3, c, 16)], 16)
         ],
-            [line(new TextRange(0, 3), new IntRange(0, 2), 42)], null, null, null, new LayoutDebugInfo(null, null, null, null, null, null, fd, null, ps));
+            [line(new TextRange(0, 3), new IntRange(0, 2), 42)], null, null, null, new LayoutPresentationDecisions(null, null, null, null, null, fd, null, ps));
     }
 
     public static function zeroWidthBreakClusterSurvivesEmptyDisplayText():LayoutResult {
@@ -119,8 +119,7 @@ class PreparedParagraphPlanConstructionTestSupport {
             new GlyphRun(c, "cjk", [new Glyph(3, c, 16)], 16)
         ],
             [line(new TextRange(0, 3), new IntRange(0, 2), 32)], null, null, null,
-            new LayoutDebugInfo(null, null, null, null, null, null, null, [z], null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, [new ZeroWidthBreakDecisionInfo(b, "​", 1)]));
+            new LayoutPresentationDecisions(null, null, null, null, null, null, [z], null, null, null, [new ZeroWidthBreakDecisionInfo(b, "​", 1)]));
     }
 
     public static function paragraphEvidenceEmitsEverySection():LayoutResult {
@@ -152,7 +151,7 @@ class PreparedParagraphPlanConstructionTestSupport {
                 new BopomofoGlyphPlacement("ㄏ", 0, 2, 4, 4, BopomofoGlyphRole.Symbol, [], 0, 6, 4)
             ])
         ];
-        final debug = new LayoutDebugInfo(null, null, null, null, ruby, bop, null, null, null, null, null, null, null, null, dec, seg);
+        final presentation = new LayoutPresentationDecisions(null, null, null, ruby, bop, null, null, null, dec, seg);
         return result(new TiqianTextContent("汉注"), [new Cluster(a, "汉", "cjk", 16), new Cluster(b, "注", "cjk", 16)], [
             new GlyphRun(new TextRange(0, 2), "cjk", [new Glyph(1, a, 16), new Glyph(2, b, 16)], 32)
         ], [line(new TextRange(0, 2), new IntRange(0, 1), 32)], ds, [
@@ -160,7 +159,7 @@ class PreparedParagraphPlanConstructionTestSupport {
             new InlineBoxSpan(a, .5),
             new InlineBoxSpan(b, null, 3),
             new InlineBoxSpan(new TextRange(0, 2), null, 1.5)
-        ], null, debug);
+        ], null, presentation);
     }
 
     public static function negativeZeroAndExponentWidthsNormalize():LayoutResult {
@@ -202,7 +201,7 @@ class PreparedParagraphPlanConstructionTestSupport {
             new GlyphRun(b, "cjk", [new Glyph(2, b, 0)], 0),
             new GlyphRun(c, "cjk", [new Glyph(3, c, 16)], 16)
         ],
-            [line(new TextRange(0, 3), new IntRange(0, 2), 48)], null, null, null, new LayoutDebugInfo(null, null, null, null, null, null, null, ds));
+            [line(new TextRange(0, 3), new IntRange(0, 2), 48)], null, null, null, new LayoutPresentationDecisions(null, null, null, null, null, null, ds));
     }
 
     static function begin(name:String):TestTraceRecorder {

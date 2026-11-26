@@ -82,14 +82,14 @@ class LayoutQueries {
 
         final annotations:Array<CopyAnnotation> = [];
         var index:Int = 0;
-        while (index < result.debug.rubyDecisions.length) {
-            final decision:RubyDecisionInfo = result.debug.rubyDecisions[index];
+        while (index < result.presentation.rubyDecisions.length) {
+            final decision:RubyDecisionInfo = result.presentation.rubyDecisions[index];
             addCopyAnnotation(annotations, decision.baseRange, decision.text, start, end);
             index += 1;
         }
         index = 0;
-        while (index < result.debug.bopomofoDecisions.length) {
-            final decision:BopomofoDecisionInfo = result.debug.bopomofoDecisions[index];
+        while (index < result.presentation.bopomofoDecisions.length) {
+            final decision:BopomofoDecisionInfo = result.presentation.bopomofoDecisions[index];
             addCopyAnnotation(annotations, decision.baseRange, decision.text, start, end);
             index += 1;
         }
@@ -459,8 +459,8 @@ class LayoutQueries {
     private static function positionedClustersAt(result:LayoutResult, lineIndex:Int, line:LineBox):Array<PositionedCluster> {
         final leadingConsumed:Array<FloatRangeValue> = [];
         var index:Int = 0;
-        while (index < result.debug.geometryDecisions.length) {
-            final decision:ClusterGeometryDecisionInfo = result.debug.geometryDecisions[index];
+        while (index < result.presentation.geometryDecisions.length) {
+            final decision:ClusterGeometryDecisionInfo = result.presentation.geometryDecisions[index];
             if (decision.leadingGlueConsumed > 0.0) {
                 setFloatByRange(leadingConsumed, decision.range, decision.leadingGlueConsumed);
             }
@@ -468,8 +468,8 @@ class LayoutQueries {
         }
         final leadingAutoSpaceGaps:Array<FloatRangeValue> = [];
         index = 0;
-        while (index < result.debug.autoSpaceDecisions.length) {
-            final decision:AutoSpaceDecisionInfo = result.debug.autoSpaceDecisions[index];
+        while (index < result.presentation.autoSpaceDecisions.length) {
+            final decision:AutoSpaceDecisionInfo = result.presentation.autoSpaceDecisions[index];
             if (decision.side == "leading") {
                 setFloatByRange(leadingAutoSpaceGaps, decision.clusterRange, -decision.totalReduction);
             }
@@ -511,8 +511,8 @@ class LayoutQueries {
     private static function withRubySelectionGeometry(result:LayoutResult, positioned:Array<PositionedCluster>, lineIndex:Int):Array<PositionedCluster> {
         final rubies:Array<RubyDecisionInfo> = [];
         var rubyIndex:Int = 0;
-        while (rubyIndex < result.debug.rubyDecisions.length) {
-            final ruby:RubyDecisionInfo = result.debug.rubyDecisions[rubyIndex];
+        while (rubyIndex < result.presentation.rubyDecisions.length) {
+            final ruby:RubyDecisionInfo = result.presentation.rubyDecisions[rubyIndex];
             if (ruby.lineIndex == lineIndex && ruby.width > 0.0)
                 rubies.push(ruby);
             rubyIndex++;
@@ -719,8 +719,8 @@ class LayoutQueries {
 
     private static function floatByRangeFromGeometry(result:LayoutResult, range:TextRange):Float {
         var index:Int = 0;
-        while (index < result.debug.geometryDecisions.length) {
-            final decision:ClusterGeometryDecisionInfo = result.debug.geometryDecisions[index];
+        while (index < result.presentation.geometryDecisions.length) {
+            final decision:ClusterGeometryDecisionInfo = result.presentation.geometryDecisions[index];
             if (sameRange(decision.range, range) && decision.rubySpread != 0.0) {
                 return decision.rubySpread;
             }

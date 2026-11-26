@@ -55,11 +55,11 @@ class LayoutQueriesResidualCoverageTest {
     @:test
     public static function copyProjectionAppendsFullySelectedAnnotationsOnly():Void {
         new TestTraceRecorder("LayoutQueriesResidualCoverageTest").section("copyProjectionAppendsFullySelectedAnnotationsOnly");
-        final debug:LayoutDebugInfo = new LayoutDebugInfo(null, [], [], [], [
+        final presentation:LayoutPresentationDecisions = new LayoutPresentationDecisions([], [], [], [
             new RubyDecisionInfo(new TextRange(0, 2), "zhù", 0, 10.0, 12.0, 6.0, 0.0, 0.0, 0.0, 12.0, [], 400, "zh-Hans", [])
         ],
             [new BopomofoDecisionInfo(new TextRange(2, 4), "ㄋㄧˇ", 0, [], [], 400, "zh-Hans")]);
-        final content:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("abcd", [], [], [], [], [], debug,
+        final content:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("abcd", [], [], [], [], [], presentation,
             LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsString("", LayoutQueries.getTextForCopy(content, new TextRange(1, 1)));
         TracedAssertions.assertEqualsString("ab（zhù）c", LayoutQueries.getTextForCopy(content, new TextRange(0, 3)));
@@ -75,7 +75,7 @@ class LayoutQueriesResidualCoverageTest {
         final content:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", [
             LayoutQueriesResidualCoverageTestHelpers.cluster(new TextRange(0, 2), "ab", 20.0)
         ], [owned], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsInt(1, LayoutQueries.positionedClustersForLine(content, owned).length);
         final error:TiqianIllegalArgumentException = TracedAssertions.assertFailsWith(null, function():Void {
             LayoutQueries.positionedClustersForLine(content, foreign);
@@ -100,12 +100,12 @@ class LayoutQueriesResidualCoverageTest {
         final content:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", clusters, [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], runs, [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new Rect(0.0, 17.0, 8.0, 27.0).toString(), LayoutQueries.glyphInkBounds(content).toString());
         final noInk:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", clusters, [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final noInkBounds = LayoutQueries.glyphInkBounds(noInk);
         TracedAssertions.assertNullRendered(noInkBounds == null, noInkBounds == null ? "-" : noInkBounds.toString());
     }
@@ -114,7 +114,7 @@ class LayoutQueriesResidualCoverageTest {
     public static function emptyLineResultsShortCircuitEveryQuery():Void {
         new TestTraceRecorder("LayoutQueriesResidualCoverageTest").section("emptyLineResultsShortCircuitEveryQuery");
         final content:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", [], [], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsInt(-1, LayoutQueries.getLineForOffset(content, 0));
         TracedAssertions.assertEqualsRendered(new Rect(0.0, 0.0, 0.0, 0.0).toString(), LayoutQueries.getBoundingBox(content, 0).toString());
         TracedAssertions.assertEqualsRendered(new Rect(0.0, 0.0, 0.0, 0.0).toString(), LayoutQueries.getCursorRect(content, 0).toString());
@@ -144,7 +144,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 3), 0, 1, 0.0, 20.0, 15.0, 0.0, 10.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new Rect(10.0, 0.0, 11.0, 20.0).toString(), LayoutQueries.getBoundingBox(content, 1).toString());
         TracedAssertions.assertEqualsRendered(new Rect(20.0, 0.0, 21.0, 20.0).toString(), LayoutQueries.getBoundingBox(content, 3).toString());
         TracedAssertions.assertEqualsRendered("[]",
@@ -162,7 +162,7 @@ class LayoutQueriesResidualCoverageTest {
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 3), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0),
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(3, 4), 2, 2, 20.0, 40.0, 35.0, 0.0, 10.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final span:RichTextSpan = new RichTextSpan(new TextRange(0, 4), Underline.instance,
             new RichTextPaint(null, Solid.instance,
                 new RichTextBackgroundPaint(0.0, 0.0, 0.0, 0.0, RichTextBackgroundMetricPolicy.MarkedFaces, Fill.instance), 0.0));
@@ -191,7 +191,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 2, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final segments:Array<RichTextLineSegment> = LayoutQueries.positionedRichTextSegments(content, [
             new RichTextSpan(new TextRange(0, 2), Underline.instance,
                 new RichTextPaint(null, Solid.instance,
@@ -207,7 +207,7 @@ class LayoutQueriesResidualCoverageTest {
     public static function trimmedDecorationSegmentsKeepOnlyDecorationRoles():Void {
         new TestTraceRecorder("LayoutQueriesResidualCoverageTest").section("trimmedDecorationSegmentsKeepOnlyDecorationRoles");
         final content:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", [], [], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final decoration:RichTextLineSegment = LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 2), Underline.instance,
             new RichTextPaint(null, Solid.instance,
                 new RichTextBackgroundPaint(0.0, 0.0, 0.0, 0.0, RichTextBackgroundMetricPolicy.MarkedFaces, Fill.instance), 0.0),
@@ -226,7 +226,7 @@ class LayoutQueriesResidualCoverageTest {
             [LayoutQueriesResidualCoverageTestHelpers.cluster(new TextRange(0, 1), "a", 10.0)], [
                 LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 0, 0.0, 20.0, 15.0, 0.0, 10.0)
             ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final far:RichTextLineSegment = LayoutQueriesResidualCoverageTestHelpers.plainSegment(new TextRange(10, 12));
         TracedAssertions.assertEqualsRendered(LayoutQueriesResidualCoverageTestHelpers.renderSegments([far]),
             LayoutQueriesResidualCoverageTestHelpers.renderSegments(LayoutQueries.richTextBackgroundSegments(content, [far])));
@@ -258,7 +258,7 @@ class LayoutQueriesResidualCoverageTest {
         final content:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("，字", clusters, [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], runs, [], [],
-            new LayoutDebugInfo(null, [], [glue], [], [], []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            new LayoutPresentationDecisions([], [glue], [], [], []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final full:Array<RichTextLineSegment> = LayoutQueries.richTextBackgroundSegments(content, [
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 2), Background.instance,
                 new RichTextPaint(null, Solid.instance,
@@ -295,7 +295,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            new LayoutDebugInfo(null, [decision], [], [], [], []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            new LayoutPresentationDecisions([decision], [], [], [], []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final box:Array<RichTextLineSegment> = LayoutQueries.richTextBackgroundSegments(content, [
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 2), Background.instance,
                 new RichTextPaint(null, Solid.instance,
@@ -331,7 +331,7 @@ class LayoutQueriesResidualCoverageTest {
             final content:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", clusters, [
                 LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0)
             ], [],
-                [new TextSpan(new TextRange(0, 1), variant)], [], new LayoutDebugInfo(null, [decision], [], [], [], []), base);
+                [new TextSpan(new TextRange(0, 1), variant)], [], new LayoutPresentationDecisions([decision], [], [], [], []), base);
             final box:Array<RichTextLineSegment> = LayoutQueries.richTextBackgroundSegments(content, [
                 LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 2), Background.instance, paint, 0, new TextRange(0, 2), 0.0, 0.0, 20.0,
                     20.0, 15.0)
@@ -353,7 +353,7 @@ class LayoutQueriesResidualCoverageTest {
             LayoutQueriesResidualCoverageTestHelpers.cluster(new TextRange(1, 2), "b", 10.0)
         ];
         final lineValue:LineBox = LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0);
-        final latin:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", clusters, [lineValue], [], [], [], new LayoutDebugInfo(null, [
+        final latin:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", clusters, [lineValue], [], [], [], new LayoutPresentationDecisions([
             LayoutQueriesResidualCoverageTestHelpers.metric(new TextRange(0, 2), "LatinBox", 9.0, 1.0, "latin")
         ], [], [], [], []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final latinBox:Array<RichTextLineSegment> = LayoutQueries.richTextBackgroundSegments(latin, [
@@ -367,7 +367,7 @@ class LayoutQueriesResidualCoverageTest {
             LayoutQueriesResidualCoverageTestHelpers.metric(new TextRange(0, 2), "IdeographicEmBox", 8.0, 2.0, "ideographic")
         ];
         final both:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", clusters, [lineValue], [], [], [],
-            new LayoutDebugInfo(null, bothMetrics, [], [], [], []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            new LayoutPresentationDecisions(bothMetrics, [], [], [], []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final ideographicBox:Array<RichTextLineSegment> = LayoutQueries.richTextBackgroundSegments(both, [
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 2), Background.instance, paint, 0, new TextRange(0, 2), 0.0, 0.0, 20.0, 20.0,
                 15.0)
@@ -385,7 +385,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final paint:RichTextPaint = new RichTextPaint(null, Solid.instance,
             new RichTextBackgroundPaint(0.0, 0.0, 0.0, 0.0, RichTextBackgroundMetricPolicy.MarkedFaces, Fill.instance), 4.0);
         final first:RichTextLineSegment = LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 1), Background.instance, paint, 0,
@@ -412,7 +412,7 @@ class LayoutQueriesResidualCoverageTest {
         final content:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", [], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 0, 0.0, 20.0, 15.0, 0.0, 10.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final underline:RichTextLineSegment = LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 1), Underline.instance,
             new RichTextPaint(null, Solid.instance,
                 new RichTextBackgroundPaint(0.0, 0.0, 0.0, 0.0, RichTextBackgroundMetricPolicy.MarkedFaces, Fill.instance), 0.0),
@@ -433,7 +433,7 @@ class LayoutQueriesResidualCoverageTest {
             ], [], [
                 new TextSpan(new TextRange(0, 1), LayoutQueriesResidualCoverageTestHelpers.style(10.0))
             ], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final y:Float = LayoutQueries.richTextDecorationLineY(withSpanStyle, underline, 1.0);
         TracedAssertions.assertTrue(y >= underline.top && y <= underline.bottom, Std.string(y));
         final lineThrough:RichTextLineSegment = LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 1), LineThrough.instance,
@@ -449,14 +449,14 @@ class LayoutQueriesResidualCoverageTest {
         new TestTraceRecorder("LayoutQueriesResidualCoverageTest").section("cursorRectCoversEmptyLinesEmptyClustersAndMultiUnitClusters");
         final emptyClusterLine:LineBox = LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 0), 0, -1, 0.0, 20.0, 15.0, 6.0, 10.0);
         final withEmptyLine:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("a", [], [emptyClusterLine], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new Rect(6.0, 0.0, 7.0, 20.0).toString(), LayoutQueries.getCursorRect(withEmptyLine, 0).toString());
         final linear:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", [
             LayoutQueriesResidualCoverageTestHelpers.cluster(new TextRange(0, 2), "ab", 20.0)
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 0, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsFloat(10.0, LayoutQueries.getCursorRect(linear, 1).left);
         final stops:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", [
             LayoutQueriesResidualCoverageTestHelpers.cluster(new TextRange(0, 2), "ab", 20.0)
@@ -468,7 +468,7 @@ class LayoutQueriesResidualCoverageTest {
                 new Glyph(2, new TextRange(0, 2), 10.0, 12.0, 0.0, null, null, null, null)
             ], 20.0, [])
         ], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsFloat(12.0, LayoutQueries.getCursorRect(stops, 1).left);
     }
 
@@ -482,7 +482,7 @@ class LayoutQueriesResidualCoverageTest {
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0),
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(2, 2), 2, -1, 20.0, 40.0, 35.0, 0.0, 0.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsInt(0, LayoutQueries.getOffsetForPosition(content, 2.0, -50.0));
         TracedAssertions.assertEqualsInt(2, LayoutQueries.getOffsetForPosition(content, 5.0, 90.0));
         TracedAssertions.assertEqualsInt(2, LayoutQueries.getOffsetForPosition(content, 5.0, 30.0));
@@ -498,7 +498,7 @@ class LayoutQueriesResidualCoverageTest {
                 new Glyph(2, new TextRange(0, 2), 10.0, 10.0, 0.0, null, null, null, null)
             ], 20.0, [])
         ], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsInt(0, LayoutQueries.getOffsetForPosition(withStops, LayoutQueriesResidualCoverageTestHelpers.nan(), 5.0));
         TracedAssertions.assertEqualsInt(0, LayoutQueries.getSelectionOffsetForPosition(withStops, LayoutQueriesResidualCoverageTestHelpers.nan(), 5.0));
     }
@@ -513,7 +513,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 3), 0, 0, 0.0, 20.0, 15.0, 0.0, 30.0)
         ], [], [], [object],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsInt(1, LayoutQueries.getSelectionOffsetForPosition(content, 15.0, 5.0));
         TracedAssertions.assertEqualsInt(3, LayoutQueries.getSelectionOffsetForPosition(content, 21.0, 5.0));
     }
@@ -524,7 +524,7 @@ class LayoutQueriesResidualCoverageTest {
         final emptyText:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("", [], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 0), 0, -1, 0.0, 20.0, 15.0, 0.0, 0.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final emptyTextBoundary = LayoutQueries.getSelectionWordBoundaryForPosition(emptyText, 0.0, 0.0);
         TracedAssertions.assertNullRendered(emptyTextBoundary == null, emptyTextBoundary == null ? "-" : emptyTextBoundary.toString());
         final emptyLine:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("a",
@@ -532,7 +532,7 @@ class LayoutQueriesResidualCoverageTest {
                 LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 1), 0, 0, 0.0, 20.0, 15.0, 0.0, 10.0),
                 LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(1, 1), 1, -1, 20.0, 40.0, 35.0, 0.0, 0.0)
             ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final emptyLineBoundary = LayoutQueries.getSelectionWordBoundaryForPosition(emptyLine, 5.0, 30.0);
         TracedAssertions.assertNullRendered(emptyLineBoundary == null, emptyLineBoundary == null ? "-" : emptyLineBoundary.toString());
         final leadingEmpty:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("a", [
@@ -541,7 +541,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 1), 0, 1, 0.0, 20.0, 15.0, 0.0, 10.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final leadingEmptyBoundary = LayoutQueries.getSelectionWordBoundaryForPosition(leadingEmpty, 0.0, 5.0);
         TracedAssertions.assertNullRendered(leadingEmptyBoundary == null, leadingEmptyBoundary == null ? "-" : leadingEmptyBoundary.toString());
         TracedAssertions.assertEqualsRendered(new TextRange(0, 1).toString(),
@@ -555,7 +555,7 @@ class LayoutQueriesResidualCoverageTest {
             [LayoutQueriesResidualCoverageTestHelpers.cluster(new TextRange(0, 0), "", 5.0)], [
                 LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 0), 0, 0, 0.0, 20.0, 15.0, 0.0, 5.0)
             ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsInt(0, LayoutQueries.getOffsetForPosition(emptyRange, 2.0, 5.0));
         final zeroAdvance:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", [
             LayoutQueriesResidualCoverageTestHelpers.cluster(new TextRange(0, 1), "a", 10.0),
@@ -564,7 +564,7 @@ class LayoutQueriesResidualCoverageTest {
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 1), 0, 0, 0.0, 20.0, 15.0, 0.0, 10.0),
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(1, 2), 1, 1, 20.0, 40.0, 35.0, 0.0, 0.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new TextRange(0, 2).toString(),
             LayoutQueries.getSelectionWordBoundaryForPosition(zeroAdvance, 0.0, 30.0).toString());
     }
@@ -577,7 +577,7 @@ class LayoutQueriesResidualCoverageTest {
         final content:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("abb", [], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 3), 0, 0, 0.0, 20.0, 15.0, 0.0, 0.0)
         ], [], [], [object],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsInt(1, LayoutQueries.coerceSelectionOffset(content, 2, SourceBoundaryBias.Backward));
         TracedAssertions.assertEqualsInt(3, LayoutQueries.coerceSelectionOffset(content, 2, SourceBoundaryBias.Forward));
         TracedAssertions.assertEqualsInt(3, LayoutQueries.coerceSelectionOffset(content, 2, SourceBoundaryBias.Nearest));
@@ -591,36 +591,36 @@ class LayoutQueriesResidualCoverageTest {
         final content:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("hello", [], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 5), 0, 0, 0.0, 20.0, 15.0, 0.0, 0.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new TextRange(0, 5).toString(), LayoutQueries.getSelectionWordBoundary(content, 2).toString());
         TracedAssertions.assertEqualsRendered(new TextRange(0, 5).toString(), LayoutQueries.getSelectionWordBoundary(content, 5).toString());
         final emojiText:String = TestHelpers.surrogateText([0xD83D, 0xDE00]);
         final emoji:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result(emojiText, [], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 0, 0.0, 20.0, 15.0, 0.0, 0.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new TextRange(0, 2).toString(), LayoutQueries.getSelectionWordBoundary(emoji, 1).toString());
         final object:InlineObjectSpan = new InlineObjectSpan(new TextRange(1, 3), 8.0, 4.0, 4.0, InlineObjectBoundaryAdjustment.fixed(),
             InlineObjectBoundaryAdjustment.fixed());
         final withObject:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("abb", [], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 3), 0, 0, 0.0, 20.0, 15.0, 0.0, 0.0)
         ], [], [], [object],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new TextRange(1, 3).toString(), LayoutQueries.getSelectionWordBoundary(withObject, 2).toString());
         final mandatory:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("a\nb", [], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 3), 0, 0, 0.0, 20.0, 15.0, 0.0, 0.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new TextRange(1, 2).toString(), LayoutQueries.getSelectionWordBoundary(mandatory, 1).toString());
         final connectors:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("a_b", [], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 3), 0, 0, 0.0, 20.0, 15.0, 0.0, 0.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new TextRange(0, 3).toString(), LayoutQueries.getSelectionWordBoundary(connectors, 1).toString());
         final empty:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("", [], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 0), 0, -1, 0.0, 20.0, 15.0, 0.0, 0.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new TextRange(0, 0).toString(), LayoutQueries.getSelectionWordBoundary(empty, 0).toString());
     }
 
@@ -635,7 +635,7 @@ class LayoutQueriesResidualCoverageTest {
             final content:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result(text, [], [
                 LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, text.length), 0, 0, 0.0, 20.0, 15.0, 0.0, 0.0)
             ], [], [], [],
-                LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+                LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
             TracedAssertions.assertEqualsRendered(new TextRange(0, text.length).toString(), LayoutQueries.getSelectionWordBoundary(content, 0).toString(),
                 "text=" + text);
             index += 1;
@@ -650,7 +650,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 0, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsInt(0, LayoutQueries.getLineForOffset(content, 2));
     }
 
@@ -672,7 +672,7 @@ class LayoutQueriesResidualCoverageTest {
         final content:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("abc", clusters, [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 3), 0, 1, 0.0, 20.0, 15.0, 0.0, 30.0)
         ], runs, [], [],
-            new LayoutDebugInfo(null, [], [], [], [matching, stray], []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            new LayoutPresentationDecisions([], [], [], [matching, stray], []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final positioned:Array<PositionedCluster> = LayoutQueries.positionedClusters(content);
         TracedAssertions.assertEqualsInt(2, positioned.length);
         final firstStops = positioned[0].sourceStops;
@@ -694,7 +694,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 10.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final boxes:Array<Rect> = LayoutQueries.getBoundingBoxes(content, new TextRange(0, 2));
         TracedAssertions.assertEqualsInt(2, boxes.length);
         TracedAssertions.assertEqualsFloat(10.0, boxes[1].left);
@@ -709,7 +709,7 @@ class LayoutQueriesResidualCoverageTest {
         new TestTraceRecorder("LayoutQueriesResidualCoverageTest").section("positionedClustersAndSegmentsReturnEmptyWithoutLines");
         final noLines:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab",
             [LayoutQueriesResidualCoverageTestHelpers.cluster(new TextRange(0, 1), "a", 10.0)], [], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertTrue(LayoutQueries.positionedClusters(noLines).length == 0);
         TracedAssertions.assertTrue(LayoutQueries.positionedRichTextSegments(noLines, [
             new RichTextSpan(new TextRange(0, 2), Background.instance,
@@ -720,7 +720,7 @@ class LayoutQueriesResidualCoverageTest {
             [LayoutQueriesResidualCoverageTestHelpers.cluster(new TextRange(0, 1), "a", 10.0)], [
                 LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 1), 0, 0, 0.0, 20.0, 15.0, 0.0, 10.0)
             ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertTrue(LayoutQueries.positionedRichTextSegments(noSpans, []).length == 0);
     }
 
@@ -738,7 +738,7 @@ class LayoutQueriesResidualCoverageTest {
             LayoutQueriesResidualCoverageTestHelpers.cluster(new TextRange(1, 2), "b", 10.0)
         ], [], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0)
-        ], LayoutQueriesResidualCoverageTestHelpers.emptyDebug());
+        ], null, LayoutQueriesResidualCoverageTestHelpers.emptyPresentation());
         final segments:Array<RichTextLineSegment> = LayoutQueries.positionedRichTextSegments(content, [
             new RichTextSpan(new TextRange(0, 2), Background.instance,
                 new RichTextPaint(null, Solid.instance,
@@ -763,7 +763,7 @@ class LayoutQueriesResidualCoverageTest {
         final noBounds:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", clusters, lines, [
             new GlyphRun(new TextRange(0, 2), "test", [new Glyph(1, new TextRange(0, 1), 10.0, 0.0, 0.0, null, null, null, null)], 20.0, [])
         ], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final absentBounds = LayoutQueries.glyphInkBounds(noBounds);
         TracedAssertions.assertNullRendered(absentBounds == null, absentBounds == null ? "-" : absentBounds.toString());
         final nanPlaced:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", clusters, lines, [
@@ -771,7 +771,7 @@ class LayoutQueriesResidualCoverageTest {
                 new Glyph(9, new TextRange(1, 2), 9.0, LayoutQueriesResidualCoverageTestHelpers.nan(), 0.0, null, new Rect(1.0, 2.0, 8.0, 4.0), null, null)
             ], 10.0, [])
         ], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final nanPlacedBounds = LayoutQueries.glyphInkBounds(nanPlaced);
         TracedAssertions.assertNullRendered(nanPlacedBounds == null, nanPlacedBounds == null ? "-" : nanPlacedBounds.toString());
         final usable:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", clusters, lines, [
@@ -780,7 +780,7 @@ class LayoutQueriesResidualCoverageTest {
                 new Glyph(2, new TextRange(1, 2), 10.0, 1.0, 0.0, null, new Rect(0.0, 1.0, 9.0, 3.0), null, null)
             ], 20.0, [])
         ], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final ink:Rect = LayoutQueries.glyphInkBounds(usable);
         TracedAssertions.assertEqualsFloat(3.0, ink.left);
         TracedAssertions.assertEqualsFloat(20.0, ink.right);
@@ -801,7 +801,7 @@ class LayoutQueriesResidualCoverageTest {
         final shortGlyph:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", clusters, lines, [
             new GlyphRun(new TextRange(1, 2), "test", [new Glyph(2, new TextRange(1, 2), 5.0, 0.0, 0.0, null, null, null, null)], 10.0, [])
         ], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final shortSegments:Array<RichTextLineSegment> = LayoutQueries.richTextBackgroundSegments(shortGlyph, [
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 2), Background.instance,
                 new RichTextPaint(null, Solid.instance,
@@ -810,7 +810,7 @@ class LayoutQueriesResidualCoverageTest {
         ]);
         TracedAssertions.assertEqualsFloat(15.0, shortSegments[0].right);
         final emptyGlyphRun:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", clusters, lines,
-            [new GlyphRun(new TextRange(1, 2), "test", [], 10.0, [])], [], [], LayoutQueriesResidualCoverageTestHelpers.emptyDebug(),
+            [new GlyphRun(new TextRange(1, 2), "test", [], 10.0, [])], [], [], LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(),
             LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final emptySegments:Array<RichTextLineSegment> = LayoutQueries.richTextBackgroundSegments(emptyGlyphRun, [
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 2), Background.instance,
@@ -830,7 +830,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final background:RichTextLineSegment = LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 1), Background.instance,
             new RichTextPaint(null, Solid.instance,
                 new RichTextBackgroundPaint(0.0, 0.0, 0.0, 0.0, RichTextBackgroundMetricPolicy.MarkedFaces, Fill.instance), 4.0),
@@ -878,7 +878,7 @@ class LayoutQueriesResidualCoverageTest {
             new TextSpan(new TextRange(0, 1), LayoutQueriesResidualCoverageTestHelpers.style(10.0)),
             new TextSpan(new TextRange(2, 3), LayoutQueriesResidualCoverageTestHelpers.style(20.0))
         ], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final between:Float = LayoutQueries.richTextDecorationLineY(content,
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(1, 2), Underline.instance,
                 new RichTextPaint(null, Solid.instance,
@@ -905,7 +905,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 0, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            new LayoutDebugInfo(null, [], [glue], [], [], []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            new LayoutPresentationDecisions([], [glue], [], [], []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final interiorStart:Array<RichTextLineSegment> = LayoutQueries.richTextBackgroundSegments(content, [
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(1, 2), Background.instance,
                 new RichTextPaint(null, Solid.instance,
@@ -934,7 +934,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [], [
             new TextSpan(new TextRange(1, 2), LayoutQueriesResidualCoverageTestHelpers.style(40.0))
         ], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final before:Array<RichTextLineSegment> = LayoutQueries.richTextBackgroundSegments(content, [
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 1), Background.instance,
                 new RichTextPaint(null, Solid.instance,
@@ -961,7 +961,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 3), 0, 2, 0.0, 20.0, 15.0, 0.0, 30.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsFloat(20.0, LayoutQueries.getCursorRect(content, 2).left);
         final gapped:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("abcde", [
             LayoutQueriesResidualCoverageTestHelpers.cluster(new TextRange(0, 1), "a", 10.0),
@@ -969,7 +969,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 5), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertFailsWithNoSuchElement(null, function():Void {
             LayoutQueries.getCursorRect(gapped, 2);
         });
@@ -985,7 +985,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 3), 0, 2, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsFloat(10.0, LayoutQueries.getCursorRect(content, 2).left);
         final withEmpty:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", [
             LayoutQueriesResidualCoverageTestHelpers.cluster(new TextRange(0, 1), "a", 10.0),
@@ -994,7 +994,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 2, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final boxes:Array<Rect> = LayoutQueries.getBoundingBoxes(withEmpty, new TextRange(0, 2));
         TracedAssertions.assertEqualsInt(2, boxes.length);
         TracedAssertions.assertEqualsFloat(0.0, boxes[0].left);
@@ -1008,7 +1008,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 3), 0, 2, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final degenerate:Array<Rect> = LayoutQueries.getBoundingBoxes(zeroAdvance, new TextRange(0, 3));
         TracedAssertions.assertEqualsInt(3, degenerate.length);
         TracedAssertions.assertEqualsFloat(10.0, degenerate[1].left);
@@ -1027,7 +1027,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 7), 0, 0, 0.0, 20.0, 15.0, 0.0, 70.0)
         ], [], [], objects,
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new TextRange(0, 7).toString(), LayoutQueries.getSelectionWordBoundary(content, 4).toString());
         TracedAssertions.assertEqualsRendered(new TextRange(1, 3).toString(), LayoutQueries.getSelectionWordBoundary(content, 2).toString());
     }
@@ -1041,7 +1041,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new TextRange(0, 1).toString(), LayoutQueries.getSelectionWordBoundaryForPosition(content, 5.0, 10.0)
             .toString());
         TracedAssertions.assertEqualsRendered(new TextRange(0, 1).toString(),
@@ -1064,7 +1064,7 @@ class LayoutQueriesResidualCoverageTest {
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 0, 0.0, 20.0, 15.0, 0.0, 10.0),
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(4, 5), 1, 1, 20.0, 40.0, 35.0, 0.0, 10.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsInt(0, LayoutQueries.getLineForOffset(content, 1));
     }
 
@@ -1078,7 +1078,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 3), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new TextRange(0, 2).toString(), LayoutQueries.getSelectionWordBoundary(content, 0).toString());
         TracedAssertions.assertEqualsRendered(new TextRange(2, 3).toString(), LayoutQueries.getSelectionWordBoundary(content, 2).toString());
     }
@@ -1108,7 +1108,7 @@ class LayoutQueriesResidualCoverageTest {
         final content:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("abc", clusters, [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 3), 0, 1, 0.0, 20.0, 15.0, 0.0, 30.0)
         ], [], [], [],
-            new LayoutDebugInfo(null, [], geometries, [], rubies, []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            new LayoutPresentationDecisions([], geometries, [], rubies, []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final positioned:Array<PositionedCluster> = LayoutQueries.positionedClusters(content);
         TracedAssertions.assertEqualsFloat(0.0, positioned[0].left);
         TracedAssertions.assertEqualsFloat(15.75, positioned[0].right);
@@ -1122,7 +1122,7 @@ class LayoutQueriesResidualCoverageTest {
                 new Glyph(2, new TextRange(2, 3), 8.0, 0.0, 0.0, null, null, null, null)
             ], 30.0, [])
         ], [], [],
-            new LayoutDebugInfo(null, [], geometries, [], rubies, []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            new LayoutPresentationDecisions([], geometries, [], rubies, []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final glyphPositioned:Array<PositionedCluster> = LayoutQueries.positionedClusters(glyphResult);
         TracedAssertions.assertEqualsFloat(0.0, glyphPositioned[0].left);
         TracedAssertions.assertEqualsFloat(16.0, glyphPositioned[0].right);
@@ -1143,7 +1143,7 @@ class LayoutQueriesResidualCoverageTest {
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(2, 4), 2, 3, 20.0, 40.0, 35.0, 0.0, 20.0),
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(4, 4), 2, 1, 40.0, 60.0, 55.0, 0.0, 0.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final positioned:Array<PositionedCluster> = LayoutQueries.positionedClusters(content);
         TracedAssertions.assertEqualsInt(4, positioned.length);
         TracedAssertions.assertEqualsInt(0, positioned[0].lineIndex);
@@ -1173,7 +1173,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final weakFirst:RichTextLineSegment = LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 1), Background.instance,
             new RichTextPaint(null, Solid.instance,
                 new RichTextBackgroundPaint(0.0, 0.0, 0.0, 0.0, RichTextBackgroundMetricPolicy.MarkedFaces, Fill.instance), 6.0),
@@ -1219,7 +1219,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [], [
             new TextSpan(new TextRange(1, 2), LayoutQueriesResidualCoverageTestHelpers.style(40.0))
         ], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final outside:Array<RichTextLineSegment> = LayoutQueries.richTextBackgroundSegments(content, [
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 1), Background.instance, uniform, 0, new TextRange(0, 1), 0.0, 0.0, 10.0, 20.0,
                 15.0)
@@ -1239,7 +1239,7 @@ class LayoutQueriesResidualCoverageTest {
             [LayoutQueriesResidualCoverageTestHelpers.cluster(new TextRange(1, 2), "b", 10.0)], [
                 LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 0, 0.0, 20.0, 15.0, 0.0, 10.0)
             ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final out:Array<RichTextLineSegment> = LayoutQueries.richTextBackgroundSegments(content, [
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 1), Background.instance,
                 new RichTextPaint(null, Solid.instance,
@@ -1257,7 +1257,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 0, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final value:Float = LayoutQueries.richTextDecorationLineY(content,
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 2), Underline.instance,
                 new RichTextPaint(null, Solid.instance,
@@ -1276,7 +1276,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new TextRange(0, 1).toString(),
             LayoutQueries.getSelectionWordBoundaryForPosition(content, 5.0, LayoutQueriesResidualCoverageTestHelpers.nan()).toString());
     }
@@ -1290,7 +1290,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 0, 0.0, 20.0, 15.0, 0.0, 10.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new TextRange(0, 2).toString(), LayoutQueries.getSelectionWordBoundary(content, 0).toString());
     }
 
@@ -1303,7 +1303,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 0, 0.0, 20.0, 15.0, 0.0, 10.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new TextRange(0, 2).toString(), LayoutQueries.getSelectionWordBoundary(content, 0).toString());
     }
 
@@ -1317,7 +1317,7 @@ class LayoutQueriesResidualCoverageTest {
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 0, 0.0, 20.0, 15.0, 0.0, 10.0),
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(4, 5), 1, 1, 20.0, 40.0, 35.0, 0.0, 10.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsFloat(10.0, LayoutQueries.getCursorRect(content, 2).left);
         TracedAssertions.assertEqualsFloat(10.0, LayoutQueries.getCursorRect(content, 3).left);
     }
@@ -1330,7 +1330,7 @@ class LayoutQueriesResidualCoverageTest {
             LayoutQueriesResidualCoverageTestHelpers.cluster(new TextRange(1, 2), "b", 10.0)
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0)
-        ], [], [], [], new LayoutDebugInfo(null, [], [], [], [
+        ], [], [], [], new LayoutPresentationDecisions([], [], [], [
             new RubyDecisionInfo(new TextRange(0, 2), "zhù", 1, 10.0, 4.0, 6.0, 0.0, 0.0, 0.0, 30.0, [], 400, "zh-Hans", [])
             ], []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final positioned:Array<PositionedCluster> = LayoutQueries.positionedClusters(content);
@@ -1356,7 +1356,7 @@ class LayoutQueriesResidualCoverageTest {
         final content:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", clusters, [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], runs, [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final output:Array<RichTextLineSegment> = LayoutQueries.richTextBackgroundSegments(content, [
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 2), Background.instance,
                 new RichTextPaint(null, Solid.instance,
@@ -1382,7 +1382,7 @@ class LayoutQueriesResidualCoverageTest {
         final content:LayoutResult = LayoutQueriesResidualCoverageTestHelpers.result("ab", clusters, [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], runs, [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final output:Array<RichTextLineSegment> = LayoutQueries.richTextBackgroundSegments(content, [
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 2), Background.instance,
                 new RichTextPaint(null, Solid.instance,
@@ -1404,7 +1404,7 @@ class LayoutQueriesResidualCoverageTest {
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0),
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(2, 4), 2, 3, 40.0, 60.0, 55.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsRendered(new TextRange(2, 3).toString(), LayoutQueries.getSelectionWordBoundaryForPosition(content, 5.0, 50.0)
             .toString());
         TracedAssertions.assertEqualsRendered(new TextRange(0, 1).toString(), LayoutQueries.getSelectionWordBoundaryForPosition(content, 5.0, 30.0)
@@ -1427,7 +1427,7 @@ class LayoutQueriesResidualCoverageTest {
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 0, 0.0, 20.0, 15.0, 0.0, 10.0),
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(5, 7), 1, 1, 20.0, 40.0, 35.0, 10.0, 10.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsFloat(10.0, LayoutQueries.getCursorRect(content, 4).left);
     }
 
@@ -1443,7 +1443,7 @@ class LayoutQueriesResidualCoverageTest {
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(2, 4), 0, 1, 0.0, 20.0, 15.0, 0.0, 20.0),
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(6, 8), 2, 3, 20.0, 40.0, 35.0, 0.0, 20.0)
         ], [], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         TracedAssertions.assertEqualsFloat(0.0, LayoutQueries.getCursorRect(content, 1).left);
         TracedAssertions.assertEqualsFloat(20.0, LayoutQueries.getCursorRect(content, 8).left);
         TracedAssertions.assertEqualsFloat(20.0, LayoutQueries.getCursorRect(content, 9).left);
@@ -1464,7 +1464,7 @@ class LayoutQueriesResidualCoverageTest {
             new TextSpan(new TextRange(0, 2), LayoutQueriesResidualCoverageTestHelpers.style(10.0)),
             new TextSpan(new TextRange(1, 3), LayoutQueriesResidualCoverageTestHelpers.style(40.0))
         ], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final inside:Array<RichTextLineSegment> = LayoutQueries.richTextBackgroundSegments(content, [
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(2, 3), Background.instance, uniform, 0, new TextRange(2, 3), 20.0, 0.0, 30.0, 20.0,
                 15.0)
@@ -1485,7 +1485,7 @@ class LayoutQueriesResidualCoverageTest {
             new TextSpan(new TextRange(0, 2), LayoutQueriesResidualCoverageTestHelpers.style(10.0)),
             new TextSpan(new TextRange(1, 3), LayoutQueriesResidualCoverageTestHelpers.style(20.0))
         ], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final value:Float = LayoutQueries.richTextDecorationLineY(content,
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(2, 3), Underline.instance,
                 new RichTextPaint(null, Solid.instance,
@@ -1510,7 +1510,7 @@ class LayoutQueriesResidualCoverageTest {
             new TextSpan(new TextRange(0, 3), LayoutQueriesResidualCoverageTestHelpers.style(40.0)),
             new TextSpan(new TextRange(1, 2), LayoutQueriesResidualCoverageTestHelpers.style(10.0))
         ], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final output:Array<RichTextLineSegment> = LayoutQueries.richTextBackgroundSegments(content, [
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 1), Background.instance, uniform, 0, new TextRange(0, 1), 0.0, 0.0, 10.0, 20.0,
                 15.0)
@@ -1531,7 +1531,7 @@ class LayoutQueriesResidualCoverageTest {
             new TextSpan(new TextRange(0, 3), LayoutQueriesResidualCoverageTestHelpers.style(20.0)),
             new TextSpan(new TextRange(1, 2), LayoutQueriesResidualCoverageTestHelpers.style(10.0))
         ], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final value:Float = LayoutQueries.richTextDecorationLineY(content,
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 1), Underline.instance,
                 new RichTextPaint(null, Solid.instance,
@@ -1566,19 +1566,19 @@ class LayoutQueriesResidualCoverageTestHelpers {
         return new TextStyle([], fontSize, "zh-Hans", 400, false, 0.0, InlineAttachment.None);
     }
 
-    public static function emptyDebug():LayoutDebugInfo {
-        return new LayoutDebugInfo(null, [], [], [], [], []);
+    public static function emptyPresentation():LayoutPresentationDecisions {
+        return new LayoutPresentationDecisions([], [], [], [], []);
     }
 
     public static function result(text:String, clusters:Array<Cluster>, lines:Array<LineBox>, glyphRuns:Array<GlyphRun>, spans:Array<TextSpan>,
-            inlineObjects:Array<InlineObjectSpan>, debug:LayoutDebugInfo, textStyle:TextStyle):LayoutResult {
+            inlineObjects:Array<InlineObjectSpan>, presentation:LayoutPresentationDecisions, textStyle:TextStyle):LayoutResult {
         final content:TiqianTextContent = new TiqianTextContent(text, spans, [], [], []);
         final input:LayoutInput = new LayoutInput(content, textStyle,
             new ParagraphStyle(LastLineAlignment.Start, WritingMode.HorizontalTb, null, null, Ic.Zero, new MeasureAdaptiveFirstLineIndent(14.0, 1.0, 2.0),
                 new LineLengthGrid(true, null), RubyLineHeightMode.PerLine, ParagraphStyle.DEFAULT_INLINE_OBJECT_MINIMUM_CLEARANCE_EM,
                 ParagraphStyle.DEFAULT_EMPHASIS_DOT_GAP_EM),
             new LayoutConstraints(100.0, Math.POSITIVE_INFINITY, 2147483647), BuiltInLayoutProfiles.ClreqHorizontal, [], [], [], inlineObjects);
-        return new LayoutResult(input, new Size(30.0, 40.0), clusters, glyphRuns, lines, debug);
+        return new LayoutResult(input, new Size(30.0, 40.0), clusters, glyphRuns, lines, null, presentation);
     }
 
     public static function segment(range:TextRange, role:RichTextRole, paint:RichTextPaint, lineIndex:Int, spanRange:TextRange, left:Float, top:Float,
@@ -1644,7 +1644,7 @@ class LayoutQueriesResidualCoverageTestHelpers {
         ], [
             LayoutQueriesResidualCoverageTestHelpers.line(new TextRange(0, 2), 0, 0, 0.0, 20.0, 15.0, 0.0, 20.0)
         ], [], [], [],
-            new LayoutDebugInfo(null, [decision], [], [], [], []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            new LayoutPresentationDecisions([decision], [], [], [], []), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final box:Array<RichTextLineSegment> = LayoutQueries.richTextBackgroundSegments(content, [
             LayoutQueriesResidualCoverageTestHelpers.segment(new TextRange(0, 2), Background.instance,
                 new RichTextPaint(null, Solid.instance,
@@ -1664,7 +1664,7 @@ class LayoutQueriesResidualCoverageTestHelpers {
         ], [
             new GlyphRun(new TextRange(0, 2), "test", [new Glyph(1, new TextRange(0, 1), 10.0, 0.0, 0.0, null, bounds, null, null)], 20.0, [])
         ], [], [],
-            LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
+            LayoutQueriesResidualCoverageTestHelpers.emptyPresentation(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         return LayoutQueries.glyphInkBounds(content);
     }
 }

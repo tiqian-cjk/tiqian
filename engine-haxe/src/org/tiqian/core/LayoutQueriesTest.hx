@@ -20,8 +20,8 @@ class LayoutQueriesTest {
         final text:String = "提椠与您";
         final ruby:RubyDecisionInfo = new RubyDecisionInfo(new TextRange(0, 2), "tíqiàn", 0, 0.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, [], 400, "zh-Hans", []);
         final bopomofo:BopomofoDecisionInfo = new BopomofoDecisionInfo(new TextRange(3, 4), "ㄋㄧㄣˊ", 0, [], [], 400, "zh-Hans");
-        final debug:LayoutDebugInfo = new LayoutDebugInfo(null, [], [], [], [ruby], [bopomofo]);
-        final result:LayoutResult = LayoutQueriesTestHelpers.result(text, 200.0, null, new Size(0.0, 0.0), [], [], [], debug, null);
+        final presentation:LayoutPresentationDecisions = new LayoutPresentationDecisions([], [], [], [ruby], [bopomofo]);
+        final result:LayoutResult = LayoutQueriesTestHelpers.result(text, 200.0, null, new Size(0.0, 0.0), [], [], [], presentation, null);
 
         TracedAssertions.assertEqualsString("提椠（tíqiàn）与您（ㄋㄧㄣˊ）", LayoutQueries.getTextForCopy(result, new TextRange(0, 4)));
         TracedAssertions.assertEqualsString("提", LayoutQueries.getTextForCopy(result, new TextRange(0, 1)));
@@ -48,7 +48,7 @@ class LayoutQueriesTest {
             LayoutQueriesTestHelpers.cluster(new TextRange(1, 3), "Hi", "latin", 22.5)
         ], [], [
             LayoutQueriesTestHelpers.line(new TextRange(0, 3), 0, 1, 15.0, 0.0, 20.0, 32.5, 32.5, 32.5, null)
-        ], new LayoutDebugInfo(null, [], [], [decision], [], []), null);
+        ], new LayoutPresentationDecisions([], [], [decision], [], []), null);
         final positions:Array<PositionedCluster> = LayoutQueries.positionedClusters(result);
         TracedAssertions.assertEqualsRendered(new Rect(10.0, 0.0, 32.5, 20.0).toString(), positions[1].rect.toString());
         TracedAssertions.assertEqualsFloat(12.5, positions[1].drawX);
@@ -63,7 +63,7 @@ class LayoutQueriesTest {
         final result:LayoutResult = LayoutQueriesTestHelpers.result("（", 10.0, LayoutQueriesTestHelpers.style(10.0), new Size(6.0, 20.0),
             [LayoutQueriesTestHelpers.cluster(new TextRange(0, 1), "（", "cjk", 6.0)], [], [
                 LayoutQueriesTestHelpers.line(new TextRange(0, 1), 0, 0, 15.0, 0.0, 20.0, 6.0, 6.0, 6.0, null)
-            ], new LayoutDebugInfo(null, [], [geometry], [], [], []), null);
+            ], new LayoutPresentationDecisions([], [geometry], [], [], []), null);
         final positioned:Array<PositionedCluster> = LayoutQueries.positionedClusters(result);
         TracedAssertions.assertEqualsRendered(new Rect(0.0, 0.0, 6.0, 20.0).toString(), positioned[0].rect.toString());
         TracedAssertions.assertEqualsFloat(-4.0, positioned[0].drawX);
@@ -149,8 +149,8 @@ class LayoutQueriesTest {
         final original:LayoutResult = LayoutQueriesTestHelpers.punctuationGlueResult();
         final geometry:Array<ClusterGeometryDecisionInfo> = [];
         var index:Int = 0;
-        while (index < original.debug.geometryDecisions.length) {
-            final decision:ClusterGeometryDecisionInfo = original.debug.geometryDecisions[index];
+        while (index < original.presentation.geometryDecisions.length) {
+            final decision:ClusterGeometryDecisionInfo = original.presentation.geometryDecisions[index];
             if (LayoutQueriesTestHelpers.sameRange(decision.range, new TextRange(0, 1))) {
                 geometry.push(new ClusterGeometryDecisionInfo(decision.range, decision.sourceText, decision.displayText, decision.baseAdvance,
                     decision.bodyWidth, decision.leadingGlueNatural, decision.leadingGlueNatural, decision.trailingGlueNatural, decision.trailingGlueConsumed,
@@ -161,7 +161,7 @@ class LayoutQueriesTest {
             }
             index += 1;
         }
-        final result:LayoutResult = LayoutQueriesTestHelpers.copyResultWithDebug(original, new LayoutDebugInfo(null, [], geometry, [], [], []));
+        final result:LayoutResult = LayoutQueriesTestHelpers.copyResultWithPresentation(original, new LayoutPresentationDecisions([], geometry, [], [], []));
         final underline:RichTextSpan = new RichTextSpan(new TextRange(0, 1), Underline.instance,
             new RichTextPaint(null, Solid.instance,
                 new RichTextBackgroundPaint(0.0, 0.0, 0.0, 0.0, RichTextBackgroundMetricPolicy.MarkedFaces, Fill.instance), 0.0));
@@ -188,7 +188,7 @@ class LayoutQueriesTest {
         new TestTraceRecorder("LayoutQueriesTest").section("lineThroughBisectsTheIdeographicMetricBox");
         final original:LayoutResult = LayoutQueriesTestHelpers.backgroundGeometryResult();
         final metric:MetricDecisionInfo = LayoutQueriesTestHelpers.backgroundMetric(new TextRange(0, 3), "IdeographicEmBox", 8.0, 2.0);
-        final result:LayoutResult = LayoutQueriesTestHelpers.copyResultWithDebug(original, new LayoutDebugInfo(null, [metric], [], [], [], []));
+        final result:LayoutResult = LayoutQueriesTestHelpers.copyResultWithPresentation(original, new LayoutPresentationDecisions([metric], [], [], [], []));
         final lineThrough:RichTextSpan = new RichTextSpan(new TextRange(0, 3), LineThrough.instance,
             new RichTextPaint(null, Solid.instance,
                 new RichTextBackgroundPaint(0.0, 0.0, 0.0, 0.0, RichTextBackgroundMetricPolicy.MarkedFaces, Fill.instance), 0.0));
@@ -223,7 +223,7 @@ class LayoutQueriesTest {
             LayoutQueriesTestHelpers.backgroundMetric(new TextRange(0, 1), "IdeographicEmBox", 8.0, 2.0),
             LayoutQueriesTestHelpers.backgroundMetric(new TextRange(1, 3), "RawFontBox", 12.0, 4.0)
         ];
-        final result:LayoutResult = LayoutQueriesTestHelpers.copyResultWithDebug(original, new LayoutDebugInfo(null, metrics, [], [], [], []));
+        final result:LayoutResult = LayoutQueriesTestHelpers.copyResultWithPresentation(original, new LayoutPresentationDecisions(metrics, [], [], [], []));
         final background:RichTextBackgroundPaint = new RichTextBackgroundPaint(0.0, 1.0, 2.0, 2.0, RichTextBackgroundMetricPolicy.UniformTextStyle,
             Fill.instance);
         final paint:RichTextPaint = RichTextPaint.withBackground(background);
@@ -368,7 +368,7 @@ class LayoutQueriesTest {
         final object:InlineObjectSpan = new InlineObjectSpan(objectRange, 40.0, 12.0, 4.0, InlineObjectBoundaryAdjustment.fixed(),
             InlineObjectBoundaryAdjustment.fixed());
         final result:LayoutResult = LayoutQueriesTestHelpers.result(source, 200.0, null, new Size(60.0, 20.0), [], [], [],
-            LayoutQueriesTestHelpers.emptyDebug(), [object]);
+            LayoutQueriesTestHelpers.emptyPresentation(), [object]);
         TracedAssertions.assertEqualsInt(1, LayoutQueries.coerceSelectionOffset(result, 5, SourceBoundaryBias.Backward));
         TracedAssertions.assertEqualsInt(objectRange.end, LayoutQueries.coerceSelectionOffset(result, 5, SourceBoundaryBias.Forward));
         TracedAssertions.assertEqualsInt(1, LayoutQueries.coerceSelectionOffset(result, 5, SourceBoundaryBias.Nearest));
@@ -450,13 +450,13 @@ class LayoutQueriesTestHelpers {
     }
 
     public static function result(text:String, maxWidth:Float, textStyle:Null<TextStyle>, size:Size, clusters:Array<Cluster>, glyphRuns:Array<GlyphRun>,
-            lines:Array<LineBox>, debug:Null<LayoutDebugInfo>, inlineObjects:Null<Array<InlineObjectSpan>>):LayoutResult {
-        return new LayoutResult(LayoutQueriesTestHelpers.input(text, maxWidth, textStyle, inlineObjects), size, clusters, glyphRuns, lines,
-            debug == null ? LayoutQueriesTestHelpers.emptyDebug() : debug);
+            lines:Array<LineBox>, presentation:Null<LayoutPresentationDecisions>, inlineObjects:Null<Array<InlineObjectSpan>>):LayoutResult {
+        return new LayoutResult(LayoutQueriesTestHelpers.input(text, maxWidth, textStyle, inlineObjects), size, clusters, glyphRuns, lines, null,
+            presentation == null ? LayoutQueriesTestHelpers.emptyPresentation() : presentation);
     }
 
-    public static function emptyDebug():LayoutDebugInfo {
-        return new LayoutDebugInfo(null, [], [], [], [], []);
+    public static function emptyPresentation():LayoutPresentationDecisions {
+        return new LayoutPresentationDecisions([], [], [], [], []);
     }
 
     public static function renderRects(values:Array<Rect>):String {
@@ -518,7 +518,7 @@ class LayoutQueriesTestHelpers {
             LayoutQueriesTestHelpers.cluster(new TextRange(2, 3), "B", "latin", 14.0)
         ], glyphRuns, [
             LayoutQueriesTestHelpers.line(new TextRange(0, 3), 0, 2, 20.0, 0.0, 30.0, 31.0, 31.0, 31.0, null)
-        ], new LayoutDebugInfo(null, [], [], [autoSpace], [], []), null);
+        ], new LayoutPresentationDecisions([], [], [autoSpace], [], []), null);
     }
 
     public static function backgroundMetric(range:TextRange, metricBox:String, ascent:Float, descent:Float):MetricDecisionInfo {
@@ -540,7 +540,7 @@ class LayoutQueriesTestHelpers {
             LayoutQueriesTestHelpers.cluster(new TextRange(3, 4), "）", "cjk", 10.0)
         ], [], [
             LayoutQueriesTestHelpers.line(new TextRange(0, 4), 0, 3, 15.0, 0.0, 20.0, 40.0, 40.0, 40.0, null)
-        ], new LayoutDebugInfo(null, [], geometries, [], [], []), null);
+        ], new LayoutPresentationDecisions([], geometries, [], [], []), null);
     }
 
     public static function interactionBoundaryResult():LayoutResult {
@@ -606,7 +606,7 @@ class LayoutQueriesTestHelpers {
             LayoutQueriesTestHelpers.cluster(new TextRange(2, 3), "李", "cjk", 20.0)
         ], [new GlyphRun(new TextRange(0, 3), "cjk", glyphs, 60.0, [])], [
             LayoutQueriesTestHelpers.line(new TextRange(0, 3), 0, 2, 15.0, 0.0, 20.0, 60.0, 90.0, 90.0, null)
-        ], new LayoutDebugInfo(null, [], geometries, [], rubies, []), null);
+        ], new LayoutPresentationDecisions([], geometries, [], rubies, []), null);
     }
 
     public static function rubyGeometry(range:TextRange, text:String, rubySpread:Float, resolvedAdvance:Float):ClusterGeometryDecisionInfo {
@@ -622,7 +622,7 @@ class LayoutQueriesTestHelpers {
         return first.start == second.start && first.end == second.end;
     }
 
-    public static function copyResultWithDebug(original:LayoutResult, debug:LayoutDebugInfo):LayoutResult {
-        return new LayoutResult(original.input, original.size, original.clusters, original.glyphRuns, original.lines, debug);
+    public static function copyResultWithPresentation(original:LayoutResult, presentation:LayoutPresentationDecisions):LayoutResult {
+        return new LayoutResult(original.input, original.size, original.clusters, original.glyphRuns, original.lines, null, presentation);
     }
 }

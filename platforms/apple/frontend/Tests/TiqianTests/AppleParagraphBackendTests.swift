@@ -17,7 +17,7 @@ final class AppleParagraphBackendTests: XCTestCase {
         XCTAssertFalse(result.lines.isEmpty)
         XCTAssertGreaterThan(result.size.width, 0)
         XCTAssertGreaterThan(result.size.height, 0)
-        XCTAssertTrue(result.debug.shapingDecisions.contains { String(engineText: $0.source) == "CoreText" })
+        XCTAssertTrue(result.presentation.shapingDecisions.contains { String(engineText: $0.source) == "CoreText" })
     }
 
     func testWrapsToMultipleLinesUnderNarrowWidth() throws {
@@ -54,13 +54,13 @@ final class AppleParagraphBackendTests: XCTestCase {
 
     func testAutospaceRunsAtCJKLatinBoundaries() throws {
         let result = try Probe.layout("中文Abc漢字123你好World", maxWidth: 400)
-        XCTAssertFalse(result.debug.autoSpaceDecisions.isEmpty)
+        XCTAssertFalse(result.presentation.autoSpaceDecisions.isEmpty)
     }
 
     func testPunctuationCompressionCarriesCompressibleGlue() throws {
         let result = try Probe.layout("他说：「你好。」然后离开了，真的。", maxWidth: 400)
-        XCTAssertFalse(result.debug.punctuationDecisions.isEmpty)
+        XCTAssertFalse(result.presentation.punctuationDecisions.isEmpty)
         // CLREQ 标点挤压 works through the mark's compressible glue; the glyph advance stays 1 em.
-        XCTAssertTrue(result.debug.punctuationDecisions.contains { $0.leadingGlueNatural > 0 || $0.trailingGlueNatural > 0 })
+        XCTAssertTrue(result.presentation.punctuationDecisions.contains { $0.leadingGlueNatural > 0 || $0.trailingGlueNatural > 0 })
     }
 }

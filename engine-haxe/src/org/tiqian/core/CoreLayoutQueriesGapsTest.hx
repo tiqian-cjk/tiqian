@@ -55,7 +55,7 @@ class CoreLayoutQueriesGapsTest {
                 CoreLayoutQueriesGapsTestHelpers.cluster(new TextRange(1, 2), "B", "latin", 10.0)
             ], [], [
                 CoreLayoutQueriesGapsTestHelpers.line(new TextRange(0, 2), 0, 1, 15.0, 0.0, 20.0, 20.0, null)
-            ], CoreLayoutQueriesGapsTestHelpers.emptyDebug());
+            ], CoreLayoutQueriesGapsTestHelpers.emptyPresentation());
         final span:RichTextSpan = new RichTextSpan(new TextRange(0, 2), Background.instance,
             RichTextPaint.withBackground(RichTextBackgroundPaint.withHorizontalPadding(5.0)));
         final occupied:Array<RichTextLineSegment> = LayoutQueries.positionedRichTextSegments(result, [span]);
@@ -72,7 +72,7 @@ class CoreLayoutQueriesGapsTest {
                 CoreLayoutQueriesGapsTestHelpers.cluster(new TextRange(1, 2), "B", "latin", 10.0)
             ], [], [
                 CoreLayoutQueriesGapsTestHelpers.line(new TextRange(0, 2), 0, 1, 15.0, 0.0, 20.0, 20.0, null)
-            ], CoreLayoutQueriesGapsTestHelpers.emptyDebug());
+            ], CoreLayoutQueriesGapsTestHelpers.emptyPresentation());
         final span:RichTextSpan = new RichTextSpan(new TextRange(0, 2), Background.instance,
             RichTextPaint.withBackground(RichTextBackgroundPaint.withHorizontalPadding(5.0)));
         final occupied:Array<RichTextLineSegment> = LayoutQueries.positionedRichTextSegments(result, [span]);
@@ -90,7 +90,7 @@ class CoreLayoutQueriesGapsTest {
                 CoreLayoutQueriesGapsTestHelpers.cluster(new TextRange(1, 2), "B", "latin", 10.0)
             ], [], [
                 CoreLayoutQueriesGapsTestHelpers.line(new TextRange(0, 2), 0, 1, 15.0, 0.0, 20.0, 20.0, null)
-            ], new LayoutDebugInfo(null, [], [], []));
+            ], new LayoutPresentationDecisions([], [], []));
         final paint:RichTextPaint = RichTextPaint.withBackground(new RichTextBackgroundPaint(0.0, 0.0, 0.0, 0.0,
             RichTextBackgroundMetricPolicy.UniformParagraphStyle, Fill.instance));
         final span:RichTextSpan = new RichTextSpan(new TextRange(0, 2), Background.instance, paint);
@@ -109,7 +109,7 @@ class CoreLayoutQueriesGapsTest {
                 CoreLayoutQueriesGapsTestHelpers.cluster(new TextRange(0, 2), "AB", "latin", 20.0)
             ], [], [
                 CoreLayoutQueriesGapsTestHelpers.line(new TextRange(0, 2), 0, 0, 15.0, 0.0, 20.0, 20.0, null)
-            ], new LayoutDebugInfo(null, [metric], [], []));
+            ], new LayoutPresentationDecisions([metric], [], []));
         final span:RichTextSpan = new RichTextSpan(new TextRange(0, 2), Background.instance,
             new RichTextPaint(null, Solid.instance,
                 new RichTextBackgroundPaint(0.0, 0.0, 0.0, 0.0, RichTextBackgroundMetricPolicy.MarkedFaces, Fill.instance), 0.0));
@@ -201,7 +201,7 @@ class CoreLayoutQueriesGapsTest {
             new Size(20.0, 20.0), [CoreLayoutQueriesGapsTestHelpers.cluster(glyphRange, text, "latin", 20.0)],
             [new GlyphRun(glyphRange, "latin", glyphs, 20.0, [])], [
                 CoreLayoutQueriesGapsTestHelpers.line(glyphRange, 0, 0, 15.0, 0.0, 20.0, 20.0, null)
-            ], CoreLayoutQueriesGapsTestHelpers.emptyDebug());
+            ], CoreLayoutQueriesGapsTestHelpers.emptyPresentation());
         final positioned:Array<PositionedCluster> = LayoutQueries.positionedClusters(result);
         TracedAssertions.assertEqualsInt(0, LayoutQueries.getOffsetForPosition(result, positioned[0].left, 10.0));
         TracedAssertions.assertEqualsInt(1, LayoutQueries.getOffsetForPosition(result, 15.0, 10.0));
@@ -300,8 +300,8 @@ class CoreLayoutQueriesGapsTestHelpers {
             0.0, [], new LineDebugInfo(null, []));
     }
 
-    public static function emptyDebug():LayoutDebugInfo {
-        return new LayoutDebugInfo(null, [], [], [], [], []);
+    public static function emptyPresentation():LayoutPresentationDecisions {
+        return new LayoutPresentationDecisions([], [], [], [], []);
     }
 
     public static function renderRects(values:Array<Rect>):String {
@@ -320,9 +320,9 @@ class CoreLayoutQueriesGapsTestHelpers {
     }
 
     public static function resultWith(text:String, maxWidth:Float, textStyle:Null<TextStyle>, size:Size, clusters:Array<Cluster>, glyphRuns:Array<GlyphRun>,
-            lines:Array<LineBox>, debug:Null<LayoutDebugInfo>):LayoutResult {
-        return new LayoutResult(CoreLayoutQueriesGapsTestHelpers.input(text, maxWidth, textStyle), size, clusters, glyphRuns, lines,
-            debug == null ? CoreLayoutQueriesGapsTestHelpers.emptyDebug() : debug);
+            lines:Array<LineBox>, presentation:Null<LayoutPresentationDecisions>):LayoutResult {
+        return new LayoutResult(CoreLayoutQueriesGapsTestHelpers.input(text, maxWidth, textStyle), size, clusters, glyphRuns, lines, null,
+            presentation == null ? CoreLayoutQueriesGapsTestHelpers.emptyPresentation() : presentation);
     }
 
     public static function sampleResult():LayoutResult {

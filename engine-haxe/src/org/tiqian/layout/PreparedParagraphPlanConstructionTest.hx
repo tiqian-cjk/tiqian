@@ -35,7 +35,7 @@ class PreparedParagraphPlanConstructionTest {
             final c = r.clusters[i];
             emptyClusters.push(new Cluster(c.range, c.text, c.fontKey, c.advance, c.range.start == 1 ? "" : c.displayText));
         }
-        final emptyDisplay = new LayoutResult(r.input, r.size, emptyClusters, r.glyphRuns, r.lines, r.debug);
+        final emptyDisplay = new LayoutResult(r.input, r.size, emptyClusters, r.glyphRuns, r.lines, r.debug, r.presentation);
         final plain = PreparedParagraphFns.toPreparedParagraphJson(emptyDisplay, false);
         TracedAssertions.assertFalse(plain.indexOf("\"inlineObject\"") >= 0, plain);
         TracedAssertions.assertFalse(plain.indexOf("\"rangeStart\":1") >= 0, plain);

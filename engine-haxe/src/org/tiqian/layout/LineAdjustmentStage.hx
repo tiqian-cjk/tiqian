@@ -49,7 +49,7 @@ import org.tiqian.layout.AnnotationGeometryStage.AnnotationGeometryStageResult;
 import org.tiqian.layout.LineGeometryStage.ClusterMetricDecision;
 import org.tiqian.layout.LineGeometryStage.LineBoxStageResult;
 import org.tiqian.layout.LineGeometryStage.LineGeometryStageFns;
-import org.tiqian.layout.LayoutDebugAssembly.LayoutDebugStageInput;
+import org.tiqian.layout.LayoutDebugAssembly.LayoutRecordStageInput;
 import org.tiqian.layout.LayoutDebugAssembly;
 import org.tiqian.layout.ParagraphShapingStage;
 import org.tiqian.layout.PunctuationGeometryStage;
@@ -836,17 +836,20 @@ class LineAdjustmentStage {
         final maxWidthConstraint = prep.input.constraints.maxWidth;
         final resultWidth = widestLine > maxWidthConstraint ? maxWidthConstraint : widestLine;
 
-        return ParagraphFinishOutcome.finished(new LayoutResult(prep.input, new Size(resultWidth, totalHeight), finalClusters, glyphRuns, lines,
-            LayoutDebugAssembly.buildLayoutDebugInfo(engine.lineBreaker.strategyName,
-                new LayoutDebugStageInput(prep.text, prep.fontDecisions, prep.punctuationGlyphSubstitutor, prep.substitutionRollbacks, prep.shapingDecisions,
-                    plan.metricDecisions, prep.punctuationAtoms, geometryDecisions, prep.spacingPlan, prep.attachedPunctuationBoundary,
-                    prep.roleOverrideInfos, laidOutLines, plan.lineSolution, prep.clusters, justificationPlans, prep.autoSpaceDecisions, edgeTrimDecisions,
-                    decorationDecisions, decorationSegments, rubyDecisions, bopomofoDecisions, prep.mandatoryBreakDecisions, maxLinesDecision,
-                    plan.lineSpacingDecision, rubyLineHeightDecision, inlineObjectLineHeightDecision, plan.kinsokuDecision, contextualKinsokuDecisions,
-                    prep.lineLengthGridDecision, plan.firstLineIndentDecision, prep.inlineBoxResult.decisions, inlineObjectDecisions,
-                    prep.inlineObjectPunctuationAttachmentDecisions, prep.zeroWidthBreakDecisions, prep.breakOpportunityDecisions,
-                    prep.emergencyTrackingEligibilityDecisions, plan.progressiveBreakOpportunities), prep.layoutMemo.fontDecisionInfos, prep.layoutMemo.metricDecisionInfos,
-                prep.layoutMemo.punctuationDecisionInfos)));
+        final recordStage = new LayoutRecordStageInput(prep.text, prep.fontDecisions, prep.punctuationGlyphSubstitutor, prep.substitutionRollbacks,
+            prep.shapingDecisions, plan.metricDecisions, prep.punctuationAtoms, geometryDecisions, prep.spacingPlan, prep.attachedPunctuationBoundary,
+            prep.roleOverrideInfos, laidOutLines, plan.lineSolution, prep.clusters, justificationPlans, prep.autoSpaceDecisions, edgeTrimDecisions,
+            decorationDecisions, decorationSegments, rubyDecisions, bopomofoDecisions, prep.mandatoryBreakDecisions, maxLinesDecision,
+            plan.lineSpacingDecision, rubyLineHeightDecision, inlineObjectLineHeightDecision, plan.kinsokuDecision, contextualKinsokuDecisions,
+            prep.lineLengthGridDecision, plan.firstLineIndentDecision, prep.inlineBoxResult.decisions, inlineObjectDecisions,
+            prep.inlineObjectPunctuationAttachmentDecisions, prep.zeroWidthBreakDecisions, prep.breakOpportunityDecisions,
+            prep.emergencyTrackingEligibilityDecisions, plan.progressiveBreakOpportunities);
+        final presentation = LayoutDebugAssembly.buildPresentationDecisions(recordStage, prep.layoutMemo.fontDecisionInfos,
+            prep.layoutMemo.metricDecisionInfos, prep.layoutMemo.punctuationDecisionInfos);
+        final debug = LayoutDebugAssembly.buildLayoutDebugInfo(engine.lineBreaker.strategyName, recordStage, prep.layoutMemo.fontDecisionInfos,
+            prep.layoutMemo.metricDecisionInfos, prep.layoutMemo.punctuationDecisionInfos);
+        return ParagraphFinishOutcome.finished(new LayoutResult(prep.input, new Size(resultWidth, totalHeight), finalClusters, glyphRuns, lines, debug,
+            presentation));
     }
 }
 

@@ -16,10 +16,10 @@ class PreparedParagraphJfTest {
             [new Cluster(new TextRange(0, 2), "——", "k", 32)], [
                 new GlyphRun(new TextRange(0, 2), "k", [new Glyph(42, new TextRange(0, 2), 32)], 32)
             ],
-            [PreparedParagraphJfTestSupport.line(new TextRange(0, 2), new IntRange(0, 0), 32)], new LayoutDebugInfo(null, null, null, null, null, null, null, [
+            [PreparedParagraphJfTestSupport.line(new TextRange(0, 2), new IntRange(0, 0), 32)], null, new LayoutPresentationDecisions(null, null, null, null, null, null, [
                 new ShapingDecisionInfo(new TextRange(0, 2), "——", "——", "k", 1, 32, "test", "DashRule", null, null, "NotoSansCJK", null, "zh",
                     "DashTwoEmLigature")
-            ], null));
+            ]));
         final json = PreparedParagraphFns.toPreparedParagraphJson(r, true);
         TracedAssertions.assertTrue(json.indexOf("\"glyphIds\":\"42\"") >= 0);
         TracedAssertions.assertTrue(json.indexOf("\"shapingLanguage\":\"zh\"") >= 0);
@@ -76,7 +76,7 @@ class PreparedParagraphJfTest {
             new Cluster(new TextRange(0, 1), "甲", "k", 16),
             new Cluster(new TextRange(1, 2), "乙", "k", 16)
         ];
-        final debug = new LayoutDebugInfo(null, null, null, null, null, null, null, null, null, null, null, null, null, null, [
+        final presentation = new LayoutPresentationDecisions(null, null, null, null, null, null, null, null, [
             new DecorationDecisionInfo(new TextRange(0, 1), "甲", "Emphasis", false, "test", null, null, 4),
             new DecorationDecisionInfo(new TextRange(0, 1), "甲", "ProperNoun", true, "test", null, null, 4),
             new DecorationDecisionInfo(new TextRange(0, 1), "甲", "Emphasis", true, "test", null, null, 0),
@@ -88,7 +88,7 @@ class PreparedParagraphJfTest {
         ]), new Size(200, 24), cs, [
             new GlyphRun(new TextRange(0, 2), "k", [new Glyph(1, new TextRange(0, 1), 16), new Glyph(2, new TextRange(1, 2), 16)], 32)
         ],
-            [PreparedParagraphJfTestSupport.line(new TextRange(0, 2), new IntRange(0, 1), 32)], debug);
+            [PreparedParagraphJfTestSupport.line(new TextRange(0, 2), new IntRange(0, 1), 32)], null, presentation);
         final json = PreparedParagraphFns.toPreparedParagraphJson(r, true);
         TracedAssertions.assertTrue(json.indexOf("\"inlineStart\":4") >= 0);
         TracedAssertions.assertTrue(json.indexOf("\"inlineEnd\":6") >= 0);
@@ -112,7 +112,7 @@ class PreparedParagraphJfTest {
         final r = new LayoutResult(new LayoutInput(content, new TextStyle(), null, new LayoutConstraints(200)), new Size(200, 24), clusters,
             [new GlyphRun(new TextRange(0, 6), "k", glyphs, 100, ["liga", "dlig"])], [
                 PreparedParagraphJfTestSupport.line(new TextRange(0, 6), new IntRange(0, 5), 100)
-            ], new LayoutDebugInfo(null));
+            ], null, new LayoutPresentationDecisions());
         final json = PreparedParagraphFns.toPreparedParagraphJson(r, true);
         TracedAssertions.assertTrue(json.indexOf("\"openTypeFeatures\":[\"liga\",\"dlig\"]") >= 0);
         TracedAssertions.assertTrue(json.indexOf("\"fontSize\":20") >= 0);

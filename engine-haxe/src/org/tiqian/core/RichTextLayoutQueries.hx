@@ -269,8 +269,8 @@ class RichTextLayoutQueries {
         var reference:Null<MetricDecisionInfo> = null;
         var firstMatch:Null<MetricDecisionInfo> = null;
         var index:Int = 0;
-        while (index < result.debug.metricDecisions.length) {
-            final decision:MetricDecisionInfo = result.debug.metricDecisions[index];
+        while (index < result.presentation.metricDecisions.length) {
+            final decision:MetricDecisionInfo = result.presentation.metricDecisions[index];
             if (sameFontMetricStyle(resolvedTextStyleAt(result, decision.range.start), style)) {
                 if (firstMatch == null)
                     firstMatch = decision;
@@ -339,8 +339,8 @@ class RichTextLayoutQueries {
     private static function geometryDecisionForRange(result:LayoutResult, range:TextRange):Null<ClusterGeometryDecisionInfo> {
         var found:Null<ClusterGeometryDecisionInfo> = null;
         var index:Int = 0;
-        while (index < result.debug.geometryDecisions.length) {
-            final decision:ClusterGeometryDecisionInfo = result.debug.geometryDecisions[index];
+        while (index < result.presentation.geometryDecisions.length) {
+            final decision:ClusterGeometryDecisionInfo = result.presentation.geometryDecisions[index];
             if (LayoutQueries.sameRange(decision.range, range)) {
                 found = decision;
             }
@@ -352,8 +352,8 @@ class RichTextLayoutQueries {
     private static function lastMetricContaining(result:LayoutResult, range:TextRange):Null<MetricDecisionInfo> {
         var found:Null<MetricDecisionInfo> = null;
         var index:Int = 0;
-        while (index < result.debug.metricDecisions.length) {
-            final decision:MetricDecisionInfo = result.debug.metricDecisions[index];
+        while (index < result.presentation.metricDecisions.length) {
+            final decision:MetricDecisionInfo = result.presentation.metricDecisions[index];
             if (range.start >= decision.range.start && range.end <= decision.range.end) {
                 found = decision;
             }

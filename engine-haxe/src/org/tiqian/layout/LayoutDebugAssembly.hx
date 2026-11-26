@@ -1,6 +1,7 @@
 package org.tiqian.layout;
 
 import org.tiqian.core.LayoutDebugInfo;
+import org.tiqian.core.LayoutPresentationDecisions;
 import org.tiqian.core.FontDecisionInfo;
 import org.tiqian.core.MetricDecisionInfo;
 import org.tiqian.core.PunctuationDecisionInfo;
@@ -53,7 +54,12 @@ import org.tiqian.layout.LineOptimization.RepairOptions;
 import org.tiqian.layout.Justifier.JustificationPlan;
 import org.tiqian.layout.cache.LayoutMemoSlot;
 
-@:dataClass class LayoutDebugStageInput {
+/**
+ * `LayoutRecordStageInput`: the stage values of one layout that `LayoutDebugAssembly` turns into
+ * the presentation records (`buildPresentationDecisions`) and the debug record
+ * (`buildLayoutDebugInfo`). Replaces the former name `LayoutDebugStageInput`.
+ */
+@:dataClass class LayoutRecordStageInput {
     public final text:String;
     public final fontDecisions:Array<FontDecision>;
     public final punctuationGlyphSubstitutor:ClreqPunctuationGlyphSubstitutor;
@@ -212,7 +218,7 @@ class LayoutDebugAssembly {
      * The debug record of each font decision with its display substitution and rollback cause.
      * It depends only on the stage's text, font decisions, substitutor and substitution rollbacks.
      */
-    private static function fontDecisionInfos(stage:LayoutDebugStageInput):Array<FontDecisionInfo> {
+    private static function fontDecisionInfos(stage:LayoutRecordStageInput):Array<FontDecisionInfo> {
         final fontDecisionsOut = new Array<FontDecisionInfo>();
         for (fIdx in 0...stage.fontDecisions.length) {
             final decision = stage.fontDecisions[fIdx];
@@ -236,7 +242,7 @@ class LayoutDebugAssembly {
     }
 
     /** The debug record of each metric decision. It depends only on the stage's `metricDecisions`. */
-    private static function metricDecisionInfos(stage:LayoutDebugStageInput):Array<MetricDecisionInfo> {
+    private static function metricDecisionInfos(stage:LayoutRecordStageInput):Array<MetricDecisionInfo> {
         final metricDecisionsOut = new Array<MetricDecisionInfo>();
         for (mIdx in 0...stage.metricDecisions.length) {
             final decision = stage.metricDecisions[mIdx];
@@ -250,7 +256,7 @@ class LayoutDebugAssembly {
     }
 
     /** The debug record of each punctuation atom. It depends only on the stage's `punctuationAtoms`. */
-    private static function punctuationDecisionInfos(stage:LayoutDebugStageInput):Array<PunctuationDecisionInfo> {
+    private static function punctuationDecisionInfos(stage:LayoutRecordStageInput):Array<PunctuationDecisionInfo> {
         final punctuationDecisionsOut = new Array<PunctuationDecisionInfo>();
         for (pIdx in 0...stage.punctuationAtoms.length) {
             final atom = stage.punctuationAtoms[pIdx];
@@ -261,6 +267,48 @@ class LayoutDebugAssembly {
                 atom.leadingGlueInitiallyConsumed, atom.trailingGlueInitiallyConsumed));
         }
         return punctuationDecisionsOut;
+    }
+
+    /** The font-decision records from `slot`, built from `stage` and stored on the first call. */
+    private static function cachedFontDecisionInfos(stage:LayoutRecordStageInput, slot:LayoutMemoSlot<Array<FontDecisionInfo>>):Array<FontDecisionInfo> {
+        final cached = slot.value;
+        final value:Array<FontDecisionInfo> = cached != null ? cached : fontDecisionInfos(stage);
+        if (cached == null)
+            slot.value = value;
+        return value;
+    }
+
+    /** The metric-decision records from `slot`, built from `stage` and stored on the first call. */
+    private static function cachedMetricDecisionInfos(stage:LayoutRecordStageInput, slot:LayoutMemoSlot<Array<MetricDecisionInfo>>):Array<MetricDecisionInfo> {
+        final cached = slot.value;
+        final value:Array<MetricDecisionInfo> = cached != null ? cached : metricDecisionInfos(stage);
+        if (cached == null)
+            slot.value = value;
+        return value;
+    }
+
+    /** The punctuation records from `slot`, built from `stage` and stored on the first call. */
+    private static function cachedPunctuationDecisionInfos(stage:LayoutRecordStageInput,
+            slot:LayoutMemoSlot<Array<PunctuationDecisionInfo>>):Array<PunctuationDecisionInfo> {
+        final cached = slot.value;
+        final value:Array<PunctuationDecisionInfo> = cached != null ? cached : punctuationDecisionInfos(stage);
+        if (cached == null)
+            slot.value = value;
+        return value;
+    }
+
+    /**
+     * The presentation records of one layout (`LayoutResult.presentation`). The font, metric and
+     * punctuation records come from the same memo slots as `buildLayoutDebugInfo` reads, so a
+     * layout that also records debug information shares every list between both records.
+     */
+    public static function buildPresentationDecisions(stage:LayoutRecordStageInput, fontDecisionInfosSlot:LayoutMemoSlot<Array<FontDecisionInfo>>,
+            metricDecisionInfosSlot:LayoutMemoSlot<Array<MetricDecisionInfo>>,
+            punctuationDecisionInfosSlot:LayoutMemoSlot<Array<PunctuationDecisionInfo>>):LayoutPresentationDecisions {
+        return new LayoutPresentationDecisions(cachedMetricDecisionInfos(stage, metricDecisionInfosSlot), stage.geometryDecisions,
+            stage.autoSpaceDecisions, stage.rubyDecisions, stage.bopomofoDecisions, cachedFontDecisionInfos(stage, fontDecisionInfosSlot),
+            stage.shapingDecisions, cachedPunctuationDecisionInfos(stage, punctuationDecisionInfosSlot), stage.decorationDecisions,
+            stage.decorationSegments, stage.zeroWidthBreakDecisions, stage.lineSpacingDecision);
     }
 
     /**
@@ -277,23 +325,12 @@ class LayoutDebugAssembly {
      * in the Rust compiler); with the memo as that parameter, the memo's fields were attributed to
      * the engine of `LineAdjustmentStage.finishParagraphLayout`.
      */
-    public static function buildLayoutDebugInfo(lineBreakerStrategyName:String, stage:LayoutDebugStageInput,
+    public static function buildLayoutDebugInfo(lineBreakerStrategyName:String, stage:LayoutRecordStageInput,
             fontDecisionInfosSlot:LayoutMemoSlot<Array<FontDecisionInfo>>, metricDecisionInfosSlot:LayoutMemoSlot<Array<MetricDecisionInfo>>,
             punctuationDecisionInfosSlot:LayoutMemoSlot<Array<PunctuationDecisionInfo>>):LayoutDebugInfo {
-        final cachedFontDecisions = fontDecisionInfosSlot.value;
-        final fontDecisionsOut:Array<FontDecisionInfo> = cachedFontDecisions != null ? cachedFontDecisions : fontDecisionInfos(stage);
-        if (cachedFontDecisions == null)
-            fontDecisionInfosSlot.value = fontDecisionsOut;
-
-        final cachedMetricDecisions = metricDecisionInfosSlot.value;
-        final metricDecisionsOut:Array<MetricDecisionInfo> = cachedMetricDecisions != null ? cachedMetricDecisions : metricDecisionInfos(stage);
-        if (cachedMetricDecisions == null)
-            metricDecisionInfosSlot.value = metricDecisionsOut;
-
-        final cachedPunctuationDecisions = punctuationDecisionInfosSlot.value;
-        final punctuationDecisionsOut:Array<PunctuationDecisionInfo> = cachedPunctuationDecisions != null ? cachedPunctuationDecisions : punctuationDecisionInfos(stage);
-        if (cachedPunctuationDecisions == null)
-            punctuationDecisionInfosSlot.value = punctuationDecisionsOut;
+        final fontDecisionsOut = cachedFontDecisionInfos(stage, fontDecisionInfosSlot);
+        final metricDecisionsOut = cachedMetricDecisionInfos(stage, metricDecisionInfosSlot);
+        final punctuationDecisionsOut = cachedPunctuationDecisionInfos(stage, punctuationDecisionInfosSlot);
 
         final spacingDecisionsOut = new Array<SpacingDecisionInfo>();
         for (sIdx in 0...stage.spacingPlan.adjustments.length) {

@@ -80,8 +80,8 @@ class LayoutPaintBoundsFns {
             runIndex += 1;
         }
         var dotIndex = 0;
-        while (dotIndex < result.debug.decorationDecisions.length) {
-            final dot = result.debug.decorationDecisions[dotIndex];
+        while (dotIndex < result.presentation.decorationDecisions.length) {
+            final dot = result.presentation.decorationDecisions[dotIndex];
             if (dot.applied && dot.dotDiameter > 0.0) {
                 final cluster = positionsByRange.get(dot.clusterRange);
                 if (cluster != null) {
@@ -92,8 +92,8 @@ class LayoutPaintBoundsFns {
             dotIndex += 1;
         }
         var rubyIndex = 0;
-        while (rubyIndex < result.debug.rubyDecisions.length) {
-            final ruby = result.debug.rubyDecisions[rubyIndex];
+        while (rubyIndex < result.presentation.rubyDecisions.length) {
+            final ruby = result.presentation.rubyDecisions[rubyIndex];
             final base = new Array<PositionedCluster>();
             var baseIndex = 0;
             while (baseIndex < positioned.length) {

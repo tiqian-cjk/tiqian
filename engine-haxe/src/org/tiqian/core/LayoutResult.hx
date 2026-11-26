@@ -11,13 +11,17 @@ class LayoutResult {
     public final lines:ReadOnlyArray<LineBox>;
     public final debug:LayoutDebugInfo;
 
+    /** The decision records presentation code reads; see `LayoutPresentationDecisions`. */
+    public final presentation:LayoutPresentationDecisions;
+
     public function new(input:LayoutInput, size:Size, clusters:ReadOnlyArray<Cluster>, glyphRuns:ReadOnlyArray<GlyphRun>, lines:ReadOnlyArray<LineBox>,
-            ?debug:Null<LayoutDebugInfo>) {
+            ?debug:Null<LayoutDebugInfo>, ?presentation:Null<LayoutPresentationDecisions>) {
         this.input = input;
         this.size = size;
         this.clusters = clusters;
         this.glyphRuns = glyphRuns;
         this.lines = lines;
         this.debug = debug == null ? LayoutDebugInfo.Default : debug;
+        this.presentation = presentation == null ? LayoutPresentationDecisions.Default : presentation;
     }
 }

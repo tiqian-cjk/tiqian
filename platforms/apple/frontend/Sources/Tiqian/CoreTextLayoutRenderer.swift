@@ -116,7 +116,7 @@ private struct SourceIndex {
         }
         // The first decision wins, so paint in reverse order.
         var decisions = [Int](repeating: -1, count: length)
-        let fontDecisions = result.debug.fontDecisions
+        let fontDecisions = result.presentation.fontDecisions
         for index in fontDecisions.indices.reversed() {
             let range = fontDecisions[index].range
             Self.paint(&decisions, Int(range.start), Int(range.end), index)
@@ -156,7 +156,7 @@ private struct SourceIndex {
     func usesLatinFace(at range: TextRange) -> Bool {
         let start = Int(range.start)
         if range.start < range.end, start >= 0, start < fontDecisionByOffset.count, fontDecisionByOffset[start] >= 0 {
-            let decision = result.debug.fontDecisions[fontDecisionByOffset[start]]
+            let decision = result.presentation.fontDecisions[fontDecisionByOffset[start]]
             if range.end <= decision.range.end { return fontRoleNameUsesLatinFace(decision.role) }
         }
         return result.usesLatinFace(at: range)
@@ -289,7 +289,7 @@ private struct DisplayListBuilder {
     // MARK: - Annotations (拼音 / 注音)
 
     mutating func appendRuby() {
-        for ruby in result.debug.rubyDecisions where !ruby.text.isEmpty {
+        for ruby in result.presentation.rubyDecisions where !ruby.text.isEmpty {
             // Re-shape the reading with its resolved font instead of replaying stored glyph ids: a
             // reading that triggered a Core Text fallback face carries ids of that face. The weight
             // is the engine-computed annotation weight (ADR 0032).
@@ -310,7 +310,7 @@ private struct DisplayListBuilder {
     /// top centre of the ideographic box, so the ㄅㄆㄇ symbol origin derives from the box. Tone
     /// marks are positioned from each platform's own ink, so their `drawX` / `baselineY` replay as-is.
     mutating func appendBopomofo() {
-        for decision in result.debug.bopomofoDecisions {
+        for decision in result.presentation.bopomofoDecisions {
             let family = decision.fontFamilies.first.map { String(engineText: $0) } ?? cjkFamily
             let language = String(engineText: decision.locale)
             for placement in decision.placements where !placement.text.isEmpty {
@@ -336,7 +336,7 @@ private struct DisplayListBuilder {
     // MARK: - 着重号 / 专名号 / 书名号 / 示亡号
 
     mutating func appendEmphasisDots() {
-        for decoration in result.debug.decorationDecisions where decoration.applied && decoration.dotDiameter > 0 {
+        for decoration in result.presentation.decorationDecisions where decoration.applied && decoration.dotDiameter > 0 {
             let radius = Double(decoration.dotDiameter) / 2
             let centerX = Double(decoration.anchorX)
             let centerY = -Double(decoration.anchorY)
@@ -354,7 +354,7 @@ private struct DisplayListBuilder {
             Float(stroke),
             min(Float(fontSize) * CoreTextLayoutRenderer.skipInkClearanceEm, CoreTextLayoutRenderer.skipInkClearanceMax),
         )
-        for segment in result.debug.decorationSegments {
+        for segment in result.presentation.decorationSegments {
             let kind = String(engineText: segment.kind)
             let argb = source.color(at: segment.sourceRange.start)
             switch kind {

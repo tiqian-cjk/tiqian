@@ -95,13 +95,13 @@ class LayoutResultReplayIndexFns {
         while (positionedIndex2 < positioned.length) {
             final cluster = positioned[positionedIndex2];
             final range = result.clusters[cluster.clusterIndex].range;
-            while (decisionIndex < result.debug.fontDecisions.length
-                && result.debug.fontDecisions[decisionIndex].range.end <= range.start) {
+            while (decisionIndex < result.presentation.fontDecisions.length
+                && result.presentation.fontDecisions[decisionIndex].range.end <= range.start) {
                 decisionIndex += 1;
             }
             var role:Null<String> = null;
-            if (decisionIndex < result.debug.fontDecisions.length) {
-                final decision = result.debug.fontDecisions[decisionIndex];
+            if (decisionIndex < result.presentation.fontDecisions.length) {
+                final decision = result.presentation.fontDecisions[decisionIndex];
                 if (range.start >= decision.range.start && range.end <= decision.range.end) {
                     role = decision.role;
                 }

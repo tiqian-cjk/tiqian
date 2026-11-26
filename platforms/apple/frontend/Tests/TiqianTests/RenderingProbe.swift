@@ -38,14 +38,13 @@ enum RenderingProbe {
         let clusters = result.clusters.map {
             Cluster($0.range, $0.text, $0.fontKey, $0.advance, [], $0.baselineShift, $0.leadingLayoutAdvance, $0.glyphInlineShift)
         }
-        let debug = LayoutDebugInfo(
-            result.debug.maxLinesDecision,
+        let presentation = LayoutPresentationDecisions(
             BoringArray(), BoringArray(), BoringArray(),
             BoringArray(),
             bopomofo.boringArray,
-            BoringArray(result.debug.fontDecisions.array),
+            BoringArray(result.presentation.fontDecisions.array),
         )
-        return LayoutResult(result.input, result.size, clusters.readOnlyArray, ReadOnlyArray(), result.lines, debug)
+        return LayoutResult(result.input, result.size, clusters.readOnlyArray, ReadOnlyArray(), result.lines, result.debug, presentation)
     }
 
     static func bopomofo(_ decision: BopomofoDecisionInfo, placements: [BopomofoGlyphPlacement]) -> BopomofoDecisionInfo {
@@ -69,7 +68,7 @@ enum RenderingProbe {
                 0, BoringArray($0.hyphenGlyphs.array), $0.debug,
             )
         }
-        return LayoutResult(result.input, result.size, result.clusters, result.glyphRuns, lines.readOnlyArray, result.debug)
+        return LayoutResult(result.input, result.size, result.clusters, result.glyphRuns, lines.readOnlyArray, result.debug, result.presentation)
     }
 
     /// An RGBA8 premultiplied bitmap filled white, with black as the inherited fill color.

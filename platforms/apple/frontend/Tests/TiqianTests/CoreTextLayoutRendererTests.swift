@@ -33,9 +33,9 @@ final class CoreTextLayoutRendererTests: XCTestCase {
             decorations: [DecorationSpan(Probe.range(3, 4), .emphasis)],
             rubySpans: [RubySpan(Probe.range(0, 2), "tíqiàn".engineText, BoringArray(), .pinyin)],
         )
-        XCTAssertFalse(rich.debug.rubyDecisions.isEmpty, "expected 拼音 ruby geometry")
-        XCTAssertTrue(rich.debug.rubyDecisions.allSatisfy { !$0.glyphs.isEmpty })
-        XCTAssertTrue(rich.debug.decorationDecisions.contains { $0.applied && $0.dotDiameter > 0 })
+        XCTAssertFalse(rich.presentation.rubyDecisions.isEmpty, "expected 拼音 ruby geometry")
+        XCTAssertTrue(rich.presentation.rubyDecisions.allSatisfy { !$0.glyphs.isEmpty })
+        XCTAssertTrue(rich.presentation.decorationDecisions.contains { $0.applied && $0.dotDiameter > 0 })
 
         let plainInk = try Probe.inkBands(plain, width: 240, bands: 1)[0]
         let richInk = try Probe.inkBands(rich, width: 240, bands: 1)[0]
@@ -51,7 +51,7 @@ final class CoreTextLayoutRendererTests: XCTestCase {
             maxWidth: 400,
             rubySpans: [RubySpan(Probe.range(0, 1), "ㄏㄠˇ".engineText, BoringArray(), .bopomofo)],
         )
-        let placements = try XCTUnwrap(zhuyin.debug.bopomofoDecisions.first).placements
+        let placements = try XCTUnwrap(zhuyin.presentation.bopomofoDecisions.first).placements
         let tone = try XCTUnwrap(placements.first { $0.role == .tone })
         let symbol = try XCTUnwrap(placements.first { $0.role == .symbol })
         XCTAssertEqual(symbol.fontSize, tone.fontSize, accuracy: 0.001, "tone marks share the annotation size")
@@ -69,7 +69,7 @@ final class CoreTextLayoutRendererTests: XCTestCase {
             maxWidth: 400,
             rubySpans: [RubySpan(Probe.range(0, 1), "ㄏㄠˇ".engineText, BoringArray(), .bopomofo)],
         )
-        let decision = try XCTUnwrap(result.debug.bopomofoDecisions.first)
+        let decision = try XCTUnwrap(result.presentation.bopomofoDecisions.first)
         let tone = try XCTUnwrap(decision.placements.first { $0.role == .tone })
         let toneOnly = Probe.annotationsOnly(result, bopomofo: [Probe.bopomofo(decision, placements: [tone])])
         let columns = try XCTUnwrap(try Probe.inkColumns(toneOnly, width: 96), "rendered no ink")
@@ -85,7 +85,7 @@ final class CoreTextLayoutRendererTests: XCTestCase {
             maxWidth: 400,
             rubySpans: [RubySpan(Probe.range(0, 1), "ㄓㄨㄥ".engineText, BoringArray(), .bopomofo)],
         )
-        let symbols = try XCTUnwrap(result.debug.bopomofoDecisions.first).placements.filter { $0.role == .symbol }
+        let symbols = try XCTUnwrap(result.presentation.bopomofoDecisions.first).placements.filter { $0.role == .symbol }
         XCTAssertEqual(symbols.count, 3)
         for symbol in symbols {
             // The Core Text vertical-run pen is the top centre of the ideographic box.
@@ -116,7 +116,7 @@ final class CoreTextLayoutRendererTests: XCTestCase {
             maxWidth: 400,
             rubySpans: [RubySpan(Probe.range(0, 1), "ㄏㄠˇ".engineText, BoringArray(), .bopomofo)],
         )
-        let decision = try XCTUnwrap(result.debug.bopomofoDecisions.first)
+        let decision = try XCTUnwrap(result.presentation.bopomofoDecisions.first)
         for placement in decision.placements {
             let recorded = placement.glyphs.compactMap { glyph in
                 glyph.bounds.map { (glyph.x + $0.left, glyph.x + $0.right) }
@@ -142,7 +142,7 @@ final class CoreTextLayoutRendererTests: XCTestCase {
             maxWidth: 400,
             rubySpans: [RubySpan(Probe.range(0, 1), "˙ㄇㄚ".engineText, BoringArray(), .bopomofo)],
         )
-        XCTAssertTrue(zhuyin.debug.bopomofoDecisions.contains { $0.placements.contains { $0.role == .neutral } })
+        XCTAssertTrue(zhuyin.presentation.bopomofoDecisions.contains { $0.placements.contains { $0.role == .neutral } })
         let plainInk = try Probe.inkBands(plain, width: 240, bands: 1)[0]
         let zhuyinInk = try Probe.inkBands(zhuyin, width: 240, bands: 1)[0]
         XCTAssertGreaterThan(zhuyinInk, plainInk + 10)
@@ -190,7 +190,7 @@ final class CoreTextLayoutRendererTests: XCTestCase {
             maxWidth: 200,
             decorations: [DecorationSpan(Probe.range(0, 1), .bookTitle)],
         )
-        let segment = try XCTUnwrap(result.debug.decorationSegments.first)
+        let segment = try XCTUnwrap(result.presentation.decorationSegments.first)
         let skips = result.coreTextInkSkipIntervals(
             lineIndex: segment.lineIndex,
             bandTop: segment.top - 4,

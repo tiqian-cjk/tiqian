@@ -48,7 +48,7 @@ class PreparedParagraphFns {
         PlanJsonNumber.appendJsonString(out, toPreparedParagraphJson(result, renderEvidence));
         out.push(",\"diagnostics\":{\"capabilityIssues\":[");
         var first = true;
-        final shapingDiagSrc = result.debug.shapingDecisions;
+        final shapingDiagSrc = result.presentation.shapingDecisions;
         for (di in 0...shapingDiagSrc.length) {
             final d = shapingDiagSrc[di];
             if (d.capabilityIssue != null) {
@@ -95,7 +95,7 @@ class PreparedParagraphFns {
         final plan = PlanLowering.toPlan(result, renderEvidence);
         final capabilityIssues:Array<PlanCapabilityIssue> = [];
         final advanceSuspects:Array<PlanAdvanceSuspect> = [];
-        final shapingDiagSrc = result.debug.shapingDecisions;
+        final shapingDiagSrc = result.presentation.shapingDecisions;
         for (d in shapingDiagSrc) {
             final issue = d.capabilityIssue;
             if (issue != null) {

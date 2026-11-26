@@ -61,13 +61,13 @@ class PlanLowering {
             }
         }
         final zeroB = SortedMap.builder();
-        final zeroSrc = result.debug.zeroWidthBreakDecisions;
+        final zeroSrc = result.presentation.zeroWidthBreakDecisions;
         for (zi in 0...zeroSrc.length) zeroB.put(rangeKey(zeroSrc[zi].range), true);
         final shapingB = SortedMap.builder();
-        final shapingSrc = result.debug.shapingDecisions;
+        final shapingSrc = result.presentation.shapingDecisions;
         for (zi in 0...shapingSrc.length) shapingB.put(rangeKey(shapingSrc[zi].range), shapingSrc[zi]);
         final punctB = SortedMap.builder();
-        final punctSrc = result.debug.punctuationDecisions;
+        final punctSrc = result.presentation.punctuationDecisions;
         for (zi in 0...punctSrc.length) punctB.put(rangeKey(punctSrc[zi].range), punctSrc[zi]);
         final inlineAdvanceB = SortedMap.builder();
         final inlineObjSrc = result.input.inlineObjects;
@@ -135,7 +135,7 @@ class PlanLowering {
                         inkFloor = pd.inkContainmentBodyFloor;
                         bodyW = pd.bodyWidth;
                     }
-                    final fdSrc = result.debug.fontDecisions;
+                    final fdSrc = result.presentation.fontDecisions;
                     for (fi in 0...fdSrc.length) {
                         final fd = fdSrc[fi];
                         if (c.range.start >= fd.range.start && c.range.end <= fd.range.end && fd.role == Type.enumConstructor(FontRole.LatinText))
@@ -212,7 +212,7 @@ class PlanLowering {
                     inlineEnd: edgeEnd.get(sk),
                 });
             }
-            final rubySrc = result.debug.rubyDecisions;
+            final rubySrc = result.presentation.rubyDecisions;
             for (ri in 0...rubySrc.length) {
                 final r = rubySrc[ri];
                 rubyDecisions.push({
@@ -222,7 +222,7 @@ class PlanLowering {
                     fontFamilies: toArray(r.fontFamilies), ascent: r.ascent,
                 });
             }
-            final bopoSrc = result.debug.bopomofoDecisions;
+            final bopoSrc = result.presentation.bopomofoDecisions;
             for (bi in 0...bopoSrc.length) {
                 final z = bopoSrc[bi];
                 final placements:Array<Plan.PlanBopomofoPlacement> = [];
@@ -239,13 +239,13 @@ class PlanLowering {
                     fontFamilies: toArray(z.fontFamilies), placements: placements,
                 });
             }
-            final segSrc = result.debug.decorationSegments;
+            final segSrc = result.presentation.decorationSegments;
             for (si in 0...segSrc.length) {
                 final s = segSrc[si];
                 if (s.kind == Type.enumConstructor(DecorationKind.ProperNoun) || s.kind == Type.enumConstructor(DecorationKind.BookTitle))
                     decorationSegments.push({kind: s.kind, left: s.left, top: s.top, right: s.right, sourceRangeStart: s.sourceRange.start, sourceRangeEnd: s.sourceRange.end});
             }
-            final dotSrc = result.debug.decorationDecisions;
+            final dotSrc = result.presentation.decorationDecisions;
             for (di in 0...dotSrc.length) {
                 final d = dotSrc[di];
                 if (d.applied && d.kind == Type.enumConstructor(DecorationKind.Emphasis) && d.dotDiameter > 0)
