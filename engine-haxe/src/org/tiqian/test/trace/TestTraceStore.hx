@@ -26,11 +26,15 @@ class TestTraceStore {
     private static final classes:Array<TraceClassState> = [];
 
     public static function open(className:String, sectionName:String):Void {
-        var classState = findClass(className);
+        var classState:Null<TraceClassState> = findClass(className);
         if (classState == null) {
             classState = new TraceClassState(className);
             classes.push(classState);
         }
+        openSection(classState, sectionName);
+    }
+
+    private static function openSection(classState:TraceClassState, sectionName:String):Void {
         final section = findSection(classState, sectionName);
         if (section == null) {
             classState.sections.push(new TraceSectionState(sectionName));
@@ -38,7 +42,7 @@ class TestTraceStore {
     }
 
     public static function append(className:String, sectionName:String, line:String):Void {
-        final classState = findClass(className);
+        final classState:Null<TraceClassState> = findClass(className);
         if (classState == null) {
             return;
         }
@@ -51,7 +55,7 @@ class TestTraceStore {
     }
 
     public static function classText(className:String):String {
-        final classState = findClass(className);
+        final classState:Null<TraceClassState> = findClass(className);
         if (classState == null) {
             return "class: " + className + "\n";
         }

@@ -137,13 +137,13 @@ class ContextualQuoteRoleResolver {
         var index:Int = startIndex;
         while (index >= 0 && index < text.length) {
             if (direction < 0) {
-                final pair:QuotePair = pairByClose.get(index);
+                final pair:Null<QuotePair> = pairByClose.get(index);
                 if (pair != null) {
                     index = pair.openIndex - 1;
                     continue;
                 }
             } else {
-                final pair:QuotePair = pairByOpen.get(index);
+                final pair:Null<QuotePair> = pairByOpen.get(index);
                 if (pair != null) {
                     index = pair.closeIndex + 1;
                     continue;

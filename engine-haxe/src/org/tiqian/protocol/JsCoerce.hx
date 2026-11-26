@@ -279,7 +279,7 @@ class JsCoerce {
                 out.add("0123456789abcdef".charAt((code >> 4) & 15));
                 out.add("0123456789abcdef".charAt(code & 15));
             } else {
-                out.addChar(code);
+                out.add(String.fromCharCode(code));
             }
             indexIdx++;
         }
