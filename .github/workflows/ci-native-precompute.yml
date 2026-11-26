@@ -144,7 +144,7 @@ jobs:
       - name: Test the generated engine with the f32 cargo feature
         # One generated tree serves both precisions: the second round selects
         # f32 through the cargo feature, so no second generation is needed.
-        run: bash tools/test-engine-rust.sh platforms/web/server/precompute/engine-gen
+        run: bash tools/test-engine-rust.sh engine-haxe/out/engine-rust/gen
 
   # ADR 0053 F4 (DualLoweringStance): the shared golden corpus binds both
   # prepared-dom implementations to the same bytes. The rust lane runs inside

@@ -29,14 +29,14 @@ on:
     paths:
       - 'platforms/web/server/precompute/**'
       - 'platforms/web/server/core/**'
-      - 'platforms/web/server/precompute/engine-gen/**'
+      - 'engine-haxe/out/engine-rust/gen/**'
       - '.github/workflows/build-neon-precompute.yml'
   push:
     branches: [main]
     paths:
       - 'platforms/web/server/precompute/**'
       - 'platforms/web/server/core/**'
-      - 'platforms/web/server/precompute/engine-gen/**'
+      - 'engine-haxe/out/engine-rust/gen/**'
       - '.github/workflows/build-neon-precompute.yml'
   workflow_dispatch:
     inputs:

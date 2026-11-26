@@ -123,7 +123,7 @@ jobs:
         shell: bash
         run: |
           test -f engine-haxe/out/engine-rust/gen/Cargo.toml
-          test -f platforms/web/server/precompute/protocol-gen/Cargo.toml
+          test -f engine-haxe/out/protocol-rust/gen/Cargo.toml
 
       - name: Upload the generated trees and manifests
         if: steps.upload-reused.outcome != 'success'
@@ -134,8 +134,8 @@ jobs:
             engine-haxe/out/ts
             engine-haxe/out/protocol-ts
             engine-haxe/out/shared-ts
-            platforms/web/server/precompute/engine-gen
-            platforms/web/server/precompute/protocol-gen
+            engine-haxe/out/engine-rust/gen
+            engine-haxe/out/protocol-rust/gen
           if-no-files-found: error
           retention-days: 7
 
