@@ -72,7 +72,9 @@ export type WorkerResponseEnvelope =
   | WorkerSuccessEnvelope
   | WorkerErrorEnvelope;
 
-import type { WorkerLayoutRequest, TextSpanWire, InlineBoxWire, LineBreakSpanWire, InlineObjectWire, SemanticSpanWire, RenderInlineBoxWire } from "../engine-access/wire-types.js";
+import type { SemanticSpanWire, RenderInlineBoxWire } from "./wire-types.js";
+import type { WorkerLayoutRequest } from "../engine-access/wire-types.js";
+import type { TextSpanWire, InlineBoxWire, LineBreakSpanWire, InlineObjectWire } from "../wire-types.js";
 
 export interface WorkerLayoutSemanticSpan {
   start?: unknown;

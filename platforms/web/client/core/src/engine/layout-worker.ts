@@ -10,8 +10,8 @@ import type {
   WorkerRequestEnvelope,
   WorkerResponseEnvelope,
 } from "./web-worker/worker-channel.js";
-import { preparedParagraphPlan } from "./engine-access/prepared-paragraph.js";
-import type { DecorationWire } from "./engine-access/wire-types.js";
+import { preparedParagraphPlan } from "./prepared-paragraph.js";
+import type { DecorationWire } from "./wire-types.js";
 import { prepareParagraphRequestWire } from "./wire-construction.js";
 import type { WorkerLayoutRequestBody } from "./web-worker/worker-channel.js";
 import { initializeGlobalServices } from "../services/global-services.js";
@@ -58,7 +58,18 @@ function errorDetail(error: unknown): string {
     const session = sessions.get(sessionKey);
     if (!session) throw new Error("LayoutWorkerFontSessionMissing");
     const request: WorkerLayoutRequestBody = message.request;
-    const additionalBoundaries = workerSnapshotSubsetSourceBoundaries(session.faces, request);
+    const textSpans = request.textSpans.map(function (span) {
+      return {
+        start: span.start,
+        end: span.end,
+        families: span.fontFamilies,
+        fontSizePx: span.fontSize,
+        fontWeight: span.fontWeight,
+        italic: span.italic,
+        baselineShift: span.baselineShift,
+      };
+    });
+    const additionalBoundaries = workerSnapshotSubsetSourceBoundaries(session.faces, { ...request, textSpans: textSpans });
     const sourceBoundaries = [
       ...new Set([
         ...request.sourceBoundaries,
@@ -87,7 +98,7 @@ function errorDetail(error: unknown): string {
       firstLineIndentIc: request.firstLineIndentIc,
       lineLengthGridEnabled: true,
       sourceBoundaries: sourceBoundaries,
-      textSpans: request.textSpans,
+      textSpans: textSpans,
       inlineBoxes: request.inlineBoxes,
       lineBreakSpans: request.lineBreakSpans,
       inlineObjects: request.inlineObjects,

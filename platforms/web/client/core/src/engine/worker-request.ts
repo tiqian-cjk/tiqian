@@ -225,7 +225,17 @@ export function buildWorkerLayoutRequest(paragraph: Element, lowered: LoweredPar
     firstLineIndentIc: firstLineIndentIc,
     lineLengthGridEnabled: true,
     sourceBoundaries: sourceBoundaries,
-    textSpans: textSpans,
+    textSpans: textSpans.map(function (span) {
+      return {
+        start: span.start,
+        end: span.end,
+        fontFamilies: span.families,
+        fontSize: span.fontSizePx,
+        fontWeight: span.fontWeight,
+        italic: span.italic,
+        baselineShift: span.baselineShift,
+      };
+    }),
     inlineBoxes: inlineBoxes,
     lineBreakSpans: lineBreakSpans,
     inlineObjects: inlineObjects,

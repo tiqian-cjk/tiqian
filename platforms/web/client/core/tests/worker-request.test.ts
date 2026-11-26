@@ -259,7 +259,15 @@ interface WorkerRequestDto {
   firstLineIndentIc: number;
   lineLengthGridEnabled: boolean;
   sourceBoundaries: number[];
-  textSpans: TextSpanDto[];
+  textSpans: {
+    start: number;
+    end: number;
+    fontFamilies: string[];
+    fontSize: number;
+    fontWeight: number;
+    italic: boolean;
+    baselineShift: number;
+  }[];
   inlineBoxes: InlineBoxDto[];
   lineBreakSpans: LineBreakSpanDto[];
   inlineObjects: InlineObjectDto[];
@@ -579,8 +587,8 @@ const RICH_EXPECTED: WorkerRequestDto = {
     {
       start: 0,
       end: 4,
-      families: ["A", "B"],
-      fontSizePx: 12.5,
+      fontFamilies: ["A", "B"],
+      fontSize: 12.5,
       fontWeight: 500,
       italic: true,
       baselineShift: 1.5,
@@ -588,8 +596,8 @@ const RICH_EXPECTED: WorkerRequestDto = {
     {
       start: 4,
       end: 8,
-      families: ["C"],
-      fontSizePx: 13.25,
+      fontFamilies: ["C"],
+      fontSize: 13.25,
       fontWeight: 600,
       italic: false,
       baselineShift: 0,
@@ -637,15 +645,15 @@ test("buildWorkerLayoutRequest DTO shape has correct textSpans array with typed 
   for (const spanItem of actual.textSpans) {
     assert.ok(typeof spanItem.start === "number");
     assert.ok(typeof spanItem.end === "number");
-    assert.ok(Array.isArray(spanItem.families));
-    assert.ok(typeof spanItem.fontSizePx === "number");
+    assert.ok(Array.isArray(spanItem.fontFamilies));
+    assert.ok(typeof spanItem.fontSize === "number");
     assert.ok(typeof spanItem.fontWeight === "number");
     assert.ok(typeof spanItem.italic === "boolean");
     assert.ok(typeof spanItem.baselineShift === "number");
   }
   // Verify member order preserved
-  assert.deepEqual(actual.textSpans[0].families, ["A", "B"]);
-  assert.deepEqual(actual.textSpans[1].families, ["C"]);
+  assert.deepEqual(actual.textSpans[0].fontFamilies, ["A", "B"]);
+  assert.deepEqual(actual.textSpans[1].fontFamilies, ["C"]);
 });
 
 test("buildWorkerLayoutRequest DTO shape has correct inlineBoxes with Narrow outerSpacing", () => {
