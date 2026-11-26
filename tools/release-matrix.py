@@ -70,11 +70,7 @@ ECOSYSTEM_STATE = {
 # bundle that is neither published by its ecosystem nor listed here fails the
 # check, so an unclaimed bundle cannot drop out of the release without a
 # recorded decision.
-EXCLUDED_BUNDLES = {
-    # The shared Rust crate is a path dependency of platforms/web/server/precompute;
-    # it is not a registry artifact.
-    "shared-rust": "path dependency of the Rust precompute crate",
-}
+EXCLUDED_BUNDLES = {}
 
 # The install artifact each target writes beside its output tree
 # (boring packages/compiler/PackageArtifacts.hx). Maven writes a repository
