@@ -539,7 +539,6 @@
     {
       "id": "shared-rust",
       "target": "rust",
-      "sourceSet": "shared-rust",
       "dependsOn": ["engine-rust", "protocol-rust"],
       "dependencyMode": "path",
       "dependencyPaths": {
@@ -556,7 +555,11 @@
         "-D", "runtime-import=crate::runtime",
         "-D", "runtime-emit=runtime",
         "-D", "package-name=tiqian-shared-gen",
-        "-D", "package-license=MPL-2.0"
+        "-D", "package-license=MPL-2.0",
+        "runtime.TestCore", "runtime.UString", "std.UStringException",
+        "org.tiqian.shared.prepared_dom.PreparedArtifact",
+        "org.tiqian.shared.prepared_dom.PreparedDom",
+        "org.tiqian.shared.prepared_dom.Evidence"
       ],
       "package": { "name": "tiqian-shared", "version": "0.1.0", "license": "MPL-2.0" }
     }
