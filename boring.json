@@ -297,7 +297,8 @@
         "org.tiqian.shared.SnapshotValueStyle",
         "org.tiqian.shared.ValueStyleInterner",
         "org.tiqian.shared.snapshot.SnapshotSource",
-        "org.tiqian.shared.layout.PreparedParagraphRequest"
+        "org.tiqian.shared.layout.PreparedParagraphRequest",
+        "org.tiqian.shared.layout.PreparedParagraphLayout"
       ],
       "package": { "name": "tiqian-shared", "npmName": "@tiqian/shared", "version": "0.1.0", "license": "MPL-2.0" },
       "run": {

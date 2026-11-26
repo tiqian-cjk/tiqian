@@ -20,7 +20,8 @@ bundle 产物已经发布，core 却仍从 `@tiqian/ffi` 取用。
 3. core 的引擎边界按职责分散存放：请求体类型由 `@tiqian/protocol` 的 `ParagraphRequest` 派生
    （`src/engine/wire-types.ts`）；worker 消息类型独立在 `src/engine/web-worker/wire-types.ts`；
    宿主结果解码在 `src/engine/host-result.ts`；字体角色判定调用引擎的 `FontRoleClassification`；
-   prepared-paragraph 的请求组装留在 `src/engine/prepared-paragraph.ts`。宿主回调改为
+   prepared-paragraph 的请求归一化、LayoutInput 组装与两个 plan 入口在 `@tiqian/shared` 的
+   `org.tiqian.shared.layout.PreparedParagraphLayout`，core 只保留宿主回调、注解缓存与错误名归一化。宿主回调改为
    `{ shape, resolve }` 的类型化对象进出，core 内不再出现 `shapeJson`/`metricsJson` 字符串通道。
 4. 生成树包之间用 boring 的 bundle 依赖声明：`shared-ts` 的 `dependsOn` 指向 `ts`，生成时跳过
    依赖包提供的模块并改为 `@tiqian/engine/...` 的 import；`boring pack` 顺序中 `ts` 必须在
