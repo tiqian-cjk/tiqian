@@ -116,7 +116,7 @@ jobs:
           export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts ts --project boring.json'
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack ts protocol-ts shared-ts --project boring.json'
 
       - name: Check that both generated crates are present
         if: steps.upload-reused.outcome != 'success'

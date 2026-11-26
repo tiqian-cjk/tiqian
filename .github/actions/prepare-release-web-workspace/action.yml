@@ -40,7 +40,7 @@ runs:
         # Generate the engine tree and pack the workspace manifests.
         nix develop -c bash -e -c '
           bash tools/setup-haxe-env.sh
-          boring pack protocol-ts shared-ts ts --project boring.json
+          boring pack ts protocol-ts shared-ts --project boring.json
         '
 
     - name: Install workspace dependencies on the Node runner

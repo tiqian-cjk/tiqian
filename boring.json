@@ -264,6 +264,7 @@
       "id": "shared-ts",
       "compare": false,
       "target": "ts",
+      "dependsOn": ["ts"],
       "haxeArgs": [
         "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/ts/std-shadow",
         "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/ts",
