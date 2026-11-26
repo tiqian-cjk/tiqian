@@ -306,6 +306,8 @@ impl Precomputer {
         let render_text_spans_json = render_text_spans_value(&render_text_spans);
         let inline_boxes_json = inline_boxes_value(&inline_boxes);
         let semantics_value = semantics_json(&semantics);
+        let (prepared_html, prepared_artifact) =
+            crate::shared_render::render_shared_artifact(&plan, &typography.locale, &semantics, false)?;
         Ok(Json::Obj(vec![
             ("status".to_string(), Json::str("prepared")),
             (
@@ -343,6 +345,14 @@ impl Precomputer {
             ("maxWidthPx".to_string(), Json::Num(max_width_px)),
             ("fontEvidence".to_string(), evidence_json(&evidence)?),
             ("plan".to_string(), plan.to_json_value()),
+            ("html".to_string(), Json::str(prepared_html)),
+            (
+                "renderArtifactSha256".to_string(),
+                Json::str(sha256_hex(stable_stringify(
+                    &crate::shared_render::artifact_json(&prepared_artifact),
+                )
+                .as_bytes())),
+            ),
         ]))
     }
 }

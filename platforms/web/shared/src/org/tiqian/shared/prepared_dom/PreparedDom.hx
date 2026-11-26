@@ -254,7 +254,7 @@ class PreparedDom {
                 "white-space:pre!important",
             ];
             Markup.applyDynamicStyles(carrierEntries, carrierStyles, styleClassFor);
-            container.children.push(Markup.renderedElement("span", carrierEntries, String.fromCharCode(160), false));
+            container.children.push(Markup.renderedElement("span", carrierEntries, "\u00A0", false));
             return container;
         }
         return Markup.renderedElement("span", attributes, input.display, false);
