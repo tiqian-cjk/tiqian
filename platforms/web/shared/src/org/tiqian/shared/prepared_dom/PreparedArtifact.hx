@@ -163,15 +163,10 @@ class PreparedArtifact {
                         pending.naturalWidth = pendingSignature.naturalWidth;
                         pending.trailingGap = pendingSignature.trailingGap;
                     } else {
-                        if (pending != null) {
-                            children.push(runChild(pending));
-                        }
+                        children.push(runChild(pending));
                         pending = cell;
                     }
                 } else {
-                    if (pending != null) {
-                        children.push(runChild(pending));
-                    }
                     pending = cell;
                 }
                 final rubyAtEnd = rubyAt(plan.rubyDecisions, cell.rangeEnd);
