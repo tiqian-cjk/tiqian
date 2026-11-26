@@ -5,19 +5,19 @@ use crate::plan::{
     Plan, PlanBopomofo, PlanBopomofoPlacement, PlanCell, PlanDecorationSegment, PlanEmphasisDot,
     PlanInlineEdge, PlanLine, PlanRuby,
 };
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::bopomofo_placement::BopomofoPlacement;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::evidence_decoration_kind::EvidenceDecorationKind;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::evidence_decoration_segment::EvidenceDecorationSegment;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::evidence_emphasis_dot::EvidenceEmphasisDot;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::inline_edge_entry::InlineEdgeEntry;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::plan_bopomofo_zone::PlanBopomofoZone;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::plan_ruby_annotation::PlanRubyAnnotation;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::prepared_emphasis_range::PreparedEmphasisRange;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::prepared_plan::PreparedPlan;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::prepared_plan_cell::PreparedPlanCell;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::prepared_plan_line::PreparedPlanLine;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::style_delta::StyleDelta;
-use tiqian_shared_gen::runtime::u_string::UString;
+use tiqian_shared::org::tiqian::shared::prepared_dom::bopomofo_placement::BopomofoPlacement;
+use tiqian_shared::org::tiqian::shared::prepared_dom::evidence_decoration_kind::EvidenceDecorationKind;
+use tiqian_shared::org::tiqian::shared::prepared_dom::evidence_decoration_segment::EvidenceDecorationSegment;
+use tiqian_shared::org::tiqian::shared::prepared_dom::evidence_emphasis_dot::EvidenceEmphasisDot;
+use tiqian_shared::org::tiqian::shared::prepared_dom::inline_edge_entry::InlineEdgeEntry;
+use tiqian_shared::org::tiqian::shared::prepared_dom::plan_bopomofo_zone::PlanBopomofoZone;
+use tiqian_shared::org::tiqian::shared::prepared_dom::plan_ruby_annotation::PlanRubyAnnotation;
+use tiqian_shared::org::tiqian::shared::prepared_dom::prepared_emphasis_range::PreparedEmphasisRange;
+use tiqian_shared::org::tiqian::shared::prepared_dom::prepared_plan::PreparedPlan;
+use tiqian_shared::org::tiqian::shared::prepared_dom::prepared_plan_cell::PreparedPlanCell;
+use tiqian_shared::org::tiqian::shared::prepared_dom::prepared_plan_line::PreparedPlanLine;
+use tiqian_shared::org::tiqian::shared::prepared_dom::style_delta::StyleDelta;
+use tiqian_shared::runtime::u_string::UString;
 
 fn shared(value: &str) -> UString {
     UString::from(value)

@@ -554,7 +554,7 @@
         "--macro", "rustcompiler.Compiler.use()",
         "-D", "runtime-import=crate::runtime",
         "-D", "runtime-emit=runtime",
-        "-D", "package-name=tiqian-shared-gen",
+        "-D", "package-name=tiqian-shared",
         "-D", "package-license=MPL-2.0",
         "runtime.TestCore", "runtime.UString", "std.UStringException",
         "org.tiqian.shared.prepared_dom.PreparedArtifact",

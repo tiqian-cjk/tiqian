@@ -5,14 +5,14 @@ use crate::plan::Plan;
 use crate::shared_prepared::to_prepared_plan;
 use crate::snapshot_source::SemanticSpan;
 use crate::NamedError;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::attribute_entry::AttributeEntry;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::inline_box_entry::InlineBoxEntry;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::markup_artifact::MarkupArtifact;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::prepared_artifact::PreparedArtifact;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::prepared_artifact_options::PreparedArtifactOptions;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::prepared_render_text_span::PreparedRenderTextSpan;
-use tiqian_shared_gen::org::tiqian::shared::prepared_dom::prepared_semantic_span::PreparedSemanticSpan;
-use tiqian_shared_gen::runtime::u_string::UString;
+use tiqian_shared::org::tiqian::shared::prepared_dom::attribute_entry::AttributeEntry;
+use tiqian_shared::org::tiqian::shared::prepared_dom::inline_box_entry::InlineBoxEntry;
+use tiqian_shared::org::tiqian::shared::prepared_dom::markup_artifact::MarkupArtifact;
+use tiqian_shared::org::tiqian::shared::prepared_dom::prepared_artifact::PreparedArtifact;
+use tiqian_shared::org::tiqian::shared::prepared_dom::prepared_artifact_options::PreparedArtifactOptions;
+use tiqian_shared::org::tiqian::shared::prepared_dom::prepared_render_text_span::PreparedRenderTextSpan;
+use tiqian_shared::org::tiqian::shared::prepared_dom::prepared_semantic_span::PreparedSemanticSpan;
+use tiqian_shared::runtime::u_string::UString;
 
 fn shared(value: &str) -> UString {
     UString::from(value)

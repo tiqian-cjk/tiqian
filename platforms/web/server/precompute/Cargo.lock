@@ -695,7 +695,7 @@ dependencies = [
  "tiqian",
  "tiqian-engine-gen",
  "tiqian-protocol-gen",
- "tiqian-shared-gen",
+ "tiqian-shared",
  "url",
  "wuff",
 ]
@@ -713,7 +713,7 @@ name = "tiqian-protocol-gen"
 version = "0.1.0"
 
 [[package]]
-name = "tiqian-shared-gen"
+name = "tiqian-shared"
 version = "0.1.0"
 dependencies = [
  "tiqian-engine-gen",
