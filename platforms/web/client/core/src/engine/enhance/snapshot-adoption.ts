@@ -24,7 +24,7 @@ import {
   releaseNativeScrollAnchoring,
 } from "../coordination/viewport-anchor.js";
 import { snapshotSessionCallbacks } from "../../measurement/browser-font-replay.js";
-import type { MetricsJsonFn, ShapeJsonFn } from "../../measurement/browser-font-replay.js";
+import type { SnapshotSessionCallbacks } from "../../measurement/browser-font-replay.js";
 import { conformingSnapshotFontSessionId } from "../lifecycle.js";
 import type { EnhanceOptions } from "../lifecycle.js";
 import type { BrowserFontSessionHandle } from "../../measurement/browser-fonts.js";
@@ -43,10 +43,7 @@ const RESPONSIVE_SNAPSHOT_GEOMETRY_MISSES = new Set([
 // Descriptor of a conforming snapshot session: the shaping callbacks of the
 // browser replay session. Dissolved from root-state.ts (which embedded the
 // root; the descriptor is now a pure function of the active options).
-export type SnapshotSessionDescriptor = {
-  shapeJson: ShapeJsonFn;
-  metricsJson: MetricsJsonFn;
-};
+export type SnapshotSessionDescriptor = SnapshotSessionCallbacks;
 
 // activeSnapshotSessionDescriptor: the former root-state view. Once prepared
 // DOM is disabled the session is always null; with the dissolved flag

@@ -1,13 +1,9 @@
-// ffi wire constructors.
+// Wire constructors.
 //
-// The generated @tiqian/ffi interfaces carry a required
-// __doNotUseOrImplementIt brand (a unique symbol per wire type), so an
-// object literal cannot satisfy them and a cast cannot be avoided at the
-// boundary. Host data enters the ffi request channel through the named
-// constructors below; each constructor holds the single assertion for its
-// wire type. The ts-discipline gate bans object-literal and
-// derived-collection assertions everywhere else, so a wire value can only
-// be constructed here.
+// Host data enters the engine request channel through the named constructors
+// below; each constructor holds the single object-literal construction for
+// its wire type, so the ts-discipline gate keeps every other module free of
+// hand-written request shapes.
 
 import type {
   DecorationWire,
@@ -19,9 +15,9 @@ import type {
   SemanticSpanWire,
   TextSpanWire,
   WorkerLayoutRequest,
-} from "@tiqian/ffi";
+} from "./engine-access/wire-types.js";
 
-type WireFields<T> = Omit<T, "__doNotUseOrImplementIt">;
+type WireFields<T> = T;
 
 export function textSpanWires(fields: WireFields<TextSpanWire>[]): TextSpanWire[] {
   return fields as TextSpanWire[];

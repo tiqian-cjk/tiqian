@@ -2,14 +2,12 @@
 // Generates the engine trees that used to be committed:
 //   platforms/web/server/precompute/engine-gen    (bundle engine-rust)
 //   platforms/web/server/precompute/protocol-gen  (bundle protocol-rust)
-//   platforms/web/client/engine-runtime/engine-gen (bundles ts + protocol-ts)
 //
 // Both directories are build products and are gitignored. Run the script
 // inside `nix develop` (the flake provides the boring driver):
 //   node tools/generate-engine-gen.mjs        # Rust tree
-//   node tools/generate-engine-gen.mjs ts     # JS tree
-// The Rust build path runs the first form before `cargo build -p tiqian`;
-// the @tiqian/ffi prepack runs the second form before build:runtime.
+// The Rust build path runs this before `cargo build -p tiqian`; the TypeScript
+// workspace members are written by `boring pack` instead.
 
 import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
@@ -35,31 +33,7 @@ function runDriver(bundle) {
   }
 }
 
-if (target === "ts") {
-  runDriver("ts");
-  runDriver("protocol-ts");
-  const tsGen = join(outRoot, "ts", "gen");
-  const protocolGen = join(outRoot, "protocol-ts", "gen");
-  if (!existsSync(tsGen)) {
-    throw new Error(`generate-engine-gen: expected driver output at ${tsGen}`);
-  }
-  if (!existsSync(protocolGen)) {
-    throw new Error(`generate-engine-gen: expected driver output at ${protocolGen}`);
-  }
-  const engineGen = join(repoRoot, "platforms/web/client/engine-runtime/engine-gen");
-  rmSync(engineGen, { recursive: true, force: true });
-  mkdirSync(engineGen, { recursive: true });
-  // The protocol-ts bundle re-emits protocol modules the ts bundle also
-  // carries; the ts bundle's copies win because they run the same macros
-  // (FontRole's FONT_ROLE_ALL) the protocol bundle does not.
-  cpSync(protocolGen, engineGen, { recursive: true });
-  cpSync(tsGen, engineGen, { recursive: true });
-  const overlay = join(repoRoot, "platforms/web/client/engine-runtime/src/engine-gen-overlay");
-  if (existsSync(overlay)) {
-    cpSync(overlay, engineGen, { recursive: true });
-  }
-  console.log(`generate-engine-gen: wrote ${engineGen}`);
-} else if (target === "rust") {
+if (target === "rust") {
   runDriver("engine-rust");
   const generated = join(outRoot, "engine-rust", "gen");
   if (!existsSync(generated)) {

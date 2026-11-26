@@ -13,7 +13,7 @@ import { FakeElement, FakeFragment, FakeNode, FakeText, asElement, asFakeElement
 import type { EnhancedElementContext } from "../src/engine/context/enhance-context.js";
 import type { TiqianLayoutWorkerInstance } from "../src/engine/coordination/coordination-service.js";
 import type { ReplayProbe, ReplayRegistry } from "../src/measurement/browser-font-replay.js";
-import { classifyFontRole, classifyFontRoles } from "@tiqian/ffi";
+import { classifyRole as classifyFontRole, classifyRoles as classifyFontRoles } from "../src/engine/engine-access/font-role.js";
 initializeGlobalServices();
 
 // The pipeline runs for real: eligibility, markdown lowering, the lifecycle
@@ -618,8 +618,8 @@ test("9. Dispatch throw -> WebEnhancementFailure, rawDom restored", () => {
   // The throwing backend answers the registered session's shaping lookups,
   // so the snapshot-session descriptor derived from the runtime options
   // throws exactly like the old injected session did.
-  const shapesStub: ReplayTableLookup = { get: () => backend.shapeJson("") };
-  const metricsStub: ReplayTableLookup = { get: () => backend.metricsJson("") };
+  const shapesStub: ReplayTableLookup = { get: () => { backend.shape({} as never); return 0 as never; } };
+  const metricsStub: ReplayTableLookup = { get: () => { backend.resolve({} as never); return 0 as never; } };
   const unregister = registerReplaySession("session-throw", {
     shapes: shapesStub as ReplayTable,
     metrics: metricsStub as ReplayTable,

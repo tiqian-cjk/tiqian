@@ -1,5 +1,4 @@
 import { globalServices } from "../services/global-services.js";
-import type { MetricsJsonFn, ShapeJsonFn } from "../measurement/browser-font-replay.js";
 // processParagraph (TsHost runtime port, Slice 4d-1). Ports the paragraph
 // processing orchestration from WebEnhancerParagraphPipeline.kt
 // (processParagraph, lines 89-227, and layoutParagraph, lines 229-264).
@@ -31,11 +30,11 @@ import {
   stabilizeContentSizedItemInlineSize,
 } from "./lifecycle.js";
 import {
-  classifyFontRole,
-  classifyFontRoles,
+  classifyRole as classifyFontRole,
+  classifyRoles as classifyFontRoles,
   firstDivergentInlineShapingProperty,
   unsupportedInlineShapingProperties,
-} from "@tiqian/ffi";
+} from "./engine-access/font-role.js";
 import type { EnhancedElementContext } from "./context/enhance-context.js";
 import type { DiagnosisIssueRecord } from "./context/diagnosis-manager.js";
 import type { TrackedParagraph } from "./enhance/context-state.js";

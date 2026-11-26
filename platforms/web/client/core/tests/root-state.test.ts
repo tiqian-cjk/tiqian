@@ -186,8 +186,8 @@ test("1. resolveEngineOptions: bag -> optionsFromJs -> snapshot gate -> withRoot
     assert.deepEqual(context.typography.cjkDashCapability, { status: "not-needed", detail: null });
     assert.ok(context.typography.browserFallback != null);
     assert.ok(context.typography.browserFallback.bridge);
-    assert.equal(typeof context.typography.browserFallback.bridge.shapeJson, "function");
-    assert.equal(typeof context.typography.browserFallback.bridge.metricsJson, "function");
+    assert.equal(typeof context.typography.browserFallback.bridge.shape, "function");
+    assert.equal(typeof context.typography.browserFallback.bridge.resolve, "function");
 
     // All-default bag: the snapshot gate passes straight through, so the
     // withoutSnapshotFontSession path is never taken.
@@ -243,8 +243,8 @@ test("3. snapshot session descriptor: resolved from the canonical options, no fa
     // The descriptor resolves the session id into the callback pair ffi takes
     // as call parameters; an unregistered id only fails at call time.
     const descriptor = activeSnapshotSessionDescriptor(resolved);
-    assert.equal(typeof descriptor!.shapeJson, "function");
-    assert.equal(typeof descriptor!.metricsJson, "function");
+    assert.equal(typeof descriptor!.shape, "function");
+    assert.equal(typeof descriptor!.resolve, "function");
 
     // The former disable toggle and its fallback attribute were dissolved;
     // construction must not write the fallback marker at all.
@@ -267,8 +267,8 @@ test("4. context cross-section: live arrays, reference push paths", () => {
 
     assert.ok(context.typography.browserFallback != null);
     assert.ok(context.typography.browserFallback.bridge);
-    assert.equal(typeof context.typography.browserFallback.bridge.shapeJson, "function");
-    assert.equal(typeof context.typography.browserFallback.bridge.metricsJson, "function");
+    assert.equal(typeof context.typography.browserFallback.bridge.shape, "function");
+    assert.equal(typeof context.typography.browserFallback.bridge.resolve, "function");
 
     // Capability issue records accumulate by reference on the diagnosis
     // manager's live array (the former engineState onIssue callback).

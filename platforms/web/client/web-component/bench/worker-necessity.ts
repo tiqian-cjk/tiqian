@@ -391,7 +391,7 @@ async function main(): Promise<void> {
   );
 
   const ffiModule: FfiModule = (await import(
-    new URL("@tiqian/ffi", import.meta.url).href
+    new URL("@tiqian/engine", import.meta.url).href
   )) as FfiModule;
   const precomputeParagraphFn: PrecomputeParagraphFn | undefined = ffiModule.precomputeParagraph;
 

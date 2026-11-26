@@ -10,6 +10,7 @@ import type { ProbeBootstrapOptions } from "../src/engine/web-worker/session-boo
 import { createServerReplayFontSession } from "../src/measurement/browser-font-replay.js";
 import type { ServerReplayFontSession, ReplayProbe } from "../src/measurement/browser-font-replay.js";
 import { FONT_REPLAY_REVISION } from "../src/sampler/snapshot/snapshot-schema.js";
+import { shapingInput } from "./engine-input.js";
 import { writeBinaryTable } from "../src/sampler/snapshot/table-binary-encode.js";
 import type { BinaryTableInput } from "../src/sampler/snapshot/table-binary-encode.js";
 import type { SnapshotManifestWire } from "../src/sampler/snapshot/snapshot-manifest.js";
@@ -50,8 +51,8 @@ test("empty tables with a probe create an unbaked session", async () => {
     assert.equal(session.faces.length, 0);
     assert.match(session.id, /^tq-test-nobake-/);
     // Verify callbacks exist
-    assert.ok(typeof session.shapeJson === "function");
-    assert.ok(typeof session.metricsJson === "function");
+    assert.ok(typeof session.shape === "function");
+    assert.ok(typeof session.resolve === "function");
   } finally {
     session.close();
   }
@@ -74,7 +75,7 @@ test("probe bootstrap backfills a miss and serves the same key from the table", 
   });
   assert.match(session.id, /^tq-worker-nobake-bootstrap-test-/);
   try {
-    const shapeRequest = JSON.stringify({
+    const shapeRequest = shapingInput({
       text: "中",
       range: { start: 0, end: 1 },
       style: { fontFamilies: ["Fixture CJK"], fontSize: 18, fontWeight: 400, italic: false, locale: "zh-Hans" },
@@ -82,13 +83,13 @@ test("probe bootstrap backfills a miss and serves the same key from the table", 
       displayText: "中",
       openTypeFeatures: [],
     });
-    const shapeResponse = JSON.parse(session.shapeJson(shapeRequest));
-    assert.equal(shapeResponse.glyphRuns[0].advance, 18);
+    const shapeResponse = session.shape(shapeRequest);
+    assert.equal(shapeResponse.glyphRuns[0]!.advance, 18);
     assert.equal(calls.length, 1);
 
     // Second call should hit cache
-    const shapeResponse2 = JSON.parse(session.shapeJson(shapeRequest));
-    assert.equal(shapeResponse2.glyphRuns[0].advance, 18);
+    const shapeResponse2 = session.shape(shapeRequest);
+    assert.equal(shapeResponse2.glyphRuns[0]!.advance, 18);
     assert.equal(calls.length, 1);
   } finally {
     session.close();
@@ -179,8 +180,8 @@ test("manifest sessions keep the baked contract path", async () => {
     assert.equal(session.faces.length, 1);
     assert.equal(session.faces[0].family, "Fixture CJK");
     assert.match(session.id, /^tq-worker-manifest-test-/);
-    assert.ok(typeof session.shapeJson === "function");
-    assert.ok(typeof session.metricsJson === "function");
+    assert.ok(typeof session.shape === "function");
+    assert.ok(typeof session.resolve === "function");
   } finally {
     session.close();
   }
@@ -193,10 +194,11 @@ test("manifest sessions keep the baked contract path", async () => {
   );
 });
 
-test("layout-worker keeps its ffi import and snapshot-subset wiring", async () => {
+test("layout-worker calls the engine access entry and keeps the snapshot-subset wiring", async () => {
   const source = await readFile(new URL("../src/engine/layout-worker.js", import.meta.url), "utf8");
   assert.match(source, /createProbeBootstrapFontSession/u);
   assert.match(source, /createManifestFontSession/u);
-  assert.match(source, /from "@tiqian\/ffi"/u);
+  assert.match(source, /from "\.\/engine-access\/prepared-paragraph\.js"/u);
+  assert.doesNotMatch(source, /@tiqian\/ffi/u);
   assert.match(source, /workerSnapshotSubsetSourceBoundaries\(session\.faces, request\)/u);
 });

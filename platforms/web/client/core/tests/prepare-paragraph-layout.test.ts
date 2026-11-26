@@ -8,6 +8,10 @@ import { emptyDomRectList } from "./snapshot-dom-fixtures.js";
 import type { FixtureFontBackend } from "./fixture-font-backend.js";
 import type { LoweredParagraph, TextStyle, TextSpan, InlineBoxSpan, LineBreakSpan, InlineObjectSpan, DecorationSpan, DomSourceSpan, DomInlineBoxStyle, DomInlineObject } from "../src/engine/lowered-paragraph.js";
 import type { PrepareLayoutResult, PrepareReadyResult } from "../src/engine/prepare-paragraph-layout.js";
+import { toEngineFontMetrics, toEngineShapingResult } from "../src/engine/engine-access/host-result.js";
+import type { ShapingInput, ShapingResult } from "@tiqian/engine/org/tiqian/shaping/TextShaper";
+import type { FontMetricsRequest } from "@tiqian/engine/org/tiqian/font/FontMetrics";
+import type { RawFontMetrics } from "@tiqian/engine/org/tiqian/font/RawFontMetrics";
 
 type PrepareParagraphLayoutArgument = Parameters<typeof prepareParagraphLayout>[0];
 
@@ -179,16 +183,14 @@ interface BridgeMetricsResponse {
   typoDescent: number;
 }
 
-type JsonBridgeFn = (request: string) => string;
-
 interface BrowserFallbackBridge {
-  shapeJson: JsonBridgeFn;
-  metricsJson: JsonBridgeFn;
+  shape: (input: ShapingInput) => ShapingResult;
+  resolve: (request: FontMetricsRequest) => RawFontMetrics;
 }
 
 interface PrepareSnapshotSessionDescriptor {
-  shapeJson: JsonBridgeFn;
-  metricsJson: JsonBridgeFn;
+  shape: FixtureFontBackend["shape"];
+  resolve: FixtureFontBackend["resolve"];
 }
 
 interface SnapshotParagraphTarget {
@@ -400,47 +402,62 @@ const RICH_LOWERED: LoweredParagraph = paragraph({
 
 const RICH_ELEMENT = element("P") as FakeElement & Element;
 
+// The plain record the harness bridge reports for one shaping request.
+function bridgeShapingRecord(input: ShapingInput): {
+  clusters: Array<Record<string, unknown>>;
+  glyphRuns: Array<Record<string, unknown>>;
+  decisions: Array<Record<string, unknown>>;
+} {
+  const text = input.text;
+  const start = input.range.start;
+  const end = input.range.end;
+  const size = input.style.fontSize;
+  const clusters: Array<Record<string, unknown>> = [];
+  const glyphs: Array<Record<string, unknown>> = [];
+  let x = 0;
+  for (let i = start; i < end; i += 1) {
+    const ch = text[i];
+    clusters.push({
+      range: { start: i, end: i + 1 },
+      text: ch,
+      displayText: ch,
+      fontKey: "cjk-primary",
+      advance: size,
+      baselineShift: 0,
+    });
+    glyphs.push({
+      id: 100 + i,
+      clusterRange: { start: i, end: i + 1 },
+      advance: size,
+      x,
+      y: 0,
+      bounds: { left: 0, top: -size * 0.88, right: size, bottom: size * 0.12 },
+    });
+    x += size;
+  }
+  return {
+    clusters,
+    glyphRuns: [{ range: { start, end }, fontKey: "cjk-primary", glyphs, advance: x, openTypeFeatures: [] }],
+    decisions: [{
+      range: { start, end },
+      sourceText: text.substring(start, end),
+      displayText: input.displayText,
+      fontKey: "cjk-primary",
+      glyphCount: end - start,
+      advance: x,
+      source: "Harness",
+      reason: "harness",
+    }],
+  };
+}
+
 function makeBridge(): BrowserFallbackBridge {
   return {
-    shapeJson(req: string): string {
-      const parsed: BridgeShapeRequest = JSON.parse(req);
-      const text = parsed.text;
-      const start = parsed.range.start;
-      const end = parsed.range.end;
-      const size = parsed.style.fontSize;
-      const clusters: BridgeCluster[] = [];
-      const glyphs: BridgeGlyph[] = [];
-      let x = 0;
-      for (let i = start; i < end; i += 1) {
-        const ch = text[i];
-        clusters.push({
-          range: { start: i, end: i + 1 },
-          text: ch,
-          displayText: ch,
-          fontKey: "cjk-primary",
-          advance: size,
-          baselineShift: 0,
-        });
-        glyphs.push({
-          id: 100 + i,
-          clusterRange: { start: i, end: i + 1 },
-          advance: size,
-          x,
-          y: 0,
-          bounds: { left: 0, top: -size * 0.88, right: size, bottom: size * 0.12 },
-        });
-        x += size;
-      }
-      const response: BridgeShapeResponse = {
-        clusters,
-        glyphRuns: [{ range: { start, end }, fontKey: "cjk-primary", glyphs, advance: x, openTypeFeatures: [] }],
-        decisions: [{ range: { start, end }, sourceText: text.substring(start, end), displayText: parsed.displayText, fontKey: "cjk-primary", glyphCount: end - start, advance: x, source: "Harness", reason: "harness" }],
-      };
-      return JSON.stringify(response);
+    shape(input: ShapingInput): ShapingResult {
+      return toEngineShapingResult(bridgeShapingRecord(input));
     },
-    metricsJson(): string {
-      const response: BridgeMetricsResponse = { ascent: 21.2, descent: 5.3, leading: 0, source: "RawTables", typoAscent: 16.7, typoDescent: 2.3 };
-      return JSON.stringify(response);
+    resolve(): RawFontMetrics {
+      return toEngineFontMetrics({ ascent: 21.2, descent: 5.3, leading: 0, source: "RawTables", typoAscent: 16.7, typoDescent: 2.3 });
     },
   };
 }
@@ -448,7 +465,7 @@ function makeBridge(): BrowserFallbackBridge {
 const RICH_BROWSER_FALLBACK: BrowserFallbackOverride = { bridge: makeBridge() };
 
 function snapshotSessionCallbacksOf(backend: FixtureFontBackend): PrepareSnapshotSessionDescriptor {
-  return { shapeJson: backend.shapeJson, metricsJson: backend.metricsJson };
+  return { shape: backend.shape, resolve: backend.resolve };
 }
 
 function fixtureSnapshotSession(): PrepareSnapshotSessionDescriptor {
@@ -640,22 +657,20 @@ test("firstLineIndentIc is zero for LI and the option value otherwise", () => {
 test("capabilityIssues[0] produces an unsupported verdict with name and reason", () => {
   const backend = installThrowingFontBackend(new Error("NoSnapshotFontFace: session miss"));
   const bridge = makeBridge();
-  const originalShapeJson = bridge.shapeJson;
-  bridge.shapeJson = function (req: string): string {
-    const parsed: BridgeShapeRequest = JSON.parse(req);
-    const inner: BridgeShapeResponse = JSON.parse(originalShapeJson(req));
-    inner.decisions = [{
-      range: { start: parsed.range.start, end: parsed.range.end },
-      sourceText: parsed.text.substring(parsed.range.start, parsed.range.end),
-      displayText: parsed.displayText,
+  bridge.shape = function (input: ShapingInput): ShapingResult {
+    const record = bridgeShapingRecord(input);
+    record.decisions = [{
+      range: { start: input.range.start, end: input.range.end },
+      sourceText: input.text.substring(input.range.start, input.range.end),
+      displayText: input.displayText,
       fontKey: "cjk-primary",
-      glyphCount: parsed.range.end - parsed.range.start,
-      advance: parsed.range.end - parsed.range.start,
+      glyphCount: input.range.end - input.range.start,
+      advance: input.range.end - input.range.start,
       source: "Harness",
       reason: "no dash face",
       capabilityIssue: "NoConformingCjkDashGlyph",
     }];
-    return JSON.stringify(inner);
+    return toEngineShapingResult(record);
   };
   try {
     withEnv(() => {
@@ -674,16 +689,14 @@ test("capabilityIssues[0] produces an unsupported verdict with name and reason",
 
 test("advance suspects skip empty and newline display text, then the first real suspect wins", () => {
   const bridge = makeBridge();
-  const originalShapeJson = bridge.shapeJson;
-  bridge.shapeJson = function (req: string): string {
-    const parsed: BridgeShapeRequest = JSON.parse(req);
-    const inner: BridgeShapeResponse = JSON.parse(originalShapeJson(req));
-    const start = parsed.range.start;
-    const end = parsed.range.end;
-    const ch = parsed.text.substring(start, end);
-    let decisionDisplay = parsed.displayText;
-    let advance = end - start;
-    let reason = "harness";
+  bridge.shape = function (input: ShapingInput): ShapingResult {
+    const record = bridgeShapingRecord(input);
+    const start = input.range.start;
+    const end = input.range.end;
+    const ch = input.text.substring(start, end);
+    let decisionDisplay: string = input.displayText;
+    let advance: number = end - start;
+    let reason: string = "harness";
     if (ch === "\u200b") {
       decisionDisplay = "";
       advance = 0;
@@ -696,7 +709,7 @@ test("advance suspects skip empty and newline display text, then the first real 
       advance = 0;
       reason = "zero advance";
     }
-    inner.decisions = [{
+    record.decisions = [{
       range: { start, end },
       sourceText: ch,
       displayText: decisionDisplay,
@@ -706,7 +719,7 @@ test("advance suspects skip empty and newline display text, then the first real 
       source: "Harness",
       reason,
     }];
-    return JSON.stringify(inner);
+    return toEngineShapingResult(record);
   };
   withEnv(() => {
     const lowered = paragraph({

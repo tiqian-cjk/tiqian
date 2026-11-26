@@ -38,8 +38,8 @@ export async function verifyPackage(packageRoot: URL = new URL("../", import.met
   if (manifest.dependencies?.["@tiqian/web-component"]) {
     fail("core package must not depend on the web-component package");
   }
-  if (!manifest.dependencies?.["@tiqian/ffi"]) {
-    fail("core package must declare its @tiqian/ffi dependency");
+  if (!manifest.dependencies?.["@tiqian/engine"]) {
+    fail("core package must declare its @tiqian/engine dependency");
   }
 
   for (const required of REQUIRED_FILES) {

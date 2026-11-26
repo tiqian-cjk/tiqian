@@ -181,7 +181,7 @@ jobs:
   # One instance per bundle entry. Each instance verifies the artifacts it
   # publishes against the digest manifest the pack job wrote, then publishes to
   # the ecosystem official registry. The npm commands and credentials follow
-  # publish-ffi.yml, the Swift upload follows release-registry.yml, and the
+  # the npm publishers, the Swift upload follows release-registry.yml, and the
   # Central staging publish stays in the maven job until the pack run collects
   # the Gradle publication tree (docs/release-pipeline-convergence.md 6.5).
   publish:
@@ -333,17 +333,8 @@ jobs:
   # They stay in the entrypoint until their inputs come from the pack run and
   # release-manifest.json is rewritten, so the release gate keeps seeing every
   # unit it declares.
-  npm-ffi:
-    needs: [gate]
-    permissions:
-      contents: read
-      actions: read
-      id-token: write
-    uses: ./.github/workflows/publish-ffi.yml
-    secrets: inherit
-
   npm-core:
-    needs: [gate, npm-ffi]
+    needs: [gate]
     permissions:
       contents: read
       actions: read
@@ -395,7 +386,7 @@ jobs:
     secrets: inherit
 
   registry:
-    needs: [gate, npm-precompute, npm-ffi, npm-core, npm-web-component, maven, publish]
+    needs: [gate, npm-precompute, npm-core, npm-web-component, maven, publish]
     permissions:
       contents: write
       actions: read

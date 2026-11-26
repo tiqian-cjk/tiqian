@@ -16,8 +16,9 @@
 // Ambient global declarations pulled in via import type from owner modules.
 import type { LoweredParagraph } from "./lowered-paragraph.js";
 import { LAYOUT_REVISION, SNAPSHOT_SCHEMA } from "../sampler/snapshot/snapshot-schema.js";
-import { precomputeParagraphWithDiagnostics } from "@tiqian/ffi";
-import type { PlanWithDiagnostics, PrepareParagraphRequest } from "@tiqian/ffi";
+import { preparedParagraphWithDiagnostics } from "./engine-access/prepared-paragraph.js";
+import type { EngineCallbacks, PlanWithDiagnostics } from "./engine-access/prepared-paragraph.js";
+import type { PrepareParagraphRequest } from "./engine-access/wire-types.js";
 import {
   decorationWires,
   inlineBoxWires,
@@ -70,13 +71,7 @@ export type PrepareLayoutResult =
   | PrepareUnsupportedResult
   | PrepareReadyResult;
 
-type BrowserBridgeShapeJsonFn = (input: string) => string;
-type BrowserBridgeMetricsJsonFn = (input: string) => string;
-
-interface BrowserBridgeDescriptor {
-  shapeJson: BrowserBridgeShapeJsonFn;
-  metricsJson: BrowserBridgeMetricsJsonFn;
-}
+type BrowserBridgeDescriptor = EngineCallbacks;
 
 interface PrepareParagraphTarget {
   source: Element;
@@ -84,10 +79,7 @@ interface PrepareParagraphTarget {
   lastMeasure: number | null;
 }
 
-interface PrepareSnapshotSessionDescriptor {
-  shapeJson: BrowserBridgeShapeJsonFn;
-  metricsJson: BrowserBridgeMetricsJsonFn;
-}
+type PrepareSnapshotSessionDescriptor = EngineCallbacks;
 
 interface PrepareParagraphLayoutInvocation {
   paragraph: PrepareParagraphTarget;
@@ -325,11 +317,10 @@ export function wireArguments(lowered: LoweredParagraph): PrepareParagraphReques
       try {
         // SnapshotSessionSemanticLayout: one font session serves the canonical
         // plain paragraph and the semantic DOM, so no engine pair exists.
-        rawEnvelope = precomputeParagraphWithDiagnostics(
+        rawEnvelope = preparedParagraphWithDiagnostics(
           wire,
           ZERO_ADVANCE_EPSILON,
-          snapshotSession.shapeJson,
-          snapshotSession.metricsJson,
+          snapshotSession,
         );
       } catch (error) {
         if (!isSnapshotSessionCapabilityFailure(error)) throw error;
@@ -415,7 +406,9 @@ export function wireArguments(lowered: LoweredParagraph): PrepareParagraphReques
     return {
       kind: 'ready',
       rawEnvelope: rawEnvelope,
-      planJson: planJson,
+      // The plan is the engine's typed object; the render entry narrows it to
+      // the plan-object parameter it already accepts.
+      planJson: planJson as unknown as string | Record<string, unknown>,
       plan: plan,
       diagnostics: diagnostics,
       width: width,
@@ -427,5 +420,5 @@ export function wireArguments(lowered: LoweredParagraph): PrepareParagraphReques
 // Canvas callbacks are closures created once per bridge, so width-only
 // relayouts reuse the same annotation cache as the replay-session path.
 function layoutWithBrowserMetrics(wire: PrepareParagraphRequest, bridge: BrowserBridgeDescriptor): PlanWithDiagnostics {
-  return precomputeParagraphWithDiagnostics(wire, ZERO_ADVANCE_EPSILON, bridge.shapeJson, bridge.metricsJson);
+  return preparedParagraphWithDiagnostics(wire, ZERO_ADVANCE_EPSILON, bridge);
 }

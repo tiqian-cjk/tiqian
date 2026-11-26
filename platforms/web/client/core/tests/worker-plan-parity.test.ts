@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { precomputeParagraphPlan, precomputeParagraphWithDiagnostics, type PrepareParagraphRequest } from "@tiqian/ffi";
+import {
+  preparedParagraphPlan,
+  preparedParagraphWithDiagnostics,
+} from "../src/engine/engine-access/prepared-paragraph.js";
+import type { PrepareParagraphRequest } from "../src/engine/engine-access/wire-types.js";
+import { toEngineFontMetrics, toEngineShapingResult } from "../src/engine/engine-access/host-result.js";
+import type { ShapingInput, ShapingResult } from "@tiqian/engine/org/tiqian/shaping/TextShaper";
+import type { FontMetricsRequest } from "@tiqian/engine/org/tiqian/font/FontMetrics";
+import type { RawFontMetrics } from "@tiqian/engine/org/tiqian/font/RawFontMetrics";
 import { createProbeBootstrapFontSession } from "../src/engine/web-worker/session-bootstrap.js";
 import { prepareParagraphRequestWire } from "../src/engine/wire-construction.js";
 import { initializeGlobalServices } from "../src/services/global-services.js";
@@ -77,12 +85,12 @@ interface MetricsResponse {
   typoDescent: number | null;
 }
 
-type ShapeJsonFn = (requestJson: string) => string;
-type MetricsJsonFn = (requestJson: string) => string;
+type ShapeFn = (input: ShapingInput) => ShapingResult;
+type MetricsFn = (request: FontMetricsRequest) => RawFontMetrics;
 
 interface ScriptedCanvasModelCallbacks {
-  shapeJson: ShapeJsonFn;
-  metricsJson: MetricsJsonFn;
+  shape: ShapeFn;
+  resolve: MetricsFn;
 }
 
 interface ShapeRequest {
@@ -152,8 +160,11 @@ function makeScriptedCanvasModelCallbacks(): ScriptedCanvasModelCallbacks {
   const shapes: Map<number, unknown> = new Map();
   const metrics: Map<number, [number, number, number, number, number]> = new Map();
   return {
-    shapeJson: (requestJson: string): string => {
-      const request: ShapeRequest = JSON.parse(requestJson);
+    shape: (input: ShapingInput): ShapingResult => {
+      const range = { start: input.range.start, end: input.range.end };
+      const fontKey: string = input.fontDecision.candidate.key;
+      const displayText: string = input.displayText;
+      const sourceText: string = input.text.substring(input.range.start, input.range.end);
       // Canvas-model shape: one glyph per cluster, id 0, x 0, no ink bounds.
       const handle: number = nextHandle++;
       shapes.set(handle, {
@@ -165,26 +176,26 @@ function makeScriptedCanvasModelCallbacks(): ScriptedCanvasModelCallbacks {
         advance: 18,
         glyphs: [{ id: 0, advance: 18, x: 0, y: 0, bounds: Number.NaN }],
       });
-      const response: ShapeResponse = {
+      return toEngineShapingResult({
         clusters: [{
-          range: request.range,
-          text: request.text.substring(request.range.start, request.range.end),
-          displayText: request.displayText,
-          fontKey: request.fontDecision.candidateKey,
+          range,
+          text: sourceText,
+          displayText,
+          fontKey,
           advance: 18,
         }],
         glyphRuns: [{
-          range: request.range,
-          fontKey: request.fontDecision.candidateKey,
-          glyphs: [{ id: 0, clusterRange: request.range, advance: 18, x: 0, y: 0, bounds: null }],
+          range,
+          fontKey,
+          glyphs: [{ id: 0, clusterRange: range, advance: 18, x: 0, y: 0, bounds: null }],
           advance: 18,
           openTypeFeatures: [],
         }],
         decisions: [{
-          range: request.range,
-          sourceText: request.text.substring(request.range.start, request.range.end),
-          displayText: request.displayText,
-          fontKey: request.fontDecision.candidateKey,
+          range,
+          sourceText,
+          displayText,
+          fontKey,
           glyphCount: 1,
           advance: 18,
           source: "HarfBuzz",
@@ -193,33 +204,29 @@ function makeScriptedCanvasModelCallbacks(): ScriptedCanvasModelCallbacks {
           missingGlyphs: 1,
           resolvedFace: "",
           script: "",
-          language: request.fontDecision.candidateKey,
+          language: fontKey,
           featureEvidence: null,
         }],
-      };
-      return JSON.stringify(response);
+      });
     },
-    metricsJson: (requestJson: string): string => {
-      const request: MetricsRequest = JSON.parse(requestJson);
+    resolve: (request: FontMetricsRequest): RawFontMetrics => {
       // WebCanvasFontMetricsResolver in px: CJK boxes derive the 字身框 from
       // ideographicBaseline (-12), Latin roles leave typo values unset.
-      const cjkBox: boolean = request.role === "CjkText" || request.role === "CjkPunctuation";
+      const cjkBox: boolean = request.role.kind === "CjkText" || request.role.kind === "CjkPunctuation";
       const ideographicDescent: number = 12;
       const handle: number = nextHandle++;
       const metricTuple: [number, number, number, number, number] = cjkBox
         ? [30, 10, 0, Math.max(request.fontSize - ideographicDescent, 0), Math.max(ideographicDescent, 0)]
         : [22, 6, 0, Number.NaN, Number.NaN];
       metrics.set(handle, metricTuple);
-      const m: [number, number, number, number, number] = metrics.get(handle)!;
-      const response: MetricsResponse = {
-        ascent: m[0],
-        descent: m[1],
-        leading: m[2],
+      return toEngineFontMetrics({
+        ascent: metricTuple[0],
+        descent: metricTuple[1],
+        leading: metricTuple[2],
         source: "RawTables",
-        typoAscent: Number.isNaN(m[3]) ? null : m[3],
-        typoDescent: Number.isNaN(m[4]) ? null : m[4],
-      };
-      return JSON.stringify(response);
+        typoAscent: Number.isNaN(metricTuple[3]) ? null : metricTuple[3],
+        typoDescent: Number.isNaN(metricTuple[4]) ? null : metricTuple[4],
+      });
     },
   };
 }
@@ -286,31 +293,23 @@ test("probe bootstrap plan matches the canvas model plan end to end", async () =
 
   let planA: unknown;
   try {
-    const { shapeJson, metricsJson } = probeSession;
     const request: PrepareParagraphRequest = buildTestRequest();
-    const envelope = precomputeParagraphWithDiagnostics(
-      request,
-      0.0,
-      shapeJson,
-      metricsJson,
-    );
+    const envelope = preparedParagraphWithDiagnostics(request, 0.0, {
+      shape: probeSession.shape,
+      resolve: probeSession.resolve,
+    });
     planA = envelope.plan;
   } finally {
     probeSession.close();
   }
 
   // Use scripted canvas model callbacks
-  const { shapeJson: scriptedShapeJson, metricsJson: scriptedMetricsJson } = makeScriptedCanvasModelCallbacks();
+  const scriptedCallbacks = makeScriptedCanvasModelCallbacks();
 
   let planB: unknown;
   try {
     const request: PrepareParagraphRequest = buildTestRequest();
-    const envelope = precomputeParagraphWithDiagnostics(
-      request,
-      0.0,
-      scriptedShapeJson,
-      scriptedMetricsJson,
-    );
+    const envelope = preparedParagraphWithDiagnostics(request, 0.0, scriptedCallbacks);
     planB = envelope.plan;
   } finally {
     // no globals to restore
@@ -329,10 +328,10 @@ test("probe bootstrap plan matches the canvas model plan end to end", async () =
 });
 
 test("the plan-only entry matches the diagnostics entry byte for byte", () => {
-  const { shapeJson, metricsJson } = makeScriptedCanvasModelCallbacks();
+  const callbacks = makeScriptedCanvasModelCallbacks();
   const request = buildTestRequest();
-  const planOnly = precomputeParagraphPlan(request, 0.0, shapeJson, metricsJson);
-  const structured = precomputeParagraphWithDiagnostics(request, 0.0, shapeJson, metricsJson);
+  const planOnly = preparedParagraphPlan(request, callbacks);
+  const structured = preparedParagraphWithDiagnostics(request, 0.0, callbacks);
   assert.equal(
     JSON.stringify(planOnly),
     JSON.stringify(structured.plan),

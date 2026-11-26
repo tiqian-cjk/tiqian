@@ -20,7 +20,7 @@ test("published package ships the TS runtime modules and no repository-only bin"
   assert.equal(
     manifest.files.includes("precompute-runtime/"),
     false,
-    "the engine runtime ships as @tiqian/ffi instead",
+    "the engine runtime ships as @tiqian/engine instead",
   );
   assert.equal(manifest.files.includes("browser-font-replay.js"), false);
   assert.equal(manifest.files.includes("browser-fonts.js"), false);
@@ -70,7 +70,7 @@ test("published package ships the TS runtime modules and no repository-only bin"
   // The generated protocol and shared trees are workspace members until
   // tools/publish-contract.py resolves them for the packed archive.
   assert.deepEqual(coreManifest.dependencies, {
-    "@tiqian/ffi": coreManifest.version,
+    "@tiqian/engine": "workspace:*",
     "@tiqian/protocol": "workspace:*",
     "@tiqian/shared": "workspace:*",
   });
@@ -93,30 +93,13 @@ test("the release helper derives the repository tag and commit subject from one 
   assert.throws(() => normalizeReleaseVersion("0.1.0+local"), /InvalidReleaseVersion/u);
 });
 
-test("the ffi release workflow mirrors the web-component one for the engine package", async () => {
-  const workflow = await readFile(
-    new URL("../../../../../.github/workflows/publish-ffi.yml", import.meta.url),
-    "utf8",
-  );
-
-  // The lane runs from the release entrypoint and from a manual dispatch on
-  // the release tag; it no longer triggers on a per-package tag.
-  assert.match(workflow, /workflow_call:/u);
-  assert.match(workflow, /workflow_dispatch:/u);
-  assert.match(workflow, /working-directory: platforms\/web\/client\/engine-runtime/u);
-  assert.match(workflow, /TIQIAN_RELEASE_ARTIFACT_DIR/u);
-  assert.match(workflow, /tiqian-ffi-release/u);
-  assert.match(workflow, /tools\/npm-publish\.sh" "\$\{tarball\}" --tag alpha/u);
-  assert.match(workflow, /tools\/npm-dist-tag\.sh" --package @tiqian\/ffi --version "\$\{RELEASE_VERSION\}" --tag latest/u);
-});
-
 test("the release workflow publishes one verified artifact and synchronizes both dist-tags", async () => {
   const workflow = await readFile(
     new URL("../../../../../.github/workflows/publish-web-component.yml", import.meta.url),
     "utf8",
   );
 
-  // See the ffi lane: one release entrypoint drives every package lane.
+  // One release entrypoint drives every package lane.
   assert.match(workflow, /workflow_call:/u);
   assert.match(workflow, /id-token: write/u);
   assert.match(workflow, /TIQIAN_RELEASE_ARTIFACT_DIR/u);
@@ -267,7 +250,8 @@ test("the custom element validates a snapshot before dynamically loading the bro
   assert.doesNotMatch(loadedSnapshotsSource, /font-shaping\.js/u);
   assert.doesNotMatch(sessionSource, /lazy-capabilities/u);
   assert.doesNotMatch(layoutWorkerSource, /precompute-fonts\.js|harfbuzzjs|woff2-encoder/u);
-  assert.match(layoutWorkerSource, /from "@tiqian\/ffi"/u);
+  assert.match(layoutWorkerSource, /from "\.\/engine-access\/prepared-paragraph\.js"/u);
+  assert.doesNotMatch(layoutWorkerSource, /@tiqian\/ffi/u);
   assert.doesNotMatch(layoutWorkerSource, /precompute-runtime/u);
   assert.match(layoutWorkerSource, /workerSnapshotSubsetSourceBoundaries\(session\.faces, request\)/u);
   assert.doesNotMatch(browserFontsSource, /harfbuzzjs|woff2-encoder/u);

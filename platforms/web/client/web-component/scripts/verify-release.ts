@@ -78,19 +78,6 @@ try {
   if (!filename) throw new Error("ReleaseConsumerPackFailed: npm pack returned no filename");
   state.tarballPath = resolve(consumerRoot, filename);
 
-  // The ffi and core packages publish in lockstep (ADR 0053 A4/F2).
-  // Pack both from the working tree and install them so the consumer resolves
-  // @tiqian/core and @tiqian/ffi the way the lockstep release provides them.
-  const packedFfi: PackedList = JSON.parse(runNpm([
-    "pack",
-    "--ignore-scripts",
-    "--json",
-    "--pack-destination",
-    consumerRoot,
-  ], { cwd: resolve(packageRoot, "../engine-runtime"), capture: true })) as PackedList;
-  const ffiFilename: string | undefined = packedFfi?.[0]?.filename;
-  if (!ffiFilename) throw new Error("ReleaseConsumerPackFailed: npm pack returned no ffi filename");
-
   // The packed artifacts carry the release versions: core's manifest lists the
   // protocol and shared packages as workspace:*, which npm refuses outside the
   // workspace, so pack it with the ranges resolved and put the source back.
@@ -119,12 +106,12 @@ try {
   const coreFilename: string | undefined = packedCore?.[0]?.filename;
   if (!coreFilename) throw new Error("ReleaseConsumerPackFailed: npm pack returned no core filename");
 
-  // @tiqian/core depends on the protocol and shared packages, which the
+  // @tiqian/core depends on the engine, protocol and shared packages, which the
   // release publishes from the pack matrix after this lane. Pack the two
   // archives this lane generated so the consumer resolves them here instead of
   // a registry that does not have them yet.
   const siblings: string[] = [];
-  for (const bundle of ["protocol-ts", "shared-ts"]) {
+  for (const bundle of ["protocol-ts", "shared-ts", "ts"]) {
     const directory: string = resolve(packageRoot, "../../../../engine-haxe/out", bundle);
     const archive: string | null = await firstArchive(directory);
     if (archive !== null) {
@@ -144,7 +131,6 @@ try {
     "--no-fund",
     state.tarballPath,
     resolve(consumerRoot, coreFilename),
-    resolve(consumerRoot, ffiFilename),
     ...siblings,
   ], { cwd: consumerRoot });
 

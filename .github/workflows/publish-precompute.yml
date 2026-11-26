@@ -79,9 +79,8 @@ jobs:
   # The install resolves generated, gitignored trees that need the flake
   # driver: the Rust engine and protocol crates the addon links, the
   # tiqian-protocol and tiqian-shared workspace members (their package.json is
-  # written by boring pack), and the @tiqian/ffi engine-gen/ tree. The Windows
-  # and macOS legs have no Nix, so generate once here and hand every leg the
-  # result.
+  # written by boring pack). The Windows and macOS legs have no Nix, so
+  # generate once here and hand every leg the result.
   manifests:
     name: Generate the trees and package manifests
     needs: [validate]
@@ -122,7 +121,7 @@ jobs:
         run: python3 tools/align-package-versions.py "${RELEASE_VERSION}"
 
       - name: Generate the Rust and TypeScript engine trees with the flake toolchain
-        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs && node tools/generate-engine-gen.mjs ts'
+        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs'
 
       - name: Write the protocol and shared package manifests
         # boring pack writes the package.json that makes engine-haxe/out/
@@ -132,7 +131,7 @@ jobs:
           export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts --project boring.json'
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts ts --project boring.json'
 
       - name: Upload the generated trees and manifests
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -143,7 +142,7 @@ jobs:
             engine-haxe/out/shared-ts
             platforms/web/server/precompute/engine-gen
             platforms/web/server/precompute/protocol-gen
-            platforms/web/client/engine-runtime/engine-gen
+            engine-haxe/out/ts
           if-no-files-found: error
           retention-days: 7
 
@@ -195,12 +194,6 @@ jobs:
         # boring pack wrote; the generated trees come from the manifests job.
         run: bun install --ignore-scripts
 
-      - name: Assemble the @tiqian/ffi runtime
-        # The skipped install hook used to compile the @tiqian/ffi runtime/
-        # declarations this smoke test resolves; engine-gen/ is already in the
-        # downloaded tree, so no boring driver is needed here.
-        working-directory: platforms/web/client/engine-runtime
-        run: npm run build:runtime
 
       - name: Build addon and place platform binary
         working-directory: platforms/web/server/core
@@ -288,12 +281,6 @@ jobs:
         # boring pack wrote; the generated trees come from the manifests job.
         run: bun install --ignore-scripts
 
-      - name: Assemble the @tiqian/ffi runtime
-        # The skipped install hook used to compile the @tiqian/ffi runtime/
-        # declarations the server/core type check resolves; engine-gen/ is
-        # already in the downloaded tree, so no boring driver is needed here.
-        working-directory: platforms/web/client/engine-runtime
-        run: npm run build:runtime
 
       - name: Build the packages the type check resolves
         # This package's project references need the declarations of the web

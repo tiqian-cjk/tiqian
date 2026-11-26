@@ -2,55 +2,33 @@
 //
 // Mirrors the fixture backend of PrecomputeExportsTest.kt: one glyph per code
 // point, advance and x scaled by the font size, glyph id 0 marks a missing
-// glyph, metrics [1.04, 0.28, 0, 0.88, 0.12] x fontSize. The callback protocol
-// is the synchronous JSON request/response contract the real @tiqian/ffi runtime
-// uses.
+// glyph, metrics [1.04, 0.28, 0, 0.88, 0.12] x fontSize. The callbacks are the
+// engine's typed host adapters.
 //
 // Tests pass the returned callbacks as the snapshot-session descriptor or the
-// scripted canvas model; the ffi entries take them as call parameters, so
+// scripted canvas model; the engine entries take them as call parameters, so
 // there is no global to install or restore.
+
+import { toEngineFontMetrics, toEngineShapingResult } from "../src/engine/engine-access/host-result.js";
+import type { ShapingInput, ShapingResult } from "@tiqian/engine/org/tiqian/shaping/TextShaper";
+import type { FontMetricsRequest } from "@tiqian/engine/org/tiqian/font/FontMetrics";
+import type { RawFontMetrics } from "@tiqian/engine/org/tiqian/font/RawFontMetrics";
 
 const MISSING_GLYPH_MARKER = "\u22ef"; // "⋯"
 
-export type ShapeJsonFn = (requestJson: string) => string;
-export type MetricsJsonFn = (requestJson: string) => string;
+export type ShapeFn = (input: ShapingInput) => ShapingResult;
+export type MetricsFn = (request: FontMetricsRequest) => RawFontMetrics;
 export type UninstallFn = () => void;
 
 export interface FixtureFontCallbacks {
-  shapeJson: ShapeJsonFn;
-  metricsJson: MetricsJsonFn;
+  shape: ShapeFn;
+  resolve: MetricsFn;
 }
 
 export interface FixtureFontBackend {
-  shapeJson: ShapeJsonFn;
-  metricsJson: MetricsJsonFn;
+  shape: ShapeFn;
+  resolve: MetricsFn;
   uninstall: UninstallFn;
-}
-
-interface ShapeRequestStyle {
-  fontSize: number;
-  locale?: string;
-}
-
-interface ShapeRequestRange {
-  start: number;
-  end: number;
-}
-
-interface ShapeRequestFontDecision {
-  candidateKey: string;
-}
-
-interface ShapeRequest {
-  displayText: string;
-  text: string;
-  range: ShapeRequestRange;
-  style: ShapeRequestStyle;
-  fontDecision: ShapeRequestFontDecision;
-}
-
-interface MetricsRequest {
-  fontSize: number;
 }
 
 interface InternalGlyph {
@@ -63,10 +41,9 @@ interface InternalGlyph {
 
 function makeFixtureCallbacks(): FixtureFontCallbacks {
   return {
-    shapeJson: (requestJson: string): string => {
-      const request = JSON.parse(requestJson) as ShapeRequest;
-      const displayText = request.displayText;
-      const fontSize = request.style.fontSize;
+    shape(input: ShapingInput): ShapingResult {
+      const displayText = input.displayText;
+      const fontSize = input.style.fontSize;
       const missing = String(displayText).includes(MISSING_GLYPH_MARKER);
       const glyphs: InternalGlyph[] = [];
       let index = 0;
@@ -80,20 +57,22 @@ function makeFixtureCallbacks(): FixtureFontCallbacks {
         });
         index += 1;
       }
-      return JSON.stringify({
+      const range = { start: input.range.start, end: input.range.end };
+      const fontKey = input.fontDecision.candidate.key;
+      return toEngineShapingResult({
         clusters: [{
-          range: request.range,
-          text: request.text.substring(request.range.start, request.range.end),
+          range,
+          text: input.text.substring(input.range.start, input.range.end),
           displayText,
-          fontKey: request.fontDecision.candidateKey,
+          fontKey,
           advance: glyphs.length * fontSize,
         }],
         glyphRuns: [{
-          range: request.range,
-          fontKey: request.fontDecision.candidateKey,
+          range,
+          fontKey,
           glyphs: glyphs.map((g) => ({
             id: g.id,
-            clusterRange: request.range,
+            clusterRange: range,
             advance: g.advance,
             x: g.x,
             y: g.y,
@@ -103,10 +82,10 @@ function makeFixtureCallbacks(): FixtureFontCallbacks {
           openTypeFeatures: [],
         }],
         decisions: [{
-          range: request.range,
-          sourceText: request.text.substring(request.range.start, request.range.end),
+          range,
+          sourceText: input.text.substring(input.range.start, input.range.end),
           displayText,
-          fontKey: request.fontDecision.candidateKey,
+          fontKey,
           glyphCount: glyphs.length,
           advance: glyphs.length * fontSize,
           source: "HarfBuzz",
@@ -115,15 +94,14 @@ function makeFixtureCallbacks(): FixtureFontCallbacks {
           missingGlyphs: missing ? glyphs.length : 0,
           resolvedFace: "Fixture CJK",
           script: "Hani",
-          language: request.style.locale,
+          language: input.style.locale,
           featureEvidence: null,
         }],
       });
     },
-    metricsJson: (requestJson: string): string => {
-      const request = JSON.parse(requestJson) as MetricsRequest;
+    resolve(request: FontMetricsRequest): RawFontMetrics {
       const fontSize = request.fontSize;
-      return JSON.stringify({
+      return toEngineFontMetrics({
         ascent: fontSize * 1.04,
         descent: fontSize * 0.28,
         leading: 0,
@@ -141,8 +119,8 @@ function installFixtureFontBackend(): FixtureFontBackend {
     uninstall(): void {
       // Retained for the try/finally shape of the callers; nothing to undo.
     },
-    shapeJson: callbacks.shapeJson,
-    metricsJson: callbacks.metricsJson,
+    shape: callbacks.shape,
+    resolve: callbacks.resolve,
   };
 }
 
@@ -154,8 +132,8 @@ function installThrowingFontBackend(error: Error): FixtureFontBackend {
     uninstall(): void {
       // No globals to restore
     },
-    shapeJson: (): string => { throw error; },
-    metricsJson: (): string => { throw error; },
+    shape: (): ShapingResult => { throw error; },
+    resolve: (): RawFontMetrics => { throw error; },
   };
 }
 

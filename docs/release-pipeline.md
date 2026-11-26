@@ -11,7 +11,7 @@ CI 打包五个目标生态的产物，写入 registry 仓库并部署站点。�
 在标签 commit 上都有 completed 且 success 的运行记录；任一 workflow 失败或没有运行
 记录时，全部发布 job 都不会开始。
 
-检查通过后，`release.yml` 按依赖顺序调用 `publish-ffi.yml`、`publish-core.yml`、
+检查通过后，`release.yml` 按依赖顺序调用 `publish-core.yml`、
 `publish-web-component.yml`、`publish-precompute.yml`、`publish.yml`、
 `release-assets.yml` 与 `release-registry.yml`。
 

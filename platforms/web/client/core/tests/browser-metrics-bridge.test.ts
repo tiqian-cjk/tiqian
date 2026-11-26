@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { precomputeParagraphWithBrowserMetrics, precomputeParagraphWithDiagnostics } from "@tiqian/ffi";
-import type { PrepareParagraphRequest } from "@tiqian/ffi";
+import { preparedParagraphWithDiagnostics } from "../src/engine/engine-access/prepared-paragraph.js";
+import type { PrepareParagraphRequest } from "../src/engine/engine-access/wire-types.js";
+import { toEngineFontMetrics, toEngineShapingResult } from "../src/engine/engine-access/host-result.js";
+import type { ShapingInput } from "@tiqian/engine/org/tiqian/shaping/TextShaper";
+import type { FontMetricsRequest } from "@tiqian/engine/org/tiqian/font/FontMetrics";
 
 import { createFontFamilies } from "../src/engine/canvas-fonts.js";
 import { clearMeasurementCache } from "../src/engine/canvas-shaping.js";
@@ -20,6 +23,39 @@ const EXPECTED_FIRST_SHAPING_REQUEST: string =
 const EXPECTED_FIRST_METRICS_REQUEST: string =
   '{"fontKey":"cjk-primary","fontSize":18,"role":"CjkText","locale":"zh-Hans","fontFamilies":["Fixture CJK"],"fontWeight":400,"italic":false,"faceSelectionText":"中"}';
 
+// The typed callback inputs projected onto the field shape the retired wire
+// carried. These projections let the byte-lock tests keep their contract:
+// the same fields with the same values reach the host callbacks.
+function projectShapingInput(input: ShapingInput): unknown {
+  return {
+    text: input.text,
+    range: { start: input.range.start, end: input.range.end },
+    style: {
+      fontFamilies: [...input.style.fontFamilies],
+      fontSize: input.style.fontSize,
+      fontWeight: input.style.fontWeight,
+      italic: input.style.italic,
+      locale: input.style.locale,
+    },
+    fontDecision: { role: input.fontDecision.role.kind, candidateKey: input.fontDecision.candidate.key },
+    displayText: input.displayText,
+    openTypeFeatures: [...input.openTypeFeatures],
+  };
+}
+
+function projectMetricsRequest(request: FontMetricsRequest): unknown {
+  return {
+    fontKey: request.fontKey,
+    fontSize: request.fontSize,
+    role: request.role.kind,
+    locale: request.locale,
+    fontFamilies: [...request.fontFamilies],
+    fontWeight: request.fontWeight,
+    italic: request.italic,
+    faceSelectionText: request.faceSelectionText,
+  };
+}
+
 type FakeMeasureFn = (text: string, font: string) => CanvasTextMetricsLike;
 
 interface FakeImageDataLike {
@@ -30,11 +66,9 @@ interface FakeProbeRectWidth {
   width: number;
 }
 
-type WireJsonFn = (requestJson: string) => string;
-
 interface ScriptedCanvasModelCallbacks {
-  shapeJson: WireJsonFn;
-  metricsJson: WireJsonFn;
+  shape: (input: ShapingInput) => ReturnType<typeof toEngineShapingResult>;
+  resolve: (request: FontMetricsRequest) => ReturnType<typeof toEngineFontMetrics>;
 }
 
 interface ScriptedGlyphRecord {
@@ -66,8 +100,6 @@ interface CapabilityIssueLike {
   name: string;
   reason: string;
 }
-
-type TestRequestFields = Omit<PrepareParagraphRequest, "__doNotUseOrImplementIt">;
 
 function fakeCanvasMeasurement(text: string): CanvasTextMetricsLike {
   if (text === "Hg") {
@@ -134,8 +166,11 @@ function makeScriptedCanvasModelCallbacks(): ScriptedCanvasModelCallbacks {
   const shapes = new Map<number, ScriptedShapeRecord>();
   const metrics = new Map<number, ScriptedMetricsBox>();
   return {
-    shapeJson: (requestJson: string): string => {
-      const request = JSON.parse(requestJson);
+    shape: (input: ShapingInput) => {
+      const range = { start: input.range.start, end: input.range.end };
+      const fontKey: string = input.fontDecision.candidate.key;
+      const displayText: string = input.displayText;
+      const sourceText: string = input.text.substring(input.range.start, input.range.end);
       const handle = nextHandle++;
       shapes.set(handle, {
         faceId: "",
@@ -146,26 +181,26 @@ function makeScriptedCanvasModelCallbacks(): ScriptedCanvasModelCallbacks {
         advance: 18,
         glyphs: [{ id: 0, advance: 18, x: 0, y: 0, bounds: Number.NaN }],
       });
-      return JSON.stringify({
+      return toEngineShapingResult({
         clusters: [{
-          range: request.range,
-          text: request.text.substring(request.range.start, request.range.end),
-          displayText: request.displayText,
-          fontKey: request.fontDecision.candidateKey,
+          range,
+          text: sourceText,
+          displayText,
+          fontKey,
           advance: 18,
         }],
         glyphRuns: [{
-          range: request.range,
-          fontKey: request.fontDecision.candidateKey,
-          glyphs: [{ id: 0, clusterRange: request.range, advance: 18, x: 0, y: 0, bounds: null }],
+          range,
+          fontKey,
+          glyphs: [{ id: 0, clusterRange: range, advance: 18, x: 0, y: 0, bounds: null }],
           advance: 18,
           openTypeFeatures: [],
         }],
         decisions: [{
-          range: request.range,
-          sourceText: request.text.substring(request.range.start, request.range.end),
-          displayText: request.displayText,
-          fontKey: request.fontDecision.candidateKey,
+          range,
+          sourceText,
+          displayText,
+          fontKey,
           glyphCount: 1,
           advance: 18,
           source: "HarfBuzz",
@@ -174,21 +209,20 @@ function makeScriptedCanvasModelCallbacks(): ScriptedCanvasModelCallbacks {
           missingGlyphs: 1,
           resolvedFace: "",
           script: "",
-          language: request.style.locale,
+          language: input.style.locale,
           featureEvidence: null,
         }],
       });
     },
-    metricsJson: (requestJson: string): string => {
-      const request = JSON.parse(requestJson);
-      const cjkBox = request.role === "CjkText" || request.role === "CjkPunctuation";
-      const ideographicDescent = 12;
+    resolve: (request: FontMetricsRequest) => {
+      const cjkBox: boolean = request.role.kind === "CjkText" || request.role.kind === "CjkPunctuation";
+      const ideographicDescent: number = 12;
       const handle = nextHandle++;
       const m: ScriptedMetricsBox = cjkBox
         ? [30, 10, 0, Math.max(request.fontSize - ideographicDescent, 0), Math.max(ideographicDescent, 0)]
         : [22, 6, 0, Number.NaN, Number.NaN];
       metrics.set(handle, m);
-      return JSON.stringify({
+      return toEngineFontMetrics({
         ascent: m[0],
         descent: m[1],
         leading: m[2],
@@ -225,21 +259,21 @@ function comparePlans(left: PlanJson, right: PlanJson, path: string): void {
   }
   if (Array.isArray(left) && Array.isArray(right)) {
     assert.equal(left.length, right.length, `${path}.length`);
-    left.forEach((value: PlanJson, index: number): void => comparePlans(value, right[index], `${path}[${index}]`));
+    left.forEach((value: PlanJson, index: number): void => comparePlans(value, right[index]!, `${path}[${index}]`));
     return;
   }
   if (isPlanJsonObject(left) && isPlanJsonObject(right)) {
     const leftKeys = Object.keys(left).sort();
     const rightKeys = Object.keys(right).sort();
     assert.deepEqual(leftKeys, rightKeys, `${path} keys`);
-    for (const key of leftKeys) comparePlans(left[key], right[key], `${path}.${key}`);
+    for (const key of leftKeys) comparePlans(left[key]!, right[key]!, `${path}.${key}`);
     return;
   }
   assert.strictEqual(left, right, path);
 }
 
 // Helper to build a PrepareParagraphRequest DTO for the test paragraph
-function buildTestRequest(overrides: Partial<TestRequestFields> = {}): PrepareParagraphRequest {
+function buildTestRequest(overrides: Partial<PrepareParagraphRequest> = {}): PrepareParagraphRequest {
   return prepareParagraphRequestWire({
     text: "中文中文",
     maxWidthPx: 36,
@@ -263,7 +297,7 @@ function buildTestRequest(overrides: Partial<TestRequestFields> = {}): PreparePa
   });
 }
 
-function buildDashRequest(overrides: Partial<TestRequestFields> = {}): PrepareParagraphRequest {
+function buildDashRequest(overrides: Partial<PrepareParagraphRequest> = {}): PrepareParagraphRequest {
   return prepareParagraphRequestWire({
     text: "——",
     maxWidthPx: 36,
@@ -291,7 +325,7 @@ test("API surface exposes createBrowserMetricsBridge", () => {
   assert.strictEqual(typeof createBrowserMetricsBridge, "function");
 });
 
-test("Shaping wire byte lock", () => {
+test("Shaping request field lock", () => {
   clearMeasurementCache();
   const fonts = createFontFamilies({
     cjk: '"Fixture CJK", sans-serif',
@@ -304,26 +338,22 @@ test("Shaping wire byte lock", () => {
     env,
   });
 
-  const capturedShapeRequests: string[] = [];
+  const capturedShapeInputs: ShapingInput[] = [];
 
   const request = buildTestRequest();
-  precomputeParagraphWithBrowserMetrics(
-    request,
-    0.01,
-    {
-      shapeJson: (req: string): string => {
-        capturedShapeRequests.push(req);
-        return bridge.shapeJson(req);
-      },
-      metricsJson: (req: string): string => bridge.metricsJson(req),
+  preparedParagraphWithDiagnostics(request, 0.01, {
+    shape: (input: ShapingInput) => {
+      capturedShapeInputs.push(input);
+      return bridge.shape(input);
     },
-  );
+    resolve: (req: FontMetricsRequest) => bridge.resolve(req),
+  });
 
-  assert.ok(capturedShapeRequests.length > 0);
-  assert.strictEqual(capturedShapeRequests[0], EXPECTED_FIRST_SHAPING_REQUEST);
+  assert.ok(capturedShapeInputs.length > 0);
+  assert.deepEqual(projectShapingInput(capturedShapeInputs[0]!), JSON.parse(EXPECTED_FIRST_SHAPING_REQUEST));
 });
 
-test("Metrics wire byte lock", () => {
+test("Metrics request field lock", () => {
   clearMeasurementCache();
   const fonts = createFontFamilies({
     cjk: '"Fixture CJK", sans-serif',
@@ -336,23 +366,19 @@ test("Metrics wire byte lock", () => {
     env,
   });
 
-  const capturedMetricsRequests: string[] = [];
+  const capturedMetricsRequests: FontMetricsRequest[] = [];
 
   const request = buildTestRequest();
-  precomputeParagraphWithBrowserMetrics(
-    request,
-    0.01,
-    {
-      shapeJson: (req: string): string => bridge.shapeJson(req),
-      metricsJson: (req: string): string => {
-        capturedMetricsRequests.push(req);
-        return bridge.metricsJson(req);
-      },
+  preparedParagraphWithDiagnostics(request, 0.01, {
+    shape: (input: ShapingInput) => bridge.shape(input),
+    resolve: (req: FontMetricsRequest) => {
+      capturedMetricsRequests.push(req);
+      return bridge.resolve(req);
     },
-  );
+  });
 
   assert.ok(capturedMetricsRequests.length > 0);
-  assert.strictEqual(capturedMetricsRequests[0], EXPECTED_FIRST_METRICS_REQUEST);
+  assert.deepEqual(projectMetricsRequest(capturedMetricsRequests[0]!), JSON.parse(EXPECTED_FIRST_METRICS_REQUEST));
 });
 
 test("End-to-end plan", () => {
@@ -369,18 +395,12 @@ test("End-to-end plan", () => {
   });
 
   const request = buildTestRequest();
-  const rawEnvelope = precomputeParagraphWithBrowserMetrics(
-    request,
-    0.01,
-    bridge,
-  );
-
-  const envelope = JSON.parse(rawEnvelope);
-  const plan = JSON.parse(envelope.plan);
+  const envelope = preparedParagraphWithDiagnostics(request, 0.01, bridge);
+  const plan = envelope.plan as unknown as { lines: PlanLineLike[] };
 
   assert.ok(plan.lines.length > 0);
-  assert.strictEqual(plan.lines[0].rangeStart, 0);
-  assert.strictEqual(plan.lines[plan.lines.length - 1].rangeEnd, 4);
+  assert.strictEqual(plan.lines[0]!.rangeStart, 0);
+  assert.strictEqual(plan.lines[plan.lines.length - 1]!.rangeEnd, 4);
   assert.deepEqual(envelope.diagnostics.capabilityIssues, []);
   assert.deepEqual(envelope.diagnostics.advanceSuspects, []);
 });
@@ -399,33 +419,24 @@ test("Parity against the scripted canvas-model backend", () => {
   });
 
   const request = buildTestRequest();
-  const rawEnvelope = precomputeParagraphWithBrowserMetrics(
-    request,
-    0.01,
-    bridge,
-  );
-  const envelope = JSON.parse(rawEnvelope);
-  const planA = JSON.parse(envelope.plan);
+  const envelope = preparedParagraphWithDiagnostics(request, 0.01, bridge);
+  const planA = envelope.plan as unknown as PlanJson;
 
-  const { shapeJson: scriptedShapeJson, metricsJson: scriptedMetricsJson } = makeScriptedCanvasModelCallbacks();
+  const scriptedCallbacks = makeScriptedCanvasModelCallbacks();
 
-  let planB: any;
+  let planB: PlanJson;
   try {
     const requestDiag = buildTestRequest();
-    const rawScriptedEnvelope = precomputeParagraphWithBrowserMetrics(
-      requestDiag,
-      0.0,
-      { shapeJson: scriptedShapeJson, metricsJson: scriptedMetricsJson },
-    );
-    planB = JSON.parse(JSON.parse(rawScriptedEnvelope).plan);
+    planB = preparedParagraphWithDiagnostics(requestDiag, 0.0, scriptedCallbacks).plan as unknown as PlanJson;
   } finally {
     // no globals to restore
   }
 
-  assert.deepEqual(
-    planA.lines.map((line: PlanLineLike): number[] => [line.rangeStart, line.rangeEnd]),
-    planB.lines.map((line: PlanLineLike): number[] => [line.rangeStart, line.rangeEnd]),
-  );
+  const linesOf = (value: PlanJson): number[][] => {
+    const lines = (value as unknown as { lines: PlanLineLike[] }).lines;
+    return lines.map((line: PlanLineLike): number[] => [line.rangeStart, line.rangeEnd]);
+  };
+  assert.deepEqual(linesOf(planA), linesOf(planB));
   comparePlans(planA, planB, "$");
 });
 
@@ -443,13 +454,8 @@ test("Dash capability passthrough", () => {
   });
 
   const request = buildDashRequest();
-  const rawEnvelope = precomputeParagraphWithBrowserMetrics(
-    request,
-    0.01,
-    bridge,
-  );
+  const envelope = preparedParagraphWithDiagnostics(request, 0.01, bridge);
 
-  const envelope = JSON.parse(rawEnvelope);
   const issue = envelope.diagnostics.capabilityIssues.find(
     (item: CapabilityIssueLike): boolean => item.name === "NoConformingCjkDashGlyph",
   );

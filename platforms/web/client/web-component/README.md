@@ -295,7 +295,7 @@ exact-font replay 时再配置宿主字体，只有主动开启 fixed-measure sn
 - 包是 ESM-only；CommonJS 宿主需要使用动态 `import()`。
 - 构建期预排入口在 `@tiqian/precompute`，需要 Node.js 22 或更高版本。
 - 浏览器端 runtime 是纯 JavaScript，不加载 WebAssembly，也不需要特殊的服务器配置。
-- 排版 worker 的引擎面来自 `@tiqian/ffi` 依赖；两包同一提交发布并互相锁定版本，
+- 排版 worker 的引擎面来自 `@tiqian/engine` 工作区依赖；两包同一提交发布并互相锁定版本，
   worker 引擎与浏览器 runtime 始终出自同一次引擎构建。
 
 ## 了解提椠

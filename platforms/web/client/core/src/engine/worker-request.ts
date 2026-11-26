@@ -18,12 +18,12 @@ import type { LoweredParagraph } from "./lowered-paragraph.js";
 import type { EnhanceOptions } from "./lifecycle.js";
 import { allowsSnapshotLayout, conformingSnapshotFontSessionId, withRootDefaults } from "./lifecycle.js";
 import {
-  classifyFontRole,
-  classifyFontRoles,
+  classifyRole as classifyFontRole,
+  classifyRoles as classifyFontRoles,
   firstDivergentInlineShapingProperty,
   unsupportedInlineShapingProperties,
-} from "@tiqian/ffi";
-import type { WorkerLayoutRequest } from "@tiqian/ffi";
+} from "./engine-access/font-role.js";
+import type { WorkerLayoutRequest } from "./engine-access/wire-types.js";
 import {
   inlineBoxWires,
   inlineObjectWires,
