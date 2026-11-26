@@ -34,6 +34,7 @@ import type { RawFontMetrics } from "@tiqian/engine/org/tiqian/font/RawFontMetri
 import type { PrepareParagraphRequest } from "./wire-types.js";
 import type { PlanWithDiagnostics } from "@tiqian/engine/org/tiqian/layout/PreparedParagraph";
 import type { Plan } from "@tiqian/protocol/org/tiqian/protocol/Plan";
+import { PreparedParagraphRequest } from "@tiqian/shared/org/tiqian/shared/layout/PreparedParagraphRequest";
 
 export type { PlanWithDiagnostics };
 
@@ -93,55 +94,16 @@ function validateRequest(request: ParagraphRequest): void {
 }
 
 function assemble(request: PrepareParagraphRequest): { model: ParagraphRequest; gapEm: number } {
-  const model: ParagraphRequest = {
-    fontSessionId: "",
-    text: request.text,
-    maxWidthPx: request.maxWidthPx,
-    fontFamilies: request.fontFamilies.slice(),
-    fontSizePx: request.fontSizePx,
-    lineHeightPx: request.lineHeightPx,
-    locale: request.locale,
-    fontWeight: request.fontWeight,
-    italic: request.italic,
-    firstLineIndentIc: request.firstLineIndentIc,
-    lineLengthGridEnabled: request.lineLengthGridEnabled,
-    emphasisDotGapEm: request.emphasisDotGapEm === undefined ? null : request.emphasisDotGapEm,
-    sourceBoundaries: request.sourceBoundaries.slice(),
-    textSpans: request.textSpans.map((span) => ({
-      start: span.start,
-      end: span.end,
-      families: span.families.slice(),
-      fontSizePx: span.fontSizePx,
-      fontWeight: span.fontWeight,
-      italic: span.italic,
-      baselineShift: span.baselineShift,
-    })),
-    lineBreakSpans: request.lineBreakSpans.map((span) => ({
-      start: span.start,
-      end: span.end,
-      policy: span.policy,
-    })),
-    inlineBoxes: request.inlineBoxes.map((box) => ({
-      start: box.start,
-      end: box.end,
-      inlineStart: box.inlineStart,
-      inlineEnd: box.inlineEnd,
-      outerSpacing: box.outerSpacing === undefined ? "Narrow" : box.outerSpacing,
-    })),
-    inlineObjects: request.inlineObjects.map((object) => ({
-      start: object.start,
-      end: object.end,
-      advance: object.advance,
-      ascent: object.ascent,
-      descent: object.descent,
-    })),
-    decorations: request.decorations.map((deco) => ({
-      start: deco.start,
-      end: deco.end,
-      kind: deco.kind,
-    })),
-  };
-  validateRequest(model);
+  let model: ParagraphRequest;
+  try {
+    model = PreparedParagraphRequest.normalize(request as unknown as ParagraphRequest);
+    PreparedParagraphRequest.validate(model);
+  } catch (error) {
+    if (error instanceof ParagraphRequestException) {
+      throw makeIllegalArgument(error.message);
+    }
+    throw error;
+  }
   return { model, gapEm: model.emphasisDotGapEm === null ? 0.1 : model.emphasisDotGapEm };
 }
 
