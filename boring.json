@@ -89,6 +89,14 @@
         }
       ]
     },
+    "shared-rust": {
+      "types": ["runtime.UString", "runtime.TestCore", "std.UStringException"],
+      "packages": [
+        "org.tiqian.shared.prepared_dom",
+        "org.tiqian.shared.html",
+        "org.tiqian.shared.snapshot"
+      ]
+    },
     "shared": {
       "types": ["runtime.UString", "runtime.TestCore", "std.UStringException"],
       "packages": [
@@ -531,7 +539,7 @@
     {
       "id": "shared-rust",
       "target": "rust",
-      "sourceSet": "shared",
+      "sourceSet": "shared-rust",
       "dependsOn": ["engine-rust", "protocol-rust"],
       "dependencyMode": "path",
       "dependencyPaths": {
