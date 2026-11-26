@@ -15,6 +15,7 @@ tiqian-engine-gen = { path = "../engine-gen" }
 # `node tools/generate-engine-gen.mjs` into a gitignored mount before cargo
 # build; the path is that mount, not engine-haxe/out/.
 tiqian-protocol-gen = { path = "../protocol-gen" }
+tiqian-shared-gen = { path = "../../../../../engine-haxe/out/shared-rust/gen" }
 harfrust = "0.13"
 skrifa = "0.46"
 read-fonts = "0.43"
