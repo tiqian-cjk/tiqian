@@ -17,7 +17,7 @@ import {
   workerLayoutRequest,
 } from "../src/engine/worker-request.js";
 import { effectiveLineMeasure } from "../src/engine/responsive-measure.js";
-import { firstDivergentInlineShapingProperty, unsupportedInlineShapingProperties } from "../src/engine/engine-access/font-role.js";
+import { firstDivergentInlineShapingProperty, unsupportedInlineShapingProperties } from "../src/engine/font-role.js";
 
 function asType<T>(value: unknown): T {
   return value as T;

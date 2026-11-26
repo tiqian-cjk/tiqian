@@ -22,8 +22,8 @@ import {
   classifyRoles as classifyFontRoles,
   firstDivergentInlineShapingProperty,
   unsupportedInlineShapingProperties,
-} from "./engine-access/font-role.js";
-import type { WorkerLayoutRequest } from "./engine-access/wire-types.js";
+} from "./font-role.js";
+import type { WorkerLayoutRequest } from "./wire-types.js";
 import {
   inlineBoxWires,
   inlineObjectWires,

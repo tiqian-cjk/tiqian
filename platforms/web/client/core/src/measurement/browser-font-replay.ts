@@ -21,7 +21,7 @@ import type { ProbeMeasure } from "./replay-probe.js";
 import type { SnapshotManifestFace } from "../sampler/snapshot/snapshot-manifest.js";
 import type { SnapshotProbe } from "../sampler/snapshot/snapshot-table-binary.js";
 import { globalServices } from "../services/global-services.js";
-import { toEngineFontMetrics, toEngineShapingResult } from "../engine/engine-access/host-result.js";
+import { toEngineFontMetrics, toEngineShapingResult } from "../engine/host-result.js";
 import type { ShapingInput, ShapingResult } from "@tiqian/engine/org/tiqian/shaping/TextShaper";
 import type { FontMetricsRequest } from "@tiqian/engine/org/tiqian/font/FontMetrics";
 import type { RawFontMetrics } from "@tiqian/engine/org/tiqian/font/RawFontMetrics";

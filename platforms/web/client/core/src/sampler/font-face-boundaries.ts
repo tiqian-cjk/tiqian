@@ -1,4 +1,4 @@
-import type { WorkerLayoutRequest } from "../engine/engine-access/wire-types.js";
+import type { WorkerLayoutRequest } from "../engine/wire-types.js";
 
 const FAMILY_SEPARATOR = "\u001f";
 const RECORD_SEPARATOR = "\u001e";

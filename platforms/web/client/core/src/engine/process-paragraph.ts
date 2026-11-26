@@ -34,7 +34,7 @@ import {
   classifyRoles as classifyFontRoles,
   firstDivergentInlineShapingProperty,
   unsupportedInlineShapingProperties,
-} from "./engine-access/font-role.js";
+} from "./font-role.js";
 import type { EnhancedElementContext } from "./context/enhance-context.js";
 import type { DiagnosisIssueRecord } from "./context/diagnosis-manager.js";
 import type { TrackedParagraph } from "./enhance/context-state.js";

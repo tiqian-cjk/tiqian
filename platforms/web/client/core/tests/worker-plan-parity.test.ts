@@ -4,9 +4,9 @@ import test from "node:test";
 import {
   preparedParagraphPlan,
   preparedParagraphWithDiagnostics,
-} from "../src/engine/engine-access/prepared-paragraph.js";
-import type { PrepareParagraphRequest } from "../src/engine/engine-access/wire-types.js";
-import { toEngineFontMetrics, toEngineShapingResult } from "../src/engine/engine-access/host-result.js";
+} from "../src/engine/prepared-paragraph.js";
+import type { PrepareParagraphRequest } from "../src/engine/wire-types.js";
+import { toEngineFontMetrics, toEngineShapingResult } from "../src/engine/host-result.js";
 import type { ShapingInput, ShapingResult } from "@tiqian/engine/org/tiqian/shaping/TextShaper";
 import type { FontMetricsRequest } from "@tiqian/engine/org/tiqian/font/FontMetrics";
 import type { RawFontMetrics } from "@tiqian/engine/org/tiqian/font/RawFontMetrics";

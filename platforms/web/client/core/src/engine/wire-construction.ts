@@ -15,7 +15,7 @@ import type {
   SemanticSpanWire,
   TextSpanWire,
   WorkerLayoutRequest,
-} from "./engine-access/wire-types.js";
+} from "./wire-types.js";
 
 type WireFields<T> = T;
 
