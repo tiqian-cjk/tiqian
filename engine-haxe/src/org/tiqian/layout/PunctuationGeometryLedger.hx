@@ -209,6 +209,46 @@ import std.SortedMap;
     public function consumeLeadingByCluster(consumptionByCluster:SortedMap<Int, Float>):PunctuationGeometryLedger
         return consumeSide(consumptionByCluster, true);
 
+    /**
+     * `consumeLeadingByCluster(leading).consumeTrailingByCluster(trailing)` in one rebuild of the
+     * budgets. The leading consumption changes only `leadingConsumed` and the trailing one only
+     * `trailingConsumed`, so applying both to each budget gives the budget the two calls give, in
+     * either order.
+     */
+    public function consumeLeadingAndTrailingByCluster(leading:SortedMap<Int, Float>, trailing:SortedMap<Int, Float>):PunctuationGeometryLedger {
+        final b = SortedMap.builder();
+        for (j in 0...budgets.size())
+            b.put(budgets.keyAt(j), budgets.valueAt(j));
+        for (i in 0...leading.size()) {
+            final k = leading.keyAt(i);
+            final q = budgets.get(k);
+            if (q != null) {
+                final trailingEntry = trailing.get(k);
+                final replacement = consumedBudget(q, leading.valueAt(i), trailingEntry == null ? 0 : trailingEntry);
+                if (replacement != null)
+                    b.put(k, replacement);
+            }
+        }
+        for (i in 0...trailing.size()) {
+            final k = trailing.keyAt(i);
+            final q = budgets.get(k);
+            if (q != null && leading.get(k) == null) {
+                final replacement = consumedBudget(q, 0, trailing.valueAt(i));
+                if (replacement != null)
+                    b.put(k, replacement);
+            }
+        }
+        return replace(this, null, null, null, null, null, b.build());
+    }
+
+    /** `q` after consuming `lead` and `trail`, or null when neither amount is positive. */
+    static function consumedBudget(q:GlueBudget, lead:Float, trail:Float):Null<GlueBudget> {
+        if (lead <= 0 && trail <= 0)
+            return null;
+        return new GlueBudget(q.leadingNatural, lead > 0 ? Math.min(q.leadingNatural, q.leadingConsumed + lead) : q.leadingConsumed, q.trailingNatural,
+            trail > 0 ? Math.min(q.trailingNatural, q.trailingConsumed + trail) : q.trailingConsumed);
+    }
+
     public function consumeTrailingByCluster(consumptionByCluster:SortedMap<Int, Float>):PunctuationGeometryLedger
         return consumeSide(consumptionByCluster, false);
 
@@ -306,61 +346,95 @@ import std.SortedMap;
     public function consumeLineEdgeGlue(lines:Array<LineCandidate>, ?forceLineEndHalfWidth:Null<Bool>):LineEdgeTrimResult {
         if (lines.length == 0 || budgets.size() == 0)
             return new LineEdgeTrimResult(this, []);
-        var lead:SortedMap<Int, Float> = emptyF();
-        var trail:SortedMap<Int, Float> = emptyF();
+        // Each edge records its consumption in two parallel arrays (cluster index, amount); a later
+        // write of the same index replaces the amount, as the former per-edge map rebuild did, and
+        // each side becomes one map after the last line.
+        final leadKeys = new Array<Int>();
+        final leadValues = new Array<Float>();
+        final trailKeys = new Array<Int>();
+        final trailValues = new Array<Float>();
         final ds:Array<LineEdgeTrimDecisionInfo> = [];
         final forceEnd = forceLineEndHalfWidth == null ? true : forceLineEndHalfWidth;
-        function consumeAtEdge(line:LineCandidate, index:Int, edge:String):Void {
-            final q = budgets.get(index);
-            if (q == null)
-                return;
-            final leadEntry = lead.get(index);
-            final alreadyLead:Float = leadEntry == null ? 0 : leadEntry;
-            final trailEntry = trail.get(index);
-            final alreadyTrail:Float = trailEntry == null ? 0 : trailEntry;
-            final lr = Math.max(0, q.leadingRemaining - alreadyLead), tr = Math.max(0, q.trailingRemaining - alreadyTrail);
-            final indexGeometry = geometries.get(index);
-            final paired = indexGeometry == null ? false : indexGeometry.anchor == PunctuationAnchor.Center;
-            final lp = paired ? Math.min(lr, tr) : (edge == "Start" ? lr : 0);
-            final tp = paired ? Math.min(lr, tr) : (edge == "End" ? tr : 0);
-            final total = lp + tp;
-            if (total <= 0)
-                return;
-            if (lp > 0)
-                lead = putF(lead, index, alreadyLead + lp);
-            if (tp > 0)
-                trail = putF(trail, index, alreadyTrail + tp);
-            var side = "";
-            var consumed = 0.0;
-            var natural = 0.0;
-            var reason = "";
-            if (paired) {
-                side = "both";
-                consumed = q.leadingConsumed + q.trailingConsumed;
-                natural = q.leadingNatural + q.trailingNatural;
-                reason = edge == "Start" ? "LineStartCenteredPunctuationPairedCompression" : "LineEndCenteredPunctuationPairedCompression";
-            } else if (edge == "Start") {
-                side = "leading";
-                consumed = q.leadingConsumed;
-                natural = q.leadingNatural;
-                reason = "LineStartHalfWidthPunctuation";
-            } else {
-                side = "trailing";
-                consumed = q.trailingConsumed;
-                natural = q.trailingNatural;
-                reason = "LineEndHalfWidthPunctuation";
-            }
-            ds.push(new LineEdgeTrimDecisionInfo(line.sourceRange, naturalClusters[index].range, side, total, consumed, natural, reason));
-        }
+        // The edges of each line run in an inner loop, not a local function: boring's Rust target
+        // passes an array captured by a local function to a mutating parameter as
+        // `&mut array.borrow()` (`renderCallArgs` in `RustExpr.hx`), which does not compile.
         for (line in lines) {
             if (line.clusterRange.start > line.clusterRange.end)
                 continue;
-            final end = line.clusterRange.end;
+            final edges:Array<String> = [];
             if (forceEnd)
-                consumeAtEdge(line, end, "End");
-            consumeAtEdge(line, line.clusterRange.start, "Start");
+                edges.push("End");
+            edges.push("Start");
+            for (edge in edges) {
+                final index = edge == "End" ? line.clusterRange.end : line.clusterRange.start;
+                final q = budgets.get(index);
+                if (q == null)
+                    continue;
+                final alreadyLead = amountAt(leadKeys, leadValues, index);
+                final alreadyTrail = amountAt(trailKeys, trailValues, index);
+                final lr = Math.max(0, q.leadingRemaining - alreadyLead), tr = Math.max(0, q.trailingRemaining - alreadyTrail);
+                final indexGeometry = geometries.get(index);
+                final paired = indexGeometry == null ? false : indexGeometry.anchor == PunctuationAnchor.Center;
+                final lp = paired ? Math.min(lr, tr) : (edge == "Start" ? lr : 0);
+                final tp = paired ? Math.min(lr, tr) : (edge == "End" ? tr : 0);
+                final total = lp + tp;
+                if (total <= 0)
+                    continue;
+                if (lp > 0)
+                    setAmount(leadKeys, leadValues, index, alreadyLead + lp);
+                if (tp > 0)
+                    setAmount(trailKeys, trailValues, index, alreadyTrail + tp);
+                var side = "";
+                var consumed = 0.0;
+                var natural = 0.0;
+                var reason = "";
+                if (paired) {
+                    side = "both";
+                    consumed = q.leadingConsumed + q.trailingConsumed;
+                    natural = q.leadingNatural + q.trailingNatural;
+                    reason = edge == "Start" ? "LineStartCenteredPunctuationPairedCompression" : "LineEndCenteredPunctuationPairedCompression";
+                } else if (edge == "Start") {
+                    side = "leading";
+                    consumed = q.leadingConsumed;
+                    natural = q.leadingNatural;
+                    reason = "LineStartHalfWidthPunctuation";
+                } else {
+                    side = "trailing";
+                    consumed = q.trailingConsumed;
+                    natural = q.trailingNatural;
+                    reason = "LineEndHalfWidthPunctuation";
+                }
+                ds.push(new LineEdgeTrimDecisionInfo(line.sourceRange, naturalClusters[index].range, side, total, consumed, natural, reason));
+            }
         }
-        return new LineEdgeTrimResult(consumeLeadingByCluster(lead).consumeTrailingByCluster(trail), ds);
+        return new LineEdgeTrimResult(consumeLeadingAndTrailingByCluster(amountMap(leadKeys, leadValues), amountMap(trailKeys, trailValues)), ds);
+    }
+
+    /** The amount recorded for `index` in the parallel arrays, or 0. */
+    static function amountAt(keys:Array<Int>, values:Array<Float>, index:Int):Float {
+        for (i in 0...keys.length)
+            if (keys[i] == index)
+                return values[i];
+        return 0;
+    }
+
+    /** Records `amount` for `index`, replacing an earlier amount of the same index. */
+    static function setAmount(keys:Array<Int>, values:Array<Float>, index:Int, amount:Float):Void {
+        for (i in 0...keys.length) {
+            if (keys[i] == index) {
+                values[i] = amount;
+                return;
+            }
+        }
+        keys.push(index);
+        values.push(amount);
+    }
+
+    static function amountMap(keys:Array<Int>, values:Array<Float>):SortedMap<Int, Float> {
+        final b = SortedMap.builder();
+        for (i in 0...keys.length)
+            b.put(keys[i], values[i]);
+        return b.build();
     }
 
     public function resolveAttachedInlinePunctuationBoundaries(inlineAttachments:Array<InlineAttachment>, punctuationAtoms:Array<PunctuationAtom>,

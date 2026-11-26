@@ -483,8 +483,7 @@ class LineAdjustmentStage {
             if (pushInLeading[i] != 0.0)
                 pushInLeadingMapBuilder.put(i, pushInLeading[i]);
         }
-        final pushInGeometry = prep.baseGeometry.consumeTrailingByCluster(pushInTrailingMapBuilder.build())
-            .consumeLeadingByCluster(pushInLeadingMapBuilder.build());
+        final pushInGeometry = prep.baseGeometry.consumeLeadingAndTrailingByCluster(pushInLeadingMapBuilder.build(), pushInTrailingMapBuilder.build());
 
         final edgeTrimResult = pushInGeometry.consumeLineEdgeGlue(plan.lineSolution.lines,
             prep.adjustmentStyle.lineEndPunctuation == LineEndPunctuationStyle.ForceHalfWidth);
