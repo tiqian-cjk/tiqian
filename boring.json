@@ -335,7 +335,7 @@
         "--macro", "rustcompiler.Compiler.use()",
         "-D", "runtime-import=crate::runtime",
         "-D", "runtime-emit=runtime",
-        "-D", "package-name=tiqian-protocol-gen",
+        "-D", "package-name=tiqian-protocol",
         "-D", "package-license=MPL-2.0",
         "org.tiqian.protocol.WireValue",
         "org.tiqian.protocol.Canonical",
@@ -528,7 +528,7 @@
         "--macro", "rustcompiler.Compiler.use()",
         "-D", "runtime-import=crate::runtime",
         "-D", "runtime-emit=runtime",
-        "-D", "package-name=tiqian-engine-gen",
+        "-D", "package-name=tiqian-engine",
         "-D", "package-license=MPL-2.0"
       ],
       "package": { "name": "tiqian-engine", "version": "0.1.0", "license": "MPL-2.0" },
@@ -542,8 +542,8 @@
       "dependsOn": ["engine-rust", "protocol-rust"],
       "dependencyMode": "path",
       "dependencyPaths": {
-        "engine-rust": "../../../../platforms/web/server/precompute/engine-gen",
-        "protocol-rust": "../../../../platforms/web/server/precompute/protocol-gen"
+        "engine-rust": "../../../../engine-haxe/out/engine-rust/gen",
+        "protocol-rust": "../../../../engine-haxe/out/protocol-rust/gen"
       },
       "compare": false,
       "haxeArgs": [

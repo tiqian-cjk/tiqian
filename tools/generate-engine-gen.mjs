@@ -39,7 +39,7 @@ if (target === "rust") {
   if (!existsSync(generated)) {
     throw new Error(`generate-engine-gen: expected driver output at ${generated}`);
   }
-  const rustGen = join(repoRoot, "platforms/web/server/precompute/engine-gen");
+  const rustGen = generated;
   rmSync(rustGen, { recursive: true, force: true });
   mkdirSync(rustGen, { recursive: true });
   cpSync(generated, rustGen, { recursive: true });
@@ -58,7 +58,7 @@ if (target === "rust") {
   if (!existsSync(protocolGenerated)) {
     throw new Error(`generate-engine-gen: expected driver output at ${protocolGenerated}`);
   }
-  const protocolGen = join(repoRoot, "platforms/web/server/precompute/protocol-gen");
+  const protocolGen = protocolGenerated;
   rmSync(protocolGen, { recursive: true, force: true });
   mkdirSync(protocolGen, { recursive: true });
   cpSync(protocolGenerated, protocolGen, { recursive: true });
