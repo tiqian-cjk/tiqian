@@ -318,7 +318,7 @@ class PreparedArtifact {
             nodes: [],
             activeSemantics: [],
             activeContainers: [],
-            cjkStrong: cjkStrong,
+            cjkStrong: cjkStrong.copy(),
             liveSource: liveSource
         };
     }
