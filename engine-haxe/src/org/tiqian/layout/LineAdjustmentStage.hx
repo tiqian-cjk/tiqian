@@ -82,52 +82,6 @@ class LineAdjustmentStage {
         return hyphenOffsets.has(naturalClusters[nextFirst].range.start) ? hyphenAdvance : 0.0;
     }
 
-    /**
-     * Groups the renderable clusters into glyph runs. A group lists cluster indices; `clusters` and
-     * `openTypeFeatures` are both indexed by natural cluster index.
-     */
-    private static function renderableGlyphRunClusters(clusters:Array<Cluster>, openTypeFeatures:Array<Null<Array<String>>>):Array<Array<Int>> {
-        final renderable = new Array<Int>();
-        for (i in 0...clusters.length) {
-            final c = clusters[i];
-            if (c.displayText.length > 0 && !ParagraphShapingStage.isInlineObjectCluster(c)) {
-                renderable.push(i);
-            }
-        }
-        if (renderable.length == 0)
-            return [];
-
-        final groups = new Array<Array<Int>>();
-        var currentGroup = [renderable[0]];
-        for (r in 1...renderable.length) {
-            final prevIndex = currentGroup[currentGroup.length - 1];
-            final currIndex = renderable[r];
-            final prev = clusters[prevIndex];
-            final curr = clusters[currIndex];
-            final prevFeatEntry = openTypeFeatures[prevIndex];
-            final prevFeat:Array<String> = prevFeatEntry == null ? [] : prevFeatEntry;
-            final currFeatEntry = openTypeFeatures[currIndex];
-            final currFeat:Array<String> = currFeatEntry == null ? [] : currFeatEntry;
-            var sameFeatures = prevFeat.length == currFeat.length;
-            if (sameFeatures) {
-                for (f in 0...prevFeat.length) {
-                    if (prevFeat[f] != currFeat[f]) {
-                        sameFeatures = false;
-                        break;
-                    }
-                }
-            }
-            if (prev.fontKey == curr.fontKey && prev.range.end == curr.range.start && sameFeatures) {
-                currentGroup.push(currIndex);
-            } else {
-                groups.push(currentGroup);
-                currentGroup = [currIndex];
-            }
-        }
-        groups.push(currentGroup);
-        return groups;
-    }
-
     private static function centerDashInk(glyphs:Array<Glyph>, cluster:Cluster, atomClass:Null<PunctuationClass>):Array<Glyph> {
         final isDash = atomClass == null ? false : atomClass == PunctuationClass.Dash;
         if (!isDash) {
@@ -764,7 +718,7 @@ class LineAdjustmentStage {
         }
         final geometryDecisions = finalGeometry.toDecisionInfo();
 
-        final runGroups = renderableGlyphRunClusters(finalClusters, lookups.openTypeFeatures);
+        final runGroups = lookups.glyphRunClusterIndices;
         final glyphRuns = new Array<GlyphRun>();
         for (runClusterIndices in runGroups) {
             final firstC = finalClusters[runClusterIndices[0]];

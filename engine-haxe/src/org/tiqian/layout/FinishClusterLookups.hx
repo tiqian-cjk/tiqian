@@ -29,6 +29,11 @@ import std.SortedMap;
  * glyphs and the cluster range, which resolved cluster `i` shares with natural cluster `i`. The
  * entry is null when the cluster has no shaped glyphs or their advance is not positive; that
  * branch reads the resolved advance, so `finishParagraphLayout` maps those glyphs per layout.
+ *
+ * `glyphRunClusterIndices` groups the renderable clusters into glyph runs. The grouping reads each
+ * cluster's display text, font key and range and its OpenType features; resolved clusters keep
+ * the display text, font key and range of their natural cluster, so the groups computed from the
+ * natural clusters are the groups of every layout.
  */
 class FinishClusterLookups {
     public final shapedGlyphs:Array<Null<Array<Glyph>>>;
@@ -36,15 +41,17 @@ class FinishClusterLookups {
     public final metricDecisions:Array<Null<ClusterMetricDecision>>;
     public final punctuationClasses:Array<Null<PunctuationClass>>;
     public final mappedShapedGlyphs:Array<Null<Array<Glyph>>>;
+    public final glyphRunClusterIndices:Array<Array<Int>>;
 
     public function new(shapedGlyphs:Array<Null<Array<Glyph>>>, openTypeFeatures:Array<Null<Array<String>>>,
             metricDecisions:Array<Null<ClusterMetricDecision>>, punctuationClasses:Array<Null<PunctuationClass>>,
-            mappedShapedGlyphs:Array<Null<Array<Glyph>>>) {
+            mappedShapedGlyphs:Array<Null<Array<Glyph>>>, glyphRunClusterIndices:Array<Array<Int>>) {
         this.shapedGlyphs = shapedGlyphs;
         this.openTypeFeatures = openTypeFeatures;
         this.metricDecisions = metricDecisions;
         this.punctuationClasses = punctuationClasses;
         this.mappedShapedGlyphs = mappedShapedGlyphs;
+        this.glyphRunClusterIndices = glyphRunClusterIndices;
     }
 
     public static function build(prep:ParagraphLayoutPrep, metricDecisionByRange:SortedMap<TextRange, ClusterMetricDecision>):FinishClusterLookups {
@@ -63,7 +70,8 @@ class FinishClusterLookups {
             metricDecisions.push(metricDecisionByRange.get(range));
             punctuationClasses.push(prep.atomClassByRange.get(range));
         }
-        return new FinishClusterLookups(shapedGlyphs, openTypeFeatures, metricDecisions, punctuationClasses, mappedShapedGlyphs);
+        return new FinishClusterLookups(shapedGlyphs, openTypeFeatures, metricDecisions, punctuationClasses, mappedShapedGlyphs,
+            renderableGlyphRunClusters(prep.naturalClusters, openTypeFeatures));
     }
 
     /** `mapToClusterRange(glyphs, cluster)` when the glyphs' total advance is positive, else null. */
@@ -72,5 +80,51 @@ class FinishClusterLookups {
         for (i in 0...glyphs.length)
             terms.push(glyphs[i].advance);
         return AccurateSum.of(terms) > 0.0 ? ParagraphShapingStage.mapToClusterRange(glyphs, cluster) : null;
+    }
+
+    /**
+     * Groups the renderable clusters into glyph runs. A group lists cluster indices; `clusters` and
+     * `openTypeFeatures` are both indexed by natural cluster index.
+     */
+    static function renderableGlyphRunClusters(clusters:Array<Cluster>, openTypeFeatures:Array<Null<Array<String>>>):Array<Array<Int>> {
+        final renderable = new Array<Int>();
+        for (i in 0...clusters.length) {
+            final c = clusters[i];
+            if (c.displayText.length > 0 && !ParagraphShapingStage.isInlineObjectCluster(c)) {
+                renderable.push(i);
+            }
+        }
+        if (renderable.length == 0)
+            return [];
+
+        final groups = new Array<Array<Int>>();
+        var currentGroup = [renderable[0]];
+        for (r in 1...renderable.length) {
+            final prevIndex = currentGroup[currentGroup.length - 1];
+            final currIndex = renderable[r];
+            final prev = clusters[prevIndex];
+            final curr = clusters[currIndex];
+            final prevFeatEntry = openTypeFeatures[prevIndex];
+            final prevFeat:Array<String> = prevFeatEntry == null ? [] : prevFeatEntry;
+            final currFeatEntry = openTypeFeatures[currIndex];
+            final currFeat:Array<String> = currFeatEntry == null ? [] : currFeatEntry;
+            var sameFeatures = prevFeat.length == currFeat.length;
+            if (sameFeatures) {
+                for (f in 0...prevFeat.length) {
+                    if (prevFeat[f] != currFeat[f]) {
+                        sameFeatures = false;
+                        break;
+                    }
+                }
+            }
+            if (prev.fontKey == curr.fontKey && prev.range.end == curr.range.start && sameFeatures) {
+                currentGroup.push(currIndex);
+            } else {
+                groups.push(currentGroup);
+                currentGroup = [currIndex];
+            }
+        }
+        groups.push(currentGroup);
+        return groups;
     }
 }
