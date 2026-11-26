@@ -24,8 +24,9 @@ import std.SortedMap;
  * text, styles, line-break spans, decorations, ruby spans, font decisions, the base shaping
  * stage's clusters, roles, quote pairs and substitution rollbacks) plus engine components (the
  * font-metrics resolver and normalizer, and the justifier's progressive technical stretch
- * capacity). None depends on the measure or on the paragraph style; `kinsokuDependent` and
- * `planningKinsokuPart` also depend on the measure-adaptive kinsoku level and are keyed by it.
+ * capacity). None depends on the measure or on the paragraph style; `kinsokuDependent`,
+ * `planningKinsokuPart` and `finishClusterLookups` also depend on the measure-adaptive kinsoku
+ * level and are keyed by it.
  *
  * Each `WidthIndependentParagraphAnnotation` owns one memo that lives as long as the annotation.
  * A prep built from a dynamic shaping stage, which depends on the measure, receives a new memo of
@@ -64,6 +65,9 @@ class WidthIndependentLayoutMemo {
     /** The debug record of each punctuation atom of `shapedBase` (`LayoutDebugAssembly.buildLayoutDebugInfo`). */
     public final punctuationDecisionInfos:LayoutMemoSlot<Array<PunctuationDecisionInfo>>;
 
+    /** The per-cluster lookups of `LineAdjustmentStage.finishParagraphLayout`, keyed by `kinsokuLevelMemoKey`. */
+    public final finishClusterLookups:IntKeyedLayoutMemoSlot<FinishClusterLookups>;
+
     public function new() {
         this.shapedBase = new LayoutMemoSlot<ShapedParagraphBase>();
         this.kinsokuDependent = new IntKeyedLayoutMemoSlot<KinsokuDependentPrep>();
@@ -75,5 +79,6 @@ class WidthIndependentLayoutMemo {
         this.fontDecisionInfos = new LayoutMemoSlot<Array<FontDecisionInfo>>();
         this.metricDecisionInfos = new LayoutMemoSlot<Array<MetricDecisionInfo>>();
         this.punctuationDecisionInfos = new LayoutMemoSlot<Array<PunctuationDecisionInfo>>();
+        this.finishClusterLookups = new IntKeyedLayoutMemoSlot<FinishClusterLookups>();
     }
 }
