@@ -409,7 +409,7 @@ function allSpaces(s:String):Bool {
         return false;
     var i = 0;
     while (i < s.length) {
-        if (s.charAt(i) != " ")
+        if (s.charCodeAt(i) != 32)
             return false;
         i++;
     }

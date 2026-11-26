@@ -313,7 +313,7 @@ class PunctuationGeometryStage {
             return false;
         var i = 0;
         while (i < c.text.length) {
-            if (c.text.charAt(i) != " ")
+            if (c.text.charCodeAt(i) != 32)
                 return false;
             i++;
         }
