@@ -23,22 +23,6 @@
   },
   "units": [
     {
-      "id": "npm-ffi",
-      "ecosystem": "npm",
-      "workflow": ".github/workflows/publish-ffi.yml",
-      "trigger": "release",
-      "packages": [
-        "@tiqian/ffi"
-      ],
-      "packageSource": {
-        "kind": "npm",
-        "files": [
-          "platforms/web/client/engine-runtime/package.json"
-        ]
-      },
-      "dependsOn": []
-    },
-    {
       "id": "npm-core",
       "ecosystem": "npm",
       "workflow": ".github/workflows/publish-core.yml",
@@ -52,9 +36,7 @@
           "platforms/web/client/core/package.json"
         ]
       },
-      "dependsOn": [
-        "npm-ffi"
-      ]
+      "dependsOn": []
     },
     {
       "id": "npm-web-component",
