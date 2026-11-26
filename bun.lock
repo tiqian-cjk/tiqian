@@ -26,21 +26,21 @@
     },
     "engine-haxe/out/protocol-ts/gen": {
       "name": "@tiqian/protocol",
-      "version": "0.1.0-alpha.15",
+      "version": "0.1.0",
       "devDependencies": {
         "typescript": "^5.9.0",
       },
     },
     "engine-haxe/out/shared-ts/gen": {
       "name": "@tiqian/shared",
-      "version": "0.1.0-alpha.15",
+      "version": "0.1.0",
       "devDependencies": {
         "typescript": "^5.9.0",
       },
     },
     "engine-haxe/out/ts/gen": {
       "name": "@tiqian/engine",
-      "version": "0.1.0-alpha.15",
+      "version": "0.1.0",
       "devDependencies": {
         "typescript": "^5.9.0",
       },
