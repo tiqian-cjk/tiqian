@@ -13,7 +13,7 @@
 | --- | --- | --- | --- | --- |
 | `publish.yml` | `workflow_dispatch`，手填 `version` 与 `namespace`（第 3-14 行） | Maven Central 暂存区 | 8 个 Maven 模块 | 输入参数 `version`，写入环境变量 `TIQIAN_VERSION`（第 27 行） |
 | `publish-snapshots.yml` | `workflow_dispatch`，手填 `version`（第 3-10 行） | Maven Central 快照仓库 | 8 个 Maven 模块 | 输入参数 `version`，必须带 `-SNAPSHOT` 后缀（第 34-37 行） |
-| `publish-ffi.yml` | 推送标签 `@tiqian/ffi@*`（第 3-6 行） | npmjs.com | 1 个 npm 包 | `platforms/web/client/engine-runtime/package.json` 的 `version`（第 54 行） |
+| ~~`publish-ffi.yml`~~ | 已删除（ADR 0064）；`@tiqian/engine` 改由 bundle 车道发布 | — | — | — |
 | `publish-precompute.yml` | 推送标签 `@tiqian/precompute@*`（第 8-11 行） | npmjs.com | 5 个 npm 包 | `platforms/web/server/core/package.json` 的 `version`（第 43 行） |
 | `publish-web-component.yml` | 推送标签 `@tiqian/web-component@*`（第 3-6 行） | npmjs.com | 1 个 npm 包 | `platforms/web/client/web-component/package.json` 的 `version`（第 54 行） |
 | `release-registry.yml` | 推送标签 `v*.*.*`（第 2-4 行） | 自建 registry 仓库 `tiqian-cjk/registry`、R2 存储、Pages 站点 | 13 个 bundle，归并为 2 个包 | 标签名去掉 `v` 前缀（第 56 行） |
@@ -33,7 +33,7 @@
 - `v*.*.*` 标签：`release-registry.yml:3-4`。
 - `@tiqian/<包名>@*` 标签：`publish-ffi.yml:4-6`、`publish-precompute.yml:9-11`、`publish-web-component.yml:4-6`。
 
-七条通道之间没有任何调用关系。推送 `v1.2.3` 只触发 registry 通道；推送 `@tiqian/ffi@1.2.3` 只触发 ffi 的 npm 发布。两者不会同时发生。
+通道之间没有调用关系。`@tiqian/ffi@*` 标签通道已随 ADR 0064 删除，npm 发布统一由 `v*.*.*` 入口驱动。
 
 ### 2.2 包集合有四套，互不包含
 

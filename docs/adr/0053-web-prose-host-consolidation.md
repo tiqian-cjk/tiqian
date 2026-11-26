@@ -94,6 +94,9 @@ bake 与 fallback 的差别收敛为度量表的填写方不同：构建期 Harf
 
 ### `SingleEngineFace`：@tiqian/ffi 是唯一引擎出口面
 
+> 状态（2026-11-26）：本节由 [ADR 0064](0064-retire-ffi-engine-face.md) 取代。`@tiqian/ffi` 已删除，
+> 引擎出口面改为工作区成员 `@tiqian/engine`，core 直接调用其类型化接口。
+
 所有 JS 宿主（浏览器主线程、module Worker、Node 构建期兼容面）只经 ffi/js 调引擎。ffi/js 新增浏览器度量后端模式：TS 采集器提供基于 canvas 的度量回调，无快照路径同样经该接口产出 plan。ffi/js 改为字节进出面：传输格式解析、校验与 `LayoutInput` 组装移入引擎入口，`PrecomputeWire` 的 parse 函数降为编解码器。ffi/js 改为独立 npm 包单独发包，
 包产物导出类型定义与 source map：类型定义给宿主编译期检查，source map 把
 宿主侧运行时栈映回源码。
