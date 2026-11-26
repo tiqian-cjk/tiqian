@@ -8,7 +8,7 @@
 use crate::js_compat::{trunc_sat_i32, trunc_sat_i64};
 use crate::json::{parse_json, Json};
 use tiqian::NamedError;
-use tiqian_protocol_gen::org::tiqian::protocol::revision::Revision as RevisionFamily;
+use tiqian_protocol::org::tiqian::protocol::revision::Revision as RevisionFamily;
 
 /// `schema` of every plan this revision understands.
 pub const PLAN_SCHEMA: i64 = 1;

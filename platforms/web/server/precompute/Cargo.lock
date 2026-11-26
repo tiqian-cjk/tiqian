@@ -676,11 +676,11 @@ dependencies = [
 name = "tiqian"
 version = "0.1.0"
 dependencies = [
- "tiqian-engine-gen",
+ "tiqian-engine",
 ]
 
 [[package]]
-name = "tiqian-engine-gen"
+name = "tiqian-engine"
 version = "0.1.0"
 
 [[package]]
@@ -693,8 +693,8 @@ dependencies = [
  "sha2",
  "skrifa",
  "tiqian",
- "tiqian-engine-gen",
- "tiqian-protocol-gen",
+ "tiqian-engine",
+ "tiqian-protocol",
  "tiqian-shared",
  "url",
  "wuff",
@@ -709,15 +709,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "tiqian-protocol-gen"
+name = "tiqian-protocol"
 version = "0.1.0"
 
 [[package]]
 name = "tiqian-shared"
 version = "0.1.0"
 dependencies = [
- "tiqian-engine-gen",
- "tiqian-protocol-gen",
+ "tiqian-engine",
+ "tiqian-protocol",
 ]
 
 [[package]]

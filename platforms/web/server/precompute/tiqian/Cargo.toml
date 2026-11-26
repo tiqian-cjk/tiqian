@@ -9,4 +9,4 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-tiqian-engine-gen = { path = "../engine-gen" }
+tiqian-engine = { workspace = true }

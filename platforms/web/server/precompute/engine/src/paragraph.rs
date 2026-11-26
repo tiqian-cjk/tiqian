@@ -3,7 +3,7 @@
 //!
 //! The typed request is the Rust port of `PrecomputeWire.kt`. Domain
 //! validation is single-sourced in the generated protocol model
-//! (tiqian_protocol_gen ParagraphRequestChecks, Stage1-P5): this module
+//! (tiqian_protocol ParagraphRequestChecks, Stage1-P5): this module
 //! adapts its lane request into the generated one and maps the generated
 //! issue variants to NamedError through the generated Display, whose
 //! strings are the published issue names. The engine consumes the
@@ -13,12 +13,12 @@
 //! the f64 values the caller passed.
 
 use tiqian::NamedError;
-use tiqian_protocol_gen::org::tiqian::protocol::inline_box_input::InlineBoxInput as GenInlineBoxInput;
-use tiqian_protocol_gen::org::tiqian::protocol::line_break_span_input::LineBreakSpanInput as GenLineBreakSpanInput;
-use tiqian_protocol_gen::org::tiqian::protocol::paragraph_request::ParagraphRequest as GeneratedRequest;
-use tiqian_protocol_gen::org::tiqian::protocol::paragraph_request_checks::ParagraphRequestChecks;
-use tiqian_protocol_gen::org::tiqian::protocol::text_span_input::TextSpanInput as GenTextSpanInput;
-use tiqian_protocol_gen::runtime::u_string::UString;
+use tiqian_protocol::org::tiqian::protocol::inline_box_input::InlineBoxInput as GenInlineBoxInput;
+use tiqian_protocol::org::tiqian::protocol::line_break_span_input::LineBreakSpanInput as GenLineBreakSpanInput;
+use tiqian_protocol::org::tiqian::protocol::paragraph_request::ParagraphRequest as GeneratedRequest;
+use tiqian_protocol::org::tiqian::protocol::paragraph_request_checks::ParagraphRequestChecks;
+use tiqian_protocol::org::tiqian::protocol::text_span_input::TextSpanInput as GenTextSpanInput;
+use tiqian_protocol::runtime::u_string::UString;
 
 // The request lane keeps the code types of the former packed engine ABI;
 // callers building a ParagraphRequest take the codes from here. The

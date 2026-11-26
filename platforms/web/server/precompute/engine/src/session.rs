@@ -19,7 +19,7 @@ use crate::source_boundaries::{
     source_boundaries_for_selected_face, BoundaryStyle, BoundaryTextSpan,
 };
 
-use tiqian_protocol_gen::org::tiqian::protocol::revision::Revision as RevisionFamily;
+use tiqian_protocol::org::tiqian::protocol::revision::Revision as RevisionFamily;
 
 /// The shared shaping backend revision (single source: the generated
 /// `Revision` crate; see crate::schema for the full family). The generated

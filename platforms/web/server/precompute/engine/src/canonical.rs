@@ -16,7 +16,7 @@
 use sha2::{Digest, Sha256};
 
 use tiqian::NamedError;
-use tiqian_protocol_gen::runtime::u_string::UString;
+use tiqian_protocol::runtime::u_string::UString;
 
 use crate::json::{member, Json};
 use crate::snapshot_source::js_number_value;
@@ -48,9 +48,9 @@ const BOX_OUTER_SPACING: u8 = 0x04;
 /// Mirrors the parsed wire JSON into the generated wire value. Object field
 /// order is the parser's document order, the identity order of attribute
 /// pairs.
-fn json_to_wire(value: &Json) -> tiqian_protocol_gen::org::tiqian::protocol::wire_value::WireValue {
-    use tiqian_protocol_gen::org::tiqian::protocol::wire_field::WireField;
-    use tiqian_protocol_gen::org::tiqian::protocol::wire_value::WireValue;
+fn json_to_wire(value: &Json) -> tiqian_protocol::org::tiqian::protocol::wire_value::WireValue {
+    use tiqian_protocol::org::tiqian::protocol::wire_field::WireField;
+    use tiqian_protocol::org::tiqian::protocol::wire_value::WireValue;
     match value {
         Json::Null => WireValue::WNull,
         Json::Bool(inner) => WireValue::WBool { value: *inner },
@@ -79,8 +79,8 @@ fn json_to_wire(value: &Json) -> tiqian_protocol_gen::org::tiqian::protocol::wir
 /// (org.tiqian.protocol.Canonical); this function adapts the parsed JSON and
 /// raises the named issue the wire readers report.
 pub fn encode_input(value: &Json, kind: u8) -> Result<Vec<u8>, NamedError> {
-    use tiqian_protocol_gen::org::tiqian::protocol::canonical::Canonical;
-    use tiqian_protocol_gen::org::tiqian::protocol::encode_result::EncodeResult;
+    use tiqian_protocol::org::tiqian::protocol::canonical::Canonical;
+    use tiqian_protocol::org::tiqian::protocol::encode_result::EncodeResult;
     match Canonical::canonical_encode(json_to_wire(value), kind as u32) {
         EncodeResult::COk { mut bytes } => {
             crate::numeric::append_canonical(value, &mut bytes)?;

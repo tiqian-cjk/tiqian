@@ -1,7 +1,7 @@
 //! Direct Rust consumption of the generated Tiqian layout engine (ADR 0050,
 //! Stage1 cutover to the boring engine-rust target).
 //!
-//! The engine lives in the generated crate `tiqian-engine-gen` (bundle
+//! The engine lives in the generated crate `tiqian-engine` (bundle
 //! `engine-rust`, sources under engine-haxe/out/engine-rust/gen).
 //! The `engine` module adapts it into this crate's error surface and keeps
 //! the dependency-injection construction of the engine. The former C ABI

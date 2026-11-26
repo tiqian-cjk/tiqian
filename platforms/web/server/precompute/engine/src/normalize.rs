@@ -4,7 +4,7 @@
 //! paragraph request, the cache key and the snapshot artifact hashes.
 
 use tiqian::NamedError;
-use tiqian_protocol_gen::org::tiqian::protocol::paragraph_request_exception::NamedError as ProtocolNamedError;
+use tiqian_protocol::org::tiqian::protocol::paragraph_request_exception::NamedError as ProtocolNamedError;
 
 use crate::js_compat::{trunc_sat_i32, trunc_sat_i64};
 use crate::json::{member, Json};

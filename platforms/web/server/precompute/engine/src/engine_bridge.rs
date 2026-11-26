@@ -21,35 +21,35 @@ use std::rc::Rc;
 
 use tiqian::engine::{Engine, EngineComponents};
 use tiqian::NamedError;
-use tiqian_engine_gen::org::tiqian::core::cluster::Cluster;
-use tiqian_engine_gen::org::tiqian::core::glyph::Glyph;
-use tiqian_engine_gen::org::tiqian::core::glyph_run::GlyphRun;
-use tiqian_engine_gen::org::tiqian::core::ic::Ic;
-use tiqian_engine_gen::org::tiqian::core::illegal_state_exception::IllegalStateException;
-use tiqian_engine_gen::org::tiqian::core::inline_box_outer_spacing::InlineBoxOuterSpacing;
-use tiqian_engine_gen::org::tiqian::core::inline_box_span::InlineBoxSpan;
-use tiqian_engine_gen::org::tiqian::core::layout_constraints::LayoutConstraints;
-use tiqian_engine_gen::org::tiqian::core::layout_input::LayoutInput;
-use tiqian_engine_gen::org::tiqian::core::line_break_policy::LineBreakPolicy;
-use tiqian_engine_gen::org::tiqian::core::line_break_span::LineBreakSpan;
-use tiqian_engine_gen::org::tiqian::core::line_length_grid::LineLengthGrid;
-use tiqian_engine_gen::org::tiqian::core::paragraph_style::ParagraphStyle;
-use tiqian_engine_gen::org::tiqian::core::rect::Rect;
-use tiqian_engine_gen::org::tiqian::core::shaping_decision_info::ShapingDecisionInfo;
-use tiqian_engine_gen::org::tiqian::core::text_range::TextRange;
-use tiqian_engine_gen::org::tiqian::core::text_span::TextSpan;
-use tiqian_engine_gen::org::tiqian::core::text_style::TextStyle;
-use tiqian_engine_gen::org::tiqian::core::tiqian_text_content::TiqianTextContent;
-use tiqian_engine_gen::org::tiqian::font::font_metric_source::FontMetricSource;
-use tiqian_engine_gen::org::tiqian::font::font_metrics::{
+use tiqian_engine::org::tiqian::core::cluster::Cluster;
+use tiqian_engine::org::tiqian::core::glyph::Glyph;
+use tiqian_engine::org::tiqian::core::glyph_run::GlyphRun;
+use tiqian_engine::org::tiqian::core::ic::Ic;
+use tiqian_engine::org::tiqian::core::illegal_state_exception::IllegalStateException;
+use tiqian_engine::org::tiqian::core::inline_box_outer_spacing::InlineBoxOuterSpacing;
+use tiqian_engine::org::tiqian::core::inline_box_span::InlineBoxSpan;
+use tiqian_engine::org::tiqian::core::layout_constraints::LayoutConstraints;
+use tiqian_engine::org::tiqian::core::layout_input::LayoutInput;
+use tiqian_engine::org::tiqian::core::line_break_policy::LineBreakPolicy;
+use tiqian_engine::org::tiqian::core::line_break_span::LineBreakSpan;
+use tiqian_engine::org::tiqian::core::line_length_grid::LineLengthGrid;
+use tiqian_engine::org::tiqian::core::paragraph_style::ParagraphStyle;
+use tiqian_engine::org::tiqian::core::rect::Rect;
+use tiqian_engine::org::tiqian::core::shaping_decision_info::ShapingDecisionInfo;
+use tiqian_engine::org::tiqian::core::text_range::TextRange;
+use tiqian_engine::org::tiqian::core::text_span::TextSpan;
+use tiqian_engine::org::tiqian::core::text_style::TextStyle;
+use tiqian_engine::org::tiqian::core::tiqian_text_content::TiqianTextContent;
+use tiqian_engine::org::tiqian::font::font_metric_source::FontMetricSource;
+use tiqian_engine::org::tiqian::font::font_metrics::{
     FontMetricsRequest, FontMetricsResolver, StubFontMetricsResolver,
 };
-use tiqian_engine_gen::org::tiqian::font::raw_font_metrics::RawFontMetrics;
-use tiqian_engine_gen::org::tiqian::layout::prepared_paragraph::PreparedParagraphFns;
-use tiqian_engine_gen::org::tiqian::shaping::text_shaper::{
+use tiqian_engine::org::tiqian::font::raw_font_metrics::RawFontMetrics;
+use tiqian_engine::org::tiqian::layout::prepared_paragraph::PreparedParagraphFns;
+use tiqian_engine::org::tiqian::shaping::text_shaper::{
     ShapingInput, ShapingResult, ShapingSource, TextShaper, TextShaperShapeFault,
 };
-use tiqian_engine_gen::runtime::u_string::UString;
+use tiqian_engine::runtime::u_string::UString;
 
 use crate::paragraph::{InlineBoxOuterSpacingCode, ParagraphRequest};
 use crate::session::{CaptureEvidence, FontSession, MetricsInput, ShapeInput};

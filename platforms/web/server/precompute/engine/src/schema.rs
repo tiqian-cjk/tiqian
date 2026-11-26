@@ -4,7 +4,7 @@
 //!
 //! The constants are single-sourced in the generated crate (boring cutover
 //! Stage1-P4): every declaration below re-exports the associated constant
-//! of the `Revision` type of `tiqian-protocol-gen`, so the Haxe source
+//! of the `Revision` type of `tiqian-protocol`, so the Haxe source
 //! (engine-haxe/src/org/tiqian/protocol/Revision.hx) is the one place the
 //! family is written.
 
@@ -14,7 +14,7 @@ use crate::js_compat::{cmp_utf16, js_number_string};
 use crate::json::{json_string, Json};
 // The single-sourced revision family (generated crate); the constants below
 // and the C ABI mirrors re-export its associated constants.
-pub use tiqian_protocol_gen::org::tiqian::protocol::revision::Revision as RevisionFamily;
+pub use tiqian_protocol::org::tiqian::protocol::revision::Revision as RevisionFamily;
 
 /// `SNAPSHOT_SCHEMA` of every snapshot this revision understands.
 pub const SNAPSHOT_SCHEMA: i64 = RevisionFamily::REVISION_SNAPSHOT_SCHEMA as i64;

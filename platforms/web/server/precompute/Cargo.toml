@@ -6,7 +6,11 @@
 [workspace]
 resolver = "2"
 members = ["engine", "binding", "tiqian"]
-exclude = ["engine-gen", "protocol-gen"]
+
+[workspace.dependencies]
+tiqian-engine = { path = "../../../../engine-haxe/out/engine-rust/gen" }
+tiqian-protocol = { path = "../../../../engine-haxe/out/protocol-rust/gen" }
+tiqian-shared = { path = "../../../../engine-haxe/out/shared-rust/gen" }
 
 [workspace.package]
 version = "0.1.0"

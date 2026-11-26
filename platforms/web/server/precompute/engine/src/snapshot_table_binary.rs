@@ -1,7 +1,7 @@
 // The snapshot-table binary form of ADR 0052 BundleLayering. The byte
 // contract -- magic, header counts, region order, delta coding, the metric
 // sort, pool dedup and the f64 bit patterns -- is single-sourced in Haxe
-// and arrives generated in the tiqian-protocol-gen crate; this file is
+// and arrives generated in the tiqian-protocol crate; this file is
 // only the platform shell around it: the Json lowering of SnapshotTables
 // into the generated input shape, the canonical-JSON text serialization the
 // shell owns per the Stage1-P2 boundary ruling, and the materialization of
@@ -11,12 +11,12 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use tiqian::NamedError;
-use tiqian_protocol_gen::org::tiqian::protocol::snapshot_table_binary::SnapshotTableBinary;
-use tiqian_protocol_gen::org::tiqian::protocol::table_data::TableData;
-use tiqian_protocol_gen::org::tiqian::protocol::table_input::TableInput;
-use tiqian_protocol_gen::org::tiqian::protocol::table_metric_row::TableMetricRow;
-use tiqian_protocol_gen::org::tiqian::protocol::table_probe::TableProbe;
-use tiqian_protocol_gen::runtime::u_string::UString;
+use tiqian_protocol::org::tiqian::protocol::snapshot_table_binary::SnapshotTableBinary;
+use tiqian_protocol::org::tiqian::protocol::table_data::TableData;
+use tiqian_protocol::org::tiqian::protocol::table_input::TableInput;
+use tiqian_protocol::org::tiqian::protocol::table_metric_row::TableMetricRow;
+use tiqian_protocol::org::tiqian::protocol::table_probe::TableProbe;
+use tiqian_protocol::runtime::u_string::UString;
 
 use crate::js_compat::trunc_sat_usize;
 use crate::json::{parse_json, Json};

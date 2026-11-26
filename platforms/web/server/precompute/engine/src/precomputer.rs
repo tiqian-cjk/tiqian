@@ -6,7 +6,7 @@
 //! face specs.
 
 use tiqian::NamedError;
-use tiqian_protocol_gen::org::tiqian::protocol::paragraph_request_exception::NamedError as ProtocolNamedError;
+use tiqian_protocol::org::tiqian::protocol::paragraph_request_exception::NamedError as ProtocolNamedError;
 
 use crate::cache::{CacheAdapter, LayeredCacheStore, NoCache, WriteBudgetTier};
 use crate::emit::evidence_json;

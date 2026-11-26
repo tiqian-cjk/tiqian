@@ -1,5 +1,5 @@
 //! Engine entry points over the generated Rust engine (boring engine-rust
-//! target, crate `tiqian-engine-gen`).
+//! target, crate `tiqian-engine`).
 //!
 //! The generated `ExplainableStubParagraphLayoutEngine` keeps the
 //! dependency-injection surface: every pipeline component arrives as a trait
@@ -13,7 +13,7 @@
 //! exported by the npm facade at
 //! platforms/web/client/engine-runtime/src/facade.mjs. Those names must match
 //! across targets; the transport shape may not. This crate passes the
-//! generated types in and out because tiqian-engine-gen is a public path
+//! generated types in and out because tiqian-engine is a public path
 //! dependency, while the npm facade carries JSON text because its package
 //! exports map publishes only the facade module. Measurement arrives here as
 //! trait objects and there as host callbacks, which follows from what each
@@ -22,28 +22,28 @@
 use crate::NamedError;
 use std::cell::RefCell;
 use std::rc::Rc;
-use tiqian_engine_gen::org::tiqian::clreq::clreq_profile_resolver::ClreqProfileResolver;
-use tiqian_engine_gen::org::tiqian::core::layout_input::LayoutInput;
-use tiqian_engine_gen::org::tiqian::core::layout_result::LayoutResult;
-use tiqian_engine_gen::org::tiqian::font::font_metrics::{FontMetricsNormalizer, FontMetricsResolver};
-use tiqian_engine_gen::org::tiqian::font::font_policy::FallbackResolver;
-use tiqian_engine_gen::org::tiqian::font::font_role_context::FontRoleClassifier;
-use tiqian_engine_gen::org::tiqian::layout::justifier::Justifier;
-use tiqian_engine_gen::org::tiqian::layout::line_breaker::LineBreaker;
-use tiqian_engine_gen::org::tiqian::layout::paragraph_layout_engine::{
+use tiqian_engine::org::tiqian::clreq::clreq_profile_resolver::ClreqProfileResolver;
+use tiqian_engine::org::tiqian::core::layout_input::LayoutInput;
+use tiqian_engine::org::tiqian::core::layout_result::LayoutResult;
+use tiqian_engine::org::tiqian::font::font_metrics::{FontMetricsNormalizer, FontMetricsResolver};
+use tiqian_engine::org::tiqian::font::font_policy::FallbackResolver;
+use tiqian_engine::org::tiqian::font::font_role_context::FontRoleClassifier;
+use tiqian_engine::org::tiqian::layout::justifier::Justifier;
+use tiqian_engine::org::tiqian::layout::line_breaker::LineBreaker;
+use tiqian_engine::org::tiqian::layout::paragraph_layout_engine::{
     ExplainableStubParagraphLayoutEngine,
     ParagraphLayoutEngineLayoutWithRejectedTechnicalTiersFault,
 };
-use tiqian_engine_gen::org::tiqian::layout::punctuation_model::{
+use tiqian_engine::org::tiqian::layout::punctuation_model::{
     PunctuationAtomBuilder, PunctuationSpacingCompressor,
 };
-use tiqian_engine_gen::org::tiqian::layout::quote_pair_analyzer::QuotePairAnalyzer;
-use tiqian_engine_gen::org::tiqian::layout::width_independent_annotation_cache::WidthIndependentAnnotationCache;
-use tiqian_engine_gen::org::tiqian::linebreak::hyphenator::Hyphenator;
-use tiqian_engine_gen::org::tiqian::shaping::text_shaper::TextShaper;
+use tiqian_engine::org::tiqian::layout::quote_pair_analyzer::QuotePairAnalyzer;
+use tiqian_engine::org::tiqian::layout::width_independent_annotation_cache::WidthIndependentAnnotationCache;
+use tiqian_engine::org::tiqian::linebreak::hyphenator::Hyphenator;
+use tiqian_engine::org::tiqian::shaping::text_shaper::TextShaper;
 
-pub use tiqian_engine_gen::org::tiqian::core::layout_input::LayoutInput as EngineLayoutInput;
-pub use tiqian_engine_gen::org::tiqian::core::layout_result::LayoutResult as EngineLayoutResult;
+pub use tiqian_engine::org::tiqian::core::layout_input::LayoutInput as EngineLayoutInput;
+pub use tiqian_engine::org::tiqian::core::layout_result::LayoutResult as EngineLayoutResult;
 
 /// One slot per `ExplainableStubParagraphLayoutEngine::new` parameter;
 /// `None` keeps the generated default implementation. Hosts inject their
@@ -108,9 +108,9 @@ impl Engine {
 /// range faults carry the engine's published sentences; the remaining stage
 /// faults render through their generated `Display`.
 fn named_new(
-    fault: tiqian_engine_gen::org::tiqian::layout::paragraph_layout_engine::ParagraphLayoutEngineNewFault,
+    fault: tiqian_engine::org::tiqian::layout::paragraph_layout_engine::ParagraphLayoutEngineNewFault,
 ) -> NamedError {
-    use tiqian_engine_gen::org::tiqian::layout::paragraph_layout_engine::ParagraphLayoutEngineNewFault;
+    use tiqian_engine::org::tiqian::layout::paragraph_layout_engine::ParagraphLayoutEngineNewFault;
     match fault {
         ParagraphLayoutEngineNewFault::TextRangeErrorFault(error) => NamedError(error.to_string()),
         ParagraphLayoutEngineNewFault::UStringFaultFault(error) => NamedError(error.to_string()),
@@ -131,11 +131,11 @@ fn named(fault: ParagraphLayoutEngineLayoutWithRejectedTechnicalTiersFault) -> N
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tiqian_engine_gen::runtime::u_string::UString;
-    use tiqian_engine_gen::org::tiqian::core::layout_constraints::LayoutConstraints;
-    use tiqian_engine_gen::org::tiqian::core::tiqian_text_content::TiqianTextContent;
-    use tiqian_engine_gen::org::tiqian::font::font_metrics::StubFontMetricsResolver;
-    use tiqian_engine_gen::org::tiqian::shaping::text_shaper::ExplainableStubTextShaper;
+    use tiqian_engine::runtime::u_string::UString;
+    use tiqian_engine::org::tiqian::core::layout_constraints::LayoutConstraints;
+    use tiqian_engine::org::tiqian::core::tiqian_text_content::TiqianTextContent;
+    use tiqian_engine::org::tiqian::font::font_metrics::StubFontMetricsResolver;
+    use tiqian_engine::org::tiqian::shaping::text_shaper::ExplainableStubTextShaper;
 
     #[test]
     fn engine_runs_a_stub_paragraph_end_to_end() {
