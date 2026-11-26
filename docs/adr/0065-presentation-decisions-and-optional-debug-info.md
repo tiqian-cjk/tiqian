@@ -38,8 +38,9 @@ ADR 0005 把 `LayoutDebugInfo` 的决策改为结构化类型，供 playground�
 3. `LayoutDebugInfo` 的字段与顺序不变，仍包含上述 12 项。引擎同时生成两份记录时，两者引用同一批列表，
    转储与黄金数据的内容不变。
 4. `recordsDebugInfo`：`ExplainableStubParagraphLayoutEngine` 的构造参数 `recordsDebugInfo` 默认为
-   true。为 false 时，引擎不调用 `LayoutDebugAssembly.buildLayoutDebugInfo`，`LayoutResult.debug`
-   为 `LayoutDebugInfo.Default`，其余字段与 true 时相同。测试、转储、排版报告与诊断探针使用默认值；
+   true。为 false 时，引擎不调用 `LayoutDebugAssembly.buildLayoutDebugInfo`，也不生成每行的说明字符串：
+   `LayoutResult.debug` 为 `LayoutDebugInfo.Default`，每个 `LineBox.debug` 为 `LineDebugInfo.Default`，
+   其余字段与 true 时相同。测试、转储、排版报告与诊断探针使用默认值；
    Apple 前端（`AppleParagraphEngines`）默认传入 false，并提供参数打开。
 5. AGENTS.md「实现约束」第 3 条改为：新的决策数据同步记录至调试信息与转储输出；呈现层需要的决策
    放入 `LayoutResult.presentation`，呈现层不读取 `LayoutResult.debug`，也不维护独立的排版数据副本。
