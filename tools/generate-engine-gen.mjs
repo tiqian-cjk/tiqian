@@ -39,15 +39,11 @@ if (target === "rust") {
   if (!existsSync(generated)) {
     throw new Error(`generate-engine-gen: expected driver output at ${generated}`);
   }
-  const rustGen = generated;
-  rmSync(rustGen, { recursive: true, force: true });
-  mkdirSync(rustGen, { recursive: true });
-  cpSync(generated, rustGen, { recursive: true });
   const tests = join(outRoot, "engine-rust", "gen-tests");
   if (existsSync(tests)) {
-    cpSync(tests, rustGen, { recursive: true });
+    cpSync(tests, generated, { recursive: true });
   }
-  console.log(`generate-engine-gen: wrote ${rustGen}`);
+  console.log(`generate-engine-gen: wrote ${generated}`);
 
   // The protocol crate follows the same shape: `boring gen protocol-rust`
   // writes engine-haxe/out/protocol-rust/gen, and the precompute workspace
@@ -58,15 +54,11 @@ if (target === "rust") {
   if (!existsSync(protocolGenerated)) {
     throw new Error(`generate-engine-gen: expected driver output at ${protocolGenerated}`);
   }
-  const protocolGen = protocolGenerated;
-  rmSync(protocolGen, { recursive: true, force: true });
-  mkdirSync(protocolGen, { recursive: true });
-  cpSync(protocolGenerated, protocolGen, { recursive: true });
   const protocolTests = join(outRoot, "protocol-rust", "gen-tests");
   if (existsSync(protocolTests)) {
-    cpSync(protocolTests, protocolGen, { recursive: true });
+    cpSync(protocolTests, protocolGenerated, { recursive: true });
   }
-  console.log(`generate-engine-gen: wrote ${protocolGen}`);
+  console.log(`generate-engine-gen: wrote ${protocolGenerated}`);
 } else if (target === "ts") {
   runDriver("ts");
 } else {
