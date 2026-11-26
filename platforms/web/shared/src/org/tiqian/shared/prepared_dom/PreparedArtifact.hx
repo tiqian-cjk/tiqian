@@ -156,13 +156,7 @@ class PreparedArtifact {
                     semanticSignature: cell.semanticSignature
                 };
                     if (PreparedDom.canMergePreparedRun(pendingSignature, cellSignature)) {
-                        final merged:PreparedRunTyped = pending;
-                        merged.rangeEnd = cell.rangeEnd;
-                        merged.source += cell.source;
-                        merged.display += cell.display;
-                        merged.naturalWidth += cell.naturalWidth;
-                        merged.trailingGap += cell.trailingGap;
-                        pending = merged;
+                        pending = mergeRunInto(pending, cellSignature);
                     } else {
                         children.push(runChild(pending));
                         pending = cell;
@@ -642,6 +636,16 @@ class PreparedArtifact {
             index += 1;
         }
         return out + "]";
+    }
+
+    private static function mergeRunInto(run:PreparedRunTyped, cell:PreparedRunSignature):PreparedRunTyped {
+        final merged:PreparedRunTyped = run;
+        merged.rangeEnd = cell.rangeEnd;
+        merged.source += cell.source;
+        merged.display += cell.display;
+        merged.naturalWidth += cell.naturalWidth;
+        merged.trailingGap += cell.trailingGap;
+        return merged;
     }
 
     private static function runChild(run:PreparedRunTyped):PreparedLineChild {
