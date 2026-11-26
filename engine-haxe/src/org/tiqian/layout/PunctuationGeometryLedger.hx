@@ -43,13 +43,6 @@ import std.SortedMap;
     static function emptyF():SortedMap<Int, Float>
         return SortedMap.builder().build();
 
-    static function cloneF(x:SortedMap<Int, Float>):SortedMap<Int, Float> {
-        final b = SortedMap.builder();
-        for (i in 0...x.size())
-            b.put(x.keyAt(i), x.valueAt(i));
-        return b.build();
-    }
-
     static function cloneB(x:SortedMap<Int, GlueBudget>):SortedMap<Int, GlueBudget> {
         final b = SortedMap.builder();
         for (i in 0...x.size())
@@ -152,40 +145,40 @@ import std.SortedMap;
     public function withRawEdgeTrims(trimByCluster:SortedMap<Int, Float>):PunctuationGeometryLedger {
         if (trimByCluster.size() == 0)
             return this;
-        var n:SortedMap<Int, Float> = cloneF(rawEdgeTrimByCluster);
+        // One builder holds every existing trim, then one put per trimmed cluster; a later put of
+        // the same key wins, and each key of `trimByCluster` adds to the trim it had before.
+        final b = SortedMap.builder();
+        for (j in 0...rawEdgeTrimByCluster.size())
+            b.put(rawEdgeTrimByCluster.keyAt(j), rawEdgeTrimByCluster.valueAt(j));
         for (i in 0...trimByCluster.size()) {
             final k = trimByCluster.keyAt(i);
-            final b = SortedMap.builder();
-            for (j in 0...n.size())
-                b.put(n.keyAt(j), n.valueAt(j));
-            final existing = n.get(k);
+            final existing = rawEdgeTrimByCluster.get(k);
             b.put(k, (existing == null ? 0 : existing) + trimByCluster.valueAt(i));
-            n = b.build();
         }
-        return replace(this, null, n);
+        return replace(this, null, b.build());
     }
 
     public function addJustificationDeltas(deltaByCluster:SortedMap<Int, Float>):PunctuationGeometryLedger
         return replace(this, deltaByCluster);
 
     function consumeSide(deltaByCluster:SortedMap<Int, Float>, lead:Bool):PunctuationGeometryLedger {
-        var n:SortedMap<Int, GlueBudget> = cloneB(budgets);
+        // One builder holds every budget, then one put per consumed cluster; a later put of the
+        // same key wins, and each key of `deltaByCluster` replaces the budget it had before.
+        final b = SortedMap.builder();
+        for (j in 0...budgets.size())
+            b.put(budgets.keyAt(j), budgets.valueAt(j));
         for (i in 0...deltaByCluster.size()) {
             final k = deltaByCluster.keyAt(i);
             final amount = deltaByCluster.valueAt(i);
-            final q = n.get(k);
+            final q = budgets.get(k);
             if (q != null && amount > 0) {
                 final replacement = lead ? new GlueBudget(q.leadingNatural, Math.min(q.leadingNatural, q.leadingConsumed + amount), q.trailingNatural,
                     q.trailingConsumed) : new GlueBudget(q.leadingNatural, q.leadingConsumed, q.trailingNatural,
                         Math.min(q.trailingNatural, q.trailingConsumed + amount));
-                final b = SortedMap.builder();
-                for (j in 0...n.size())
-                    b.put(n.keyAt(j), n.valueAt(j));
                 b.put(k, replacement);
-                n = b.build();
             }
         }
-        return replace(this, null, null, null, null, null, n);
+        return replace(this, null, null, null, null, null, b.build());
     }
 
     public function consumeLeadingByCluster(consumptionByCluster:SortedMap<Int, Float>):PunctuationGeometryLedger
@@ -417,12 +410,15 @@ import std.SortedMap;
                     naturalClusters[previous].range, reason));
             }
         }
-        var attached = cloneF(attachedInlineTrailingGlueByCluster);
+        final attachedBuilder = SortedMap.builder();
+        for (j in 0...attachedInlineTrailingGlueByCluster.size())
+            attachedBuilder.put(attachedInlineTrailingGlueByCluster.keyAt(j), attachedInlineTrailingGlueByCluster.valueAt(j));
         for (i in 0...trailing.size()) {
-            var k = trailing.keyAt(i);
-            final attachedEntry = attached.get(k);
-            attached = putF(attached, k, Math.max(attachedEntry == null ? 0 : attachedEntry, trailing.valueAt(i)));
+            final k = trailing.keyAt(i);
+            final attachedEntry = attachedInlineTrailingGlueByCluster.get(k);
+            attachedBuilder.put(k, Math.max(attachedEntry == null ? 0 : attachedEntry, trailing.valueAt(i)));
         }
+        final attached:SortedMap<Int, Float> = attachedBuilder.build();
         return new AttachedInlinePunctuationBoundaryResult(new PunctuationGeometryLedger(naturalClusters, geometries, updated, justificationDeltaByCluster,
             rawEdgeTrimByCluster, rubySpreadByCluster, inlineBoxAdvanceByCluster, attached),
             trailing, decisions);
