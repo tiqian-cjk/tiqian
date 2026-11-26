@@ -163,9 +163,7 @@ class Evidence {
                 throw new PreparedDomException(InvalidPreparedOverlayGeometry);
             final strokeWidth = fontSize * LINE_THICKNESS_EM;
             final svg = Markup.renderedContainer("svg", overlayAttributes(width, height));
-            var i = 0;
-            while (i < segments.length) {
-                final segment = segments[i];
+            for (segment in segments) {
                 final left = segment.left;
                 final top = segment.top;
                 final right = segment.right;
@@ -176,7 +174,6 @@ class Evidence {
                     case BookTitle:
                         svg.children.push(decorationWave(left, top, right, fontSize, strokeWidth, style));
                 }
-                i += 1;
             }
             nodes.push(svg);
         }
