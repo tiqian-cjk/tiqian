@@ -1,4 +1,4 @@
-import type { WorkerLayoutRequest } from "../engine/wire-types.js";
+import type { WorkerLayoutRequest } from "../engine/web-worker/wire-types.js";
 
 const FAMILY_SEPARATOR = "\u001f";
 const RECORD_SEPARATOR = "\u001e";
@@ -253,8 +253,8 @@ function workerTextSpans(value: WorkerFontContractRequest["textSpans"]): WorkerT
     return value.map((span) => validateWorkerTextSpan({
       start: span.start,
       end: span.end,
-      fontFamilies: Array.isArray(span.fontFamilies) ? span.fontFamilies.filter(Boolean) : [],
-      fontSizePx: span.fontSize,
+      fontFamilies: Array.isArray(span.families) ? span.families.filter(Boolean) : [],
+      fontSizePx: span.fontSizePx,
       fontWeight: span.fontWeight,
       italic: span.italic,
       baselineShiftPx: span.baselineShift,

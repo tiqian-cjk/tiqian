@@ -11,11 +11,13 @@ import type {
   InlineObjectWire,
   LineBreakSpanWire,
   PrepareParagraphRequest,
+  TextSpanWire,
+} from "./wire-types.js";
+import type {
   RenderInlineBoxWire,
   SemanticSpanWire,
-  TextSpanWire,
   WorkerLayoutRequest,
-} from "./wire-types.js";
+} from "./web-worker/wire-types.js";
 
 type WireFields<T> = T;
 

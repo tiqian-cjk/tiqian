@@ -115,8 +115,8 @@ export function wireArguments(lowered: LoweredParagraph): PrepareParagraphReques
     return {
       start: span.start,
       end: span.end,
-      fontFamilies: span.style.fontFamilies,
-      fontSize: span.style.fontSize,
+      families: span.style.fontFamilies,
+      fontSizePx: span.style.fontSize,
       fontWeight: span.style.fontWeight,
       italic: span.style.italic,
       baselineShift: span.style.baselineShift,

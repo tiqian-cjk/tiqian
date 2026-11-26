@@ -110,8 +110,8 @@ function assemble(request: PrepareParagraphRequest): { model: ParagraphRequest; 
     textSpans: request.textSpans.map((span) => ({
       start: span.start,
       end: span.end,
-      families: span.fontFamilies.slice(),
-      fontSizePx: span.fontSize,
+      families: span.families.slice(),
+      fontSizePx: span.fontSizePx,
       fontWeight: span.fontWeight,
       italic: span.italic,
       baselineShift: span.baselineShift,
