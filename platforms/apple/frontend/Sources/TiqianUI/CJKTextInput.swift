@@ -2,7 +2,7 @@
 import UIKit
 import Tiqian
 
-/// Integer-backed UIKit text positions. Offsets are UTF-16, matching NSString, Kotlin String and
+/// Integer-backed UIKit text positions. Offsets are UTF-16, matching NSString, the engine text and
 /// Tiqian's source ranges.
 final class CJKTextPosition: UITextPosition {
     let offset: Int
@@ -94,8 +94,8 @@ extension CJKCanvas {
     func text(in range: UITextRange) -> String? {
         guard let range = range as? CJKTextRange, let document = selectionDocument else { return nil }
         return document.textInRange(
-            start: Int32(range.lower.offset),
-            end: Int32(range.upper.offset)
+            start: range.lower.offset,
+            end: range.upper.offset
         )
     }
 
@@ -134,7 +134,7 @@ extension CJKCanvas {
             return self.position(from: position, offset: offset)
         }
         guard let document = selectionDocument else { return CJKTextPosition(position.offset) }
-        let caret = document.caretBox(offset: Int32(position.offset))
+        let caret = document.caretBox(offset: position.offset)
         let targetY = direction == .up ? caret.top - 1.0 : caret.bottom + 1.0
         let target = Int(document.selectionOffset(x: caret.left, y: targetY))
         return CJKTextPosition(normalizedOffset(target, forward: direction == .down))
@@ -201,7 +201,7 @@ extension CJKCanvas {
             let position = position as? CJKTextPosition,
             let document = selectionDocument
         else { return .zero }
-        let box = document.caretBox(offset: Int32(position.offset))
+        let box = document.caretBox(offset: position.offset)
         return platformRect(box)
     }
 
@@ -212,8 +212,8 @@ extension CJKCanvas {
             let document = selectionDocument
         else { return [] }
         let boxes = document.selectionBoxes(
-            start: Int32(range.lower.offset),
-            end: Int32(range.upper.offset)
+            start: range.lower.offset,
+            end: range.upper.offset
         )
         return boxes.enumerated().map { index, box in
             CJKNativeSelectionRect(
@@ -298,8 +298,8 @@ extension CJKCanvas {
             let document = selectionDocument
         else { return nil }
         return document.clipboardTextInRange(
-            start: Int32(range.lower.offset),
-            end: Int32(range.upper.offset)
+            start: range.lower.offset,
+            end: range.upper.offset
         )
     }
 
@@ -326,7 +326,7 @@ extension CJKCanvas {
     private func normalizedOffset(_ offset: Int, forward: Bool) -> Int {
         let clamped = offset.coerce(in: 0...textLength)
         guard let document = selectionDocument else { return clamped }
-        return Int(document.selectionBoundary(offset: Int32(clamped), forward: forward))
+        return Int(document.selectionBoundary(offset: clamped, forward: forward))
     }
 
     private func platformRect(_ box: SelectionBox) -> CGRect {

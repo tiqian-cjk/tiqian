@@ -1,7 +1,0 @@
-# SwiftPM build output + Xcode-generated package user data
-.build/
-.swiftpm/
-*.xcodeproj
-
-# Regenerable engine SDK — run demo/macos-app/build-xcframework.sh to produce it
-Tiqian.xcframework/

@@ -296,24 +296,24 @@ final class CJKCanvas: NSView, NSUserInterfaceValidations {
     var selectedSourceText: String? {
         guard selectionRange.length > 0, let document else { return nil }
         return document.textInRange(
-            start: Int32(selectionRange.location),
-            end: Int32(NSMaxRange(selectionRange))
+            start: selectionRange.location,
+            end: NSMaxRange(selectionRange)
         )
     }
 
     var selectedClipboardText: String? {
         guard selectionRange.length > 0, let document else { return nil }
         return document.clipboardTextInRange(
-            start: Int32(selectionRange.location),
-            end: Int32(NSMaxRange(selectionRange))
+            start: selectionRange.location,
+            end: NSMaxRange(selectionRange)
         )
     }
 
     var selectionRectsForDisplay: [NSRect] {
         guard selectionRange.length > 0, let document else { return [] }
         return document.selectionBoxes(
-            start: Int32(selectionRange.location),
-            end: Int32(NSMaxRange(selectionRange))
+            start: selectionRange.location,
+            end: NSMaxRange(selectionRange)
         ).map { box in
             NSRect(
                 x: padding + CGFloat(box.left),
@@ -399,8 +399,7 @@ final class CJKCanvas: NSView, NSUserInterfaceValidations {
         // inset is folded into canvasHeight; left inset is a translate.
         NSColor.textColor.setFill()
         ctx.translateBy(x: padding, y: 0)
-        let contextPointer = Unmanaged.passUnretained(ctx).toOpaque()
-        document.draw(context: contextPointer, canvasHeight: Double(bounds.height) - Double(padding))
+        document.draw(in: ctx, canvasHeight: Double(bounds.height) - Double(padding))
         ctx.restoreGState()
     }
 
@@ -583,7 +582,7 @@ final class CJKCanvas: UIView, UITextInput, UITextInteractionDelegate, UIGesture
         setNeedsDisplay()
     }
 
-    /// Rebuild the Swift→Kotlin builder only when authored content changes. Viewport-only changes
+    /// Rebuild the lowered builder only when authored content changes. Viewport-only changes
     /// keep the already-lowered builder and only rerun line breaking for a new column bucket.
     @discardableResult
     func configure(blocks: [CJKBlock], fontSize: Float) -> Bool {
@@ -657,11 +656,7 @@ final class CJKCanvas: UIView, UITextInput, UITextInteractionDelegate, UIGesture
         context.scaleBy(x: 1, y: -1)
         context.setFillColor(UIColor.label.cgColor)
         context.translateBy(x: padding, y: 0)
-        let contextPointer = Unmanaged.passUnretained(context).toOpaque()
-        document.draw(
-            context: contextPointer,
-            canvasHeight: Double(bounds.height) - Double(padding)
-        )
+        document.draw(in: context, canvasHeight: Double(bounds.height) - Double(padding))
         context.restoreGState()
     }
 

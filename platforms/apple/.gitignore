@@ -1,0 +1,6 @@
+# SwiftPM build output and Xcode-generated package user data of the engine, shaping and frontend
+# packages. engine/Sources/TiqianEngine is a checked-in symlink into the gitignored
+# engine-haxe/out/swift-f32/gen.
+.build/
+.swiftpm/
+*.xcodeproj

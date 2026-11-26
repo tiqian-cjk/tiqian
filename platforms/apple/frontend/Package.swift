@@ -1,27 +1,46 @@
 // swift-tools-version:5.9
 import PackageDescription
 
-// TiqianUI — the SwiftUI / AppKit / UIKit frontend for the Tiqian CJK typesetting engine, the Apple peer of
-// `frontend/compose` (which vends the Compose `CjkText`). It provides reusable, content-agnostic
-// views (`CJKText`, including read-only native selection/copy) over the Core Text pipeline, and re-exports
-// the engine SDK (`Tiqian.xcframework`). Apps — the bundled demo and AthenaReader — depend on this
-// package rather than copying the view. Pagination is NOT here: that belongs to the pageflow engine.
+// TiqianUI: the SwiftUI / AppKit / UIKit frontend for the Tiqian CJK typesetting engine, the Apple
+// peer of the Compose `CjkText`. It vends content-agnostic views (`CJKText`, `CJKTextView`) with
+// read-only native selection and copy. Apps (the bundled demo and downstream readers) depend on
+// this package and `import TiqianUI`. Pagination is not here; that belongs to the pageflow engine.
+//
+// Module layering (ADR 0064):
+//   TiqianEngine    ../engine   the Swift engine boring generates from engine-haxe (swift-f32)
+//   TiqianCoreText  ../shaping  Core Text shaper, font metrics, shared font / line cache
+//   Tiqian          this        Core Text renderer, paragraph backend, document facade
+//   TiqianUI        this        views over the facade; the only product
 let package = Package(
     name: "TiqianUI",
     platforms: [.macOS(.v14), .iOS(.v15)],
     products: [
         .library(name: "TiqianUI", targets: ["TiqianUI"]),
     ],
+    dependencies: [
+        .package(path: "../engine"),
+        .package(path: "../shaping"),
+    ],
     targets: [
-        // The compiled engine + Core Text SDK (Kotlin/Native). Produced by
-        // `:frontend:apple:assembleTiqianDebugXCFramework` and synced next to this Package.swift by
-        // `build-xcframework.sh`. Static, so it links straight into the consumer.
-        .binaryTarget(name: "Tiqian", path: "Tiqian.xcframework"),
+        .target(
+            name: "Tiqian",
+            dependencies: [
+                .product(name: "TiqianEngine", package: "engine"),
+                .product(name: "TiqianCoreText", package: "shaping"),
+            ],
+            linkerSettings: [.linkedFramework("CoreText")],
+        ),
         .target(
             name: "TiqianUI",
             dependencies: ["Tiqian"],
-            // The static engine slice references Core Text; propagate the system-framework link.
-            linkerSettings: [.linkedFramework("CoreText")],
+        ),
+        .testTarget(
+            name: "TiqianTests",
+            dependencies: [
+                "Tiqian",
+                .product(name: "TiqianEngine", package: "engine"),
+                .product(name: "TiqianCoreText", package: "shaping"),
+            ],
         ),
         .testTarget(
             name: "TiqianUITests",

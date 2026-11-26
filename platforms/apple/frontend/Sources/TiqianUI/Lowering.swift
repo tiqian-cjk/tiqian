@@ -8,14 +8,13 @@ import UIKit
 #endif
 
 /// Translates the idiomatic Swift authoring surface (`[CJKBlock]` of `AttributedString`) down to the
-/// engine SDK's builder (`Typesetter` / `DocBuilder` / `ParagraphContent`), reading native
-/// `.font` / `.foregroundColor` / `.languageIdentifier` and the custom CJK attribute keys. This is
-/// the only place the `Tiqian` framework's (prefix-free) KN types are used — the app never sees them.
+/// `Tiqian` facade's builder (`Typesetter` / `DocBuilder` / `ParagraphContent`), reading native
+/// `.font` / `.foregroundColor` / `.languageIdentifier` and the custom CJK attribute keys. The app
+/// never sees the facade types.
 enum Lowering {
-    /// Lower `[CJKBlock]` (AttributedString content) into a reusable engine `DocBuilder` — done ONCE
-    /// per (blocks, fontSize). Re-laying out at a new width is then just `builder.layout(width:)`,
-    /// so a window-resize reflow doesn't re-walk the AttributedStrings or re-cross the Swift↔Kotlin
-    /// boundary per piece each tick.
+    /// Lower `[CJKBlock]` (AttributedString content) into a reusable `DocBuilder`, once per
+    /// (blocks, fontSize). Re-laying out at a new width is then `builder.layout(width:)`, so a
+    /// window-resize reflow does not re-walk the AttributedStrings.
     static func builder(
         _ blocks: [CJKBlock],
         baseSize: Float,
@@ -27,17 +26,17 @@ enum Lowering {
             case let .paragraph(text, indent):
                 let content = paragraphContent(text, baseSize: baseSize)
                 switch indent.kind {
-                case .firstLine: builder.paragraph(content: content)
-                case .flush: builder.flushParagraph(content: content)
-                case let .quote(amount): builder.quote(content: content, amount: amount)
-                case let .hanging(amount): builder.hangingParagraph(content: content, amount: amount)
+                case .firstLine: builder.paragraph(content)
+                case .flush: builder.flushParagraph(content)
+                case let .quote(amount): builder.quote(content, amount: amount)
+                case let .hanging(amount): builder.hangingParagraph(content, amount: amount)
                 }
             case let .list(items, marker):
                 let contents = items.map { paragraphContent($0, baseSize: baseSize) }
                 switch marker {
-                case .decimal: builder.decimalList(items: contents)
-                case .cjkNumber: builder.numberedList(items: contents)
-                case .bullet: builder.bulletList(items: contents)
+                case .decimal: builder.decimalList(contents)
+                case .cjkNumber: builder.numberedList(contents)
+                case .bullet: builder.bulletList(contents)
                 }
             case .section:
                 builder.section()
@@ -80,10 +79,10 @@ enum Lowering {
             let hasStyle = font != nil || color != nil || italic || language != nil
             let hasDecoration = emphasis || properNoun || bookTitle || mourning
             if !hasStyle, !hasDecoration, ruby == nil, link == nil {
-                content.text(s: text)
+                content.text(text)
             } else {
                 content.piece(
-                    s: text,
+                    text,
                     bold: isBold(font),
                     italic: italic,
                     sizeEm: font.map { Float($0.pointSize) / baseSize } ?? 1,
@@ -91,10 +90,12 @@ enum Lowering {
                     argb: argb(of: color),
                     rubyReading: ruby?.reading,
                     rubyBopomofo: ruby?.kind == .bopomofo,
-                    emphasis: emphasis,
-                    properNoun: properNoun,
-                    bookTitle: bookTitle,
-                    mourning: mourning,
+                    decorations: decorations(
+                        emphasis: emphasis,
+                        properNoun: properNoun,
+                        bookTitle: bookTitle,
+                        mourning: mourning,
+                    ),
                     locale: language,
                     rubyLocale: ruby?.languageIdentifier,
                     linkTarget: link?.absoluteString,
@@ -113,19 +114,29 @@ enum Lowering {
         #endif
     }
 
-    /// Platform color → `0xAARRGGBB` (0 = no color / inherit the context fill).
-    private static func argb(of color: PlatformColor?) -> Int64 {
-        guard let color else { return 0 }
+    /// CLREQ decoration flags in the order the engine receives them.
+    private static func decorations(emphasis: Bool, properNoun: Bool, bookTitle: Bool, mourning: Bool) -> [Decoration] {
+        var kinds: [Decoration] = []
+        if emphasis { kinds.append(.emphasis) }
+        if properNoun { kinds.append(.properNoun) }
+        if bookTitle { kinds.append(.bookTitle) }
+        if mourning { kinds.append(.mourning) }
+        return kinds
+    }
+
+    /// Platform color → `0xAARRGGBB`; nil inherits the context fill.
+    private static func argb(of color: PlatformColor?) -> UInt32? {
+        guard let color else { return nil }
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         #if canImport(AppKit)
         (color.usingColorSpace(.sRGB) ?? color).getRed(&r, green: &g, blue: &b, alpha: &a)
         #elseif canImport(UIKit)
         color.getRed(&r, green: &g, blue: &b, alpha: &a)
         #endif
-        let A = Int64((a * 255).rounded())
-        let R = Int64((r * 255).rounded())
-        let G = Int64((g * 255).rounded())
-        let B = Int64((b * 255).rounded())
+        let A = UInt32((a * 255).rounded())
+        let R = UInt32((r * 255).rounded())
+        let G = UInt32((g * 255).rounded())
+        let B = UInt32((b * 255).rounded())
         return (A << 24) | (R << 16) | (G << 8) | B
     }
 
