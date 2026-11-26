@@ -620,21 +620,21 @@ private fun drawAndroidDecorations(
     val fillPaint = drawCache.decorationFillPaint
     fillPaint.color = color
     fillPaint.style = Paint.Style.FILL
-    for (dot in result.debug.decorationDecisions) {
+    for (dot in result.presentation.decorationDecisions) {
         if (dot.applied && dot.dotDiameter > 0f) {
             fillPaint.color = colorAt(dot.clusterRange.start, color, colorSpans)
             canvas.drawCircle(dot.anchorX, dot.anchorY, dot.dotDiameter / 2f, fillPaint)
         }
     }
 
-    if (result.debug.decorationSegments.isEmpty()) return
+    if (result.presentation.decorationSegments.isEmpty()) return
     val strokePaint = drawCache.decorationStrokePaint
     strokePaint.color = color
     strokePaint.style = Paint.Style.STROKE
     strokePaint.strokeWidth = (fontSize / 16f).coerceAtLeast(1f)
     val skipBandPad = strokePaint.strokeWidth.coerceAtLeast(1f)
     val skipClearance = browserLikeSkipInkClearance(fontSize, strokePaint.strokeWidth)
-    for (seg in result.debug.decorationSegments) {
+    for (seg in result.presentation.decorationSegments) {
         strokePaint.color = colorAt(seg.sourceRange.start, color, colorSpans)
         when (seg.kind) {
             DecorationKind.ProperNoun.name -> {
@@ -898,7 +898,7 @@ private fun drawAndroidRuby(
 ) {
     paint.color = color
     paint.textLocale = Locale.forLanguageTag(result.input.textStyle.locale)
-    for (ruby in result.debug.rubyDecisions) {
+    for (ruby in result.presentation.rubyDecisions) {
         paint.textLocale = Locale.forLanguageTag(ruby.locale)
         paint.textSize = ruby.fontSize
         paint.fontFeatureSettings = null
@@ -919,7 +919,7 @@ private fun drawAndroidBopomofo(
         textLocale = Locale.forLanguageTag(result.input.textStyle.locale)
         fontFeatureSettings = "'vert' on"
     }
-    for (z in result.debug.bopomofoDecisions) {
+    for (z in result.presentation.bopomofoDecisions) {
         paint.typeface = typefaces.resolve(FontRole.CjkText, z.fontFamilies, z.fontWeight, italic = false)
         paint.textLocale = Locale.forLanguageTag(z.locale)
         for (p in z.placements) {

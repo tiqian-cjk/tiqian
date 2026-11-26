@@ -518,7 +518,7 @@ internal class CjkTextLayoutNode(
         // content is placed at 0. MinLinesHeightReservation: minLines only reserves
         // vertical space (one resolved line height per missing line) — no hidden
         // layout state is invented.
-        val lineHeight = laidOut.debug.lineSpacingDecision?.resolvedHeight
+        val lineHeight = laidOut.presentation.lineSpacingDecision?.resolvedHeight
             ?: laidOut.lines.firstOrNull()?.let { it.bottom - it.top }
             ?: textStyle.fontSize * 1.5f
         val w = ceil(laidOut.size.width).toInt().coerceIn(constraints.minWidth, constraints.maxWidth)

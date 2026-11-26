@@ -44,7 +44,7 @@ class SkipInkTest {
                 decorations = listOf(DecorationSpan(TextRange(0, text.length), DecorationKind.ProperNoun)),
             ),
         )
-        val seg = result.debug.decorationSegments.first { it.kind == "ProperNoun" }
+        val seg = result.presentation.decorationSegments.first { it.kind == "ProperNoun" }
         return result.lineInkSkipIntervals(
             result.lines[seg.lineIndex], cjkFont, latinFont, shaper, seg.top - 2f, seg.top + 2f,
         )

@@ -50,8 +50,8 @@ class AndroidDashPunctuationReproTest {
             ),
         )
         val dash = result.clusters.single { it.text == "——" }
-        val dashDecision = result.debug.fontDecisions.single { it.sourceText == "——" }
-        val dashGeometry = result.debug.geometryDecisions.single { it.sourceText == "——" }
+        val dashDecision = result.presentation.fontDecisions.single { it.sourceText == "——" }
+        val dashGeometry = result.presentation.geometryDecisions.single { it.sourceText == "——" }
         // Font-agnostic contract: the display form is either the kept `⸺`
         // (full-ink fonts) or the rolled-back source `——` (deficient-ink fonts
         // like Pixel's Noto CJK — DashSubstitutionInkCoverageRollback). Either
@@ -134,7 +134,7 @@ class AndroidDashPunctuationReproTest {
             assertTrue(dash.displayText == "⸺" || dash.displayText == "——", "display=$dash")
             assertEquals(fontSize * 2f, dash.advance, 0.5f)
         }
-        val dashGeometry = result.debug.geometryDecisions.filter { it.sourceText == "——" }
+        val dashGeometry = result.presentation.geometryDecisions.filter { it.sourceText == "——" }
         assertEquals(2, dashGeometry.size)
         dashGeometry.forEach { geometry ->
             assertEquals(0f, geometry.leadingGlueNatural, 0.5f)

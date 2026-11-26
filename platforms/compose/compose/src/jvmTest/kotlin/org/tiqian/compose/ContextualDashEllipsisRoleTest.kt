@@ -31,12 +31,12 @@ class ContextualDashEllipsisRoleTest {
             assertEquals(FontRole.LatinText.name, decision.role, "index=$index $decision")
             assertEquals(decision.sourceText, decision.displayText, "index=$index $decision")
         }
-        assertTrue(result.debug.punctuationDecisions.none { it.char == "—" || it.char == "…" })
+        assertTrue(result.presentation.punctuationDecisions.none { it.char == "—" || it.char == "…" })
         assertTrue(
-            result.debug.shapingDecisions
+            result.presentation.shapingDecisions
                 .filter { it.sourceText.any { char -> char.isContextualDashOrEllipsis() } }
                 .all { it.source == "Skia" && it.missingGlyphs == 0 },
-            result.debug.shapingDecisions.toString(),
+            result.presentation.shapingDecisions.toString(),
         )
     }
 
@@ -48,13 +48,13 @@ class ContextualDashEllipsisRoleTest {
         text.markIndices().forEach { index ->
             assertEquals(FontRole.CjkPunctuation.name, result.fontDecisionAt(index).role)
         }
-        assertTrue(result.debug.punctuationDecisions.any { it.char == "—" })
-        assertTrue(result.debug.punctuationDecisions.any { it.char == "…" || it.char == "⋯" })
+        assertTrue(result.presentation.punctuationDecisions.any { it.char == "—" })
+        assertTrue(result.presentation.punctuationDecisions.any { it.char == "…" || it.char == "⋯" })
         assertTrue(
-            result.debug.shapingDecisions
+            result.presentation.shapingDecisions
                 .filter { it.sourceText.any { char -> char.isContextualDashOrEllipsis() } }
                 .all { it.source == "Skia" },
-            result.debug.shapingDecisions.toString(),
+            result.presentation.shapingDecisions.toString(),
         )
     }
 

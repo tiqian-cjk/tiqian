@@ -138,7 +138,7 @@ internal actual fun ContentDrawScope.drawParagraph(
         // Emphasis dots (ADR 0018): paint the engine-owned final diameter at
         // the engine-owned ink-centre anchor.
         val decorationPaint = drawCache.decorationPaint
-        for (dot in result.debug.decorationDecisions) {
+        for (dot in result.presentation.decorationDecisions) {
             if (dot.applied && dot.dotDiameter > 0f) {
                 decorationPaint.color = colorAt(dot.clusterRange.start, color, colorSpans)
                 skCanvas.drawCircle(
@@ -153,7 +153,7 @@ internal actual fun ContentDrawScope.drawParagraph(
         // Decoration segments (ADR 0018/0024): 示亡号 frames (continuation
         // edges stay undrawn), 专名号 straight underlines, 书名号甲式 wavy
         // underlines.
-        if (result.debug.decorationSegments.isNotEmpty()) {
+        if (result.presentation.decorationSegments.isNotEmpty()) {
             val framePaint = drawCache.framePaint
             framePaint.color = color
             framePaint.mode = org.jetbrains.skia.PaintMode.STROKE
@@ -164,7 +164,7 @@ internal actual fun ContentDrawScope.drawParagraph(
             // matters for Western descenders inside a 专名号/书名号 span.
             val skipBandPad = framePaint.strokeWidth.coerceAtLeast(1f)
             val skipClearance = browserLikeSkipInkClearance(fontSize, framePaint.strokeWidth)
-            for (seg in result.debug.decorationSegments) {
+            for (seg in result.presentation.decorationSegments) {
                 framePaint.color = colorAt(seg.sourceRange.start, color, colorSpans)
                 when (seg.kind) {
                     "ProperNoun" -> {
@@ -218,7 +218,7 @@ internal actual fun ContentDrawScope.drawParagraph(
         // 行间注 (ruby, ADR 0032): 注文 shaped at its own size and centred over the
         // base x-span the engine computed. We measure the real注文 width here so a
         // 注文 wider than the base overhangs symmetrically (v1; 避让 is a follow-up).
-        for (ruby in result.debug.rubyDecisions) {
+        for (ruby in result.presentation.rubyDecisions) {
             // 注文 uses its OWN font (注音 needs ㄅㄆㄇ glyphs; 拼音/释义 may differ) —
             // resolved via the shared resolver, defaulting to the Latin face.
             val rubyStyle = org.jetbrains.skia.FontStyle(ruby.fontWeight, org.jetbrains.skia.FontStyle.NORMAL.width, org.jetbrains.skia.FontSlant.UPRIGHT)
@@ -236,7 +236,7 @@ internal actual fun ContentDrawScope.drawParagraph(
 
         // 注音 (ADR 0033): layout owns each vertical glyph's size and position. The
         // renderer only re-shapes with `vert` to recover the platform's physical glyph.
-        for (z in result.debug.bopomofoDecisions) {
+        for (z in result.presentation.bopomofoDecisions) {
             val tf = (
                 SkiaSystemTypefaces.typeface(
                     isLatin = false,

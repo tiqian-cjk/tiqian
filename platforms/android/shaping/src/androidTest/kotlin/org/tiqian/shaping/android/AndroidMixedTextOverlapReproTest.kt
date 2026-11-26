@@ -59,7 +59,7 @@ class AndroidMixedTextOverlapReproTest {
             result.clusters
                 .filter { it.text.startsWith("/") && it.text.contains("TERF") }
                 .forEach { cluster ->
-                    val leadingGap = result.debug.autoSpaceDecisions.any {
+                    val leadingGap = result.presentation.autoSpaceDecisions.any {
                         it.clusterRange == cluster.range && it.side == "leading"
                     }
                     if (leadingGap) {
@@ -92,7 +92,7 @@ class AndroidMixedTextOverlapReproTest {
                             append('\n')
                         }
                     append("font decisions:\n")
-                    result.debug.fontDecisions
+                    result.presentation.fontDecisions
                         .filter { it.range.end > line.range.start && it.range.start < line.range.end }
                         .forEach { d ->
                             append("  ")
@@ -104,7 +104,7 @@ class AndroidMixedTextOverlapReproTest {
                             append('\n')
                         }
                     append("autospace decisions:\n")
-                    result.debug.autoSpaceDecisions
+                    result.presentation.autoSpaceDecisions
                         .filter { it.clusterRange.end > line.range.start && it.clusterRange.start < line.range.end }
                         .forEach { d ->
                             append("  ")
@@ -115,7 +115,7 @@ class AndroidMixedTextOverlapReproTest {
                             append('\n')
                         }
                     append("shaping decisions:\n")
-                    result.debug.shapingDecisions
+                    result.presentation.shapingDecisions
                         .filter { it.range.end > line.range.start && it.range.start < line.range.end }
                         .forEach { d ->
                             append("  ")

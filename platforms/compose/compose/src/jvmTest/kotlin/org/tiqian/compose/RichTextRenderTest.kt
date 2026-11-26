@@ -164,15 +164,15 @@ class RichTextRenderTest {
         assertEquals(4f, inlineBox.inlineStart, 0.01f)
         assertEquals(4f, inlineBox.inlineEnd, 0.01f)
         assertEquals("Narrow", inlineBox.outerSpacing)
-        assertEquals(2, result.debug.autoSpaceDecisions.size)
+        assertEquals(2, result.presentation.autoSpaceDecisions.size)
         assertEquals(
             setOf(
                 "InlineBoxOuterAutoSpace:leading-W-N",
                 "InlineBoxOuterAutoSpace:trailing-N-W",
             ),
-            result.debug.autoSpaceDecisions.map { it.reason }.toSet(),
+            result.presentation.autoSpaceDecisions.map { it.reason }.toSet(),
         )
-        assertTrue(result.debug.autoSpaceDecisions.all { it.boundaryRole == "InlineBox.Narrow" })
+        assertTrue(result.presentation.autoSpaceDecisions.all { it.boundaryRole == "InlineBox.Narrow" })
     }
 
     @Test
@@ -204,10 +204,10 @@ class RichTextRenderTest {
         val result = layout ?: error("onTextLayout not called")
         val codeRanges = spans.filter { it.role == org.tiqian.core.InlineCode.instance }.map { it.range }
         assertTrue(
-            result.debug.autoSpaceDecisions.any {
+            result.presentation.autoSpaceDecisions.any {
                 it.reason == "InlineBoxOuterAutoSpace:leading-W-N"
             },
-            "inline-code background must keep its outer sino-western gap: ${result.debug.autoSpaceDecisions}",
+            "inline-code background must keep its outer sino-western gap: ${result.presentation.autoSpaceDecisions}",
         )
         val wrappedCodeLines = result.lines.filter { line ->
             codeRanges.any { code -> line.range.end > code.start && line.range.end < code.end }
@@ -555,8 +555,8 @@ class RichTextRenderTest {
         val replayIndex = result.toReplayIndex(listOf(underlineSpan))
         val occupied = replayIndex.richTextSegments.single()
         val underline = replayIndex.richTextDecorationSegments.single()
-        val openingGeometry = result.debug.geometryDecisions.single { it.range == TextRange(1, 2) }
-        val closingGeometry = result.debug.geometryDecisions.single { it.range == TextRange(3, 4) }
+        val openingGeometry = result.presentation.geometryDecisions.single { it.range == TextRange(1, 2) }
+        val closingGeometry = result.presentation.geometryDecisions.single { it.range == TextRange(3, 4) }
         val leadingGlue = openingGeometry.leadingGlueNatural - openingGeometry.leadingGlueConsumed
         val trailingGlue = closingGeometry.trailingGlueNatural - closingGeometry.trailingGlueConsumed
 

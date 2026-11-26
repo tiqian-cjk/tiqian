@@ -82,8 +82,8 @@ class SlashLedRunGeometryTest {
         val r = layout(9999f)
         val run = r.clusters.single { it.text.contains("TERF") }
         assertTrue(
-            r.debug.autoSpaceDecisions.none { it.clusterRange == run.range && it.side == "leading" },
-            "slash-led run must not get 中西间距: ${r.debug.autoSpaceDecisions}",
+            r.presentation.autoSpaceDecisions.none { it.clusterRange == run.range && it.side == "leading" },
+            "slash-led run must not get 中西间距: ${r.presentation.autoSpaceDecisions}",
         )
     }
 }

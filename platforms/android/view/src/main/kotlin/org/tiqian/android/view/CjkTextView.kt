@@ -460,7 +460,7 @@ class CjkTextView @JvmOverloads constructor(
         val input = content.layoutInput(layoutWidth, Float.POSITIVE_INFINITY, maxLines)
         val snapshot = obtainLayout(input)
 
-        val lineHeight = snapshot.result.debug.lineSpacingDecision?.resolvedHeight
+        val lineHeight = snapshot.result.presentation.lineSpacingDecision?.resolvedHeight
             ?: snapshot.result.lines.firstOrNull()?.let { it.bottom - it.top }
             ?: content.textStyle.fontSize * EMPTY_PARAGRAPH_LINE_HEIGHT_FACTOR
         val desiredWidth = ceil(snapshot.result.size.width).toInt() + horizontalPadding

@@ -87,8 +87,8 @@ class RichColorRenderTest {
         }.use { scene -> scene.render().toComposeImageBitmap().toPixelMap() }
 
         val result = layout ?: error("onTextLayout was not called")
-        val dot = result.debug.decorationDecisions.first { it.applied && it.dotDiameter > 0f }
-        val line = result.debug.decorationSegments.single { it.kind == "ProperNoun" }
+        val dot = result.presentation.decorationDecisions.first { it.applied && it.dotDiameter > 0f }
+        val line = result.presentation.decorationSegments.single { it.kind == "ProperNoun" }
 
         fun hasColorNear(x: Float, y: Float, predicate: (Color) -> Boolean): Boolean {
             val centerX = x.roundToInt()

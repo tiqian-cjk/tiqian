@@ -380,12 +380,12 @@ class CjkTextRenderTest {
             cluster.text.any { it in 'A'..'Z' || it in 'a'..'z' }
         } ?: error("expected first visible line to include a Latin cluster: ${result.clusters}")
         assertTrue(
-            result.debug.fontDecisions.any {
+            result.presentation.fontDecisions.any {
                 it.role == "LatinText" &&
                     visibleLatin.range.start >= it.range.start &&
                     visibleLatin.range.end <= it.range.end
             },
-            "visible Latin cluster lost its font decision: cluster=$visibleLatin font=${result.debug.fontDecisions}",
+            "visible Latin cluster lost its font decision: cluster=$visibleLatin font=${result.presentation.fontDecisions}",
         )
     }
 
