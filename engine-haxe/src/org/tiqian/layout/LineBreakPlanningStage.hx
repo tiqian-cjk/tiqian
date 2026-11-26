@@ -711,7 +711,7 @@ class LineBreakPlanningStage {
 
         final noStretchBoundaryClustersBuilder = SortedSet.builder();
         for (idx in 0...prep.naturalClusters.length) {
-            final cls = prep.atomClassByRange.has(prep.naturalClusters[idx].range) ? prep.atomClassByRange.get(prep.naturalClusters[idx].range) : null;
+            final cls = prep.atomClassByRange.get(prep.naturalClusters[idx].range);
             if (cls == PunctuationClass.Connector || cls == PunctuationClass.Solidus || cls == PunctuationClass.Dash || cls == PunctuationClass.Ellipsis) {
                 noStretchBoundaryClustersBuilder.put(idx);
             }

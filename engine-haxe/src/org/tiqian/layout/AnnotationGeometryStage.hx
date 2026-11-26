@@ -135,8 +135,10 @@ class AnnotationGeometryStage {
                         final applied = role == FontRole.CjkText;
                         // Centre on the base BODY: drop the trailing justify stretch AND
                         // the 注音 column reservation (着重号 belongs under 基文, not 基文+注音).
-                        final justifyDelta = justifyDeltaByCluster.has(idx) ? justifyDeltaByCluster.get(idx) : 0.0;
-                        final rubySpread = rubySpreadByCluster.has(idx) ? rubySpreadByCluster.get(idx) : 0.0;
+                        final justifyDeltaEntry = justifyDeltaByCluster.get(idx);
+                        final justifyDelta:Float = justifyDeltaEntry == null ? 0.0 : justifyDeltaEntry;
+                        final rubySpreadEntry = rubySpreadByCluster.get(idx);
+                        final rubySpread:Float = rubySpreadEntry == null ? 0.0 : rubySpreadEntry;
                         final glyphAdvance = cluster.advance - justifyDelta - rubySpread;
                         var metric:Null<ClusterMetricDecision> = null;
                         for (mi in 0...metricDecisions.length) {
@@ -266,13 +268,13 @@ class AnnotationGeometryStage {
         // (CLREQ 避两侧空白): the autospace gap + the punctuation glue still present
         // (开/闭标点 half-width), mirroring how the renderer positions the glyph.
         final leadingBlank = function(range:TextRange, atLineStart:Bool):Float {
-            final g = geometryByRange.has(range) ? geometryByRange.get(range) : null;
+            final g = geometryByRange.get(range);
             final glue = g != null ? (g.leadingGlueNatural - g.leadingGlueConsumed) : 0.0;
             final auto = (leadingGapRanges.has(range) && !atLineStart) ? autoSpaceGapPx : 0.0;
             return glue + auto;
         };
         final trailingBlank = function(range:TextRange, atLineEnd:Bool):Float {
-            final g = geometryByRange.has(range) ? geometryByRange.get(range) : null;
+            final g = geometryByRange.get(range);
             final glue = g != null ? (g.trailingGlueNatural - g.trailingGlueConsumed) : 0.0;
             final auto = (trailingGapRanges.has(range) && !atLineEnd) ? autoSpaceGapPx : 0.0;
             return glue + auto;
@@ -311,7 +313,8 @@ class AnnotationGeometryStage {
                         // End at the last covered cluster's ink/body right: drop the
                         // trailing justify stretch AND the trailing blank (autospace +
                         // 闭标点 glue) — 长度与文字外框一致, both sides.
-                        final justifyDelta = justifyDeltaByCluster.has(idx) ? justifyDeltaByCluster.get(idx) : 0.0;
+                        final justifyDeltaEntry = justifyDeltaByCluster.get(idx);
+                        final justifyDelta:Float = justifyDeltaEntry == null ? 0.0 : justifyDeltaEntry;
                         right = x + cluster.advance - justifyDelta - trailingBlank(cluster.range, idx == clusterRange.end);
                         segEnd = cluster.range.end;
                     }

@@ -306,8 +306,8 @@ class LayoutDebugAssembly {
                 "visual:" + line.visualWidth
             ];
             final nextCluster = candidate.clusterRange.end + 1;
-            if (stage.progressiveBreakOpportunities.has(nextCluster)) {
-                final opp = stage.progressiveBreakOpportunities.get(nextCluster);
+            final opp = stage.progressiveBreakOpportunities.get(nextCluster);
+            if (opp != null) {
                 notes.push("technical-break:" + progressiveBreakTierName(opp.tier));
             }
             if (candidate.repair != null) {

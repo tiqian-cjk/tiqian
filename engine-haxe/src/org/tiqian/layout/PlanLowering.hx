@@ -110,7 +110,8 @@ class PlanLowering {
                 final ck = rangeKey(c.range);
                 if (!(c.displayText.length > 0 || zero.has(ck) || (renderEvidence && inlineAdvance.has(ck))))
                     continue;
-                final natW:Float = natural.has(ck) ? natural.get(ck) : c.advance;
+                final naturalEntry = natural.get(ck);
+                final natW:Float = naturalEntry == null ? c.advance : naturalEntry;
                 var inlineObj:Null<Float> = null; var advOverride:Null<Float> = null;
                 var renderFam:Null<String> = null; var dash:Null<String> = null;
                 var lang:Null<String> = null; var face:Null<String> = null;
@@ -118,15 +119,16 @@ class PlanLowering {
                 var inkFloor:Null<Float> = null; var bodyW:Null<Float> = null;
                 var latin = false; var styleDelta:Null<PlanStyleDelta> = null;
                 if (renderEvidence) {
-                    inlineObj = inlineAdvance.has(ck) ? inlineAdvance.get(ck) : null;
+                    inlineObj = inlineAdvance.get(ck);
                     final glyphW:Float = inlineObj == null ? natW : inlineObj;
                     advOverride = (c.advance != glyphW) ? c.advance : null;
-                    renderFam = fonts.has(ck) ? fonts.get(ck) : null;
+                    renderFam = fonts.get(ck);
                     final sd = shaping.get(ck);
                     dash = sd != null ? sd.strategy : null;
                     lang = sd != null ? sd.language : null;
                     face = sd != null ? sd.resolvedFace : null;
-                    gIds = glyphIds.has(ck) && glyphIds.get(ck).length > 0 ? glyphIds.get(ck).join(",") : null;
+                    final glyphIdsEntry = glyphIds.get(ck);
+                    gIds = glyphIdsEntry == null ? null : (glyphIdsEntry.length > 0 ? glyphIdsEntry.join(",") : null);
                     ev = sd != null ? sd.reason : null;
                     final pd = punct.get(ck);
                     if (pd != null && pd.inkContainmentApplied && pd.inkContainmentBodyFloor != null) {
@@ -206,8 +208,8 @@ class PlanLowering {
                 final sk = Std.string(offset);
                 inlineEdges.push({
                     offset: offset,
-                    inlineStart: edgeStart.has(sk) ? edgeStart.get(sk) : null,
-                    inlineEnd: edgeEnd.has(sk) ? edgeEnd.get(sk) : null,
+                    inlineStart: edgeStart.get(sk),
+                    inlineEnd: edgeEnd.get(sk),
                 });
             }
             final rubySrc = result.debug.rubyDecisions;

@@ -97,8 +97,10 @@ class LineAdjustmentStage {
         for (i in 1...renderable.length) {
             final prev = currentGroup[currentGroup.length - 1];
             final curr = renderable[i];
-            final prevFeat = openTypeFeaturesByClusterRange.has(prev.range) ? openTypeFeaturesByClusterRange.get(prev.range) : [];
-            final currFeat = openTypeFeaturesByClusterRange.has(curr.range) ? openTypeFeaturesByClusterRange.get(curr.range) : [];
+            final prevFeatEntry = openTypeFeaturesByClusterRange.get(prev.range);
+            final prevFeat:Array<String> = prevFeatEntry == null ? [] : prevFeatEntry;
+            final currFeatEntry = openTypeFeaturesByClusterRange.get(curr.range);
+            final currFeat:Array<String> = currFeatEntry == null ? [] : currFeatEntry;
             var sameFeatures = prevFeat.length == currFeat.length;
             if (sameFeatures) {
                 for (f in 0...prevFeat.length) {
@@ -120,7 +122,9 @@ class LineAdjustmentStage {
     }
 
     private static function centerDashInk(glyphs:Array<Glyph>, cluster:Cluster, atomClassByRange:SortedMap<TextRange, PunctuationClass>):Array<Glyph> {
-        if (!atomClassByRange.has(cluster.range) || atomClassByRange.get(cluster.range) != PunctuationClass.Dash) {
+        final atomClass = atomClassByRange.get(cluster.range);
+        final isDash = atomClass == null ? false : atomClass == PunctuationClass.Dash;
+        if (!isDash) {
             return glyphs;
         }
         if (glyphs.length != 1)
@@ -538,7 +542,8 @@ class LineAdjustmentStage {
                 autoSpaceEdgeTrims, autoSpaceEdgeDecisions);
 
             final attachedGlueCluster = line.clusterRange.end;
-            final attachedGlue = prep.attachedPunctuationTrailingGlueByCluster.has(attachedGlueCluster) ? prep.attachedPunctuationTrailingGlueByCluster.get(attachedGlueCluster) : 0.0;
+            final attachedGlueEntry = prep.attachedPunctuationTrailingGlueByCluster.get(attachedGlueCluster);
+            final attachedGlue:Float = attachedGlueEntry == null ? 0.0 : attachedGlueEntry;
             if (attachedGlue > 0.0) {
                 autoSpaceEdgeTrims[attachedGlueCluster] += attachedGlue;
                 autoSpaceEdgeDecisions.push(new LineEdgeTrimDecisionInfo(line.sourceRange, prep.naturalClusters[attachedGlueCluster].range, "trailing",
@@ -547,8 +552,8 @@ class LineAdjustmentStage {
 
             if (line.endReason == LineEndReason.AutoWrap) {
                 final clusterIdx = line.clusterRange.end;
-                final discardable = prep.inlineObjectByClusterIndex.has(clusterIdx) ? prep.inlineObjectByClusterIndex.get(clusterIdx)
-                    .trailingBoundary.lineEndDiscardableAdvance : 0.0;
+                final inlineObject = prep.inlineObjectByClusterIndex.get(clusterIdx);
+                final discardable = inlineObject == null ? 0.0 : inlineObject.trailingBoundary.lineEndDiscardableAdvance;
                 final consumedBefore = pushInRawTrims[clusterIdx] < discardable ? pushInRawTrims[clusterIdx] : discardable;
                 final diff = discardable - consumedBefore;
                 final remaining = diff < 0.0 ? 0.0 : diff;
@@ -584,7 +589,7 @@ class LineAdjustmentStage {
                 justificationPlans.push(null);
             } else {
                 final nextIdx = lineCandidate.clusterRange.end + 1;
-                final selectedTechnicalBreak = plan.progressiveBreakOpportunities.has(nextIdx) ? plan.progressiveBreakOpportunities.get(nextIdx) : null;
+                final selectedTechnicalBreak = plan.progressiveBreakOpportunities.get(nextIdx);
                 final preferredTrackingSpan = (selectedTechnicalBreak != null
                     && selectedTechnicalBreak.tier == ProgressiveBreakTier.Emergency) ? selectedTechnicalBreak.spanRange : null;
 
@@ -728,10 +733,11 @@ class LineAdjustmentStage {
         final resolvedFinalClusters = finalGeometry.resolveClusters();
         final finalClusters = new Array<Cluster>();
         for (c in resolvedFinalClusters) {
-            if (!plan.metricDecisionByRange.has(c.range)) {
+            final metricDecision = plan.metricDecisionByRange.get(c.range);
+            if (metricDecision == null) {
                 finalClusters.push(c);
             } else {
-                final m = plan.metricDecisionByRange.get(c.range).layoutMetrics;
+                final m = metricDecision.layoutMetrics;
                 final metricShift = m.baselineClass == BaselineClass.Roman ? 0.0 : plan.baseBoxDescent - m.descent;
                 final shift = c.baselineShift + metricShift + prep.styleAt(c.range.start).baselineShift;
                 if (shift > -0.01 && shift < 0.01) {
@@ -748,14 +754,15 @@ class LineAdjustmentStage {
         for (runClusters in runGroups) {
             final firstC = runClusters[0];
             final lastC = runClusters[runClusters.length - 1];
-            final openTypeFeatures = prep.openTypeFeaturesByClusterRange.has(firstC.range) ? prep.openTypeFeaturesByClusterRange.get(firstC.range) : [];
+            final openTypeFeaturesEntry = prep.openTypeFeaturesByClusterRange.get(firstC.range);
+            final openTypeFeatures:Array<String> = openTypeFeaturesEntry == null ? [] : openTypeFeaturesEntry;
             final runGlyphs = new Array<Glyph>();
             final runAdvanceTerms:Array<Float> = [];
             for (clusterIdx in 0...runClusters.length) {
                 final cluster = runClusters[clusterIdx];
                 runAdvanceTerms.push(cluster.advance);
-                if (prep.shapedGlyphsByClusterRange.has(cluster.range)) {
-                    final shaped = prep.shapedGlyphsByClusterRange.get(cluster.range);
+                final shaped = prep.shapedGlyphsByClusterRange.get(cluster.range);
+                if (shaped != null) {
                     final mapped = ParagraphShapingStage.mapToClusterRange(shaped, cluster);
                     final centered = centerDashInk(mapped, cluster, prep.atomClassByRange);
                     for (g in centered)

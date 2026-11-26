@@ -141,10 +141,11 @@ class LineGeometryStageFns {
         for (line in lineSolution.lines) {
             var required = 0.0;
             for (pair in pinyinClusterRanges) {
-                if (pair.range.start <= line.clusterRange.end
-                    && pair.range.end >= line.clusterRange.start
-                    && rubyFontGeometryBySpan.has(pair.ruby))
-                    required = Math.max(required, rubyFontGeometryBySpan.get(pair.ruby).requiredExtent);
+                if (pair.range.start <= line.clusterRange.end && pair.range.end >= line.clusterRange.start) {
+                    final rubyGeometry = rubyFontGeometryBySpan.get(pair.ruby);
+                    if (rubyGeometry != null)
+                        required = Math.max(required, rubyGeometry.requiredExtent);
+                }
             }
             perLineRubyExtent.push(required);
         }
@@ -187,10 +188,12 @@ class LineGeometryStageFns {
             var descent = 0.0;
             var idx = line.clusterRange.start;
             while (idx <= line.clusterRange.end) {
-                if (inlineObjectByClusterIndex != null && inlineObjectByClusterIndex.has(idx)) {
+                if (inlineObjectByClusterIndex != null) {
                     final obj = inlineObjectByClusterIndex.get(idx);
-                    ascent = Math.max(ascent, f32(obj.ascent));
-                    descent = Math.max(descent, f32(obj.descent));
+                    if (obj != null) {
+                        ascent = Math.max(ascent, f32(obj.ascent));
+                        descent = Math.max(descent, f32(obj.descent));
+                    }
                 }
                 idx++;
             }

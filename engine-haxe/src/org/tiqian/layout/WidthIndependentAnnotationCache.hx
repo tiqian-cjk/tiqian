@@ -1063,7 +1063,8 @@ class WidthIndependentAnnotationCacheFns {
             if (clusterRoles[idx] == FontRole.LatinText)
                 continue;
             final cluster = naturalClusters[idx];
-            final shapedGlyphs = shapedGlyphsByClusterRange.has(cluster.range) ? shapedGlyphsByClusterRange.get(cluster.range) : [];
+            final shapedGlyphsEntry = shapedGlyphsByClusterRange.get(cluster.range);
+            final shapedGlyphs:Array<Glyph> = shapedGlyphsEntry == null ? [] : shapedGlyphsEntry;
             final atoms = PunctuationGeometryStage.punctuationAtoms(cluster, fontSize, punctuationAtomBuilder, shapedGlyphs,
                 annotation.clreqProfile.gluePlacement, annotation.clreqProfile.punctuationWidth);
             for (a in 0...atoms.length)
@@ -1219,9 +1220,9 @@ class WidthIndependentAnnotationCacheFns {
 
         for (idx in 0...naturalClusters.length) {
             final cluster = naturalClusters[idx];
-            if (glueCaps.has(idx)) {
-                final caps = glueCaps.get(idx);
-                final cls = atomClassByRange.has(cluster.range) ? atomClassByRange.get(cluster.range) : null;
+            final caps = glueCaps.get(idx);
+            if (caps != null) {
+                final cls = atomClassByRange.get(cluster.range);
 
                 if (cls == PunctuationClass.Interpunct || cls == PunctuationClass.MiddleDot) {
                     addGeometryAwareOpportunity(shrinkOpportunities, caps, idx, 3);

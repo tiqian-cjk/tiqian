@@ -115,7 +115,8 @@ import std.SortedMap;
         for (i in 0...naturalClusters.length) {
             final c = naturalClusters[i];
             final v = resolvedAdvance(i, c);
-            final sh = geometries.has(i) ? geometries.get(i).glyphInlineShift : 0;
+            final geometry = geometries.get(i);
+            final sh = geometry == null ? 0 : geometry.glyphInlineShift;
             result.push(v == c.advance
                 && sh == 0 ? c : new Cluster(c.range, c.text, c.fontKey, v, c.displayText, c.baselineShift, c.leadingLayoutAdvance, c.glyphInlineShift + sh));
         }
@@ -123,16 +124,22 @@ import std.SortedMap;
     }
 
     function resolvedAdvance(i:Int, c:Cluster):Float {
-        final raw = rawEdgeTrimByCluster.has(i) ? rawEdgeTrimByCluster.get(i) : 0, sp = rubySpreadByCluster.has(i) ? rubySpreadByCluster.get(i) : 0,
-        d = justificationDeltaByCluster.has(i) ? justificationDeltaByCluster.get(i) : 0,
-        att = attachedInlineTrailingGlueByCluster.has(i) ? attachedInlineTrailingGlueByCluster.get(i) : 0,
-        box = inlineBoxAdvanceByCluster.has(i) ? inlineBoxAdvanceByCluster.get(i) : 0;
-        if (!geometries.has(i))
-            return Math.max(0, c.advance + d + sp + att - raw);
+        final rawEntry = rawEdgeTrimByCluster.get(i);
+        final raw:Float = rawEntry == null ? 0 : rawEntry;
+        final spreadEntry = rubySpreadByCluster.get(i);
+        final sp:Float = spreadEntry == null ? 0 : spreadEntry;
+        final deltaEntry = justificationDeltaByCluster.get(i);
+        final d:Float = deltaEntry == null ? 0 : deltaEntry;
+        final attachedEntry = attachedInlineTrailingGlueByCluster.get(i);
+        final att:Float = attachedEntry == null ? 0 : attachedEntry;
+        final boxEntry = inlineBoxAdvanceByCluster.get(i);
+        final box:Float = boxEntry == null ? 0 : boxEntry;
         final g = geometries.get(i);
-        if (!budgets.has(i))
-            return Math.max(0, g.bodyWidth + box + d + sp - raw);
+        if (g == null)
+            return Math.max(0, c.advance + d + sp + att - raw);
         final b = budgets.get(i);
+        if (b == null)
+            return Math.max(0, g.bodyWidth + box + d + sp - raw);
         return Math.max(0, g.bodyWidth + box + b.leadingRemaining + b.trailingRemaining + d + sp + att - raw);
     }
 
@@ -151,7 +158,8 @@ import std.SortedMap;
             final b = SortedMap.builder();
             for (j in 0...n.size())
                 b.put(n.keyAt(j), n.valueAt(j));
-            b.put(k, (n.has(k) ? n.get(k) : 0) + trimByCluster.valueAt(i));
+            final existing = n.get(k);
+            b.put(k, (existing == null ? 0 : existing) + trimByCluster.valueAt(i));
             n = b.build();
         }
         return replace(this, null, n);
@@ -165,8 +173,8 @@ import std.SortedMap;
         for (i in 0...deltaByCluster.size()) {
             final k = deltaByCluster.keyAt(i);
             final amount = deltaByCluster.valueAt(i);
-            if (n.has(k) && amount > 0) {
-                final q = n.get(k);
+            final q = n.get(k);
+            if (q != null && amount > 0) {
                 final replacement = lead ? new GlueBudget(q.leadingNatural, Math.min(q.leadingNatural, q.leadingConsumed + amount), q.trailingNatural,
                     q.trailingConsumed) : new GlueBudget(q.leadingNatural, q.leadingConsumed, q.trailingNatural,
                         Math.min(q.trailingNatural, q.trailingConsumed + amount));
@@ -191,9 +199,10 @@ import std.SortedMap;
         for (i in 0...budgets.size()) {
             final k = budgets.keyAt(i);
             final q = budgets.valueAt(i);
-            if (q.leadingRemaining > 0 || q.trailingRemaining > 0)
-                b.put(k, new GlueCapacity(q.leadingRemaining, q.trailingRemaining, geometries.has(k)
-                    && geometries.get(k).anchor == PunctuationAnchor.Center));
+            if (q.leadingRemaining > 0 || q.trailingRemaining > 0) {
+                final geometry = geometries.get(k);
+                b.put(k, new GlueCapacity(q.leadingRemaining, q.trailingRemaining, geometry == null ? false : geometry.anchor == PunctuationAnchor.Center));
+            }
         }
         return b.build();
     }
@@ -203,10 +212,11 @@ import std.SortedMap;
         for (i in 0...geometries.size()) {
             final k = geometries.keyAt(i);
             final g = geometries.valueAt(i), b = budgets.get(k);
+            final deltaEntry = justificationDeltaByCluster.get(k);
+            final spreadEntry = rubySpreadByCluster.get(k);
             r.push(new ClusterGeometryDecisionInfo(g.range, g.sourceText, g.displayText, g.baseAdvance, g.bodyWidth, b.leadingNatural, b.leadingConsumed,
-                b.trailingNatural, b.trailingConsumed, justificationDeltaByCluster.has(k) ? justificationDeltaByCluster.get(k) : 0,
-                resolvedAdvance(k, naturalClusters[k]), "PunctuationGeometryLedger", g.reason, rubySpreadByCluster.has(k) ? rubySpreadByCluster.get(k) : 0,
-                g.glyphInlineShift, g.glyphPlacementReason));
+                b.trailingNatural, b.trailingConsumed, deltaEntry == null ? 0 : deltaEntry, resolvedAdvance(k, naturalClusters[k]),
+                "PunctuationGeometryLedger", g.reason, spreadEntry == null ? 0 : spreadEntry, g.glyphInlineShift, g.glyphPlacementReason));
         }
         return r;
     }
@@ -283,13 +293,16 @@ import std.SortedMap;
         final ds:Array<LineEdgeTrimDecisionInfo> = [];
         final forceEnd = forceLineEndHalfWidth == null ? true : forceLineEndHalfWidth;
         function consumeAtEdge(line:LineCandidate, index:Int, edge:String):Void {
-            if (!budgets.has(index))
-                return;
             final q = budgets.get(index);
-            final alreadyLead:Float = lead.get(index) == null ? 0 : lead.get(index);
-            final alreadyTrail:Float = trail.get(index) == null ? 0 : trail.get(index);
+            if (q == null)
+                return;
+            final leadEntry = lead.get(index);
+            final alreadyLead:Float = leadEntry == null ? 0 : leadEntry;
+            final trailEntry = trail.get(index);
+            final alreadyTrail:Float = trailEntry == null ? 0 : trailEntry;
             final lr = Math.max(0, q.leadingRemaining - alreadyLead), tr = Math.max(0, q.trailingRemaining - alreadyTrail);
-            final paired = geometries.has(index) && geometries.get(index).anchor == PunctuationAnchor.Center;
+            final indexGeometry = geometries.get(index);
+            final paired = indexGeometry == null ? false : indexGeometry.anchor == PunctuationAnchor.Center;
             final lp = paired ? Math.min(lr, tr) : (edge == "Start" ? lr : 0);
             final tp = paired ? Math.min(lr, tr) : (edge == "End" ? tr : 0);
             final total = lp + tp;
@@ -351,12 +364,12 @@ import std.SortedMap;
         for (boundary in boundaries) {
             final previous = boundary.previousClusterIndex;
             final end = boundary.attachedClusterRange.end;
-            final previousBudget = updated.has(previous) ? updated.get(previous) : null;
+            final previousBudget = updated.get(previous);
             final left = previousBudget == null ? 0 : previousBudget.trailingRemaining;
             var next = boundary.nextClusterIndex;
             if (next != null && naturalClusters[next].fontKey == "mandatory-break" && naturalClusters[next].displayText == "")
                 next = null;
-            final nextBudget = next != null && updated.has(next) ? updated.get(next) : null;
+            final nextBudget = next != null ? updated.get(next) : null;
             final right = nextBudget == null ? 0 : nextBudget.leadingRemaining;
             var leftAtom:PunctuationAtom = null;
             for (atom in punctuationAtoms)
@@ -407,7 +420,8 @@ import std.SortedMap;
         var attached = cloneF(attachedInlineTrailingGlueByCluster);
         for (i in 0...trailing.size()) {
             var k = trailing.keyAt(i);
-            attached = putF(attached, k, Math.max(attached.has(k) ? attached.get(k) : 0, trailing.valueAt(i)));
+            final attachedEntry = attached.get(k);
+            attached = putF(attached, k, Math.max(attachedEntry == null ? 0 : attachedEntry, trailing.valueAt(i)));
         }
         return new AttachedInlinePunctuationBoundaryResult(new PunctuationGeometryLedger(naturalClusters, geometries, updated, justificationDeltaByCluster,
             rawEdgeTrimByCluster, rubySpreadByCluster, inlineBoxAdvanceByCluster, attached),
