@@ -56,8 +56,11 @@ import type {
   SvelteUnmountResult,
 } from "./types.js";
 
+import { browserTreePrefix, browserTreeDirectory, buildBrowserTrees, rewriteWorkerEngineSpecifiers } from "./browser-engine.js";
 const webDemoDir: string = fileURLToPath(new URL("..", import.meta.url));
 const repoRoot: string = fileURLToPath(new URL("../../..", import.meta.url));
+
+buildBrowserTrees(repoRoot);
 const npmDir: string = join(repoRoot, "platforms/web/client/web-component");
 const npmCoreDir: string = join(repoRoot, "platforms/web/client/core");
 const ffiRuntimeDir: string = join(repoRoot, "platforms/web/client/engine-runtime/runtime");
@@ -432,6 +435,21 @@ async function waitForCdpEndpoint(port: number, timeoutMs: number = 15000): Prom
 function startFixtureServer(svelteComponents: SvelteComponents): Promise<Server> {
   const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const path: string = decodeURIComponent(new URL(req.url!, "http://x").pathname);
+    const generatedTree = browserTreePrefix(path);
+    if (generatedTree !== null) {
+      const rest: string = path.slice(generatedTree.prefix.length);
+      const file: string = join(browserTreeDirectory(repoRoot, generatedTree.tree), rest);
+      const data: Buffer | null = await readFile(file).catch(() => null);
+      if (data === null) {
+        res.statusCode = 404;
+        res.end("not found");
+        return;
+      }
+      res.setHeader("content-type", "text/javascript");
+      res.end(data);
+      return;
+    }
+
     const send = (data: string | Buffer, type: string): void => {
       res.setHeader("content-type", type);
       res.end(data);
@@ -439,17 +457,11 @@ function startFixtureServer(svelteComponents: SvelteComponents): Promise<Server>
     const sendFile = async (file: string, type: string): Promise<void> => {
       const data: Buffer | null = await readFile(file).catch(() => null);
       if (data) {
-        // Module workers do not see the document import map, so the dev-tree
-        // layout worker in core gets its bare "@tiqian/ffi" import
-        // rewritten to the absolute /npm-engine-runtime/ URL served below.
+        // Module workers do not see the document import map, so the worker
+        // source gets its bare engine specifiers rewritten to served URLs.
         if (file === join(npmCoreDir, "layout-worker.js")) {
-          const source: string = data.toString("utf8");
-          const occurrences: number = source.split('from "@tiqian/ffi"').length - 1;
-          assert.ok(occurrences <= 1, `unexpected engine import count ${occurrences}`);
-          if (occurrences === 1) {
-            send(source.replace('from "@tiqian/ffi"', 'from "/npm-engine-runtime/Tiqian-tiqian-ffi-js.mjs"'), type);
-            return;
-          }
+          send(rewriteWorkerEngineSpecifiers(data.toString("utf8")), type);
+          return;
         }
         send(data, type);
       }
@@ -476,7 +488,9 @@ function startFixtureServer(svelteComponents: SvelteComponents): Promise<Server>
     "@tiqian/web-component/element": "/npm/element.js",
     "@tiqian/web-component/": "/npm/",
     "@tiqian/core/": "/core/",
-    "@tiqian/ffi": "/npm-engine-runtime/Tiqian-tiqian-ffi-js.mjs",
+    "@tiqian/engine/": "/engine/",
+    "@tiqian/protocol/": "/protocol/",
+    "@tiqian/shared/": "/shared/",
     "svelte": "/svelte/src/index-client.js",
     "svelte/internal/client": "/svelte/src/internal/client/index.js",
     "svelte/internal/disclose-version": "/svelte/src/internal/disclose-version.js",
@@ -565,7 +579,7 @@ function startFixtureServer(svelteComponents: SvelteComponents): Promise<Server>
   return new Promise<Server>((resolve) => server.listen(demoPort, "127.0.0.1", () => resolve(server)));
 }
 
-test("FrameworkCommitConflict: framework commits survive and re-render through the tiqian raw-dom", { skip: "the demo served the removed @tiqian/ffi runtime; the engine now ships as the @tiqian/engine workspace tree, whose .ts sources the browser cannot load" }, async (_t: TestContext) => {
+test("FrameworkCommitConflict: framework commits survive and re-render through the tiqian raw-dom", async (_t: TestContext) => {
   const svelteMain: string = await compileSvelteComponent();
   assert.match(svelteMain, /svelte\/internal\/client/, "compiled fixture must use the svelte client runtime");
 
