@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-08
+- Amended: 2026-11-26（renderer、paragraph backend 与 facade 改用 Swift 实现，位于 `platforms/apple/frontend` 的模块 `Tiqian`；`coretext-render` 模块与 `Tiqian.xcframework` 删除，见 [ADR 0064](0064-apple-frontend-on-generated-swift-engine.md)）
 - Refines: 与 [0017](0017-compose-desktop-renderer.md) / [0035](0035-android-compose-gallery.md) / [0039](0039-web-rendering-path.md) 并列(前端);消费 [ADR 0046](0046-core-text-shaping-adapter.md)
 
 ## Context

@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-08
+- Amended: 2026-11-26（适配器改用 Swift 实现，位于 SwiftPM 包 `platforms/apple/shaping` 的模块 `TiqianCoreText`，接口约定不变，见 [ADR 0064](0064-apple-frontend-on-generated-swift-engine.md)）
 - Refines: [ADR 0008](0008-shaping-adapter-contract.md)（Shaping adapter contract）；与 [0013](0013-jvm-awt-shaping-adapter.md) / [0015](0015-skiko-shaping-adapter-cross-check.md) / [0016](0016-android-textpaint-adapter.md) 并列
 
 ## Context

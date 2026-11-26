@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-08
-- Amended: 2026-08-20（macosX64 处置状态表述修正，决定不变）；2026-11-12（Kotlin 割接删除了 `LayoutDumpGoldenTest` 与 golden 机制，见 ADR 0059）
+- Amended: 2026-08-20（macosX64 处置状态表述修正，决定不变）；2026-11-12（Kotlin 割接删除了 `LayoutDumpGoldenTest` 与 golden 机制，见 ADR 0059）；2026-11-26（Apple 前端改用 boring 生成的 Swift 引擎，不再经 Kotlin/Native 消费引擎；引擎的 Kotlin/Native Apple 坐标继续发布，见 [ADR 0064](0064-apple-frontend-on-generated-swift-engine.md)）
 - Refines: [ADR 0001](0001-core-pipeline-and-platform-boundary.md)（核心 pipeline 与平台边界）
 
 ## Context

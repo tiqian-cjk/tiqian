@@ -32,6 +32,8 @@ ADR 记录已经做出的架构与排版决定。它们按编号保留当时的 
 - [0043 多 face 段降级为平台字符串绘制](0043-multi-face-platform-string-draw-degrade.md)
 - [0045 Apple (Kotlin/Native) 目标](0045-apple-kotlin-native-target.md)
 - [0046 Core Text shaping 与度量适配器](0046-core-text-shaping-adapter.md)
+- [0047 Core Text 渲染前端](0047-core-text-rendering-frontend.md)
+- [0064 Apple 前端改用 boring 生成的 Swift 引擎](0064-apple-frontend-on-generated-swift-engine.md)
 
 ## 行内与段落排版
 
@@ -102,5 +104,7 @@ ADR 记录已经做出的架构与排版决定。它们按编号保留当时的 
 - 0042 把 0040 的字体证据与固定版心几何拆成两个公共输入：字体回放不要求宿主宽度，只有显式快照
   继续使用 `maxWidthPx`；SvelteKit / Astro 生命周期由同仓库独立 npm adapter 持有。
 - 0049 的逻辑文档选区模型由 0058 在 Android View 前端复用。
+- 0045、0046、0047 的 Kotlin/Native 实现与 `Tiqian.xcframework` 打包由 0064 改为 Swift 实现与本地 SwiftPM 包；
+  0046 的 shaping 接口约定与 0047 的绘制规则不变。
 - 0039 / 0040 的 Node precompute 运行时由 0050 迁往 Kotlin/Native 静态库加 Rust 绑定，precompute
   迁入独立的 `@tiqian/precompute` 包；迁移完成前两文中的 WASM 依赖与 npm 结构描述仍有效。
