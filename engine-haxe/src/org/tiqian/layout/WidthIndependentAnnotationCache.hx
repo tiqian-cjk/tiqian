@@ -695,7 +695,7 @@ class WidthIndependentAnnotationCacheFns {
     }
 
     /** `KinsokuLevelMemoKey`: the integer key of a kinsoku level in `WidthIndependentLayoutMemo.kinsokuDependent`. */
-    static function kinsokuLevelMemoKey(level:KinsokuLevel):Int {
+    public static function kinsokuLevelMemoKey(level:KinsokuLevel):Int {
         return switch (level) {
             case KinsokuLevel.None: 0;
             case KinsokuLevel.Basic: 1;

@@ -29,6 +29,9 @@ import org.tiqian.core.InlineAttachment;
 import org.tiqian.core.LineLengthGridDecisionInfo;
 import org.tiqian.layout.LineGeometryStage.ClusterMetricDecision;
 import org.tiqian.layout.LineGeometryStage.ResolvedLineMetrics;
+import org.tiqian.layout.LineBreakPlanningParts.KinsokuDependentPlanning;
+import org.tiqian.layout.LineBreakPlanningParts.LineBreakPlanningBase;
+import org.tiqian.layout.WidthIndependentAnnotationCache.WidthIndependentAnnotationCacheFns;
 import org.tiqian.core.LineSpacingDecisionInfo;
 import org.tiqian.core.FirstLineIndentDecisionInfo;
 import org.tiqian.core.KinsokuDecisionInfo;
@@ -474,6 +477,282 @@ class LineBreakPlanningStage {
         return metricDecisionByRangeBuilder.build();
     }
 
+    /**
+     * The `LineBreakPlanningBase` of `prep`; see that class for what it holds. The code is the part
+     * of `planParagraphLines` that reads no measure and no kinsoku level.
+     */
+    private static function buildPlanningBase(prep:ParagraphLayoutPrep, progressiveTechnicalWhitespaceStretchCapacity:Float):LineBreakPlanningBase {
+        final inlineAttachments = prep.naturalInlineAttachments;
+        final westernBracketBoundaries = UnicodePunctuationBoundaryResolver.resolveWesternBracketCjkInterCharBoundaries(prep.text, prep.naturalClusters,
+            prep.clusterRoles);
+        final attachedInlineInterCharBoundaries = UnicodePunctuationBoundaryResolver.resolveAttachedInlineInterCharBoundaries(prep.text, prep.naturalClusters,
+            prep.clusterRoles, prep.eastAsianSpacingEdges, westernBracketBoundaries, inlineAttachments);
+
+        final attachedInlineForbiddenLineStartClustersBuilder = SortedSet.builder();
+        for (it in 0...inlineAttachments.length) {
+            if (inlineAttachments[it] == InlineAttachment.Previous) {
+                attachedInlineForbiddenLineStartClustersBuilder.put(it);
+            }
+        }
+        final attachedInlineForbiddenLineStartClusters = attachedInlineForbiddenLineStartClustersBuilder.build();
+
+        final hyphenBreakClustersBuilder = SortedSet.builder();
+        if (prep.hyphenOffsets.size() > 0) {
+            for (it in 0...prep.naturalClusters.length) {
+                if (prep.hyphenOffsets.has(prep.naturalClusters[it].range.start)) {
+                    hyphenBreakClustersBuilder.put(it);
+                }
+            }
+        }
+        final hyphenBreakClusters = hyphenBreakClustersBuilder.build();
+
+        final clusterIndexBySourceStartBuilder = SortedMap.builder();
+        for (it in 0...prep.naturalClusters.length) {
+            clusterIndexBySourceStartBuilder.put(prep.naturalClusters[it].range.start, it);
+        }
+        final clusterIndexBySourceStart = clusterIndexBySourceStartBuilder.build();
+
+        final progressiveBreakOpportunitiesBuilder:SortedMapBuilder<Int, ProgressiveBreakOpportunity> = SortedMap.builder();
+        for (i in 0...prep.progressiveBreakOffsets.size()) {
+            final sourceOffset = prep.progressiveBreakOffsets.keyAt(i);
+            final opportunity = prep.progressiveBreakOffsets.valueAt(i);
+            if (clusterIndexBySourceStart.has(sourceOffset)) {
+                final clusterIndex = clusterIndexBySourceStart.get(sourceOffset);
+                final opp = opportunity.tier == ProgressiveBreakTier.Whitespace ? new ProgressiveBreakOpportunity(opportunity.tier, opportunity.spanRange,
+                    progressiveTechnicalWhitespaceStretchCapacity) : opportunity;
+                progressiveBreakOpportunitiesBuilder.put(clusterIndex, opp);
+            }
+        }
+        final progressiveBreakOpportunities = progressiveBreakOpportunitiesBuilder.build();
+
+        final progressiveTechnicalRanges = new Array<TextRange>();
+        for (i in 0...prep.input.content.lineBreakSpans.length) {
+            if (prep.input.content.lineBreakSpans[i].policy == LineBreakPolicy.ProgressiveTechnical) {
+                progressiveTechnicalRanges.push(prep.input.content.lineBreakSpans[i].range);
+            }
+        }
+        final progressiveTechnicalOverlap = new IntervalOverlapIndex(progressiveTechnicalRanges);
+
+        final rawNumberSymbolRanges = NumberSymbolCohesion.unbreakableRanges(prep.text);
+        final numberSymbolClusterRanges = new Array<IntRange>();
+        for (i in 0...rawNumberSymbolRanges.length) {
+            final sourceRange = rawNumberSymbolRanges[i];
+            if (!progressiveTechnicalOverlap.overlaps(sourceRange.start, sourceRange.end + 1)) {
+                final idxRange = PunctuationGeometryLedger.clusterIndexRangeFor(prep.naturalClusters, new TextRange(sourceRange.start, sourceRange.end + 1));
+                if (idxRange != null) {
+                    numberSymbolClusterRanges.push(idxRange);
+                }
+            }
+        }
+
+        final noStretchBoundaryClustersBuilder = SortedSet.builder();
+        for (idx in 0...prep.naturalClusters.length) {
+            final cls = prep.atomClassByRange.get(prep.naturalClusters[idx].range);
+            if (cls == PunctuationClass.Connector || cls == PunctuationClass.Solidus || cls == PunctuationClass.Dash || cls == PunctuationClass.Ellipsis) {
+                noStretchBoundaryClustersBuilder.put(idx);
+            }
+        }
+        final noStretchBoundaryClusters = noStretchBoundaryClustersBuilder.build();
+
+        final technicalBoundaryAfterClustersBuilder = SortedMap.builder();
+        for (i in 0...progressiveBreakOpportunities.size()) {
+            final rightIndex = progressiveBreakOpportunities.keyAt(i);
+            final opportunity = progressiveBreakOpportunities.valueAt(i);
+            if (opportunity.tier == ProgressiveBreakTier.Whitespace) {
+                technicalBoundaryAfterClustersBuilder.put(rightIndex - 1, opportunity.tier);
+            }
+        }
+        final technicalBoundaryAfterClusters = technicalBoundaryAfterClustersBuilder.build();
+
+        final boundaryEligible = new Array<Bool>();
+        for (i in 0...prep.naturalClusters.length)
+            boundaryEligible.push(false);
+        for (leftIndex in 0...prep.naturalClusters.length - 1) {
+            final rightIndex = leftIndex + 1;
+            final left = prep.naturalClusters[leftIndex];
+            final right = prep.naturalClusters[rightIndex];
+            if (left.range.end != right.range.start)
+                continue;
+            if (prep.inlineObjectByClusterIndex.has(leftIndex)
+                || prep.inlineObjectByClusterIndex.has(rightIndex)
+                || prep.zeroWidthBreakClusters.has(leftIndex)
+                || prep.zeroWidthBreakClusters.has(rightIndex)
+                || prep.mandatoryBreakClusters.has(leftIndex)
+                || prep.mandatoryBreakClusters.has(rightIndex)
+                || left.text.length == 0
+                || right.text.length == 0
+                || isWhitespaceOnly(left.text)
+                || isWhitespaceOnly(right.text)) {
+                continue;
+            }
+            boundaryEligible[leftIndex] = true;
+        }
+
+        final addedKeys = new Array<Bool>();
+        for (i in 0...prep.naturalClusters.length)
+            addedKeys.push(false);
+        final emergencyTrackingBoundaryAfterClustersBuilder = SortedMap.builder();
+        for (i in 0...prep.emergencyTrackingEligibilityDecisions.length) {
+            final decision = prep.emergencyTrackingEligibilityDecisions[i];
+            final span = PunctuationGeometryLedger.clusterIndexRangeFor(prep.naturalClusters, decision.range);
+            if (span == null)
+                continue;
+            for (leftIndex in span.start...span.end) {
+                if (!boundaryEligible[leftIndex] || addedKeys[leftIndex])
+                    continue;
+                addedKeys[leftIndex] = true;
+                emergencyTrackingBoundaryAfterClustersBuilder.put(leftIndex, decision.reason);
+            }
+        }
+        final emergencyTrackingBoundaryAfterClusters = emergencyTrackingBoundaryAfterClustersBuilder.build();
+
+        final virtualBoundaries = UnicodePunctuationBoundaryResolver.resolveAttachedInlineVirtualBoundaries(inlineAttachments);
+        final attachedInlineUnbreakableRanges = new Array<IntRange>();
+        for (i in 0...virtualBoundaries.length) {
+            final boundary = virtualBoundaries[i];
+            attachedInlineUnbreakableRanges.push(new IntRange(boundary.previousClusterIndex, boundary.attachedClusterRange.end));
+        }
+
+        final leadingUnbreakableRanges = new Array<IntRange>();
+        for (i in 0...prep.input.decorations.length) {
+            final d = prep.input.decorations[i];
+            if (d.kind == DecorationKind.Mourning) {
+                final r = PunctuationGeometryLedger.clusterIndexRangeFor(prep.naturalClusters, d.range);
+                if (r != null)
+                    leadingUnbreakableRanges.push(r);
+            }
+        }
+        for (i in 0...prep.pinyinSpans.length) {
+            final r = PunctuationGeometryLedger.clusterIndexRangeFor(prep.naturalClusters, prep.pinyinSpans[i].baseRange);
+            if (r != null)
+                leadingUnbreakableRanges.push(r);
+        }
+        for (i in 0...attachedInlineUnbreakableRanges.length)
+            leadingUnbreakableRanges.push(attachedInlineUnbreakableRanges[i]);
+        return new LineBreakPlanningBase(attachedInlineInterCharBoundaries, attachedInlineForbiddenLineStartClusters, hyphenBreakClusters,
+            progressiveBreakOpportunities, numberSymbolClusterRanges, noStretchBoundaryClusters, technicalBoundaryAfterClusters,
+            emergencyTrackingBoundaryAfterClusters, leadingUnbreakableRanges);
+    }
+
+    /**
+     * The `KinsokuDependentPlanning` of `prep` at its resolved kinsoku level; see that class for what
+     * it holds. The code is the part of `planParagraphLines` that reads the kinsoku rule or the
+     * kinsoku-dependent prep part and no measure.
+     */
+    private static function buildKinsokuDependentPlanning(prep:ParagraphLayoutPrep, planningBase:LineBreakPlanningBase,
+            unicodePunctuationBoundaries:UnicodePunctuationBoundaries):KinsokuDependentPlanning {
+        final attachedInlineForbiddenLineStartClusters = planningBase.attachedInlineForbiddenLineStartClusters;
+        final numberSymbolClusterRanges = planningBase.numberSymbolClusterRanges;
+        final noStretchBoundaryClusters = planningBase.noStretchBoundaryClusters;
+        final westernBracketCjkInterCharBoundaryAfterClusters = planningBase.attachedInlineInterCharBoundaries.ordinaryWesternBoundaryAfterClusters;
+        final attachedInlinePhysicalBoundaryAfterClusters = planningBase.attachedInlineInterCharBoundaries.suppressedPhysicalBoundaryAfterClusters;
+        final attachedInlineVirtualBoundaryAfterClusters = planningBase.attachedInlineInterCharBoundaries.virtualBoundaryAfterClusters;
+        final attachedInlineVirtualSinoWesternBoundaryAfterClusters = planningBase.attachedInlineInterCharBoundaries.virtualSinoWesternBoundaryAfterClusters;
+
+        final forbiddenLineStartCoreClustersBuilder = SortedSet.builder();
+        for (idx in 0...prep.naturalClusters.length) {
+            if (attachedInlineForbiddenLineStartClusters.has(idx)
+                || prep.zeroWidthBreakClusters.has(idx)
+                || (PunctuationGeometryStage.isCjkKinsokuRole(prep.clusterRoles[idx])
+                    && prep.kinsokuRule.forbiddenAtLineStart(prep.naturalClusters[idx]))
+                || unicodePunctuationBoundaries.forbiddenLineStartClusters.has(idx)) {
+                forbiddenLineStartCoreClustersBuilder.put(idx);
+            }
+        }
+        final forbiddenLineStartCoreClusters = forbiddenLineStartCoreClustersBuilder.build();
+
+        final forbiddenLineEndClustersBuilder = SortedSet.builder();
+        for (idx in 0...prep.naturalClusters.length) {
+            if ((PunctuationGeometryStage.isCjkKinsokuRole(prep.clusterRoles[idx])
+                && prep.kinsokuRule.forbiddenAtLineEnd(prep.naturalClusters[idx]))
+                || unicodePunctuationBoundaries.forbiddenLineEndClusters.has(idx)) {
+                forbiddenLineEndClustersBuilder.put(idx);
+            }
+        }
+        final forbiddenLineEndClusters = forbiddenLineEndClustersBuilder.build();
+
+        final noStretchBoundaryAfterClustersBuilder = SortedSet.builder();
+        for (i in 0...numberSymbolClusterRanges.length) {
+            final range = numberSymbolClusterRanges[i];
+            for (cIdx in range.start...range.end) {
+                noStretchBoundaryAfterClustersBuilder.put(cIdx);
+            }
+        }
+        for (i in 0...prep.inlineObjectAttachmentNoStretchBoundaries.size()) {
+            noStretchBoundaryAfterClustersBuilder.put(prep.inlineObjectAttachmentNoStretchBoundaries.at(i));
+        }
+        final noStretchBoundaryAfterClusters = noStretchBoundaryAfterClustersBuilder.build();
+
+        final adjustableInlineBoundaryRightClustersBuilder = SortedSet.builder();
+        for (i in 0...prep.uniformInlineObjectBoundaryAfterClusters.size()) {
+            final leftIndex = prep.uniformInlineObjectBoundaryAfterClusters.at(i);
+            final rightIndex = leftIndex + 1;
+            if (noStretchBoundaryAfterClusters.has(leftIndex)
+                || noStretchBoundaryClusters.has(leftIndex)
+                || noStretchBoundaryClusters.has(rightIndex)) {
+                // skip
+            } else {
+                adjustableInlineBoundaryRightClustersBuilder.put(rightIndex);
+            }
+        }
+        final adjustableInlineBoundaryRightClusters = adjustableInlineBoundaryRightClustersBuilder.build();
+
+        final cjkInterCharBoundariesBuilder = SortedSet.builder();
+        for (it in 1...prep.naturalClusters.length) {
+            if (!attachedInlinePhysicalBoundaryAfterClusters.has(it - 1)
+                && !noStretchBoundaryAfterClusters.has(it - 1)
+                && prep.clusterRoles[it - 1] == FontRole.CjkText
+                && prep.clusterRoles[it] == FontRole.CjkText) {
+                cjkInterCharBoundariesBuilder.put(it);
+            }
+        }
+        for (i in 0...adjustableInlineBoundaryRightClusters.size()) {
+            cjkInterCharBoundariesBuilder.put(adjustableInlineBoundaryRightClusters.at(i));
+        }
+        for (i in 0...westernBracketCjkInterCharBoundaryAfterClusters.size()) {
+            cjkInterCharBoundariesBuilder.put(westernBracketCjkInterCharBoundaryAfterClusters.at(i) + 1);
+        }
+        for (i in 0...attachedInlineVirtualBoundaryAfterClusters.size()) {
+            cjkInterCharBoundariesBuilder.put(attachedInlineVirtualBoundaryAfterClusters.keyAt(i) + 1);
+        }
+        final cjkInterCharBoundaries = cjkInterCharBoundariesBuilder.build();
+
+        final sinoWesternBoundariesBuilder = SortedSet.builder();
+        for (it in 1...prep.naturalClusters.length) {
+            if (!attachedInlinePhysicalBoundaryAfterClusters.has(it - 1)
+                && !noStretchBoundaryAfterClusters.has(it - 1)
+                && PunctuationGeometryStage.isEastAsianSpacingBoundaryAt(it, prep.naturalClusters, prep.eastAsianSpacingEdges)) {
+                sinoWesternBoundariesBuilder.put(it);
+            }
+        }
+        for (i in 0...attachedInlineVirtualSinoWesternBoundaryAfterClusters.size()) {
+            sinoWesternBoundariesBuilder.put(attachedInlineVirtualSinoWesternBoundaryAfterClusters.at(i) + 1);
+        }
+        final sinoWesternBoundaries = sinoWesternBoundariesBuilder.build();
+
+        return new KinsokuDependentPlanning(forbiddenLineStartCoreClusters, forbiddenLineEndClusters, noStretchBoundaryAfterClusters,
+            cjkInterCharBoundaries, sinoWesternBoundaries);
+    }
+
+    /**
+     * The forbidden line starts of one layout: the kinsoku-level core plus the ones the
+     * measure-dependent contextual kinsoku adds. The core is returned as is when the contextual
+     * kinsoku adds none.
+     */
+    private static function mergeForbiddenLineStartClusters(core:SortedSet<Int>, asciiPointMarkStarts:SortedSet<Int>,
+            inlineObjectStarts:SortedSet<Int>):SortedSet<Int> {
+        if (asciiPointMarkStarts.size() == 0 && inlineObjectStarts.size() == 0)
+            return core;
+        final builder = SortedSet.builder();
+        for (i in 0...core.size())
+            builder.put(core.at(i));
+        for (i in 0...asciiPointMarkStarts.size())
+            builder.put(asciiPointMarkStarts.at(i));
+        for (i in 0...inlineObjectStarts.size())
+            builder.put(inlineObjectStarts.at(i));
+        return builder.build();
+    }
+
     public static function planParagraphLines(engine:ExplainableStubParagraphLayoutEngine, prep:ParagraphLayoutPrep):LineBreakPlanningStageResult {
         // `WidthIndependentLayoutMemo`: a prep built on the base shaping stage carries the
         // annotation's memo, so the width-independent values below are computed once per paragraph.
@@ -602,104 +881,39 @@ class LineBreakPlanningStage {
                 prep.quotePairs);
         if (cachedUnicodeBoundaries == null)
             memo.unicodePunctuationBoundaries.value = unicodePunctuationBoundaries;
-        final inlineAttachments = prep.naturalInlineAttachments;
-        final cachedWesternBoundaries = memo.westernBracketBoundaries.value;
-        final westernBracketBoundaries:SortedSet<Int> = cachedWesternBoundaries != null ? cachedWesternBoundaries
-            : UnicodePunctuationBoundaryResolver.resolveWesternBracketCjkInterCharBoundaries(prep.text, prep.naturalClusters, prep.clusterRoles);
-        if (cachedWesternBoundaries == null)
-            memo.westernBracketBoundaries.value = westernBracketBoundaries;
-        final attachedInlineInterCharBoundaries = UnicodePunctuationBoundaryResolver.resolveAttachedInlineInterCharBoundaries(prep.text, prep.naturalClusters,
-            prep.clusterRoles, prep.eastAsianSpacingEdges, westernBracketBoundaries, inlineAttachments);
+        final cachedPlanningBase = memo.planningBase.value;
+        final planningBase:LineBreakPlanningBase = cachedPlanningBase != null ? cachedPlanningBase
+            : buildPlanningBase(prep, engine.justifier.progressiveTechnicalWhitespaceStretchCapacity(prep.fontSize));
+        if (cachedPlanningBase == null)
+            memo.planningBase.value = planningBase;
+        final kinsokuKey = WidthIndependentAnnotationCacheFns.kinsokuLevelMemoKey(prep.resolvedKinsoku.level);
+        final cachedKinsokuPlanning = memo.planningKinsokuPart.cached(kinsokuKey);
+        final kinsokuPlanning:KinsokuDependentPlanning = cachedKinsokuPlanning != null ? cachedKinsokuPlanning
+            : buildKinsokuDependentPlanning(prep, planningBase, unicodePunctuationBoundaries);
+        if (cachedKinsokuPlanning == null) {
+            memo.planningKinsokuPart.key = kinsokuKey;
+            memo.planningKinsokuPart.value = kinsokuPlanning;
+        }
+        final attachedInlineInterCharBoundaries = planningBase.attachedInlineInterCharBoundaries;
         final westernBracketCjkInterCharBoundaryAfterClusters = attachedInlineInterCharBoundaries.ordinaryWesternBoundaryAfterClusters;
         final attachedInlinePhysicalBoundaryAfterClusters = attachedInlineInterCharBoundaries.suppressedPhysicalBoundaryAfterClusters;
         final attachedInlineVirtualBoundaryAfterClusters = attachedInlineInterCharBoundaries.virtualBoundaryAfterClusters;
         final attachedInlineVirtualSinoWesternBoundaryAfterClusters = attachedInlineInterCharBoundaries.virtualSinoWesternBoundaryAfterClusters;
-
-        final attachedInlineForbiddenLineStartClustersBuilder = SortedSet.builder();
-        for (it in 0...inlineAttachments.length) {
-            if (inlineAttachments[it] == InlineAttachment.Previous) {
-                attachedInlineForbiddenLineStartClustersBuilder.put(it);
-            }
-        }
-        final attachedInlineForbiddenLineStartClusters = attachedInlineForbiddenLineStartClustersBuilder.build();
-
-        final forbiddenLineStartClustersBuilder = SortedSet.builder();
-        for (idx in 0...prep.naturalClusters.length) {
-            if (attachedInlineForbiddenLineStartClusters.has(idx)
-                || prep.zeroWidthBreakClusters.has(idx)
-                || (PunctuationGeometryStage.isCjkKinsokuRole(prep.clusterRoles[idx])
-                    && prep.kinsokuRule.forbiddenAtLineStart(prep.naturalClusters[idx]))
-                || unicodePunctuationBoundaries.forbiddenLineStartClusters.has(idx)
-                || asciiPointMarkKinsoku.forbiddenLineStartClusters.has(idx)
-                || inlineObjectKinsoku.forbiddenLineStartClusters.has(idx)) {
-                forbiddenLineStartClustersBuilder.put(idx);
-            }
-        }
-        final forbiddenLineStartClusters = forbiddenLineStartClustersBuilder.build();
-
-        final forbiddenLineEndClustersBuilder = SortedSet.builder();
-        for (idx in 0...prep.naturalClusters.length) {
-            if ((PunctuationGeometryStage.isCjkKinsokuRole(prep.clusterRoles[idx])
-                && prep.kinsokuRule.forbiddenAtLineEnd(prep.naturalClusters[idx]))
-                || unicodePunctuationBoundaries.forbiddenLineEndClusters.has(idx)) {
-                forbiddenLineEndClustersBuilder.put(idx);
-            }
-        }
-        final forbiddenLineEndClusters = forbiddenLineEndClustersBuilder.build();
-
-        final hyphenBreakClustersBuilder = SortedSet.builder();
-        if (prep.hyphenOffsets.size() > 0) {
-            for (it in 0...prep.naturalClusters.length) {
-                if (prep.hyphenOffsets.has(prep.naturalClusters[it].range.start)) {
-                    hyphenBreakClustersBuilder.put(it);
-                }
-            }
-        }
-        final hyphenBreakClusters = hyphenBreakClustersBuilder.build();
-
-        final clusterIndexBySourceStartBuilder = SortedMap.builder();
-        for (it in 0...prep.naturalClusters.length) {
-            clusterIndexBySourceStartBuilder.put(prep.naturalClusters[it].range.start, it);
-        }
-        final clusterIndexBySourceStart = clusterIndexBySourceStartBuilder.build();
-        final progressiveTechnicalWhitespaceStretchCapacity = engine.justifier.progressiveTechnicalWhitespaceStretchCapacity(prep.fontSize);
-
-        final progressiveBreakOpportunitiesBuilder:SortedMapBuilder<Int, ProgressiveBreakOpportunity> = SortedMap.builder();
-        for (i in 0...prep.progressiveBreakOffsets.size()) {
-            final sourceOffset = prep.progressiveBreakOffsets.keyAt(i);
-            final opportunity = prep.progressiveBreakOffsets.valueAt(i);
-            if (clusterIndexBySourceStart.has(sourceOffset)) {
-                final clusterIndex = clusterIndexBySourceStart.get(sourceOffset);
-                final opp = opportunity.tier == ProgressiveBreakTier.Whitespace ? new ProgressiveBreakOpportunity(opportunity.tier, opportunity.spanRange,
-                    progressiveTechnicalWhitespaceStretchCapacity) : opportunity;
-                progressiveBreakOpportunitiesBuilder.put(clusterIndex, opp);
-            }
-        }
-        final progressiveBreakOpportunities = progressiveBreakOpportunitiesBuilder.build();
-
-        final progressiveTechnicalRanges = new Array<TextRange>();
-        for (i in 0...prep.input.content.lineBreakSpans.length) {
-            if (prep.input.content.lineBreakSpans[i].policy == LineBreakPolicy.ProgressiveTechnical) {
-                progressiveTechnicalRanges.push(prep.input.content.lineBreakSpans[i].range);
-            }
-        }
-        final progressiveTechnicalOverlap = new IntervalOverlapIndex(progressiveTechnicalRanges);
-
-        final rawNumberSymbolRanges = NumberSymbolCohesion.unbreakableRanges(prep.text);
-        final numberSymbolClusterRanges = new Array<IntRange>();
-        for (i in 0...rawNumberSymbolRanges.length) {
-            final sourceRange = rawNumberSymbolRanges[i];
-            if (!progressiveTechnicalOverlap.overlaps(sourceRange.start, sourceRange.end + 1)) {
-                final idxRange = PunctuationGeometryLedger.clusterIndexRangeFor(prep.naturalClusters, new TextRange(sourceRange.start, sourceRange.end + 1));
-                if (idxRange != null) {
-                    numberSymbolClusterRanges.push(idxRange);
-                }
-            }
-        }
+        final forbiddenLineStartClusters = mergeForbiddenLineStartClusters(kinsokuPlanning.forbiddenLineStartCoreClusters,
+            asciiPointMarkKinsoku.forbiddenLineStartClusters, inlineObjectKinsoku.forbiddenLineStartClusters);
+        final forbiddenLineEndClusters = kinsokuPlanning.forbiddenLineEndClusters;
+        final hyphenBreakClusters = planningBase.hyphenBreakClusters;
+        final progressiveBreakOpportunities = planningBase.progressiveBreakOpportunities;
+        final noStretchBoundaryClusters = planningBase.noStretchBoundaryClusters;
+        final noStretchBoundaryAfterClusters = kinsokuPlanning.noStretchBoundaryAfterClusters;
+        final technicalBoundaryAfterClusters = planningBase.technicalBoundaryAfterClusters;
+        final emergencyTrackingBoundaryAfterClusters = planningBase.emergencyTrackingBoundaryAfterClusters;
+        final cjkInterCharBoundaries = kinsokuPlanning.cjkInterCharBoundaries;
+        final sinoWesternBoundaries = kinsokuPlanning.sinoWesternBoundaries;
 
         final numberSymbolUnbreakableRanges = new Array<IntRange>();
-        for (i in 0...numberSymbolClusterRanges.length) {
-            final idxRange = numberSymbolClusterRanges[i];
+        for (i in 0...planningBase.numberSymbolClusterRanges.length) {
+            final idxRange = planningBase.numberSymbolClusterRanges[i];
             final rangeTerms:Array<Float> = [];
             for (cIdx in idxRange.start...idxRange.end + 1) {
                 rangeTerms.push(prep.naturalClusters[cIdx].advance);
@@ -709,149 +923,9 @@ class LineBreakPlanningStage {
             }
         }
 
-        final noStretchBoundaryClustersBuilder = SortedSet.builder();
-        for (idx in 0...prep.naturalClusters.length) {
-            final cls = prep.atomClassByRange.get(prep.naturalClusters[idx].range);
-            if (cls == PunctuationClass.Connector || cls == PunctuationClass.Solidus || cls == PunctuationClass.Dash || cls == PunctuationClass.Ellipsis) {
-                noStretchBoundaryClustersBuilder.put(idx);
-            }
-        }
-        final noStretchBoundaryClusters = noStretchBoundaryClustersBuilder.build();
-
-        final noStretchBoundaryAfterClustersBuilder = SortedSet.builder();
-        for (i in 0...numberSymbolClusterRanges.length) {
-            final range = numberSymbolClusterRanges[i];
-            for (cIdx in range.start...range.end) {
-                noStretchBoundaryAfterClustersBuilder.put(cIdx);
-            }
-        }
-        for (i in 0...prep.inlineObjectAttachmentNoStretchBoundaries.size()) {
-            noStretchBoundaryAfterClustersBuilder.put(prep.inlineObjectAttachmentNoStretchBoundaries.at(i));
-        }
-        final noStretchBoundaryAfterClusters = noStretchBoundaryAfterClustersBuilder.build();
-
-        final technicalBoundaryAfterClustersBuilder = SortedMap.builder();
-        for (i in 0...progressiveBreakOpportunities.size()) {
-            final rightIndex = progressiveBreakOpportunities.keyAt(i);
-            final opportunity = progressiveBreakOpportunities.valueAt(i);
-            if (opportunity.tier == ProgressiveBreakTier.Whitespace) {
-                technicalBoundaryAfterClustersBuilder.put(rightIndex - 1, opportunity.tier);
-            }
-        }
-        final technicalBoundaryAfterClusters = technicalBoundaryAfterClustersBuilder.build();
-
-        final boundaryEligible = new Array<Bool>();
-        for (i in 0...prep.naturalClusters.length)
-            boundaryEligible.push(false);
-        for (leftIndex in 0...prep.naturalClusters.length - 1) {
-            final rightIndex = leftIndex + 1;
-            final left = prep.naturalClusters[leftIndex];
-            final right = prep.naturalClusters[rightIndex];
-            if (left.range.end != right.range.start)
-                continue;
-            if (prep.inlineObjectByClusterIndex.has(leftIndex)
-                || prep.inlineObjectByClusterIndex.has(rightIndex)
-                || prep.zeroWidthBreakClusters.has(leftIndex)
-                || prep.zeroWidthBreakClusters.has(rightIndex)
-                || prep.mandatoryBreakClusters.has(leftIndex)
-                || prep.mandatoryBreakClusters.has(rightIndex)
-                || left.text.length == 0
-                || right.text.length == 0
-                || isWhitespaceOnly(left.text)
-                || isWhitespaceOnly(right.text)) {
-                continue;
-            }
-            boundaryEligible[leftIndex] = true;
-        }
-
-        final addedKeys = new Array<Bool>();
-        for (i in 0...prep.naturalClusters.length)
-            addedKeys.push(false);
-        final emergencyTrackingBoundaryAfterClustersBuilder = SortedMap.builder();
-        for (i in 0...prep.emergencyTrackingEligibilityDecisions.length) {
-            final decision = prep.emergencyTrackingEligibilityDecisions[i];
-            final span = PunctuationGeometryLedger.clusterIndexRangeFor(prep.naturalClusters, decision.range);
-            if (span == null)
-                continue;
-            for (leftIndex in span.start...span.end) {
-                if (!boundaryEligible[leftIndex] || addedKeys[leftIndex])
-                    continue;
-                addedKeys[leftIndex] = true;
-                emergencyTrackingBoundaryAfterClustersBuilder.put(leftIndex, decision.reason);
-            }
-        }
-        final emergencyTrackingBoundaryAfterClusters = emergencyTrackingBoundaryAfterClustersBuilder.build();
-
-        final adjustableInlineBoundaryRightClustersBuilder = SortedSet.builder();
-        for (i in 0...prep.uniformInlineObjectBoundaryAfterClusters.size()) {
-            final leftIndex = prep.uniformInlineObjectBoundaryAfterClusters.at(i);
-            final rightIndex = leftIndex + 1;
-            if (noStretchBoundaryAfterClusters.has(leftIndex)
-                || noStretchBoundaryClusters.has(leftIndex)
-                || noStretchBoundaryClusters.has(rightIndex)) {
-                // skip
-            } else {
-                adjustableInlineBoundaryRightClustersBuilder.put(rightIndex);
-            }
-        }
-        final adjustableInlineBoundaryRightClusters = adjustableInlineBoundaryRightClustersBuilder.build();
-
-        final cjkInterCharBoundariesBuilder = SortedSet.builder();
-        for (it in 1...prep.naturalClusters.length) {
-            if (!attachedInlinePhysicalBoundaryAfterClusters.has(it - 1)
-                && !noStretchBoundaryAfterClusters.has(it - 1)
-                && prep.clusterRoles[it - 1] == FontRole.CjkText
-                && prep.clusterRoles[it] == FontRole.CjkText) {
-                cjkInterCharBoundariesBuilder.put(it);
-            }
-        }
-        for (i in 0...adjustableInlineBoundaryRightClusters.size()) {
-            cjkInterCharBoundariesBuilder.put(adjustableInlineBoundaryRightClusters.at(i));
-        }
-        for (i in 0...westernBracketCjkInterCharBoundaryAfterClusters.size()) {
-            cjkInterCharBoundariesBuilder.put(westernBracketCjkInterCharBoundaryAfterClusters.at(i) + 1);
-        }
-        for (i in 0...attachedInlineVirtualBoundaryAfterClusters.size()) {
-            cjkInterCharBoundariesBuilder.put(attachedInlineVirtualBoundaryAfterClusters.keyAt(i) + 1);
-        }
-        final cjkInterCharBoundaries = cjkInterCharBoundariesBuilder.build();
-
-        final sinoWesternBoundariesBuilder = SortedSet.builder();
-        for (it in 1...prep.naturalClusters.length) {
-            if (!attachedInlinePhysicalBoundaryAfterClusters.has(it - 1)
-                && !noStretchBoundaryAfterClusters.has(it - 1)
-                && PunctuationGeometryStage.isEastAsianSpacingBoundaryAt(it, prep.naturalClusters, prep.eastAsianSpacingEdges)) {
-                sinoWesternBoundariesBuilder.put(it);
-            }
-        }
-        for (i in 0...attachedInlineVirtualSinoWesternBoundaryAfterClusters.size()) {
-            sinoWesternBoundariesBuilder.put(attachedInlineVirtualSinoWesternBoundaryAfterClusters.at(i) + 1);
-        }
-        final sinoWesternBoundaries = sinoWesternBoundariesBuilder.build();
-
-        final virtualBoundaries = UnicodePunctuationBoundaryResolver.resolveAttachedInlineVirtualBoundaries(inlineAttachments);
-        final attachedInlineUnbreakableRanges = new Array<IntRange>();
-        for (i in 0...virtualBoundaries.length) {
-            final boundary = virtualBoundaries[i];
-            attachedInlineUnbreakableRanges.push(new IntRange(boundary.previousClusterIndex, boundary.attachedClusterRange.end));
-        }
-
         final allUnbreakables = new Array<IntRange>();
-        for (i in 0...prep.input.decorations.length) {
-            final d = prep.input.decorations[i];
-            if (d.kind == DecorationKind.Mourning) {
-                final r = PunctuationGeometryLedger.clusterIndexRangeFor(prep.naturalClusters, d.range);
-                if (r != null)
-                    allUnbreakables.push(r);
-            }
-        }
-        for (i in 0...prep.pinyinSpans.length) {
-            final r = PunctuationGeometryLedger.clusterIndexRangeFor(prep.naturalClusters, prep.pinyinSpans[i].baseRange);
-            if (r != null)
-                allUnbreakables.push(r);
-        }
-        for (i in 0...attachedInlineUnbreakableRanges.length)
-            allUnbreakables.push(attachedInlineUnbreakableRanges[i]);
+        for (i in 0...planningBase.leadingUnbreakableRanges.length)
+            allUnbreakables.push(planningBase.leadingUnbreakableRanges[i]);
         for (i in 0...numberSymbolUnbreakableRanges.length)
             allUnbreakables.push(numberSymbolUnbreakableRanges[i]);
         for (i in 0...unicodePunctuationBoundaries.unbreakableRanges.length)

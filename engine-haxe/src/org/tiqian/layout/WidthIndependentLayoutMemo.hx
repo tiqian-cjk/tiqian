@@ -2,6 +2,8 @@ package org.tiqian.layout;
 
 import org.tiqian.core.FontDecisionInfo;
 import org.tiqian.core.TextRange;
+import org.tiqian.layout.LineBreakPlanningParts.KinsokuDependentPlanning;
+import org.tiqian.layout.LineBreakPlanningParts.LineBreakPlanningBase;
 import org.tiqian.layout.LineGeometryStage.ClusterMetricDecision;
 import org.tiqian.layout.ParagraphPrepParts.KinsokuDependentPrep;
 import org.tiqian.layout.ParagraphPrepParts.ShapedParagraphBase;
@@ -9,7 +11,6 @@ import org.tiqian.layout.UnicodePunctuationBoundaryResolver.UnicodePunctuationBo
 import org.tiqian.layout.cache.LayoutMemoSlot;
 import org.tiqian.layout.cache.LayoutMemoSlot.IntKeyedLayoutMemoSlot;
 import std.SortedMap;
-import std.SortedSet;
 
 /**
  * `WidthIndependentLayoutMemo`: the memo slots of one paragraph. Paragraph preparation,
@@ -18,10 +19,11 @@ import std.SortedSet;
  * measure.
  *
  * Every slot holds a pure function of fields that the annotation cache key already fixes (source
- * text, styles, font decisions, the base shaping stage's clusters, roles, quote pairs and
- * substitution rollbacks) plus the engine's font-metrics resolver and normalizer. None depends on
- * the measure; `kinsokuDependent` also depends on the measure-adaptive kinsoku level and is keyed
- * by it.
+ * text, styles, line-break spans, decorations, ruby spans, font decisions, the base shaping
+ * stage's clusters, roles, quote pairs and substitution rollbacks) plus engine components (the
+ * font-metrics resolver and normalizer, and the justifier's progressive technical stretch
+ * capacity). None depends on the measure or on the paragraph style; `kinsokuDependent` and
+ * `planningKinsokuPart` also depend on the measure-adaptive kinsoku level and are keyed by it.
  *
  * Each `WidthIndependentParagraphAnnotation` owns one memo that lives as long as the annotation.
  * A prep built from a dynamic shaping stage, which depends on the measure, receives a new memo of
@@ -45,8 +47,11 @@ class WidthIndependentLayoutMemo {
     /** Contextual kinsoku boundaries from `UnicodePunctuationBoundaryResolver.resolveUnicodePunctuationBoundaries`. */
     public final unicodePunctuationBoundaries:LayoutMemoSlot<UnicodePunctuationBoundaries>;
 
-    /** Western bracket and CJK inter-character boundaries after each cluster. */
-    public final westernBracketBoundaries:LayoutMemoSlot<SortedSet<Int>>;
+    /** The break-planning sets that depend on neither the measure nor the kinsoku level. */
+    public final planningBase:LayoutMemoSlot<LineBreakPlanningBase>;
+
+    /** The break-planning sets that also depend on the kinsoku level, keyed by `kinsokuLevelMemoKey`. */
+    public final planningKinsokuPart:IntKeyedLayoutMemoSlot<KinsokuDependentPlanning>;
 
     /** The debug record of each font decision with its display substitution (`LayoutDebugAssembly.buildLayoutDebugInfo`). */
     public final fontDecisionInfos:LayoutMemoSlot<Array<FontDecisionInfo>>;
@@ -57,7 +62,8 @@ class WidthIndependentLayoutMemo {
         this.metricDecisions = new LayoutMemoSlot<Array<ClusterMetricDecision>>();
         this.metricDecisionByRange = new LayoutMemoSlot<SortedMap<TextRange, ClusterMetricDecision>>();
         this.unicodePunctuationBoundaries = new LayoutMemoSlot<UnicodePunctuationBoundaries>();
-        this.westernBracketBoundaries = new LayoutMemoSlot<SortedSet<Int>>();
+        this.planningBase = new LayoutMemoSlot<LineBreakPlanningBase>();
+        this.planningKinsokuPart = new IntKeyedLayoutMemoSlot<KinsokuDependentPlanning>();
         this.fontDecisionInfos = new LayoutMemoSlot<Array<FontDecisionInfo>>();
     }
 }
