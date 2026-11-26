@@ -148,11 +148,42 @@ interface WidthIndependentAnnotationCache {
     public var size(get, never):Int;
 }
 
+/**
+ * One cached annotation, its key and the slot it occupies in `LruWidthIndependentAnnotationCache`.
+ * The class is public: boring's Kotlin target emitted no declaration for it as a module-private
+ * class, and the cache's references to it did not resolve.
+ */
+class LruAnnotationEntry {
+    public final key:WidthIndependentAnnotationKey;
+    public final annotation:WidthIndependentParagraphAnnotation;
+    public final slot:Int;
+
+    public function new(key:WidthIndependentAnnotationKey, annotation:WidthIndependentParagraphAnnotation, slot:Int) {
+        this.key = key;
+        this.annotation = annotation;
+        this.slot = slot;
+    }
+}
+
+/**
+ * `LruWidthIndependentAnnotationCache`: at most `maxEntries` annotations; a put into a full cache
+ * evicts the least recently used key. Every get and put takes the next value of a use counter and
+ * stores it in `lastUse` at the slot of its key, so a hit costs one hash lookup and one array
+ * write. A put into a full cache scans `lastUse` for the smallest value, the least recently used
+ * key, and gives its slot to the new key. The former implementation kept the keys in recency
+ * order and moved a key on every hit, which compared the key with each earlier key in turn.
+ *
+ * `slots` and the map hold separate entry objects with the same contents: boring's Rust target
+ * moves a value assigned to an array element or put into the map, so one object cannot reach both.
+ * Each write stores the slot's entry first and puts the map's entry last, the last use of `key`.
+ */
 class LruWidthIndependentAnnotationCache implements WidthIndependentAnnotationCache {
     public final maxEntries:Int;
 
-    private final map:HashMap<WidthIndependentAnnotationKey, WidthIndependentParagraphAnnotation> = new HashMap();
-    private final keys:Array<WidthIndependentAnnotationKey> = [];
+    private final map:HashMap<WidthIndependentAnnotationKey, LruAnnotationEntry> = new HashMap();
+    private final slots:Array<LruAnnotationEntry> = [];
+    private final lastUse:Array<Int> = [];
+    private var useCount:Int = 0;
 
     public var size(get, never):Int;
 
@@ -160,42 +191,59 @@ class LruWidthIndependentAnnotationCache implements WidthIndependentAnnotationCa
         this.maxEntries = maxEntries;
     }
 
-    private static function removeKeyFromList(keys:Array<WidthIndependentAnnotationKey>, key:WidthIndependentAnnotationKey):Void {
-        for (i in 0...keys.length) {
-            if (keys[i] == key) {
-                keys.splice(i, 1);
-                return;
-            }
-        }
-    }
     public function get(key:WidthIndependentAnnotationKey):Null<WidthIndependentParagraphAnnotation> {
-        final value = map.get(key);
-        if (value == null)
+        final entry = map.get(key);
+        if (entry == null)
             return null;
-        removeKeyFromList(keys, key);
-        keys.push(key);
-        return value;
+        useCount++;
+        final now = useCount;
+        lastUse[entry.slot] = now;
+        return entry.annotation;
     }
 
     public function put(key:WidthIndependentAnnotationKey, annotation:WidthIndependentParagraphAnnotation):Void {
-        if (map.exists(key)) {
-            removeKeyFromList(keys, key);
-        } else if (keys.length >= maxEntries) {
-            final oldest = keys[0];
-            keys.shift();
-            map.remove(oldest);
+        useCount++;
+        final now = useCount;
+        final existing = map.get(key);
+        if (existing != null) {
+            final slot = existing.slot;
+            lastUse[slot] = now;
+            slots[slot] = new LruAnnotationEntry(key, annotation, slot);
+            final entry = new LruAnnotationEntry(key, annotation, slot);
+            map.set(key, entry);
+            return;
         }
-        keys.push(key);
-        map.set(key, annotation);
+        if (slots.length >= maxEntries && slots.length > 0) {
+            var oldest = 0;
+            final count = lastUse.length;
+            for (i in 1...count) {
+                if (lastUse[i] < lastUse[oldest])
+                    oldest = i;
+            }
+            final evicted = slots[oldest];
+            map.remove(evicted.key);
+            lastUse[oldest] = now;
+            slots[oldest] = new LruAnnotationEntry(key, annotation, oldest);
+            final entry = new LruAnnotationEntry(key, annotation, oldest);
+            map.set(key, entry);
+            return;
+        }
+        final slot = slots.length;
+        lastUse.push(now);
+        slots.push(new LruAnnotationEntry(key, annotation, slot));
+        final entry = new LruAnnotationEntry(key, annotation, slot);
+        map.set(key, entry);
     }
 
     public function clear():Void {
         map.clear();
-        keys.splice(0, keys.length);
+        slots.splice(0, slots.length);
+        lastUse.splice(0, lastUse.length);
+        useCount = 0;
     }
 
     public function get_size():Int {
-        return keys.length;
+        return slots.length;
     }
 }
 
