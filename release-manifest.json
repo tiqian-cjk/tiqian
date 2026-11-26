@@ -143,7 +143,6 @@
         ]
       },
       "dependsOn": [
-        "npm-ffi",
         "npm-core",
         "npm-web-component",
         "npm-precompute",

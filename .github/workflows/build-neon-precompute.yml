@@ -268,8 +268,8 @@ jobs:
       # The smoke test resolves `@tiqian/web-component` and `@tiqian/core` from
       # this checkout: the registry alpha predates the `./prepared-dom`
       # subpath the precompute sources import, and the emitted declarations
-      # are not tracked. This lane has no Gradle step, so the ffi
-      # declarations a full type check would need are absent; emit the
+      # are not tracked. This lane has no Gradle step, so the generated
+      # engine declarations a full type check would need are absent; emit the
       # packages and the suite without checks (the Native precompute CI runs
       # the full checks over the same sources).
       - name: Download the generated trees and package manifests
@@ -367,7 +367,7 @@ jobs:
           package-manager-cache: false
       # Same working-tree resolution as the binaries job: the registry alpha
       # predates the ./prepared-dom subpath, and the emitted declarations are
-      # not tracked. This lane has no Gradle step, so the ffi declarations a
+      # not tracked. This lane has no Gradle step, so the engine declarations a
       # full type check would need are absent; build without checks and drop
       # the typecheck script (the Native precompute CI runs the full checks
       # over the same sources).

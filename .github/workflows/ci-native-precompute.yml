@@ -277,12 +277,6 @@ jobs:
           exit 1
       - name: Allow unprivileged user namespaces
         run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
-      # engine-gen/ is a build product. Generating it before the install keeps
-      # build:runtime from regenerating the protocol-ts tree, which would drop
-      # the package manifest written below; the core type check after
-      # build:runtime resolves tiqian-protocol through that manifest.
-      - name: Generate the TypeScript engine tree with the flake toolchain
-        run: nix develop -c bash -c 'bash tools/setup-haxe-env.sh && node tools/generate-engine-gen.mjs ts'
       # tiqian-protocol and tiqian-shared are workspace members at
       # engine-haxe/out/{protocol-ts,shared-ts}/gen. boring gen writes source
       # only; the package.json each member needs is written by boring pack, so

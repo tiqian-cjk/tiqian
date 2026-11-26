@@ -40,7 +40,6 @@ const repoRoot: string = fileURLToPath(new URL("../../..", import.meta.url));
 buildBrowserTrees(repoRoot);
 const npmDir: string = join(repoRoot, "platforms/web/client/web-component");
 const npmCoreDir: string = join(repoRoot, "platforms/web/client/core");
-const ffiRuntimeDir: string = join(repoRoot, "platforms/web/client/engine-runtime/runtime");
 
 const demoPort: number = 8994;
 const cdpPort: number = 9984;
@@ -186,11 +185,6 @@ function startFixtureServer(): Promise<Server> {
       }
       if (path === "/page-driver.mjs") {
         send(PAGE_DRIVER, "text/javascript");
-        return;
-      }
-      if (path.startsWith("/npm-engine-runtime/")) {
-        const rest: string = path.slice("/npm-engine-runtime/".length);
-        await sendFile(join(ffiRuntimeDir, rest), "text/javascript");
         return;
       }
       if (path.startsWith("/npm/")) {

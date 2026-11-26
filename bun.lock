@@ -11,10 +11,10 @@
     },
     "demo/web": {
       "name": "tiqian-web-demo",
-      "version": "0.1.0-alpha.9",
+      "version": "0.1.0-alpha.15",
       "dependencies": {
-        "@tiqian/core": "0.1.0-alpha.9",
-        "@tiqian/web-component": "0.1.0-alpha.9",
+        "@tiqian/core": "0.1.0-alpha.15",
+        "@tiqian/web-component": "0.1.0-alpha.15",
       },
       "devDependencies": {
         "parcel": "^2.16.4",
@@ -26,41 +26,48 @@
     },
     "engine-haxe/out/protocol-ts/gen": {
       "name": "@tiqian/protocol",
-      "version": "0.1.0-alpha.9",
+      "version": "0.1.0-alpha.15",
       "devDependencies": {
         "typescript": "^5.9.0",
       },
     },
     "engine-haxe/out/shared-ts/gen": {
       "name": "@tiqian/shared",
-      "version": "0.1.0-alpha.9",
+      "version": "0.1.0-alpha.15",
+      "devDependencies": {
+        "typescript": "^5.9.0",
+      },
+    },
+    "engine-haxe/out/ts/gen": {
+      "name": "@tiqian/engine",
+      "version": "0.1.0-alpha.15",
       "devDependencies": {
         "typescript": "^5.9.0",
       },
     },
     "platforms/web/client/astro": {
       "name": "@tiqian/astro",
-      "version": "0.1.0-alpha.9",
+      "version": "0.1.0-alpha.15",
       "dependencies": {
-        "@tiqian/core": "0.1.0-alpha.9",
+        "@tiqian/core": "0.1.0-alpha.15",
       },
       "devDependencies": {
         "@astrojs/compiler-rs": "0.3.1",
-        "@tiqian/precompute": "0.1.0-alpha.9",
-        "@tiqian/web-component": "0.1.0-alpha.9",
+        "@tiqian/precompute": "0.1.0-alpha.15",
+        "@tiqian/web-component": "0.1.0-alpha.15",
         "astro": "7.0.7",
       },
       "peerDependencies": {
-        "@tiqian/precompute": "0.1.0-alpha.9",
-        "@tiqian/web-component": "0.1.0-alpha.9",
+        "@tiqian/precompute": "0.1.0-alpha.15",
+        "@tiqian/web-component": "0.1.0-alpha.15",
         "astro": ">=5",
       },
     },
     "platforms/web/client/core": {
       "name": "@tiqian/core",
-      "version": "0.1.0-alpha.9",
+      "version": "0.1.0-alpha.15",
       "dependencies": {
-        "@tiqian/ffi": "0.1.0-alpha.9",
+        "@tiqian/engine": "workspace:*",
         "@tiqian/protocol": "workspace:*",
         "@tiqian/shared": "workspace:*",
       },
@@ -69,19 +76,11 @@
         "typescript": "5.9.3",
       },
     },
-    "platforms/web/client/engine-runtime": {
-      "name": "@tiqian/ffi",
-      "version": "0.1.0-alpha.9",
-      "devDependencies": {
-        "@types/node": "22.15.29",
-        "typescript": "5.9.3",
-      },
-    },
     "platforms/web/client/react": {
       "name": "@tiqian/react",
-      "version": "0.1.0-alpha.9",
+      "version": "0.1.0-alpha.15",
       "dependencies": {
-        "@tiqian/core": "0.1.0-alpha.9",
+        "@tiqian/core": "0.1.0-alpha.15",
       },
       "devDependencies": {
         "@types/react": "^19.0.0",
@@ -96,42 +95,43 @@
     },
     "platforms/web/client/sveltekit": {
       "name": "@tiqian/sveltekit",
-      "version": "0.1.0-alpha.9",
+      "version": "0.1.0-alpha.15",
       "dependencies": {
-        "@tiqian/core": "0.1.0-alpha.9",
+        "@tiqian/core": "0.1.0-alpha.15",
       },
       "devDependencies": {
         "@sveltejs/kit": "3.2.0",
-        "@tiqian/precompute": "0.1.0-alpha.9",
-        "@tiqian/web-component": "0.1.0-alpha.9",
+        "@tiqian/precompute": "0.1.0-alpha.15",
+        "@tiqian/web-component": "0.1.0-alpha.15",
         "svelte": "5.57.1",
       },
       "peerDependencies": {
         "@sveltejs/kit": "^2.0.0 || ^3.0.0",
-        "@tiqian/precompute": "0.1.0-alpha.9",
-        "@tiqian/web-component": "0.1.0-alpha.9",
+        "@tiqian/precompute": "0.1.0-alpha.15",
+        "@tiqian/web-component": "0.1.0-alpha.15",
         "svelte": ">=5",
       },
     },
     "platforms/web/client/web-component": {
       "name": "@tiqian/web-component",
-      "version": "0.1.0-alpha.9",
+      "version": "0.1.0-alpha.15",
       "dependencies": {
-        "@tiqian/core": "0.1.0-alpha.9",
+        "@tiqian/core": "0.1.0-alpha.15",
       },
       "devDependencies": {
+        "@tiqian/engine": "workspace:*",
         "typescript": "5.9.3",
       },
     },
     "platforms/web/server/core": {
       "name": "@tiqian/precompute",
-      "version": "0.1.0-alpha.9",
+      "version": "0.1.0-alpha.15",
       "dependencies": {
         "@neon-rs/load": "^0.1.82",
-        "@tiqian/core": "0.1.0-alpha.9",
+        "@tiqian/core": "0.1.0-alpha.15",
         "@tiqian/protocol": "workspace:*",
         "@tiqian/shared": "workspace:*",
-        "@tiqian/web-component": "0.1.0-alpha.9",
+        "@tiqian/web-component": "0.1.0-alpha.15",
         "linkedom": "^0.18.13",
       },
       "devDependencies": {
@@ -145,10 +145,10 @@
         "typescript-eslint": "^8.67.0",
       },
       "optionalDependencies": {
-        "@tiqian/precompute-darwin-arm64": "0.1.0-alpha.9",
-        "@tiqian/precompute-linux-arm64-gnu": "0.1.0-alpha.9",
-        "@tiqian/precompute-linux-x64-gnu": "0.1.0-alpha.9",
-        "@tiqian/precompute-win32-x64-msvc": "0.1.0-alpha.9",
+        "@tiqian/precompute-darwin-arm64": "0.1.0-alpha.15",
+        "@tiqian/precompute-linux-arm64-gnu": "0.1.0-alpha.15",
+        "@tiqian/precompute-linux-x64-gnu": "0.1.0-alpha.15",
+        "@tiqian/precompute-win32-x64-msvc": "0.1.0-alpha.15",
       },
     },
   },
@@ -687,17 +687,17 @@
 
     "@tiqian/core": ["@tiqian/core@workspace:platforms/web/client/core"],
 
-    "@tiqian/ffi": ["@tiqian/ffi@workspace:platforms/web/client/engine-runtime"],
+    "@tiqian/engine": ["@tiqian/engine@workspace:engine-haxe/out/ts/gen"],
 
     "@tiqian/precompute": ["@tiqian/precompute@workspace:platforms/web/server/core"],
 
-    "@tiqian/precompute-darwin-arm64": ["@tiqian/precompute-darwin-arm64@0.1.0-alpha.9", "", { "os": "darwin", "cpu": "arm64" }, "sha512-0UDB3lC+U32r1NqIsvqxnyNHnfbR3TFqvytyVQa2Wv6tP7PIKCj25F/i6Yis2bMUNSoOjnO4GGpMq0bKNvU1Dw=="],
+    "@tiqian/precompute-darwin-arm64": ["@tiqian/precompute-darwin-arm64@0.1.0-alpha.15", "", { "os": "darwin", "cpu": "arm64" }, "sha512-WYrZRo8BJOPlHxWiVkjE9nJP54X73GrMus2tTlAXGA47fS0hJihP70F7NgmIgOya6au2TC9TnTpla6Q6DJKt5Q=="],
 
-    "@tiqian/precompute-linux-arm64-gnu": ["@tiqian/precompute-linux-arm64-gnu@0.1.0-alpha.9", "", { "os": "linux", "cpu": "arm64" }, "sha512-DmgN9egnMPH4JsvAgOaaB2OIsW2O1u/mT2q8pkP/O1/Z56YL3Tt7qlmGKYfBOjojIpdeWz6jCjhErH6ld/Lq3w=="],
+    "@tiqian/precompute-linux-arm64-gnu": ["@tiqian/precompute-linux-arm64-gnu@0.1.0-alpha.15", "", { "os": "linux", "cpu": "arm64" }, "sha512-FRLpNyw/5vCOSZKtfBa1JdgFgQgcf4gNt6q9RE+JvF2bK+bmc+O+KMvg64t8TwwRfupMqziLFfo3eLTNvdEEvg=="],
 
-    "@tiqian/precompute-linux-x64-gnu": ["@tiqian/precompute-linux-x64-gnu@0.1.0-alpha.9", "", { "os": "linux", "cpu": "x64" }, "sha512-C/TfbhxjbHF4VmLLFFWo+2n8sDmTMa+o7rTXPuoY2lvFg7LDFs05pnQs9Vuc1mJOroqB5ChoBt31WsA4EpkKIg=="],
+    "@tiqian/precompute-linux-x64-gnu": ["@tiqian/precompute-linux-x64-gnu@0.1.0-alpha.15", "", { "os": "linux", "cpu": "x64" }, "sha512-jLfQy1PWCIhnHdlRHew4jXOEAPcJ12icOSzkbRAFIMGPbN6C/+x3423xX8QHvt1hkbkgHvYD/5ocDh9HC/JJaQ=="],
 
-    "@tiqian/precompute-win32-x64-msvc": ["@tiqian/precompute-win32-x64-msvc@0.1.0-alpha.9", "", { "os": "win32", "cpu": "x64" }, "sha512-sGFbnbeYg0cavUT+wef4PzV1dJcdiwB8RDEVqkjnNXGF51NmJVovqrd9tHVwapEsEuRJoqLNfrcQ5loLSYxaOg=="],
+    "@tiqian/precompute-win32-x64-msvc": ["@tiqian/precompute-win32-x64-msvc@0.1.0-alpha.15", "", { "os": "win32", "cpu": "x64" }, "sha512-HrrJ2c6k+XSPX+ItRAofpkMEn8oQv1fCj1XxCFTyAI1rGV54H5tgz0nUD05ipanV+dgZCGG7zjA5J1fU4wyD3Q=="],
 
     "@tiqian/protocol": ["@tiqian/protocol@workspace:engine-haxe/out/protocol-ts/gen"],
 

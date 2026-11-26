@@ -20,8 +20,11 @@ bundle 产物已经发布，core 却仍从 `@tiqian/ffi` 取用。
 3. core 新建 `src/engine/engine-access/`：wire 类型、字体角色判定、宿主结果转换、prepared-paragraph
    组装。宿主回调改为 `{ shape, resolve }` 的类型化对象进出，core 内不再出现
    `shapeJson`/`metricsJson` 字符串通道。
-4. 发版：`@tiqian/engine` 由 bundle 车道发布；`release-manifest.json` 删除 `npm-ffi` 单元，
-   `npm-core` 不再声明前置依赖，与 `@tiqian/protocol`/`@tiqian/shared` 同一处理方式。
+4. 发版：`@tiqian/engine` 由 bundle 车道的 `ts protocol-ts shared-ts` 分组打包发布；
+   `release-manifest.json` 删除 `npm-ffi` 单元与 `registry` 对它的依赖项，`npm-core` 不再声明
+   前置依赖，与 `@tiqian/protocol`/`@tiqian/shared` 同一处理方式。`release.yml` 的 `npm-ffi` 作业移除；
+   `prepare-release-web-workspace` 动作与 `build-precompute-release.yml` 改为生成并解析三棵生成树，
+   `pack-release-bundles.yml` 上传下载 `engine-haxe/out/{ts,protocol-ts,shared-ts}`，不再组装 ffi runtime。
 5. 快照车道同步收口：`snapshot-swap.ts` 的改名集合加入 `@tiqian/engine`、`@tiqian/protocol`
    与 `@tiqian/shared`；`snapshot-precompute.yml` 的 client-packages 在 `boring pack` 之后用
    `tools/rewrite-npm-tarball.py` 把三个生成树 tarball 的包名与版本改写为快照 scope 与快照版本，

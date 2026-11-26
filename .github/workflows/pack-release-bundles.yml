@@ -67,15 +67,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Only the FFI source tree is version-neutral. Pack writes the npm manifests.
-          relative=platforms/web/client/engine-runtime/engine-gen
-          source="$RUNNER_TEMP/verified-neon-sources/$relative"
-          test -s "$source/org/tiqian/protocol/ParagraphRequest.ts"
-          cp -a "$source" "$relative"
-
-      - name: Generate the Web runtime sources when CI artifacts are unavailable
-        if: inputs.shard == 'npm' && steps.reuse-web.outcome != 'success'
-        run: nix develop -c bash -e -c 'bash tools/setup-haxe-env.sh; node tools/generate-engine-gen.mjs ts'
+          # The generated trees are version-neutral. Pack writes the npm manifests.
+          for relative in engine-haxe/out/ts engine-haxe/out/protocol-ts engine-haxe/out/shared-ts; do
+            source="$RUNNER_TEMP/verified-neon-sources/$relative"
+            test -d "$source"
+            mkdir -p "$(dirname "$relative")"
+            cp -a "$source" "$relative"
+          done
 
       - name: Pack and compile this shard
         shell: bash
@@ -119,19 +117,14 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Assemble the shared Web runtime
-        if: inputs.shard == 'npm'
-        run: nix develop -c bash -e -c 'bun install --ignore-scripts; npm run build:runtime --workspace @tiqian/ffi'
-
       - name: Upload the Web runtime and workspace inputs
         if: inputs.shard == 'npm'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-web-inputs
           path: |
+            engine-haxe/out/ts
             engine-haxe/out/protocol-ts
             engine-haxe/out/shared-ts
-            platforms/web/client/engine-runtime/engine-gen
-            platforms/web/client/engine-runtime/runtime
           if-no-files-found: error
           retention-days: 7

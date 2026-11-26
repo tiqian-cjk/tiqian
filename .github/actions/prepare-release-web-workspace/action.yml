@@ -37,11 +37,10 @@ runs:
         printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
         chmod +x "$BORING_PACKAGE_TSC"
 
-        # Generate the FFI sources before pack writes the workspace manifests.
+        # Generate the engine tree and pack the workspace manifests.
         nix develop -c bash -e -c '
           bash tools/setup-haxe-env.sh
-          node tools/generate-engine-gen.mjs ts
-          boring pack protocol-ts shared-ts --project boring.json
+          boring pack protocol-ts shared-ts ts --project boring.json
         '
 
     - name: Install workspace dependencies on the Node runner
@@ -56,9 +55,3 @@ runs:
         linker_args=()
         if [[ -n "$RELEASE_BUN_LINKER" ]]; then linker_args=(--linker "$RELEASE_BUN_LINKER"); fi
         bun install --ignore-scripts "${linker_args[@]}"
-
-    - name: Assemble the Web runtime for standalone runs
-      if: inputs.artifact == ''
-      shell: bash
-      working-directory: ${{ github.workspace }}
-      run: npm run build:runtime --workspace @tiqian/ffi

@@ -2,7 +2,7 @@
 """Write registry metadata for the npm tarballs the Web lanes published.
 
 The boring pack run writes the registry tree for the engine bundles. The Web
-packages (@tiqian/ffi, core, web-component, precompute and its platform
+packages (@tiqian/engine, core, web-component, precompute and its platform
 packages, and the framework adapters) are packed and published by their own
 lanes, each of which keeps the tarball it handed to npm as an npm-tarball-*
 artifact. The registry lane downloads those artifacts, uploads the files to
@@ -169,7 +169,7 @@ def selftest() -> int:
         tarballs.mkdir()
         fake_tarball(tarballs / "tiqian-core-1.0.0.tgz", {
             "name": "@tiqian/core", "version": "1.0.0", "license": "MPL-2.0", "scripts": {"build": "tsc"},
-            "dependencies": {"@tiqian/ffi": "1.0.0"}, "engines": {"node": ">=22"},
+            "dependencies": {"@tiqian/engine": "1.0.0"}, "engines": {"node": ">=22"},
         })
         fake_tarball(tarballs / "tiqian-precompute-linux-x64-gnu-1.0.0.tgz", {
             "name": "@tiqian/precompute-linux-x64-gnu", "version": "1.0.0", "os": ["linux"], "cpu": ["x64"],
@@ -178,20 +178,20 @@ def selftest() -> int:
         assert write(tarballs, tree, "tiqian-cjk", "tiqian-cjk/tiqian", "1.0.0") == 2
         core = json.loads((tree / "tiqian-cjk" / "@tiqian%2fcore" / "1.0.0" / "npm" / "metadata.json").read_text())
         assert core["url"] == "https://github.com/tiqian-cjk/tiqian/releases/download/v1.0.0/tiqian-core-1.0.0.tgz"
-        assert core["manifest"] == {"dependencies": {"@tiqian/ffi": "1.0.0"}, "engines": {"node": ">=22"}}
+        assert core["manifest"] == {"dependencies": {"@tiqian/engine": "1.0.0"}, "engines": {"node": ">=22"}}
         assert core["license"] == "MPL-2.0"
         assert core["sha512"] == base64.b64encode(hashlib.sha512((tarballs / "tiqian-core-1.0.0.tgz").read_bytes()).digest()).decode()
         native = json.loads((tree / "tiqian-cjk" / "@tiqian%2fprecompute-linux-x64-gnu" / "1.0.0" / "npm" / "metadata.json").read_text())
         assert native["manifest"] == {"os": ["linux"], "cpu": ["x64"]} and "license" not in native
         assert (tree / "tiqian-cjk" / "@tiqian%2fcore" / "README.md").read_text() == "# @tiqian/core\n\nPackage metadata for @tiqian/core.\n"
         assert len((tarballs / "SHA256SUMS").read_text().splitlines()) == 2
-        fake_tarball(tarballs / "tiqian-ffi-0.9.0.tgz", {"name": "@tiqian/ffi", "version": "0.9.0"})
+        fake_tarball(tarballs / "tiqian-engine-0.9.0.tgz", {"name": "@tiqian/engine", "version": "0.9.0"})
         try:
             write(tarballs, root / "tree2", "tiqian-cjk", "tiqian-cjk/tiqian", "1.0.0")
             raise AssertionError("a tarball of another version was accepted")
         except TarballError as error:
             assert "0.9.0" in str(error)
-        (tarballs / "tiqian-ffi-0.9.0.tgz").unlink()
+        (tarballs / "tiqian-engine-0.9.0.tgz").unlink()
         (tarballs / "main-package").mkdir()
         fake_tarball(tarballs / "main-package" / "tiqian-precompute-1.0.0.tgz", {"name": "@tiqian/precompute", "version": "1.0.0"})
         try:

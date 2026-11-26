@@ -63,7 +63,6 @@ const repoRoot: string = fileURLToPath(new URL("../../..", import.meta.url));
 buildBrowserTrees(repoRoot);
 const npmDir: string = join(repoRoot, "platforms/web/client/web-component");
 const npmCoreDir: string = join(repoRoot, "platforms/web/client/core");
-const ffiRuntimeDir: string = join(repoRoot, "platforms/web/client/engine-runtime/runtime");
 // The npm workspace installs shared packages (react, scheduler, react-dom,
 // svelte, clsx) into the repo-root node_modules rather than demo/web's own,
 // so fixture lookups walk up from demo/web to the repo root and take the
@@ -549,11 +548,6 @@ function startFixtureServer(svelteComponents: SvelteComponents): Promise<Server>
       if (path.startsWith("/clsx/")) {
         const rest: string = path.slice("/clsx/".length);
         await sendFile(nodeModulesFile("clsx", rest), "text/javascript");
-        return;
-      }
-      if (path.startsWith("/npm-engine-runtime/")) {
-        const rest: string = path.slice("/npm-engine-runtime/".length);
-        await sendFile(join(ffiRuntimeDir, rest), "text/javascript");
         return;
       }
       if (path.startsWith("/npm/")) {

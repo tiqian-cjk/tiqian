@@ -1,8 +1,8 @@
 name: Snapshot precompute packages
 
 # Manual-only snapshot lane for the full npm set: precompute and its platform
-# binaries, the astro and sveltekit integrations, and the ffi, core, web-component,
-# and react client packages. Each dispatch stamps its own timestamped tag,
+# binaries, the astro and sveltekit integrations, and the engine, protocol, shared,
+# core, web-component, and react client packages. Each dispatch stamps its own timestamped tag,
 # builds the eleven packages from that commit, temporarily swaps the manifests
 # to the running repository owner's scope (GitHub Packages requires the npm
 # scope to equal the owner), publishes the timestamped versions with the

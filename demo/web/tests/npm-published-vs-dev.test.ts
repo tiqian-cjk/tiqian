@@ -35,7 +35,6 @@ const repoRoot: string = fileURLToPath(new URL("../../../", import.meta.url));
 
 buildBrowserTrees(repoRoot);
 const devPkgDir: string = join(repoRoot, "platforms/web/client/web-component");
-const ffiRuntimeDir: string = join(repoRoot, "platforms/web/client/engine-runtime/runtime");
 
 // The published release and the working tree are served through the same
 // static server and import map, so the only variable between the two pages is
@@ -281,15 +280,6 @@ function startDemoServer(port: number, pkgDir: string): Promise<DemoServerHandle
       if (path === "/main.js" || path === "/index.css") {
         file = join(webDemoDir, path.slice(1));
         if (path.endsWith(".css")) type = "text/css";
-      } else if (path.startsWith("/engine-runtime/")) {
-        // Module workers do not see the document import map, so the dev-tree
-        // layout worker in core gets its bare "@tiqian/ffi" import
-        // rewritten below to this absolute URL. The document-context import
-        // in ts-runtime.js resolves through the import map instead. The
-        // published side predates the dependency and keeps its relative
-        // precompute-runtime import.
-        const rest: string = path.slice("/engine-runtime/".length);
-        file = join(ffiRuntimeDir, rest);
       } else if (path.startsWith("/platforms/web/client/web-component/")) {
         const rest: string = path.slice("/platforms/web/client/web-component/".length);
         file = join(pkgDir, rest);
