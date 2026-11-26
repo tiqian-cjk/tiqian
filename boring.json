@@ -89,7 +89,13 @@
       ]
     },
     "shared": {
-      "packages": ["org.tiqian.shared"]
+      "types": ["runtime.UString", "runtime.TestCore", "std.UStringException"],
+      "packages": [
+        "org.tiqian.shared",
+        "org.tiqian.shared.prepared_dom",
+        "org.tiqian.shared.html",
+        "org.tiqian.shared.snapshot"
+      ]
     }
   },
   "bundles": [
