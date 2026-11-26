@@ -589,7 +589,7 @@ jobs:
           retention-days: 7
 
   client-packages:
-    name: Pack core, web-component, and react packages
+    name: Pack the generated, core, web-component and react packages
     needs: [stamp]
     runs-on: ubuntu-latest
     env:
@@ -661,6 +661,27 @@ jobs:
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
           nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts ts --project boring.json'
+
+      # The generated trees publish as their own packages, so a core tarball's
+      # @<scope>/engine, @<scope>/protocol and @<scope>/shared dependencies
+      # resolve. boring pack writes the repository names and the placeholder
+      # version; this step rewrites both to the snapshot scope and version.
+      - name: Rewrite the generated packages for the snapshot scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${GITHUB_WORKSPACE}/client-pack-output"
+          mkdir -p "${out}"
+          scope="$(printf '%s' "${SNAPSHOT_SCOPE}" | tr '[:upper:]' '[:lower:]')"
+          for bundle in ts protocol-ts shared-ts; do
+            tarball="$(find "engine-haxe/out/${bundle}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+            test -n "${tarball}"
+            python3 tools/rewrite-npm-tarball.py \
+              --scope "${scope}" \
+              --version "${SNAPSHOT_VERSION}" \
+              --output-dir "${out}" \
+              "${tarball}"
+          done
       # Root install covers every workspace member; each package's pretest
       # then emits the .js/.d.ts build products its tarball ships.
       - name: Install workspace dependencies
@@ -704,7 +725,7 @@ jobs:
       # assertions grep a saved listing: piping tar straight into grep -q
       # lets grep exit on the match while tar still writes, and pipefail
       # turns the resulting SIGPIPE into a step failure.
-      - name: Pack the three packages
+      - name: Pack the client packages
         shell: bash
         run: |
           set -euo pipefail
@@ -713,11 +734,21 @@ jobs:
           (cd platforms/web/client/core && npm pack --ignore-scripts --pack-destination "${out}")
           (cd platforms/web/client/web-component && npm pack --ignore-scripts --pack-destination "${out}")
           (cd platforms/web/client/react && npm pack --ignore-scripts --pack-destination "${out}")
-          test "$(find "${out}" -name '*.tgz' | wc -l)" -eq 3
+          test "$(find "${out}" -name '*.tgz' | wc -l)" -eq 6
           core_tarball="$(find "${out}" -name '*core*.tgz' -print -quit)"
           web_component_tarball="$(find "${out}" -name '*web-component*.tgz' -print -quit)"
           react_tarball="$(find "${out}" -name '*react*.tgz' -print -quit)"
+          engine_tarball="$(find "${out}" -name '*-engine-*.tgz' -print -quit)"
+          protocol_tarball="$(find "${out}" -name '*-protocol-*.tgz' -print -quit)"
+          shared_tarball="$(find "${out}" -name '*-shared-*.tgz' -print -quit)"
           listing="${out}/listing.txt"
+          tar -tzf "${engine_tarball}" > "${listing}"
+          grep -q '^package/dist/org/tiqian/layout/ParagraphLayoutEngine.js$' "${listing}"
+          grep -q '^package/dist/runtime.js$' "${listing}"
+          tar -tzf "${protocol_tarball}" > "${listing}"
+          grep -q '^package/dist/org/tiqian/protocol/Plan.js$' "${listing}"
+          tar -tzf "${shared_tarball}" > "${listing}"
+          grep -q '^package/dist/org/tiqian/shared/prepared_dom/PreparedDom.js$' "${listing}"
           tar -tzf "${core_tarball}" > "${listing}"
           grep -q '^package/src/' "${listing}"
           tar -tzf "${web_component_tarball}" > "${listing}"
@@ -781,11 +812,11 @@ jobs:
           done < <(find packages -name '*.tgz' -print0)
 
       # Publish in dependency order so every version resolves as it lands:
-      # core first (web-component and react
-      # depend on it, then the platform binaries (the main package lists
-      # them as optional dependencies at the same version), then the main
-      # package, and finally the integrations that peer on the snapshot
-      # precompute and web-component.
+      # the generated engine, protocol and shared packages first (core imports
+      # them at build and runtime), then core (web-component and react depend on
+      # it), then the platform binaries (the main package lists them as optional
+      # dependencies at the same version), then the main package, and finally the
+      # integrations that peer on the snapshot precompute and web-component.
       - name: Publish each tarball
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -796,7 +827,7 @@ jobs:
             tarball="$(find "packages/$1" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
             npm publish "${tarball}" --ignore-scripts --access public --tag snapshot
           }
-          for pattern in '*ffi*.tgz' '*core*.tgz' '*web-component*.tgz' '*react*.tgz'; do
+          for pattern in '*-engine-*.tgz' '*-protocol-*.tgz' '*-shared-*.tgz' '*core*.tgz' '*web-component*.tgz' '*react*.tgz'; do
             tarball="$(find packages/client-packages -maxdepth 1 -type f -name "${pattern}" -print -quit)"
             npm publish "${tarball}" --ignore-scripts --access public --tag snapshot
           done
@@ -817,7 +848,7 @@ jobs:
             echo ""
             echo '```sh'
             echo "npm install \\"
-            for package in ffi core web-component react precompute astro sveltekit; do
+            for package in engine protocol shared core web-component react precompute astro sveltekit; do
               echo "  ${scope}/${package}@${SNAPSHOT_VERSION} \\"
             done
             echo "  --registry=https://npm.pkg.github.com"

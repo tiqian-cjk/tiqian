@@ -51,6 +51,9 @@ const sourceExtensions: readonly string[] = [".js", ".cjs", ".mjs", ".ts", ".mts
 // dependency keys in the snapshot manifests. Each entry is rescoped to the
 // fork scope and pinned to the snapshot version.
 const rescopeSet: readonly string[] = [
+  "@tiqian/engine",
+  "@tiqian/protocol",
+  "@tiqian/shared",
   "@tiqian/core",
   "@tiqian/web-component",
   "@tiqian/precompute",

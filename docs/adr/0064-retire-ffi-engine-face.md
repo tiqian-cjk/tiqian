@@ -22,9 +22,10 @@ bundle 产物已经发布，core 却仍从 `@tiqian/ffi` 取用。
    `shapeJson`/`metricsJson` 字符串通道。
 4. 发版：`@tiqian/engine` 由 bundle 车道发布；`release-manifest.json` 删除 `npm-ffi` 单元，
    `npm-core` 不再声明前置依赖，与 `@tiqian/protocol`/`@tiqian/shared` 同一处理方式。
-5. 快照车道只移除 ffi 步骤；`@tiqian/engine` 与 protocol/shared 一样不属于快照打包集合，
-   core 的快照 tarball 因此保留 `workspace:*` 依赖。该限制在 protocol/shared 上已存在，本记录
-   不扩大修复范围；解决它需要快照车道学会打包生成树并改写 tarball 清单。
+5. 快照车道同步收口：`snapshot-swap.ts` 的改名集合加入 `@tiqian/engine`、`@tiqian/protocol`
+   与 `@tiqian/shared`；`snapshot-precompute.yml` 的 client-packages 在 `boring pack` 之后用
+   `tools/rewrite-npm-tarball.py` 把三个生成树 tarball 的包名与版本改写为快照 scope 与快照版本，
+   发布顺序把三个生成包放在 core 之前。core 的快照 tarball 因此不再携带 `workspace:*` 依赖。
 
 ## Consequences
 
