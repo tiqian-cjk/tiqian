@@ -127,8 +127,8 @@ class PreparedArtifact {
                     naturalWidth: pending.naturalWidth,
                     trailingGap: pending.trailingGap,
                     shapingBoundary: pending.shapingBoundary,
-                    openTypeFeatures: pending.openTypeFeatures,
-                    renderFontFamilies: pending.renderFontFamilies,
+                    openTypeFeatures: pending.openTypeFeatures == null ? null : pending.openTypeFeatures.copy(),
+                    renderFontFamilies: pending.renderFontFamilies.copy(),
                     spacing: pending.spacing,
                     italicEffect: pending.italicEffect,
                     dashStrategy: pending.dashStrategy,
@@ -145,8 +145,8 @@ class PreparedArtifact {
                     naturalWidth: cell.naturalWidth,
                     trailingGap: cell.trailingGap,
                     shapingBoundary: cell.shapingBoundary,
-                    openTypeFeatures: cell.openTypeFeatures,
-                    renderFontFamilies: cell.renderFontFamilies,
+                    openTypeFeatures: cell.openTypeFeatures == null ? null : cell.openTypeFeatures.copy(),
+                    renderFontFamilies: cell.renderFontFamilies.copy(),
                     spacing: cell.spacing,
                     italicEffect: cell.italicEffect,
                     dashStrategy: cell.dashStrategy,
@@ -156,12 +156,13 @@ class PreparedArtifact {
                     semanticSignature: cell.semanticSignature
                 };
                     if (PreparedDom.canMergePreparedRun(pendingSignature, cellSignature)) {
-                        PreparedDom.mergePreparedRun(pendingSignature, cellSignature);
-                        pending.rangeEnd = pendingSignature.rangeEnd;
-                        pending.source = pendingSignature.source;
-                        pending.display = pendingSignature.display;
-                        pending.naturalWidth = pendingSignature.naturalWidth;
-                        pending.trailingGap = pendingSignature.trailingGap;
+                        final merged:PreparedRunTyped = pending;
+                        merged.rangeEnd = cell.rangeEnd;
+                        merged.source += cell.source;
+                        merged.display += cell.display;
+                        merged.naturalWidth += cell.naturalWidth;
+                        merged.trailingGap += cell.trailingGap;
+                        pending = merged;
                     } else {
                         children.push(runChild(pending));
                         pending = cell;
@@ -265,17 +266,59 @@ class PreparedArtifact {
                 if (child.kind == "run") {
                     final run:PreparedRunTyped = child.run;
                     final spacingBoundary = run.spacing.px > 0 ? markSpacingEnds(state, run) : "";
-                    container.push(PreparedDom.renderRun(run, styleClassFor, spacingBoundary));
+                    final renderInput:PreparedRunRenderInput = {
+                        source: run.source,
+                        display: run.display,
+                        drawX: run.drawX,
+                        naturalWidth: run.naturalWidth,
+                        shapingBoundary: run.shapingBoundary,
+                        openTypeFeatures: run.openTypeFeatures,
+                        renderFontFamilies: run.renderFontFamilies,
+                        trailingGap: run.trailingGap,
+                        spacing: run.spacing,
+                        styleDelta: run.styleDelta,
+                        italicEffect: run.italicEffect,
+                        dashStrategy: run.dashStrategy,
+                        shapingLanguage: run.shapingLanguage,
+                        resolvedFace: run.resolvedFace,
+                        glyphIds: run.glyphIds,
+                        shapingEvidence: run.shapingEvidence,
+                        punctuationInkFloor: run.punctuationInkFloor,
+                        punctuationBodyWidth: run.punctuationBodyWidth,
+                        evidenceRenderFontFamily: run.evidenceRenderFontFamily
+                    };
+                    container.push(PreparedDom.renderRun(renderInput, styleClassFor, spacingBoundary));
                 } else if (child.kind == "inlineObject") {
                     final cell:PreparedRunTyped = child.cell;
-                    container.push(Evidence.inlineObjectPlaceholder(cell, child.carrierMargin, styleClassFor));
+                    final placeholder:InlineObjectPlaceholderCell = {
+                        naturalWidth: cell.naturalWidth,
+                        rangeStart: cell.rangeStart,
+                        rangeEnd: cell.rangeEnd,
+                        drawX: cell.drawX
+                    };
+                    container.push(Evidence.inlineObjectPlaceholder(placeholder, child.carrierMargin, styleClassFor));
                     inlineObjectCount += 1;
                 } else if (child.kind == "ruby") {
                     final ruby:PlanRubyAnnotation = child.ruby;
-                    container.push(Evidence.rubyAnnotationSpan(ruby, child.lineTop, styleClassFor));
+                    final annotation:RubyAnnotation = {
+                        fontSize: ruby.fontSize,
+                        ascent: ruby.ascent,
+                        fontFamilies: ruby.fontFamilies,
+                        text: ruby.text,
+                        fontWeight: ruby.fontWeight,
+                        centerX: ruby.centerX,
+                        baselineY: ruby.baselineY
+                    };
+                    container.push(Evidence.rubyAnnotationSpan(annotation, child.lineTop, styleClassFor));
                 } else {
                     final zone:PlanBopomofoZone = child.zone;
-                    container.push(Evidence.bopomofoAnnotationSpan(zone, child.width, child.lineTop, child.lineHeight, styleClassFor));
+                    final zoneInput:BopomofoZone = {
+                        text: zone.text,
+                        fontWeight: zone.fontWeight,
+                        fontFamilies: zone.fontFamilies,
+                        placements: zone.placements
+                    };
+                    container.push(Evidence.bopomofoAnnotationSpan(zoneInput, child.width, child.lineTop, child.lineHeight, styleClassFor));
                 }
                 renderIndex += 1;
             }
