@@ -60,10 +60,19 @@ class ExplainableStubParagraphLayoutEngine implements ParagraphLayoutEngine {
     public final hyphenator:Hyphenator;
     public final annotationCache:WidthIndependentAnnotationCache;
 
+    /**
+     * `recordsDebugInfo`: whether each `LayoutResult` carries the full explanation record
+     * (`LayoutResult.debug`). Defaults to true, which tests, dumps and layout reports rely on. A
+     * frontend that only presents layouts passes false; its results carry
+     * `LayoutDebugInfo.Default` and the same `LayoutResult.presentation` records, and the
+     * engine skips `LayoutDebugAssembly.buildLayoutDebugInfo`.
+     */
+    public final recordsDebugInfo:Bool;
+
     public function new(?fontRoleClassifier:FontRoleClassifier, ?fallbackResolver:FallbackResolver, ?clreqProfileResolver:ClreqProfileResolver,
             ?fontMetricsResolver:FontMetricsResolver, ?fontMetricsNormalizer:FontMetricsNormalizer, ?punctuationAtomBuilder:PunctuationAtomBuilder,
             ?punctuationSpacingCompressor:PunctuationSpacingCompressor, ?quotePairAnalyzer:QuotePairAnalyzer, ?lineBreaker:LineBreaker, ?justifier:Justifier,
-            ?textShaper:TextShaper, ?hyphenator:Hyphenator, ?annotationCache:WidthIndependentAnnotationCache) {
+            ?textShaper:TextShaper, ?hyphenator:Hyphenator, ?annotationCache:WidthIndependentAnnotationCache, ?recordsDebugInfo:Null<Bool>) {
         this.fontRoleClassifier = fontRoleClassifier == null ? new CjkFontRoleClassifier() : fontRoleClassifier;
         this.fallbackResolver = fallbackResolver == null ? new ParagraphLayoutFallbackResolver() : fallbackResolver;
         this.clreqProfileResolver = clreqProfileResolver == null ? new BuiltInClreqProfileResolver() : clreqProfileResolver;
@@ -77,6 +86,7 @@ class ExplainableStubParagraphLayoutEngine implements ParagraphLayoutEngine {
         this.textShaper = textShaper == null ? new ExplainableStubTextShaper() : textShaper;
         this.hyphenator = hyphenator == null ? DefaultHyphenator.defaultHyphenator() : hyphenator;
         this.annotationCache = annotationCache == null ? new LruWidthIndependentAnnotationCache() : annotationCache;
+        this.recordsDebugInfo = recordsDebugInfo == null ? true : recordsDebugInfo;
     }
 
     public function layout(input:LayoutInput):LayoutResult {

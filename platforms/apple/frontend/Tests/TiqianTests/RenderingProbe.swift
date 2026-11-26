@@ -7,7 +7,8 @@ import TiqianEngine
 /// (the generated Swift classes have no `copy`), and render a `LayoutResult` into an offscreen
 /// black-on-white RGBA bitmap.
 enum RenderingProbe {
-    static let engine = appleParagraphEngine()
+    // Records the explanation record so tests can assert CLREQ decisions such as kinsoku.
+    static let engine = appleParagraphEngine(recordsDebugInfo: true)
 
     static func layout(
         _ text: String,

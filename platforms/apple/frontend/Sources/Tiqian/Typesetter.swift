@@ -18,10 +18,12 @@ public final class Typesetter {
         fontSize: Float = 18,
         cjkFamily: String = CoreTextSupport.defaultCJKFamily,
         latinFamily: String = CoreTextSupport.defaultLatinFamily,
+        recordsDebugInfo: Bool = false,
     ) {
         self.fontSize = fontSize
-        // The same families reach the engine (measure) and the renderer (draw).
-        engines = AppleParagraphEngines(cjkFamily: cjkFamily, latinFamily: latinFamily)
+        // The same families reach the engine (measure) and the renderer (draw). The renderer reads
+        // only LayoutResult.presentation, so the explanation record is off unless requested.
+        engines = AppleParagraphEngines(cjkFamily: cjkFamily, latinFamily: latinFamily, recordsDebugInfo: recordsDebugInfo)
         renderer = CoreTextLayoutRenderer(cjkFamily: cjkFamily, latinFamily: latinFamily)
     }
 

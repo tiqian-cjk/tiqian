@@ -8,12 +8,14 @@ import TiqianEngine
 /// built-in defaults.
 ///
 /// `cjkFamily` / `latinFamily` must equal the families the renderer draws with, otherwise measure
-/// and draw diverge (AGENTS.md implementation constraint 5).
+/// and draw diverge (AGENTS.md implementation constraint 5). `recordsDebugInfo` is the engine's
+/// `recordsDebugInfo` (ADR 0065): false skips the explanation record, which the renderer never reads.
 func appleParagraphEngine(
     cjkFamily: String = CoreTextSupport.defaultCJKFamily,
     latinFamily: String = CoreTextSupport.defaultLatinFamily,
+    recordsDebugInfo: Bool = false,
 ) -> ParagraphLayoutEngine {
-    AppleParagraphEngines(cjkFamily: cjkFamily, latinFamily: latinFamily, count: 1).engines[0]
+    AppleParagraphEngines(cjkFamily: cjkFamily, latinFamily: latinFamily, count: 1, recordsDebugInfo: recordsDebugInfo).engines[0]
 }
 
 /// `AppleParallelParagraphLayout`: several engines, each with its own shaping, metrics and
@@ -37,12 +39,14 @@ final class AppleParagraphEngines {
         cjkFamily: String = CoreTextSupport.defaultCJKFamily,
         latinFamily: String = CoreTextSupport.defaultLatinFamily,
         count: Int = min(ProcessInfo.processInfo.activeProcessorCount, AppleParagraphEngines.maxParallelEngines),
+        recordsDebugInfo: Bool = false,
     ) {
         engines = (0..<max(count, 1)).map { _ in
             // Bounded caches: a reflow reuses width-independent shaping and metrics.
             Self.makeEngine(
                 metrics: CachingFontMetricsResolver(CoreTextFontMetricsResolver(cjkFamily: cjkFamily, latinFamily: latinFamily)),
                 shaper: CachingTextShaper(CoreTextShaper(cjkFamily: cjkFamily, latinFamily: latinFamily)),
+                recordsDebugInfo: recordsDebugInfo,
             )
         }
     }
@@ -73,10 +77,11 @@ final class AppleParagraphEngines {
     }
 
     // boring's Swift backend emits unlabeled parameters, so replacing the eleventh argument
-    // (textShaper) requires spelling out the ten before it. Every argument other than the metrics
-    // resolver, the line breaker and the shaper is the default-constructed value that
+    // (textShaper) and the fourteenth (recordsDebugInfo) requires spelling out the ones before them.
+    // Every argument other than the metrics resolver, the line breaker, the shaper and
+    // recordsDebugInfo is the default-constructed value that
     // engine-haxe/src/org/tiqian/layout/ParagraphLayoutEngine.hx substitutes for null.
-    private static func makeEngine(metrics: FontMetricsResolver, shaper: TextShaper) -> ParagraphLayoutEngine {
+    private static func makeEngine(metrics: FontMetricsResolver, shaper: TextShaper, recordsDebugInfo: Bool) -> ParagraphLayoutEngine {
         EngineInvariant.call("ExplainableStubParagraphLayoutEngine.init") {
             try ExplainableStubParagraphLayoutEngine(
                 CjkFontRoleClassifier(),
@@ -90,6 +95,9 @@ final class AppleParagraphEngines {
                 LookaheadLineBreaker(),
                 Justifier(),
                 shaper,
+                nil,
+                LruWidthIndependentAnnotationCache(),
+                recordsDebugInfo,
             )
         }
     }

@@ -846,8 +846,8 @@ class LineAdjustmentStage {
             prep.emergencyTrackingEligibilityDecisions, plan.progressiveBreakOpportunities);
         final presentation = LayoutDebugAssembly.buildPresentationDecisions(recordStage, prep.layoutMemo.fontDecisionInfos,
             prep.layoutMemo.metricDecisionInfos, prep.layoutMemo.punctuationDecisionInfos);
-        final debug = LayoutDebugAssembly.buildLayoutDebugInfo(engine.lineBreaker.strategyName, recordStage, prep.layoutMemo.fontDecisionInfos,
-            prep.layoutMemo.metricDecisionInfos, prep.layoutMemo.punctuationDecisionInfos);
+        final debug = engine.recordsDebugInfo ? LayoutDebugAssembly.buildLayoutDebugInfo(engine.lineBreaker.strategyName, recordStage,
+            prep.layoutMemo.fontDecisionInfos, prep.layoutMemo.metricDecisionInfos, prep.layoutMemo.punctuationDecisionInfos) : null;
         return ParagraphFinishOutcome.finished(new LayoutResult(prep.input, new Size(resultWidth, totalHeight), finalClusters, glyphRuns, lines, debug,
             presentation));
     }

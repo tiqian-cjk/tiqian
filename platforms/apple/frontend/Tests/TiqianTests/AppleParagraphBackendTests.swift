@@ -20,6 +20,21 @@ final class AppleParagraphBackendTests: XCTestCase {
         XCTAssertTrue(result.presentation.shapingDecisions.contains { String(engineText: $0.source) == "CoreText" })
     }
 
+    /// ADR 0065: the default Apple engine skips the explanation record and keeps the presentation records.
+    func testDefaultEngineSkipsDebugInfoAndKeepsPresentation() throws {
+        let input = LayoutInput(
+            TiqianTextContent("你好，世界！提椠排版。".engineText),
+            TextStyle(BoringArray(), 16, "zh-Hans".engineText),
+            ParagraphStyle(),
+            try LayoutConstraints(120),
+        )
+        let result = try appleParagraphEngine().layout(input)
+        XCTAssertTrue(result.debug.lineDecisions.isEmpty)
+        XCTAssertTrue(result.debug.fontDecisions.isEmpty)
+        XCTAssertFalse(result.presentation.fontDecisions.isEmpty)
+        XCTAssertFalse(result.presentation.shapingDecisions.isEmpty)
+    }
+
     func testWrapsToMultipleLinesUnderNarrowWidth() throws {
         let result = try Probe.layout("这是一段足够长的中文文字用来测试在窄宽度下的自动换行行为是否正确无误。", maxWidth: 96)
         XCTAssertGreaterThanOrEqual(result.lines.count, 2)
