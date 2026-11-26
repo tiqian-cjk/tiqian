@@ -1,6 +1,8 @@
 package org.tiqian.layout;
 
 import org.tiqian.core.FontDecisionInfo;
+import org.tiqian.core.MetricDecisionInfo;
+import org.tiqian.core.PunctuationDecisionInfo;
 import org.tiqian.core.TextRange;
 import org.tiqian.layout.LineBreakPlanningParts.KinsokuDependentPlanning;
 import org.tiqian.layout.LineBreakPlanningParts.LineBreakPlanningBase;
@@ -56,6 +58,12 @@ class WidthIndependentLayoutMemo {
     /** The debug record of each font decision with its display substitution (`LayoutDebugAssembly.buildLayoutDebugInfo`). */
     public final fontDecisionInfos:LayoutMemoSlot<Array<FontDecisionInfo>>;
 
+    /** The debug record of each entry of `metricDecisions` (`LayoutDebugAssembly.buildLayoutDebugInfo`). */
+    public final metricDecisionInfos:LayoutMemoSlot<Array<MetricDecisionInfo>>;
+
+    /** The debug record of each punctuation atom of `shapedBase` (`LayoutDebugAssembly.buildLayoutDebugInfo`). */
+    public final punctuationDecisionInfos:LayoutMemoSlot<Array<PunctuationDecisionInfo>>;
+
     public function new() {
         this.shapedBase = new LayoutMemoSlot<ShapedParagraphBase>();
         this.kinsokuDependent = new IntKeyedLayoutMemoSlot<KinsokuDependentPrep>();
@@ -65,5 +73,7 @@ class WidthIndependentLayoutMemo {
         this.planningBase = new LayoutMemoSlot<LineBreakPlanningBase>();
         this.planningKinsokuPart = new IntKeyedLayoutMemoSlot<KinsokuDependentPlanning>();
         this.fontDecisionInfos = new LayoutMemoSlot<Array<FontDecisionInfo>>();
+        this.metricDecisionInfos = new LayoutMemoSlot<Array<MetricDecisionInfo>>();
+        this.punctuationDecisionInfos = new LayoutMemoSlot<Array<PunctuationDecisionInfo>>();
     }
 }

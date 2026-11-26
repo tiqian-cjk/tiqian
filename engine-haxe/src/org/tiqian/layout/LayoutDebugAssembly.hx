@@ -235,24 +235,8 @@ class LayoutDebugAssembly {
         return fontDecisionsOut;
     }
 
-    /**
-     * Assembles the debug record of one layout. `fontDecisionInfosSlot` is the `fontDecisionInfos`
-     * slot of the prep's `WidthIndependentLayoutMemo`: the annotation's memo when the stage input
-     * comes from the base shaping stage, so the font-decision records are built once per paragraph.
-     *
-     * The function takes the line breaker's strategy name and that one slot instead of the engine
-     * and the whole memo. boring's Rust target projects the last class parameter of a static
-     * function that receives the engine into the fields the function reads (`scanFieldProjections`
-     * in the Rust compiler); with the memo as that parameter, the memo's fields were attributed to
-     * the engine of `LineAdjustmentStage.finishParagraphLayout`.
-     */
-    public static function buildLayoutDebugInfo(lineBreakerStrategyName:String, stage:LayoutDebugStageInput,
-            fontDecisionInfosSlot:LayoutMemoSlot<Array<FontDecisionInfo>>):LayoutDebugInfo {
-        final cachedFontDecisions = fontDecisionInfosSlot.value;
-        final fontDecisionsOut:Array<FontDecisionInfo> = cachedFontDecisions != null ? cachedFontDecisions : fontDecisionInfos(stage);
-        if (cachedFontDecisions == null)
-            fontDecisionInfosSlot.value = fontDecisionsOut;
-
+    /** The debug record of each metric decision. It depends only on the stage's `metricDecisions`. */
+    private static function metricDecisionInfos(stage:LayoutDebugStageInput):Array<MetricDecisionInfo> {
         final metricDecisionsOut = new Array<MetricDecisionInfo>();
         for (mIdx in 0...stage.metricDecisions.length) {
             final decision = stage.metricDecisions[mIdx];
@@ -262,7 +246,11 @@ class LayoutDebugAssembly {
                 Type.enumConstructor(decision.layoutMetrics.baselineClass), Type.enumConstructor(decision.layoutMetrics.metricBox),
                 Type.enumConstructor(decision.layoutMetrics.source), decision.layoutMetrics.reason));
         }
+        return metricDecisionsOut;
+    }
 
+    /** The debug record of each punctuation atom. It depends only on the stage's `punctuationAtoms`. */
+    private static function punctuationDecisionInfos(stage:LayoutDebugStageInput):Array<PunctuationDecisionInfo> {
         final punctuationDecisionsOut = new Array<PunctuationDecisionInfo>();
         for (pIdx in 0...stage.punctuationAtoms.length) {
             final atom = stage.punctuationAtoms[pIdx];
@@ -272,6 +260,40 @@ class LayoutDebugAssembly {
                 atom.haltAdvance, atom.haltValidation, atom.advanceExpansion, atom.glyphInlineShift, atom.glyphPlacementReason,
                 atom.leadingGlueInitiallyConsumed, atom.trailingGlueInitiallyConsumed));
         }
+        return punctuationDecisionsOut;
+    }
+
+    /**
+     * Assembles the debug record of one layout. `fontDecisionInfosSlot`, `metricDecisionInfosSlot`
+     * and `punctuationDecisionInfosSlot` are the slots of the same names in the prep's
+     * `WidthIndependentLayoutMemo`: the annotation's memo when the stage input comes from the base
+     * shaping stage, so the font-decision, metric-decision and punctuation records are built once
+     * per paragraph. The stage's `metricDecisions` and `punctuationAtoms` come from that memo's
+     * `metricDecisions` and `shapedBase` slots, so a filled slot always matches them.
+     *
+     * The function takes the line breaker's strategy name and those slots instead of the engine
+     * and the whole memo. boring's Rust target projects the last class parameter of a static
+     * function that receives the engine into the fields the function reads (`scanFieldProjections`
+     * in the Rust compiler); with the memo as that parameter, the memo's fields were attributed to
+     * the engine of `LineAdjustmentStage.finishParagraphLayout`.
+     */
+    public static function buildLayoutDebugInfo(lineBreakerStrategyName:String, stage:LayoutDebugStageInput,
+            fontDecisionInfosSlot:LayoutMemoSlot<Array<FontDecisionInfo>>, metricDecisionInfosSlot:LayoutMemoSlot<Array<MetricDecisionInfo>>,
+            punctuationDecisionInfosSlot:LayoutMemoSlot<Array<PunctuationDecisionInfo>>):LayoutDebugInfo {
+        final cachedFontDecisions = fontDecisionInfosSlot.value;
+        final fontDecisionsOut:Array<FontDecisionInfo> = cachedFontDecisions != null ? cachedFontDecisions : fontDecisionInfos(stage);
+        if (cachedFontDecisions == null)
+            fontDecisionInfosSlot.value = fontDecisionsOut;
+
+        final cachedMetricDecisions = metricDecisionInfosSlot.value;
+        final metricDecisionsOut:Array<MetricDecisionInfo> = cachedMetricDecisions != null ? cachedMetricDecisions : metricDecisionInfos(stage);
+        if (cachedMetricDecisions == null)
+            metricDecisionInfosSlot.value = metricDecisionsOut;
+
+        final cachedPunctuationDecisions = punctuationDecisionInfosSlot.value;
+        final punctuationDecisionsOut:Array<PunctuationDecisionInfo> = cachedPunctuationDecisions != null ? cachedPunctuationDecisions : punctuationDecisionInfos(stage);
+        if (cachedPunctuationDecisions == null)
+            punctuationDecisionInfosSlot.value = punctuationDecisionsOut;
 
         final spacingDecisionsOut = new Array<SpacingDecisionInfo>();
         for (sIdx in 0...stage.spacingPlan.adjustments.length) {
