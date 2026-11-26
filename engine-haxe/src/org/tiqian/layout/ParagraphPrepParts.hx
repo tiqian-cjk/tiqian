@@ -91,8 +91,8 @@ class ShapedParagraphBase {
  * punctuation geometry ledger that consumes those attachments, the resolved clusters and the shrink
  * opportunities. Natural inline attachments and atom classes do not depend on the level; they are
  * built here because the ledger and the shrink opportunities consume them. `WidthIndependentLayoutMemo`
- * keeps the part for the last kinsoku level it saw, so relayouts at widths that resolve to the same
- * level reuse it.
+ * keeps one part per kinsoku level, so relayouts at widths that resolve to a level seen before reuse
+ * that level's part.
  */
 class KinsokuDependentPrep {
     public final inlineObjectAttachedMarks:Array<InlineObjectAttachedMark>;

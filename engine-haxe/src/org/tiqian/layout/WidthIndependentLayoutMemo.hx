@@ -11,7 +11,6 @@ import org.tiqian.layout.ParagraphPrepParts.KinsokuDependentPrep;
 import org.tiqian.layout.ParagraphPrepParts.ShapedParagraphBase;
 import org.tiqian.layout.UnicodePunctuationBoundaryResolver.UnicodePunctuationBoundaries;
 import org.tiqian.layout.cache.LayoutMemoSlot;
-import org.tiqian.layout.cache.LayoutMemoSlot.IntKeyedLayoutMemoSlot;
 import std.SortedMap;
 
 /**
@@ -26,7 +25,12 @@ import std.SortedMap;
  * font-metrics resolver and normalizer, and the justifier's progressive technical stretch
  * capacity). None depends on the measure or on the paragraph style; `kinsokuDependent`,
  * `planningKinsokuPart` and `finishClusterLookups` also depend on the measure-adaptive kinsoku
- * level and are keyed by it.
+ * level, so each is an array of slots indexed by `kinsokuLevelMemoKey`, one slot per
+ * `KinsokuLevel`: a relayout whose measure moves the paragraph back to a level it had before reuses
+ * that level's values. The arrays hold `LayoutMemoSlot` values directly; a generic slot container
+ * class did not compile in boring's Rust target, which emits no `PartialEq` for a generic class
+ * whose array field fails its Clone check (`classDecl` in `RustDecl.hx`), while this class derives
+ * `PartialEq` over its fields.
  *
  * Each `WidthIndependentParagraphAnnotation` owns one memo that lives as long as the annotation.
  * A prep built from a dynamic shaping stage, which depends on the measure, receives a new memo of
@@ -39,7 +43,7 @@ class WidthIndependentLayoutMemo {
     public final shapedBase:LayoutMemoSlot<ShapedParagraphBase>;
 
     /** The prep part that also depends on the kinsoku level, keyed by `kinsokuLevelMemoKey`. */
-    public final kinsokuDependent:IntKeyedLayoutMemoSlot<KinsokuDependentPrep>;
+    public final kinsokuDependent:Array<LayoutMemoSlot<KinsokuDependentPrep>>;
 
     /** Raw and normalized font metrics per font decision (`LineBreakPlanningStage.planParagraphLines`). */
     public final metricDecisions:LayoutMemoSlot<Array<ClusterMetricDecision>>;
@@ -54,7 +58,7 @@ class WidthIndependentLayoutMemo {
     public final planningBase:LayoutMemoSlot<LineBreakPlanningBase>;
 
     /** The break-planning sets that also depend on the kinsoku level, keyed by `kinsokuLevelMemoKey`. */
-    public final planningKinsokuPart:IntKeyedLayoutMemoSlot<KinsokuDependentPlanning>;
+    public final planningKinsokuPart:Array<LayoutMemoSlot<KinsokuDependentPlanning>>;
 
     /** The debug record of each font decision with its display substitution (`LayoutDebugAssembly.buildLayoutDebugInfo`). */
     public final fontDecisionInfos:LayoutMemoSlot<Array<FontDecisionInfo>>;
@@ -66,19 +70,19 @@ class WidthIndependentLayoutMemo {
     public final punctuationDecisionInfos:LayoutMemoSlot<Array<PunctuationDecisionInfo>>;
 
     /** The per-cluster lookups of `LineAdjustmentStage.finishParagraphLayout`, keyed by `kinsokuLevelMemoKey`. */
-    public final finishClusterLookups:IntKeyedLayoutMemoSlot<FinishClusterLookups>;
+    public final finishClusterLookups:Array<LayoutMemoSlot<FinishClusterLookups>>;
 
     public function new() {
         this.shapedBase = new LayoutMemoSlot<ShapedParagraphBase>();
-        this.kinsokuDependent = new IntKeyedLayoutMemoSlot<KinsokuDependentPrep>();
+        this.kinsokuDependent = [new LayoutMemoSlot<KinsokuDependentPrep>(), new LayoutMemoSlot<KinsokuDependentPrep>(), new LayoutMemoSlot<KinsokuDependentPrep>(), new LayoutMemoSlot<KinsokuDependentPrep>()];
         this.metricDecisions = new LayoutMemoSlot<Array<ClusterMetricDecision>>();
         this.metricDecisionByRange = new LayoutMemoSlot<SortedMap<TextRange, ClusterMetricDecision>>();
         this.unicodePunctuationBoundaries = new LayoutMemoSlot<UnicodePunctuationBoundaries>();
         this.planningBase = new LayoutMemoSlot<LineBreakPlanningBase>();
-        this.planningKinsokuPart = new IntKeyedLayoutMemoSlot<KinsokuDependentPlanning>();
+        this.planningKinsokuPart = [new LayoutMemoSlot<KinsokuDependentPlanning>(), new LayoutMemoSlot<KinsokuDependentPlanning>(), new LayoutMemoSlot<KinsokuDependentPlanning>(), new LayoutMemoSlot<KinsokuDependentPlanning>()];
         this.fontDecisionInfos = new LayoutMemoSlot<Array<FontDecisionInfo>>();
         this.metricDecisionInfos = new LayoutMemoSlot<Array<MetricDecisionInfo>>();
         this.punctuationDecisionInfos = new LayoutMemoSlot<Array<PunctuationDecisionInfo>>();
-        this.finishClusterLookups = new IntKeyedLayoutMemoSlot<FinishClusterLookups>();
+        this.finishClusterLookups = [new LayoutMemoSlot<FinishClusterLookups>(), new LayoutMemoSlot<FinishClusterLookups>(), new LayoutMemoSlot<FinishClusterLookups>(), new LayoutMemoSlot<FinishClusterLookups>()];
     }
 }

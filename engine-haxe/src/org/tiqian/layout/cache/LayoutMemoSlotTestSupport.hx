@@ -1,7 +1,5 @@
 package org.tiqian.layout.cache;
 
-import org.tiqian.layout.cache.LayoutMemoSlot.IntKeyedLayoutMemoSlot;
-
 /**
  * `LayoutMemoSlotTestSupport`: creates the slots `LayoutMemoSlotTest` exercises. The slots are
  * created through functions with a declared return type because boring's Kotlin backend drops
@@ -11,9 +9,5 @@ import org.tiqian.layout.cache.LayoutMemoSlot.IntKeyedLayoutMemoSlot;
 class LayoutMemoSlotTestSupport {
     public static function newIntArraySlot():LayoutMemoSlot<Array<Int>> {
         return new LayoutMemoSlot<Array<Int>>();
-    }
-
-    public static function newKeyedIntArraySlot():IntKeyedLayoutMemoSlot<Array<Int>> {
-        return new IntKeyedLayoutMemoSlot<Array<Int>>();
     }
 }

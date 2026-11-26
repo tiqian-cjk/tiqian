@@ -491,6 +491,9 @@ class WidthIndependentAnnotationCacheFns {
     }
 
     /** `KinsokuLevelMemoKey`: the integer key of a kinsoku level in `WidthIndependentLayoutMemo.kinsokuDependent`. */
+    /** The number of keys `kinsokuLevelMemoKey` returns, one per `KinsokuLevel` constructor; `WidthIndependentLayoutMemo` keeps this many slots per kinsoku-dependent value. */
+    public static inline final KINSOKU_LEVEL_MEMO_KEY_COUNT:Int = 4;
+
     public static function kinsokuLevelMemoKey(level:KinsokuLevel):Int {
         return switch (level) {
             case KinsokuLevel.None: 0;
@@ -580,13 +583,12 @@ class WidthIndependentAnnotationCacheFns {
         if (cachedBase == null)
             layoutMemo.shapedBase.value = base;
         final kinsokuKey = kinsokuLevelMemoKey(resolvedKinsoku.level);
-        final cachedKinsokuPart = layoutMemo.kinsokuDependent.cached(kinsokuKey);
+        final kinsokuSlot = layoutMemo.kinsokuDependent[kinsokuKey];
+        final cachedKinsokuPart = kinsokuSlot.value;
         final kinsokuPart:KinsokuDependentPrep = cachedKinsokuPart != null ? cachedKinsokuPart
             : ParagraphPrepPartsBuilder.buildKinsokuDependentPrep(input, annotation, base, resolvedKinsoku, kinsokuRule);
-        if (cachedKinsokuPart == null) {
-            layoutMemo.kinsokuDependent.key = kinsokuKey;
-            layoutMemo.kinsokuDependent.value = kinsokuPart;
-        }
+        if (cachedKinsokuPart == null)
+            kinsokuSlot.value = kinsokuPart;
 
         return new ParagraphLayoutPrep(input, rejectedTechnicalTiersBySpan, text, fontSize, annotation.styleAt, annotation.fontSizeAt,
             annotation.bopomofoFontWeightAt, annotation.rubyFontSize, annotation.rubyStackGap, annotation.rubyFontWeight, annotation.pinyinSpans,

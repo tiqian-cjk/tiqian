@@ -52,8 +52,8 @@ class LineBreakPlanningBase {
  * and on nothing that varies with the measure. `forbiddenLineStartCoreClusters` holds every
  * forbidden line start except the ones the measure-dependent contextual kinsoku adds
  * (`PunctuationGeometryStage.attachedAsciiPointMarkKinsoku` and `inlineObjectAttachedKinsoku`);
- * planning merges those per layout. `WidthIndependentLayoutMemo.planningKinsokuPart` keeps the
- * value for the last kinsoku level it saw.
+ * planning merges those per layout. `WidthIndependentLayoutMemo.planningKinsokuPart` keeps one
+ * value per kinsoku level.
  */
 class KinsokuDependentPlanning {
     public final forbiddenLineStartCoreClusters:SortedSet<Int>;

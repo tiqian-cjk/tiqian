@@ -888,13 +888,12 @@ class LineBreakPlanningStage {
         if (cachedPlanningBase == null)
             memo.planningBase.value = planningBase;
         final kinsokuKey = WidthIndependentAnnotationCacheFns.kinsokuLevelMemoKey(prep.resolvedKinsoku.level);
-        final cachedKinsokuPlanning = memo.planningKinsokuPart.cached(kinsokuKey);
+        final kinsokuPlanningSlot = memo.planningKinsokuPart[kinsokuKey];
+        final cachedKinsokuPlanning = kinsokuPlanningSlot.value;
         final kinsokuPlanning:KinsokuDependentPlanning = cachedKinsokuPlanning != null ? cachedKinsokuPlanning
             : buildKinsokuDependentPlanning(prep, planningBase, unicodePunctuationBoundaries);
-        if (cachedKinsokuPlanning == null) {
-            memo.planningKinsokuPart.key = kinsokuKey;
-            memo.planningKinsokuPart.value = kinsokuPlanning;
-        }
+        if (cachedKinsokuPlanning == null)
+            kinsokuPlanningSlot.value = kinsokuPlanning;
         final attachedInlineInterCharBoundaries = planningBase.attachedInlineInterCharBoundaries;
         final westernBracketCjkInterCharBoundaryAfterClusters = attachedInlineInterCharBoundaries.ordinaryWesternBoundaryAfterClusters;
         final attachedInlinePhysicalBoundaryAfterClusters = attachedInlineInterCharBoundaries.suppressedPhysicalBoundaryAfterClusters;

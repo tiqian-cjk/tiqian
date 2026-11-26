@@ -740,12 +740,11 @@ class LineAdjustmentStage {
         // `FinishClusterLookups`: entry `i` of `resolvedFinalClusters` and `finalClusters` is
         // natural cluster `i`, so the per-cluster values below are read by index.
         final lookupsKey = WidthIndependentAnnotationCacheFns.kinsokuLevelMemoKey(prep.resolvedKinsoku.level);
-        final cachedLookups = prep.layoutMemo.finishClusterLookups.cached(lookupsKey);
+        final lookupsSlot = prep.layoutMemo.finishClusterLookups[lookupsKey];
+        final cachedLookups = lookupsSlot.value;
         final lookups:FinishClusterLookups = cachedLookups != null ? cachedLookups : FinishClusterLookups.build(prep, plan.metricDecisionByRange);
-        if (cachedLookups == null) {
-            prep.layoutMemo.finishClusterLookups.key = lookupsKey;
-            prep.layoutMemo.finishClusterLookups.value = lookups;
-        }
+        if (cachedLookups == null)
+            lookupsSlot.value = lookups;
         final finalClusters = new Array<Cluster>();
         for (clusterIndex in 0...resolvedFinalClusters.length) {
             final c = resolvedFinalClusters[clusterIndex];
@@ -780,7 +779,8 @@ class LineAdjustmentStage {
                 runAdvanceTerms.push(cluster.advance);
                 final shaped = lookups.shapedGlyphs[naturalIndex];
                 if (shaped != null) {
-                    final mapped = ParagraphShapingStage.mapToClusterRange(shaped, cluster);
+                    final premapped = lookups.mappedShapedGlyphs[naturalIndex];
+                    final mapped = premapped == null ? ParagraphShapingStage.mapToClusterRange(shaped, cluster) : premapped;
                     final centered = centerDashInk(mapped, cluster, lookups.punctuationClasses[naturalIndex]);
                     for (g in centered)
                         runGlyphs.push(g);

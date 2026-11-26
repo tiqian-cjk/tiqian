@@ -28,22 +28,3 @@ class LayoutMemoSlot<T> {
         this.value = null;
     }
 }
-
-/**
- * `IntKeyedLayoutMemoSlot`: one memoized value together with the integer key it was computed for.
- * `cached` returns `value` when the requested key equals `key`, and null otherwise. The owner
- * writes `key` and `value` together after computing a value, so the slot holds one key at a time.
- */
-class IntKeyedLayoutMemoSlot<T> {
-    public var key:Int;
-    public var value:Null<T>;
-
-    public function new() {
-        this.key = 0;
-        this.value = null;
-    }
-
-    public function cached(requestedKey:Int):Null<T> {
-        return key == requestedKey ? value : null;
-    }
-}
