@@ -88,6 +88,16 @@
           "suffix": "Test"
         }
       ]
+    },
+    "shared": {
+      "types": ["runtime.UString", "runtime.TestCore", "std.UStringException"],
+      "packages": [
+        "org.tiqian.shared",
+        "org.tiqian.shared.prepared_dom",
+        "org.tiqian.shared.html",
+        "org.tiqian.shared.snapshot",
+        "org.tiqian.shared.layout"
+      ]
     }
   },
   "bundles": [
@@ -517,6 +527,25 @@
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
+    },
+    {
+      "id": "shared-rust",
+      "target": "rust",
+      "sourceSet": "shared",
+      "dependsOn": ["engine-rust", "protocol-rust"],
+      "compare": false,
+      "haxeArgs": [
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/rust/std-shadow",
+        "-cp", ".haxelib/boring/git/packages/compiler/reflaxe/rust",
+        "-cp", "platforms/web/shared/src",
+        "--macro", "Intercept.run(['engine-haxe/src', '.haxelib/boring/git/samples/std', 'platforms/web/shared/src'])",
+        "--macro", "rustcompiler.Compiler.use()",
+        "-D", "runtime-import=crate::runtime",
+        "-D", "runtime-emit=runtime",
+        "-D", "package-name=tiqian-shared-gen",
+        "-D", "package-license=MPL-2.0"
+      ],
+      "package": { "name": "tiqian-shared", "version": "0.1.0", "license": "MPL-2.0" }
     }
   ]
 }
