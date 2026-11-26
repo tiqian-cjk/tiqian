@@ -53,6 +53,7 @@ if (target === "rust") {
   // writes engine-haxe/out/protocol-rust/gen, and the precompute workspace
   // reads it from this gitignored mount (engine/Cargo.toml points at it).
   runDriver("protocol-rust");
+  runDriver("shared-rust");
   const protocolGenerated = join(outRoot, "protocol-rust", "gen");
   if (!existsSync(protocolGenerated)) {
     throw new Error(`generate-engine-gen: expected driver output at ${protocolGenerated}`);
