@@ -68,6 +68,10 @@ public final class Document {
     private let indexedBlocks: [IndexedBlock]
     private let sourceUnits: [UInt16]
     private let renderer: CoreTextLayoutRenderer
+    /// `DocumentDisplayListCache`: one `CoreTextDisplayList` per block, resolved on the first draw
+    /// and replayed on later draws (scrolling, selection highlight). The host view draws on its main
+    /// thread, which is the only thread that touches this cache.
+    private var displayLists: [CoreTextDisplayList]?
 
     /// The document's plain source text, each block joined with its logical separator. Hosts expose
     /// it as the accessibility value so source and accessibility offsets stay faithful (AGENTS.md
@@ -90,6 +94,7 @@ public final class Document {
         self.width = width
         self.height = height
         self.renderer = renderer
+        displayLists = nil
     }
 
     /// Number of laid-out blocks (paragraphs plus list marker and body rows).
@@ -249,24 +254,41 @@ public final class Document {
     /// top at that height (callers fold a top inset into it). Each block draws at
     /// `canvasHeight - yTop`; list bodies translate the context by the marker-column width. Text
     /// inherits the context fill color; color spans override it per cluster.
-    public func draw(in context: CGContext, canvasHeight: Double) {
-        for block in blocks {
+    ///
+    /// `visibleRect` is the area to repaint in document coordinates (top-left origin, y-down). A
+    /// block whose painted area, the union of its display-list primitives, does not intersect it
+    /// is skipped; nil draws every block.
+    public func draw(in context: CGContext, canvasHeight: Double, visibleRect: CGRect? = nil) {
+        let lists = resolvedDisplayLists()
+        for (index, block) in blocks.enumerated() {
             let blockCanvasHeight = canvasHeight - block.yTop
             if blockCanvasHeight <= 0 { continue }
+            let list = lists[index]
+            if let visibleRect {
+                let painted = list.paintBounds.offsetBy(dx: block.x, dy: block.yTop)
+                if painted.isNull || !painted.intersects(visibleRect) { continue }
+            }
             context.saveGState()
             if block.x != 0 { context.translateBy(x: block.x, y: 0) }
-            EngineInvariant.call("CoreTextLayoutRenderer.draw") {
-                try renderer.draw(
-                    block.result,
-                    in: context,
-                    canvasHeight: blockCanvasHeight,
+            list.replay(in: context, canvasHeight: blockCanvasHeight)
+            context.restoreGState()
+        }
+    }
+
+    func resolvedDisplayLists() -> [CoreTextDisplayList] {
+        if let displayLists { return displayLists }
+        let lists = blocks.map { block in
+            EngineInvariant.call("CoreTextLayoutRenderer.displayList") {
+                try renderer.displayList(
+                    for: block.result,
                     spans: block.spans,
                     colorSpans: block.colorSpans,
                     richTextSpans: block.richTextSpans,
                 )
             }
-            context.restoreGState()
         }
+        displayLists = lists
+        return lists
     }
 
     private func nearestBlock(x: Double, y: Double) -> IndexedBlock? {

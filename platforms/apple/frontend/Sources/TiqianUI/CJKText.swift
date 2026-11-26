@@ -399,7 +399,13 @@ final class CJKCanvas: NSView, NSUserInterfaceValidations {
         // inset is folded into canvasHeight; left inset is a translate.
         NSColor.textColor.setFill()
         ctx.translateBy(x: padding, y: 0)
-        document.draw(in: ctx, canvasHeight: Double(bounds.height) - Double(padding))
+        // The view is flipped (y-down), so the dirty rect maps to document coordinates by removing
+        // the inset; blocks outside it are skipped.
+        document.draw(
+            in: ctx,
+            canvasHeight: Double(bounds.height) - Double(padding),
+            visibleRect: dirtyRect.offsetBy(dx: -padding, dy: -padding),
+        )
         ctx.restoreGState()
     }
 
@@ -656,7 +662,13 @@ final class CJKCanvas: UIView, UITextInput, UITextInteractionDelegate, UIGesture
         context.scaleBy(x: 1, y: -1)
         context.setFillColor(UIColor.label.cgColor)
         context.translateBy(x: padding, y: 0)
-        document.draw(in: context, canvasHeight: Double(bounds.height) - Double(padding))
+        // UIKit's rect is y-down from the view top, so it maps to document coordinates by removing
+        // the inset; blocks outside it are skipped.
+        document.draw(
+            in: context,
+            canvasHeight: Double(bounds.height) - Double(padding),
+            visibleRect: rect.offsetBy(dx: -padding, dy: -padding),
+        )
         context.restoreGState()
     }
 
