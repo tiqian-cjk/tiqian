@@ -122,7 +122,7 @@ jobs:
         if: steps.upload-reused.outcome != 'success'
         shell: bash
         run: |
-          test -f platforms/web/server/precompute/engine-gen/Cargo.toml
+          test -f engine-haxe/out/engine-rust/gen/Cargo.toml
           test -f platforms/web/server/precompute/protocol-gen/Cargo.toml
 
       - name: Upload the generated trees and manifests
