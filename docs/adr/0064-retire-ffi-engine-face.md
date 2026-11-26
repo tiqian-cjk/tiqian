@@ -17,15 +17,21 @@ bundle 产物已经发布，core 却仍从 `@tiqian/ffi` 取用。
 1. 删除 `platforms/web/client/engine-runtime` 与 `.github/workflows/publish-ffi.yml`。
 2. `engine-haxe/out/ts/gen` 作为根 `package.json` 的 workspace 成员，包名 `@tiqian/engine`；
    core 以 `workspace:*` 依赖它，直接编译生成树的 `.ts` 源码。
-3. core 新建 `src/engine/engine-access/`：wire 类型、字体角色判定、宿主结果转换、prepared-paragraph
-   组装。宿主回调改为 `{ shape, resolve }` 的类型化对象进出，core 内不再出现
-   `shapeJson`/`metricsJson` 字符串通道。
-4. 发版：`@tiqian/engine` 由 bundle 车道的 `ts protocol-ts shared-ts` 分组打包发布；
+3. core 的引擎边界按职责分散存放：请求体类型由 `@tiqian/protocol` 的 `ParagraphRequest` 派生
+   （`src/engine/wire-types.ts`）；worker 消息类型独立在 `src/engine/web-worker/wire-types.ts`；
+   宿主结果解码在 `src/engine/host-result.ts`；字体角色判定调用引擎的 `FontRoleClassification`；
+   prepared-paragraph 的请求组装留在 `src/engine/prepared-paragraph.ts`。宿主回调改为
+   `{ shape, resolve }` 的类型化对象进出，core 内不再出现 `shapeJson`/`metricsJson` 字符串通道。
+4. 生成树包之间用 boring 的 bundle 依赖声明：`shared-ts` 的 `dependsOn` 指向 `ts`，生成时跳过
+   依赖包提供的模块并改为 `@tiqian/engine/...` 的 import；`boring pack` 顺序中 `ts` 必须在
+   `shared-ts` 之前。boring 的 `dependsOn` 支持 ts、rust、kotlin、swift、dart 五个发射目标，
+   由驱动器测试覆盖。
+5. 发版：`@tiqian/engine` 由 bundle 车道的 `ts protocol-ts shared-ts` 分组打包发布；
    `release-manifest.json` 删除 `npm-ffi` 单元与 `registry` 对它的依赖项，`npm-core` 不再声明
    前置依赖，与 `@tiqian/protocol`/`@tiqian/shared` 同一处理方式。`release.yml` 的 `npm-ffi` 作业移除；
    `prepare-release-web-workspace` 动作与 `build-precompute-release.yml` 改为生成并解析三棵生成树，
    `pack-release-bundles.yml` 上传下载 `engine-haxe/out/{ts,protocol-ts,shared-ts}`，不再组装 ffi runtime。
-5. 快照车道同步收口：`snapshot-swap.ts` 的改名集合加入 `@tiqian/engine`、`@tiqian/protocol`
+6. 快照车道同步收口：`snapshot-swap.ts` 的改名集合加入 `@tiqian/engine`、`@tiqian/protocol`
    与 `@tiqian/shared`；`snapshot-precompute.yml` 的 client-packages 在 `boring pack` 之后用
    `tools/rewrite-npm-tarball.py` 把三个生成树 tarball 的包名与版本改写为快照 scope 与快照版本，
    发布顺序把三个生成包放在 core 之前。core 的快照 tarball 因此不再携带 `workspace:*` 依赖。
