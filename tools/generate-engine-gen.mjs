@@ -67,6 +67,8 @@ if (target === "rust") {
     cpSync(protocolTests, protocolGen, { recursive: true });
   }
   console.log(`generate-engine-gen: wrote ${protocolGen}`);
+} else if (target === "ts") {
+  runDriver("ts");
 } else {
   console.error(`generate-engine-gen: unknown target ${target} (expected rust or ts)`);
   process.exit(1);
