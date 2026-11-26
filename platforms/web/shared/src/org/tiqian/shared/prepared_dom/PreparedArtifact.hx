@@ -118,8 +118,56 @@ class PreparedArtifact {
                     childIndex += 1;
                     continue;
                 }
-                if (pending != null && PreparedDom.canMergePreparedRun(pending, cell)) {
-                    PreparedDom.mergePreparedRun(pending, cell);
+                if (pending != null) {
+                                    final pendingSignature:PreparedRunSignature = {
+                    rangeStart: pending.rangeStart,
+                    rangeEnd: pending.rangeEnd,
+                    source: pending.source,
+                    display: pending.display,
+                    naturalWidth: pending.naturalWidth,
+                    trailingGap: pending.trailingGap,
+                    shapingBoundary: pending.shapingBoundary,
+                    openTypeFeatures: pending.openTypeFeatures,
+                    renderFontFamilies: pending.renderFontFamilies,
+                    spacing: pending.spacing,
+                    italicEffect: pending.italicEffect,
+                    dashStrategy: pending.dashStrategy,
+                    evidenceRenderFontFamily: pending.evidenceRenderFontFamily,
+                    styleSignature: pending.styleSignature,
+                    punctuationSignature: pending.punctuationSignature,
+                    semanticSignature: pending.semanticSignature
+                };
+                                    final cellSignature:PreparedRunSignature = {
+                    rangeStart: cell.rangeStart,
+                    rangeEnd: cell.rangeEnd,
+                    source: cell.source,
+                    display: cell.display,
+                    naturalWidth: cell.naturalWidth,
+                    trailingGap: cell.trailingGap,
+                    shapingBoundary: cell.shapingBoundary,
+                    openTypeFeatures: cell.openTypeFeatures,
+                    renderFontFamilies: cell.renderFontFamilies,
+                    spacing: cell.spacing,
+                    italicEffect: cell.italicEffect,
+                    dashStrategy: cell.dashStrategy,
+                    evidenceRenderFontFamily: cell.evidenceRenderFontFamily,
+                    styleSignature: cell.styleSignature,
+                    punctuationSignature: cell.punctuationSignature,
+                    semanticSignature: cell.semanticSignature
+                };
+                    if (PreparedDom.canMergePreparedRun(pendingSignature, cellSignature)) {
+                        PreparedDom.mergePreparedRun(pendingSignature, cellSignature);
+                        pending.rangeEnd = pendingSignature.rangeEnd;
+                        pending.source = pendingSignature.source;
+                        pending.display = pendingSignature.display;
+                        pending.naturalWidth = pendingSignature.naturalWidth;
+                        pending.trailingGap = pendingSignature.trailingGap;
+                    } else {
+                        if (pending != null) {
+                            children.push(runChild(pending));
+                        }
+                        pending = cell;
+                    }
                 } else {
                     if (pending != null) {
                         children.push(runChild(pending));
