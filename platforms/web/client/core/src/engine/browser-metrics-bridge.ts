@@ -13,8 +13,8 @@ import type { WebFontFamiliesInstance } from "./canvas-fonts.js";
 import type { CanvasShapingEnv, CjkDashCapability } from "./canvas-shaping.js";
 import { createMetricsResolver } from "./canvas-metrics.js";
 import { createTextShaper } from "./canvas-shaping.js";
-import { toEngineFontMetrics, toEngineShapingResult } from "./host-result.js";
-import type { EngineCallbacks } from "./prepared-paragraph.js";
+import { toEngineFontMetrics, toEngineShapingResult } from "./engine-access/host-result.js";
+import type { EngineCallbacks } from "./engine-access/prepared-paragraph.js";
 import type { ShapingInput } from "@tiqian/engine/org/tiqian/shaping/TextShaper";
 
 export interface BrowserMetricsBridgeOptions {

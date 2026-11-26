@@ -4,11 +4,6 @@ name: Publish web-component package
 # the core lane published @tiqian/core, and gated before publishing.
 on:
   workflow_call:
-    inputs:
-      web-inputs:
-        description: Shared Web build artifact from this release run
-        type: string
-        default: ""
   workflow_dispatch:
 
 permissions:
@@ -29,7 +24,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: read
       id-token: write
     outputs:
       version: ${{ steps.release.outputs.version }}
@@ -41,6 +35,12 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "25"
 
       - name: Set up Node.js 24
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
@@ -78,11 +78,62 @@ jobs:
           fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
-      - name: Prepare the Web release workspace
-        uses: ./.github/actions/prepare-release-web-workspace
-        with:
-          artifact: ${{ inputs.web-inputs }}
-          version: ${{ steps.release.outputs.version }}
+      - name: Accept Android SDK licenses
+        shell: bash
+        run: yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      # The install resolves three generated, gitignored trees: tiqian-protocol,
+      # tiqian-shared and tiqian-engine are workspace:* members under
+      # engine-haxe/out/{protocol-ts,shared-ts,ts}/gen whose package.json is
+      # written by boring pack. npm cannot resolve the workspace protocol
+      # (EUNSUPPORTEDPROTOCOL), so this lane generates the trees, packs the
+      # member manifests, then installs with bun. The job defaults run to
+      # platforms/web/client/web-component, so the generation steps set the
+      # repository root explicitly.
+      - name: Install Nix
+        id: nix-installer
+        continue-on-error: true
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      - name: Install Nix with the install script when the action fails
+        if: steps.nix-installer.outcome != 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL \
+              https://install.determinate.systems/nix \
+              | sh -s -- install --no-confirm; then
+              exit 0
+            fi
+            echo "nix install attempt ${attempt} failed; retrying" >&2
+            sleep 15
+          done
+          exit 1
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: Align the generated package versions with the release
+        working-directory: ${{ github.workspace }}
+        # boring pack writes the placeholder version from boring.json, and the
+        # sibling archives the inspect step installs must carry the release
+        # version @tiqian/core depends on, so align before packing.
+        run: python3 tools/align-package-versions.py ${{ steps.release.outputs.version }}
+
+      - name: Write the protocol and shared package manifests
+        working-directory: .
+        run: |
+          export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
+          printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
+          chmod +x "$BORING_PACKAGE_TSC"
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts ts --project boring.json'
+      - name: Install workspace dependencies
+        working-directory: .
+        # bun, not npm: the web consumers declare tiqian-protocol and
+        # tiqian-shared as workspace:*, and npm refuses that protocol with
+        # EUNSUPPORTEDPROTOCOL. --ignore-scripts skips the root postinstall,
+        # which would regenerate the protocol-ts tree and delete the manifest
+        # boring pack wrote; the runtime is assembled explicitly below.
+        run: nix develop -c bun install --ignore-scripts
 
       - name: Build and verify the release tarball
         env:
@@ -104,7 +155,7 @@ jobs:
           tarball="$(find "${TIQIAN_RELEASE_ARTIFACT_DIR}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
           # @tiqian/core installs @tiqian/protocol and @tiqian/shared, which the
           # release publishes from the pack matrix after this lane; the archives
-          # from the Web pack or standalone generation stand in for them.
+          # this lane generated for its manifest step stand in for them.
           siblings=()
           for bundle in protocol-ts shared-ts; do
             path="$(find "${GITHUB_WORKSPACE}/engine-haxe/out/${bundle}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
@@ -117,20 +168,8 @@ jobs:
           bash "${GITHUB_WORKSPACE}/tools/check-npm-package.sh" "${tarball}" \
             --expect @tiqian/web-component --entry @tiqian/web-component "${siblings[@]}"
 
-      - name: Fix the release tarball for this run
-        # The first attempt of the release run keeps the verified tarball as an
-        # artifact and a re-run publishes that kept file instead of its rebuild,
-        # so npm and the registry receive the same bytes.
-        uses: ./.github/actions/keep-release-files
-        with:
-          name: npm-tarball-web-component
-          root: ${{ runner.temp }}/tiqian-web-component-release
-          path: ${{ runner.temp }}/tiqian-web-component-release/*.tgz
-
       - name: Publish the verified tarball to alpha
         shell: bash
-        env:
-          NPM_PUBLISH_DIVERGED_LOG: ${{ runner.temp }}/npm-diverged.txt
         run: |
           set -euo pipefail
           tarball="$(find "${RUNNER_TEMP}/tiqian-web-component-release" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
@@ -139,17 +178,6 @@ jobs:
             exit 1
           fi
           bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
-
-      - name: Report a version npm already holds with other bytes
-        # npm-publish.sh keeps a published copy that differs from this run's
-        # tarball, which happens when an earlier run of the same version
-        # published it. The registry lane refuses to describe such a tarball.
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: npm-diverged-web-component
-          path: ${{ runner.temp }}/npm-diverged.txt
-          if-no-files-found: ignore
-          overwrite: true
 
   sync-latest:
     name: Synchronize latest dist-tag

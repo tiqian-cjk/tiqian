@@ -1,8 +1,8 @@
 name: Snapshot precompute packages
 
 # Manual-only snapshot lane for the full npm set: precompute and its platform
-# binaries, the astro and sveltekit integrations, and the engine, protocol, shared,
-# core, web-component, and react client packages. Each dispatch stamps its own timestamped tag,
+# binaries, the astro and sveltekit integrations, and the ffi, core, web-component,
+# and react client packages. Each dispatch stamps its own timestamped tag,
 # builds the eleven packages from that commit, temporarily swaps the manifests
 # to the running repository owner's scope (GitHub Packages requires the npm
 # scope to equal the owner), publishes the timestamped versions with the
@@ -125,7 +125,7 @@ jobs:
           export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack ts protocol-ts shared-ts --project boring.json'
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts ts --project boring.json'
       - name: Install workspace dependencies
         working-directory: .
         # bun, not npm: the web consumers declare tiqian-protocol and
@@ -343,7 +343,7 @@ jobs:
           export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack ts protocol-ts shared-ts --project boring.json'
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts ts --project boring.json'
       - name: Install workspace dependencies
         working-directory: .
         # bun, not npm: the web consumers declare tiqian-protocol and
@@ -482,7 +482,7 @@ jobs:
           export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack ts protocol-ts shared-ts --project boring.json'
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts ts --project boring.json'
       - name: Install workspace dependencies
         working-directory: .
         # bun, not npm: the web consumers declare tiqian-protocol and
@@ -660,7 +660,7 @@ jobs:
           export BORING_PACKAGE_TSC="$RUNNER_TEMP/boring-package-tsc"
           printf '#!/usr/bin/env bash\nexec bun x --bun typescript@5.9.3/bin/tsc "$@"\n' > "$BORING_PACKAGE_TSC"
           chmod +x "$BORING_PACKAGE_TSC"
-          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack ts protocol-ts shared-ts --project boring.json'
+          nix develop -c bash -c 'bash tools/setup-haxe-env.sh && boring pack protocol-ts shared-ts ts --project boring.json'
 
       # The generated trees publish as their own packages, so a core tarball's
       # @<scope>/engine, @<scope>/protocol and @<scope>/shared dependencies

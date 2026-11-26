@@ -7,7 +7,7 @@
 // capability plus the browser fallback descriptor dissolved from
 // root-state.ts.
 
-import type { EngineCallbacks as BrowserMetricsBridgeInstance } from "../prepared-paragraph.js";
+import type { EngineCallbacks as BrowserMetricsBridgeInstance } from "../engine-access/prepared-paragraph.js";
 import { createBrowserMetricsBridge } from "../browser-metrics-bridge.js";
 import type { CanvasContextLike } from "../canvas-metrics.js";
 import type { CanvasShapingEnv, ProbeElementLike } from "../canvas-shaping.js";

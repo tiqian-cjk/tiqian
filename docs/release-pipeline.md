@@ -7,25 +7,13 @@ CI 打包五个目标生态的产物，写入 registry 仓库并部署站点。�
 
 推送 `v*.*.*` 标签只触发 `.github/workflows/release.yml`。这个 workflow 先运行
 `.github/workflows/release-gate.yml`，由 `tools/release-gate.py` 读取
-`release-manifest.json`，要求 `Native precompute CI`、`Build Neon precompute` 与
-`Bundle verification` 在标签提交上都有成功记录。开发者可以在同一次 Git 推送中上传
-`main` 和版本标签。发版前检查每 30 秒查询尚未通过的作业，最多等待五小时。全部检查通过后
-开始打包。任一检查完成但失败，或等待到期时仍有检查未通过，发布作业会停止。
+`release-manifest.json`，要求 `Native precompute CI` 与 `Build Neon precompute`
+在标签 commit 上都有 completed 且 success 的运行记录；任一 workflow 失败或没有运行
+记录时，全部发布 job 都不会开始。
 
 检查通过后，`release.yml` 按依赖顺序调用 `publish-core.yml`、
-`publish-web-component.yml`、`publish-precompute.yml`、`publish-web-adapters.yml`、
-`publish.yml`、`release-assets.yml` 与 `release-registry.yml`。
-`pack-release-bundles.yml` 将 Web、Kotlin、Swift 及 Cargo 和 pub 归档分成四组并行打包。
-Web 分组交付本次生成的 npm 工作区包（engine、protocol、shared），几个 npm 作业直接下载这些产物。
-Web 分组还优先复用检查通过的 `Build Neon precompute` 运行生成的 TypeScript 引擎树。
-`build-precompute-release.yml` 从同一次检查下载四个平台包和主包，核对包名、版本及文件清单，
-并在已有的主包 JavaScript 上改写依赖版本后重新打包。产物缺失或校验失败时重新构建。
-`publish-precompute.yml` 等待这些包及其 npm 依赖就绪后发布。
-`publish-web-adapters.yml` 等待同版本的预计算包和生成的 TypeScript 包发布，再构建并测试
-`@tiqian/astro`、`@tiqian/sveltekit` 和 `@tiqian/react`。工作流在空项目中安装每个压缩包并
-加载 JavaScript 入口，随后将压缩包发布到 npm 公共仓库的 `alpha` 标签。
-`release.yml` 接着用 `tools/npm-dist-tag.sh` 将三个包的 `latest` 指向同一版本。
-两个作业均先读取标签。如果任一标签指向更高版本，当前作业会停止。
+`publish-web-component.yml`、`publish-precompute.yml`、`publish.yml`、
+`release-assets.yml` 与 `release-registry.yml`。
 
 GitHub Release 页面由 `release-assets.yml` 维护，只依赖 gate 与 pack：pack 一绿就把
 本次制品与自动生成的说明放到标签上，npm、Maven 或 registry 任一步骤失败都不影响它。
@@ -90,25 +78,13 @@ npm 清单，`release-manifest.json` 中各发布单元与 `notInRelease` 列出
 命中。配置为 `Pending validation` 时，第一次发布会把它转成有效；条目过期后发布返回
 404。发布前用 `https://www.npmjs.com/package/<包名>/access` 逐个核对文件名与状态。
 
-首次发布新包时，npm 要求包名先存在，维护者才能配置可信发布者。如果同版本的依赖已在
-npm 公共仓库，维护者可在推送发布标签前用 `tools/pack-web-adapters.sh` 打包验证，并用具备
-`@tiqian` 发布权限的身份发布压缩包。维护者也可以使用首次发布运行的 `npm-tarball-web-adapters`
-构建产物。两种方式都将包发布到 `alpha` 标签，并将 `latest` 指向同一版本。
-重跑失败的发布作业时，作业会识别已发布的版本和标签。下一个新版本发布前，维护者为该包
-配置 `tiqian-cjk/tiqian` 的 `release.yml`，允许发布和更新标签。npm 要求该配置在创建后
-两天内完成首次可信发布。
-[设置信任关系的要求见 npm 文档](https://docs.npmjs.com/cli/commands/npm-trust/)。
-
 provenance 校验要求清单里的 `repository.url` 与仓库一致。打包器生成的 npm 清单不带该
 字段，`tools/embed-repository.py` 在 pack 之后把 `https://github.com/tiqian-cjk/tiqian.git`
 写入 `@tiqian/engine`、`@tiqian/protocol`、`@tiqian/shared` 三个归档，并同步刷新
 registry 元数据里的 `sha512`，否则 `check-registry-tree` 会因摘要不一致失败。
 
-npm 发布新版本或写入 dist-tag 后，`npm view` 要过一段时间才能读到新版本和新的
-dist-tag。alpha.9 到 alpha.13 的 59 次发布，这段时间在 75 到 309 秒之间，中位数
-126 秒。`tools/npm-dist-tag.sh` 在写入前用 `tools/npm-wait-version.sh` 检查精确版本，
-写入后再检查标签。每个阶段每隔十秒查询，最多等待十分钟。Web 适配器在下载原生插件前
-用同一个脚本检查原生插件、预计算主包和生成的 TypeScript 依赖版本。
+dist-tag 写入后 registry 读取有延迟，`tools/npm-dist-tag.sh` 的收敛轮询允许五分钟；
+三个 npm 作业并发时一分钟窗口会误报未收敛。
 
 npm 目标在 `boring.json` 的 `package` 块里有两个名字：`name` 是自建 registry 的
 目录名（例如 `tiqian-engine`），`npmName` 是 registry.npmjs.org 上的包名（例如
@@ -146,12 +122,9 @@ CLI 版本按步骤分：打包与发布步骤保持 `npm@11.12.1`，因为 `npm
 两个脚本承担可重跑：
 
 - `tools/npm-publish.sh`：先读 `<name>@<version>` 的 `dist.shasum`。已发布且与本地
-  tarball 的 sha1 相同则跳过上传；不同则保留 npm 上的那份，发出警告后继续。npm 不允许
-  覆盖已发布的版本，用户安装的就是那一份；字节不同的情况由 registry 作业处理，见
-  “Web npm 包进入 registry”一节第 2 步。
-- `tools/npm-dist-tag.sh`：先读 dist-tags。已经指向该版本就不写，重跑一次已发布但后续
-  失败的发布因此不会卡在鉴权上。写入失败直接报错；写入后最多等十分钟，直到 `npm view`
-  读到新的 dist-tag。
+  tarball 的 sha1 相同则跳过上传；不同则报错终止，因为重跑不能送上另一个产物。
+- `tools/npm-dist-tag.sh`：先读 dist-tags。已经不指向该版本才写，写入后用最多 12 次
+  读取确认收敛。重跑一次已发布但后续失败的发布因此不会卡在鉴权上。
 
 `snapshot-precompute.yml` 是 fork 快照工作流，发布 `-snapshot` 版本的集成包，触发标签与
 scope 都和本流程不同，不在这一套 trusted publisher 配置内。
@@ -172,8 +145,8 @@ python3 tools/align-package-versions.py "${GITHUB_REF_NAME#v}"
 占位版本 `0.1.0`，下载地址就不存在。
 
 
-每个分组用同一条 `boring pack` 命令生成所属制品及其 registry 元数据。
-下面的命令展示一次打包如何写入 `$RUNNER_TEMP/registry-tree`：
+制品与 registry 元数据由同一条 `boring pack` 命令产出。四个 registry 参数同时给出时，
+`boring pack` 在写出每个 bundle 的制品之后，把 registry 树写到 `$RUNNER_TEMP/registry-tree`：
 
 ```shell
 nix develop -c bash -c "boring pack protocol-rust protocol-ts protocol-kotlin protocol-swift protocol-dart engine-rust ts kotlin-f32 kotlin-f64 swift-f32 swift-f64 dart --registry-out "$RUNNER_TEMP/registry-tree" --owner "${{ github.repository_owner }}" --repo "${{ github.event.repository.name }}" --asset-base "${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.ref_name }}""
@@ -191,8 +164,6 @@ GitHub Release 下载前缀，`--registry-out` 取树的根目录。四个参数
    `release-artifacts/`；某个命名的文件在输出根下找不到时该步骤失败。清单来自 pack
    写出的元数据，Gradle 的 `.module`、Kotlin/Native 的 `.klib` 与 Android 的
    `.aar` 因此随 pack 的产物一并进入发布资产。
-   `tools/assemble-release-pack.py` 汇总各分组的产物和 registry 树。相同路径若出现不同字节，
-   汇总作业会失败。作业写入 `SHA256SUMS`，随后核对文件及元数据的摘要。
 2. Create GitHub Release：把 `release-artifacts/*` 作为标签的发布资产上传。
 3. Upload the Swift archives：把 `release-artifacts/*.zip` 上传到 R2 的
    `swift/tiqian/<包名>/<版本>.zip`。元数据的 `archive` 字段指向这个路径，
@@ -211,7 +182,7 @@ GitHub Release 下载前缀，`--registry-out` 取树的根目录。四个参数
 
 1. `python3 tools/compile-bundles.py --project boring.json` 对每个 bundle 的生成物运行一次
    目标编译器，逐 bundle 打印退出码；pack 已经编译的目标打印 `compiled by pack`。
-   `.github/workflows/pack-release-bundles.yml` 在打包之后按分组运行这条命令，
+   `.github/workflows/release.yml` 的 pack job 在打包之后运行这条命令，
    `tools/staging-pipeline.sh` 的 `compile-bundles` stage 运行同一条命令。
 2. `nix develop -c bash -c 'boring verify --project boring.json'` 生成全部 bundle、运行全部
    bundle 的生成测试，并比较参与比较的 bundle（driver `packages/driver/src/driver/Main.hx`
@@ -224,84 +195,6 @@ GitHub Release 下载前缀，`--registry-out` 取树的根目录。四个参数
 `boring.json` 声明 `compare: false` 的 6 个 protocol 与 shared bundle 不参与
 `boring compare`：该命令按单一 baseline（`kotlin-f32`）的测试 id 逐目标比对，而 protocol
 bundle 的测试语料与 baseline 不同。它们的生成测试仍由 `boring verify` 运行。
-
-Kotlin 分组和 Maven 发布读取 `ci-native-precompute.yml` 在主分支保存的 Gradle 依赖。
-`build-neon-precompute.yml` 缓存生成的两棵原生源码树，缓存键包含运行环境、flake 锁文件、
-`boring.json` 和生成输入的摘要。发版时命中这份缓存的原生源码作业可跳过 Nix 安装和源码生成。
-
-### Web npm 包进入 registry
-
-Web 的 npm 包不经过 `boring pack`：`@tiqian/ffi`、`@tiqian/core`、`@tiqian/web-component`、
-`@tiqian/precompute` 及其四个平台包、`@tiqian/astro`、`@tiqian/sveltekit`、`@tiqian/react`
-由各自的发布作业打包并发布到 npm。registry 提供与 npm 相同字节的 tarball，lockfile
-记录的 integrity 在两个来源之间通用。
-
-1. 固定本次运行的 tarball：每个发布作业校验完 tarball 后、发布到 npm 之前，运行
-   `.github/actions/keep-release-files`。第一次尝试把 tarball 上传为构建产物（例如
-   `npm-tarball-core`）；重跑的尝试删除重新打出的 tarball，下载第一次尝试的构建产物再发布。构建产物
-   属于整次运行，后续尝试可以下载之前尝试上传的产物（`v0.1.0-alpha.9` 的发布运行
-   44670336838 第 2 次尝试的 registry 作业下载了第 1 次尝试上传的 `release-artifacts`）。
-2. 拒绝与 npm 字节不同的版本：npm 已有同一版本而字节不同时（同一版本的另一次发布运行
-   先发布过），`tools/npm-publish.sh` 保留 npm 上的那份，并把差异写入
-   `NPM_PUBLISH_DIVERGED_LOG`，发布作业将其上传为 `npm-diverged-*` 构建产物。npm 发布照常
-   继续。registry 作业发现这类构建产物时报出每个版本，本版本的 Web 包一个都不写入：
-   它们互相依赖，只写一部分会让依赖解析失败。pack 的树照常提交并部署，作业在最后失败。
-3. 写入 registry 树：registry 作业下载 `npm-tarball-*`，把 precompute 构建产物里按包分目录
-   的 tarball 移到同一层，`tools/write-npm-registry-tree.py` 从每个 tarball 的
-   `package/package.json` 读取名字、版本、许可证和 `manifest` 字段并计算 `sha512`，
-   `tools/check-registry-tree.py` 核对写出的树。`--expect-manifest release-manifest.json`
-   要求 tarball 的包名集合等于 `npm-*` 发布单元列出的包，缺一个或多一个都不写入。
-4. 上传发布资产：tarball 以原文件名上传到标签的 GitHub Release。资产已存在时比较字节，
-   相同则跳过，不同则停止。registry 作业依赖 `release-assets`，上传时 Release 已经存在。
-5. 合并：`tools/merge-registry-tree.py` 在合并 pack 的树之后合并这棵树。
-
-第 2 步跳过 Web 包时，从 npm 下载该版本的全部 Web 包，按第 3 至 5 步手动补录。npm 上的
-字节就是消费者安装的字节，补录后两个来源的 integrity 一致。包名取自 `release-manifest.json`
-的 `npm-*` 发布单元：
-
-```bash
-version=<版本>
-mkdir -p npm-tarballs
-for package in $(python3 -c 'import json; print(" ".join(p for u in json.load(open("release-manifest.json"))["units"] if (u.get("packageSource") or {}).get("kind") == "npm" for p in u["packages"]))'); do
-  npm pack "${package}@${version}" --pack-destination npm-tarballs
-done
-python3 tools/write-npm-registry-tree.py --tarballs npm-tarballs --tree npm-registry-tree --owner tiqian-cjk --repository tiqian-cjk/tiqian --version "${version}" --expect-manifest release-manifest.json
-python3 tools/check-registry-tree.py --tree npm-registry-tree --artifacts npm-tarballs
-gh release upload "v${version}" npm-tarballs/*.tgz --repo tiqian-cjk/tiqian
-python3 tools/merge-registry-tree.py --tree npm-registry-tree --owner tiqian-cjk --registry <registry 仓库检出>
-```
-
-然后在 registry 仓库检出里提交并推送，再用 `PAGES_DEPLOY_HOOK` 触发部署（见下一段）。
-
-### Gradle 的 Maven 模块进入 registry
-
-`build.gradle.kts` 的 `publishedModules` 发布 7 个模块：`tiqian-jvm-skia`、四个 Android 模块、
-`tiqian-compose` 与 `tiqian-compose-material3`。Kotlin Multiplatform 模块除根坐标外还发布
-每个 target 的坐标（例如 `tiqian-compose-android`、`tiqian-compose-jvm`）。一个模块拥有与
-模块同名的根坐标，以及根坐标的 Gradle 模块元数据（`.module`）通过 `available-at` 指向的坐标。
-只看名字前缀分不清：`tiqian-compose-material3` 以 `tiqian-compose-` 开头。
-
-1. 收集：`publish.yml` 的 Maven Local 预检之后，`tools/write-maven-registry-tree.py collect`
-   从 `$RUNNER_TEMP/tiqian-maven-preflight` 复制这些模块的文件。`tiqian-engine` 的 9 个坐标
-   由 pack 负责，不在其中；签名、校验和与 `maven-metadata` 文件也不复制。`release-manifest.json`
-   的 `maven` 单元列出的模块缺一个，或出现不属于任何模块的 artifactId，该步骤失败。
-2. 固定本次运行的文件：Central 上传之后，`.github/actions/keep-release-files` 把收集结果
-   保存为 `maven-gradle-publication` 构建产物。之后的重跑换回这份构建产物；重跑的 Central
-   上传仍发送重跑的构建，Portal 里会多出一个 staging deployment。与 registry 一致的是保存了
-   构建产物的那次尝试上传的 deployment。Central 上传与 Maven Local 预检在同一个工作区运行，
-   Gradle 判定打包任务为最新，预期两者是同一份文件（Central 另有签名），尚未逐字节比对。
-3. 写入 registry 树：registry 作业下载该构建产物，`write-maven-registry-tree.py write` 为
-   每个模块写一个包目录，`artifacts` 列出根坐标与各 target 坐标的文件，`groupId` 与许可证
-   取自 POM；文件以原名放进同一个目录并写出 `SHA256SUMS`，`tools/check-registry-tree.py`
-   核对写出的树。
-4. 上传与合并：`tools/upload-release-assets.sh` 把文件上传到标签的 GitHub Release（规则与
-   Web 包相同），`tools/merge-registry-tree.py` 合并这棵树。这些坐标与 pack 写的
-   `tiqian-engine` 同属 `org.tiqian`、来自同一个仓库，registry 的重定向仍是这个 groupId 的
-   一条规则。
-
-`tools/staging-pipeline.sh` 的 maven-local-publish 阶段在每次推送时用 staging 版本运行第 1、3 步的
-同一组命令（`collect`、`write` 与 `check-registry-tree.py`），模块清单与 Gradle 输出不一致时
-在合入时失败，不等到发版。
 
 提交之后执行 Deploy the registry site 一步，用 `PAGES_DEPLOY_HOOK` 触发 Cloudflare
 Pages 构建。registry 工具在 boring 仓库构建并随发布资产上传
@@ -662,15 +555,15 @@ Fetching tiqian.tiqian-engine-f32
 `boring pack` 在 ts 目标上调用 `package-tsc`，按 `BORING_PACKAGE_TSC`、PATH 上的
 `tsc` 的顺序解析编译器，两者都缺时以 `pack on the ts target needs tsc` 结束。flake
 devShell 不提供 `tsc`，脚本因此在两者都缺时把 bun 承载的 shim 写到 staging 根目录并
-导出 `BORING_PACKAGE_TSC`，与 `pack-release-bundles.yml` 的打包步骤做法一致。
+导出 `BORING_PACKAGE_TSC`，与 `release.yml` 的 Pack every bundle 步骤做法一致。
 
 脚本步骤与对应的发版步骤：
 
 | staging 步骤 | 对应的发版步骤 |
 | --- | --- |
-| `align` | `pack-release-bundles.yml` 的 Align the package versions with the release |
-| `pack` | `pack-release-bundles.yml` 的 Pack and compile this shard |
-| `collect-artifacts` | `pack-release-bundles.yml` 收集各组制品，`release.yml` 汇总并校验摘要 |
+| `align` | `release.yml` 的 Align the package versions |
+| `pack` | `release.yml` 的 Pack every bundle |
+| `collect-artifacts` | `release.yml` 的 Collect the artifacts 与 Record the artifact digests |
 | `registry-tree` | `release-registry.yml` 的 Check the registry tree against the artifacts |
 | `maven-artifact-ids` | maven 元数据的 `artifacts` 数组要带 `artifactId` |
 | `cargo-consume` | cargo 消费者从 pack 产物构建依赖 |

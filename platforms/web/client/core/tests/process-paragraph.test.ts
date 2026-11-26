@@ -13,7 +13,7 @@ import { FakeElement, FakeFragment, FakeNode, FakeText, asElement, asFakeElement
 import type { EnhancedElementContext } from "../src/engine/context/enhance-context.js";
 import type { TiqianLayoutWorkerInstance } from "../src/engine/coordination/coordination-service.js";
 import type { ReplayProbe, ReplayRegistry } from "../src/measurement/browser-font-replay.js";
-import { classifyRole as classifyFontRole, classifyRoles as classifyFontRoles } from "../src/engine/font-role.js";
+import { classifyRole as classifyFontRole, classifyRoles as classifyFontRoles } from "../src/engine/engine-access/font-role.js";
 initializeGlobalServices();
 
 // The pipeline runs for real: eligibility, markdown lowering, the lifecycle

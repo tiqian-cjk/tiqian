@@ -32,7 +32,9 @@ import {
 import {
   classifyRole as classifyFontRole,
   classifyRoles as classifyFontRoles,
-} from "./font-role.js";
+  firstDivergentInlineShapingProperty,
+  unsupportedInlineShapingProperties,
+} from "./engine-access/font-role.js";
 import { InlineShapingStylePolicy } from "@tiqian/engine/org/tiqian/font/InlineShapingStylePolicy";
 import type { EnhancedElementContext } from "./context/enhance-context.js";
 import type { DiagnosisIssueRecord } from "./context/diagnosis-manager.js";

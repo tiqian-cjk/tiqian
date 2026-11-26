@@ -16,9 +16,9 @@
 // Ambient global declarations pulled in via import type from owner modules.
 import type { LoweredParagraph } from "./lowered-paragraph.js";
 import { LAYOUT_REVISION, SNAPSHOT_SCHEMA } from "../sampler/snapshot/snapshot-schema.js";
-import { preparedParagraphWithDiagnostics } from "./prepared-paragraph.js";
-import type { EngineCallbacks, PlanWithDiagnostics } from "./prepared-paragraph.js";
-import type { PrepareParagraphRequest } from "./wire-types.js";
+import { preparedParagraphWithDiagnostics } from "./engine-access/prepared-paragraph.js";
+import type { EngineCallbacks, PlanWithDiagnostics } from "./engine-access/prepared-paragraph.js";
+import type { PrepareParagraphRequest } from "./engine-access/wire-types.js";
 import {
   decorationWires,
   inlineBoxWires,

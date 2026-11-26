@@ -10,8 +10,8 @@ import type {
   WorkerRequestEnvelope,
   WorkerResponseEnvelope,
 } from "./web-worker/worker-channel.js";
-import { preparedParagraphPlan } from "./prepared-paragraph.js";
-import type { DecorationWire } from "./wire-types.js";
+import { preparedParagraphPlan } from "./engine-access/prepared-paragraph.js";
+import type { DecorationWire } from "./engine-access/wire-types.js";
 import { prepareParagraphRequestWire } from "./wire-construction.js";
 import type { WorkerLayoutRequestBody } from "./web-worker/worker-channel.js";
 import { initializeGlobalServices } from "../services/global-services.js";

@@ -9,7 +9,7 @@
 // scripted canvas model; the engine entries take them as call parameters, so
 // there is no global to install or restore.
 
-import { toEngineFontMetrics, toEngineShapingResult } from "../src/engine/host-result.js";
+import { toEngineFontMetrics, toEngineShapingResult } from "../src/engine/engine-access/host-result.js";
 import type { ShapingInput, ShapingResult } from "@tiqian/engine/org/tiqian/shaping/TextShaper";
 import type { FontMetricsRequest } from "@tiqian/engine/org/tiqian/font/FontMetrics";
 import type { RawFontMetrics } from "@tiqian/engine/org/tiqian/font/RawFontMetrics";

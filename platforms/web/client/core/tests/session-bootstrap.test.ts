@@ -194,11 +194,11 @@ test("manifest sessions keep the baked contract path", async () => {
   );
 });
 
-test("layout-worker calls the prepared-paragraph entry and keeps the snapshot-subset wiring", async () => {
+test("layout-worker calls the engine access entry and keeps the snapshot-subset wiring", async () => {
   const source = await readFile(new URL("../src/engine/layout-worker.js", import.meta.url), "utf8");
   assert.match(source, /createProbeBootstrapFontSession/u);
   assert.match(source, /createManifestFontSession/u);
-  assert.match(source, /from "\.\/prepared-paragraph\.js"/u);
+  assert.match(source, /from "\.\/engine-access\/prepared-paragraph\.js"/u);
   assert.doesNotMatch(source, /@tiqian\/ffi/u);
   assert.match(source, /workerSnapshotSubsetSourceBoundaries\(session\.faces, request\)/u);
 });

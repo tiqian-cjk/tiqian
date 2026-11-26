@@ -17,7 +17,7 @@ import type {
   RenderInlineBoxWire,
   SemanticSpanWire,
   WorkerLayoutRequest,
-} from "./web-worker/wire-types.js";
+} from "./engine-access/wire-types.js";
 
 type WireFields<T> = T;
 

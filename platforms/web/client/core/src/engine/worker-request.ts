@@ -20,9 +20,11 @@ import { allowsSnapshotLayout, conformingSnapshotFontSessionId, withRootDefaults
 import {
   classifyRole as classifyFontRole,
   classifyRoles as classifyFontRoles,
-} from "./font-role.js";
+  firstDivergentInlineShapingProperty,
+  unsupportedInlineShapingProperties,
+} from "./engine-access/font-role.js";
 import { InlineShapingStylePolicy } from "@tiqian/engine/org/tiqian/font/InlineShapingStylePolicy";
-import type { WorkerLayoutRequest } from "./web-worker/wire-types.js";
+import type { WorkerLayoutRequest } from "./engine-access/wire-types.js";
 import {
   inlineBoxWires,
   inlineObjectWires,

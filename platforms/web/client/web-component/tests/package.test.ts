@@ -250,7 +250,7 @@ test("the custom element validates a snapshot before dynamically loading the bro
   assert.doesNotMatch(loadedSnapshotsSource, /font-shaping\.js/u);
   assert.doesNotMatch(sessionSource, /lazy-capabilities/u);
   assert.doesNotMatch(layoutWorkerSource, /precompute-fonts\.js|harfbuzzjs|woff2-encoder/u);
-  assert.match(layoutWorkerSource, /from "\.\/prepared-paragraph\.js"/u);
+  assert.match(layoutWorkerSource, /from "\.\/engine-access\/prepared-paragraph\.js"/u);
   assert.doesNotMatch(layoutWorkerSource, /@tiqian\/ffi/u);
   assert.doesNotMatch(layoutWorkerSource, /precompute-runtime/u);
   assert.match(layoutWorkerSource, /workerSnapshotSubsetSourceBoundaries\(session\.faces, request\)/u);

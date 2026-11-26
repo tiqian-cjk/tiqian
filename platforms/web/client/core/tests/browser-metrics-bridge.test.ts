@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { preparedParagraphWithDiagnostics } from "../src/engine/prepared-paragraph.js";
-import type { PrepareParagraphRequest } from "../src/engine/wire-types.js";
-import { toEngineFontMetrics, toEngineShapingResult } from "../src/engine/host-result.js";
+import { preparedParagraphWithDiagnostics } from "../src/engine/engine-access/prepared-paragraph.js";
+import type { PrepareParagraphRequest } from "../src/engine/engine-access/wire-types.js";
+import { toEngineFontMetrics, toEngineShapingResult } from "../src/engine/engine-access/host-result.js";
 import type { ShapingInput } from "@tiqian/engine/org/tiqian/shaping/TextShaper";
 import type { FontMetricsRequest } from "@tiqian/engine/org/tiqian/font/FontMetrics";
 
