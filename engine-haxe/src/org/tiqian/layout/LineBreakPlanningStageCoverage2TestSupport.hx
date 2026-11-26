@@ -66,7 +66,7 @@ class LineBreakPlanningStageCoverage2TestSupport {
             p.inlineObjectPunctuationAttachmentDecisions, p.mandatoryBreakClusters, p.zeroWidthBreakClusters, p.mandatoryBreakDecisions,
             p.zeroWidthBreakDecisions, p.punctuationAtoms, p.spacingPlan, p.rubyFontGeometryBySpan, p.rubyAndBopomofoSpread, attachments,
             p.attachedPunctuationBoundary, p.baseGeometry, p.attachedPunctuationTrailingGlueByCluster, cr, p.adjustmentStyle,
-            atoms == null ? p.atomClassByRange : atoms, p.shrinkOpportunities);
+            atoms == null ? p.atomClassByRange : atoms, p.shrinkOpportunities, new WidthIndependentLayoutMemo());
     }
 
     public static function plan(p:ParagraphLayoutPrep):LineBreakPlanningStageResult

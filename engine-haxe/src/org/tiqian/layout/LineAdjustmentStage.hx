@@ -348,7 +348,7 @@ class LineAdjustmentStage {
     }
 
     public static function finishParagraphLayout(engine:ExplainableStubParagraphLayoutEngine, prep:ParagraphLayoutPrep,
-            plan:LineBreakPlanningStageResult):LayoutResult {
+            plan:LineBreakPlanningStageResult):ParagraphFinishOutcome {
         final appliedHangingClustersBuilder = SortedSet.builder();
         for (line in plan.lineSolution.lines) {
             for (i in 0...line.hangingClusterIndices.size()) {
@@ -702,7 +702,7 @@ class LineAdjustmentStage {
                     updatedRejectedTiersBuilder.put(span, newlyRejectedTiersList[nIdx]);
                 }
             }
-            return engine.layoutWithRejectedTechnicalTiers(prep.input, updatedRejectedTiersBuilder.build());
+            return ParagraphFinishOutcome.retry(updatedRejectedTiersBuilder.build());
         }
 
         final justifyDeltas = new Array<Float>();
@@ -812,8 +812,8 @@ class LineAdjustmentStage {
         final maxWidthConstraint = prep.input.constraints.maxWidth;
         final resultWidth = widestLine > maxWidthConstraint ? maxWidthConstraint : widestLine;
 
-        return new LayoutResult(prep.input, new Size(resultWidth, totalHeight), finalClusters, glyphRuns, lines,
-            LayoutDebugAssembly.buildLayoutDebugInfo(engine,
+        return ParagraphFinishOutcome.finished(new LayoutResult(prep.input, new Size(resultWidth, totalHeight), finalClusters, glyphRuns, lines,
+            LayoutDebugAssembly.buildLayoutDebugInfo(engine.lineBreaker.strategyName,
                 new LayoutDebugStageInput(prep.text, prep.fontDecisions, prep.punctuationGlyphSubstitutor, prep.substitutionRollbacks, prep.shapingDecisions,
                     plan.metricDecisions, prep.punctuationAtoms, geometryDecisions, prep.spacingPlan, prep.attachedPunctuationBoundary,
                     prep.roleOverrideInfos, laidOutLines, plan.lineSolution, prep.clusters, justificationPlans, prep.autoSpaceDecisions, edgeTrimDecisions,
@@ -821,6 +821,35 @@ class LineAdjustmentStage {
                     plan.lineSpacingDecision, rubyLineHeightDecision, inlineObjectLineHeightDecision, plan.kinsokuDecision, contextualKinsokuDecisions,
                     prep.lineLengthGridDecision, plan.firstLineIndentDecision, prep.inlineBoxResult.decisions, inlineObjectDecisions,
                     prep.inlineObjectPunctuationAttachmentDecisions, prep.zeroWidthBreakDecisions, prep.breakOpportunityDecisions,
-                    prep.emergencyTrackingEligibilityDecisions, plan.progressiveBreakOpportunities)));
+                    prep.emergencyTrackingEligibilityDecisions, plan.progressiveBreakOpportunities), prep.layoutMemo.fontDecisionInfos)));
+    }
+}
+
+/**
+ * `ParagraphFinishOutcome`: the outcome of one `LineAdjustmentStage.finishParagraphLayout`
+ * attempt. `result` holds the finished `LayoutResult`. When the attempt rejected further
+ * progressive technical break tiers, `result` is null and `retryRejectedTechnicalTiersBySpan`
+ * holds every rejected tier, the earlier ones included;
+ * `ExplainableStubParagraphLayoutEngine.layoutWithRejectedTechnicalTiers` lays the paragraph out
+ * again with that map. The engine loops over attempts instead of `finishParagraphLayout` calling
+ * the engine back: on boring's Rust target that mutual call made the fault unions of the two
+ * functions contain each other (E0072 recursive types, E0119 conflicting `From` impls).
+ */
+class ParagraphFinishOutcome {
+    public final result:Null<LayoutResult>;
+    public final retryRejectedTechnicalTiersBySpan:SortedMap<TextRange, SortedSet<Int>>;
+
+    function new(result:Null<LayoutResult>, retryRejectedTechnicalTiersBySpan:SortedMap<TextRange, SortedSet<Int>>) {
+        this.result = result;
+        this.retryRejectedTechnicalTiersBySpan = retryRejectedTechnicalTiersBySpan;
+    }
+
+    public static function finished(result:LayoutResult):ParagraphFinishOutcome {
+        final noRetry:SortedMap<TextRange, SortedSet<Int>> = SortedMap.builder().build();
+        return new ParagraphFinishOutcome(result, noRetry);
+    }
+
+    public static function retry(rejectedTechnicalTiersBySpan:SortedMap<TextRange, SortedSet<Int>>):ParagraphFinishOutcome {
+        return new ParagraphFinishOutcome(null, rejectedTechnicalTiersBySpan);
     }
 }

@@ -55,6 +55,7 @@
           "packages": [
             "org.tiqian.core",
             "org.tiqian.layout",
+            "org.tiqian.layout.cache",
             "org.tiqian.font",
             "org.tiqian.clreq",
             "org.tiqian.shaping",
@@ -79,6 +80,7 @@
           "packages": [
             "org.tiqian.core",
             "org.tiqian.layout",
+            "org.tiqian.layout.cache",
             "org.tiqian.font",
             "org.tiqian.clreq",
             "org.tiqian.shaping",

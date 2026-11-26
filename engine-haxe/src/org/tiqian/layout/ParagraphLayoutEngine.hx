@@ -83,19 +83,31 @@ class ExplainableStubParagraphLayoutEngine implements ParagraphLayoutEngine {
         return layoutWithRejectedTechnicalTiers(input, SortedMap.builder().build());
     }
 
+    /**
+     * Lays `input` out with the given progressive technical break tiers rejected. An attempt whose
+     * line adjustment rejects further tiers returns them in a `ParagraphFinishOutcome`, and the
+     * next attempt lays the paragraph out again with the larger map, until an attempt finishes.
+     */
     public function layoutWithRejectedTechnicalTiers(input:LayoutInput, rejectedTechnicalTiersBySpan:SortedMap<TextRange, SortedSet<Int>>):LayoutResult {
         validateLayoutInput(input);
-        final cacheKey = WidthIndependentAnnotationCacheFns.toWidthIndependentAnnotationKey(input, rejectedTechnicalTiersBySpan);
-        final cached = annotationCache.get(cacheKey);
-        var annotation:WidthIndependentParagraphAnnotation;
-        if (Std.isOfType(cached, WidthIndependentParagraphAnnotation)) {
-            annotation = cast(cached, WidthIndependentParagraphAnnotation);
-        } else {
-            annotation = WidthIndependentAnnotationCacheFns.prepareWidthIndependentAnnotation(this, input, rejectedTechnicalTiersBySpan);
-            annotationCache.put(cacheKey, annotation);
+        var rejectedTiers = rejectedTechnicalTiersBySpan;
+        while (true) {
+            final cacheKey = WidthIndependentAnnotationCacheFns.toWidthIndependentAnnotationKey(input, rejectedTiers);
+            final cached = annotationCache.get(cacheKey);
+            var annotation:WidthIndependentParagraphAnnotation;
+            if (Std.isOfType(cached, WidthIndependentParagraphAnnotation)) {
+                annotation = cast(cached, WidthIndependentParagraphAnnotation);
+            } else {
+                annotation = WidthIndependentAnnotationCacheFns.prepareWidthIndependentAnnotation(this, input, rejectedTiers);
+                annotationCache.put(cacheKey, annotation);
+            }
+            final prep = WidthIndependentAnnotationCacheFns.buildParagraphLayoutPrep(this, input, annotation, rejectedTiers);
+            final outcome = LineAdjustmentStage.finishParagraphLayout(this, prep, LineBreakPlanningStage.planParagraphLines(this, prep));
+            final result = outcome.result;
+            if (result != null)
+                return result;
+            rejectedTiers = outcome.retryRejectedTechnicalTiersBySpan;
         }
-        final prep = WidthIndependentAnnotationCacheFns.buildParagraphLayoutPrep(this, input, annotation, rejectedTechnicalTiersBySpan);
-        return LineAdjustmentStage.finishParagraphLayout(this, prep, LineBreakPlanningStage.planParagraphLines(this, prep));
     }
 
     private function validateLayoutInput(input:LayoutInput):Void {

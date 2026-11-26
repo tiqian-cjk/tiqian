@@ -57,10 +57,16 @@ import org.tiqian.core.AutoSpaceDecisionInfo;
 import org.tiqian.clreq.AutoSpaceMode;
 import org.tiqian.layout.PunctuationGeometryStage;
 import org.tiqian.layout.PunctuationModel.PunctuationAtom;
+import org.tiqian.layout.PunctuationModel.PunctuationAtomBuilder;
 import org.tiqian.layout.PunctuationModel.PunctuationSpacingCompressionResult;
+import org.tiqian.layout.PunctuationModel.PunctuationSpacingCompressor;
 import org.tiqian.clreq.PunctuationClass;
 import org.tiqian.layout.PunctuationGeometryLedger;
+import org.tiqian.clreq.KinsokuLevel;
+import org.tiqian.clreq.ResolvedKinsoku;
 import org.tiqian.layout.KinsokuRule.ClreqKinsokuRule;
+import org.tiqian.layout.ParagraphPrepParts.KinsokuDependentPrep;
+import org.tiqian.layout.ParagraphPrepParts.ShapedParagraphBase;
 import org.tiqian.core.MandatoryBreakDecisionInfo;
 import org.tiqian.core.ZeroWidthBreakDecisionInfo;
 import org.tiqian.core.InlineObjectBoundaryAdjustment;
@@ -127,6 +133,8 @@ class WidthIndependentParagraphAnnotation {
     public final substitutionRollbacks:SortedMap<TextRange, String>;
     public final rubyFontGeometryBySpan:SortedMap<RubySpan, RubyFontGeometry>;
     public final baseShapingStage:ParagraphShapingStageResult;
+    /** Width-independent planning and debug values derived from `baseShapingStage`, filled on first use. */
+    public final layoutMemo:WidthIndependentLayoutMemo;
 
     public function new(text:String, fontSize:Float, styleAt:Int->TextStyle, fontSizeAt:Int->Float, bopomofoFontWeightAt:Int->Int, rubyFontSize:Float,
             rubyStackGap:Float, rubyFontWeight:Int, pinyinSpans:Array<RubySpan>, clreqProfile:ClreqProfile,
@@ -156,6 +164,7 @@ class WidthIndependentParagraphAnnotation {
         this.substitutionRollbacks = substitutionRollbacks;
         this.rubyFontGeometryBySpan = rubyFontGeometryBySpan;
         this.baseShapingStage = baseShapingStage;
+        this.layoutMemo = new WidthIndependentLayoutMemo();
     }
 }
 
@@ -672,76 +681,40 @@ class WidthIndependentAnnotationCacheFns {
         }
     }
 
-    public static function buildParagraphLayoutPrep(engine:ExplainableStubParagraphLayoutEngine, input:LayoutInput,
-            annotation:WidthIndependentParagraphAnnotation, rejectedTechnicalTiersBySpan:SortedMap<TextRange, SortedSet<Int>>):ParagraphLayoutPrep {
+    /** Adjacent-punctuation compression followed by CJK-closing-before-ASCII-point-mark compression of `punctuationAtoms`. */
+    private static function compressPunctuationSpacing(punctuationSpacingCompressor:PunctuationSpacingCompressor, punctuationAtoms:Array<PunctuationAtom>,
+            text:String, fontSize:Float):PunctuationSpacingCompressionResult {
+        final adjacentPunctuationSpacingPlan = punctuationSpacingCompressor.compress(punctuationAtoms, fontSize);
+        final cjkClosingBeforeAsciiPointMarkPlan = punctuationSpacingCompressor.compressCjkClosingBeforeAsciiPointMark(punctuationAtoms, text, fontSize);
+        final allAdjustments = new Array<org.tiqian.layout.PunctuationModel.PunctuationSpacingAdjustment>();
+        for (i in 0...adjacentPunctuationSpacingPlan.adjustments.length)
+            allAdjustments.push(adjacentPunctuationSpacingPlan.adjustments[i]);
+        for (i in 0...cjkClosingBeforeAsciiPointMarkPlan.adjustments.length)
+            allAdjustments.push(cjkClosingBeforeAsciiPointMarkPlan.adjustments[i]);
+        return new PunctuationSpacingCompressionResult(allAdjustments);
+    }
+
+    /** `KinsokuLevelMemoKey`: the integer key of a kinsoku level in `WidthIndependentLayoutMemo.kinsokuDependent`. */
+    static function kinsokuLevelMemoKey(level:KinsokuLevel):Int {
+        return switch (level) {
+            case KinsokuLevel.None: 0;
+            case KinsokuLevel.Basic: 1;
+            case KinsokuLevel.GbStyle: 2;
+            case KinsokuLevel.Strict: 3;
+        };
+    }
+
+    /**
+     * The `ShapedParagraphBase` of one shaping stage; see that class for what it holds. It takes the
+     * two engine components it uses instead of the engine: boring's Rust target narrows an engine
+     * parameter to the engine fields a function reads, and a helper that also reads fields of
+     * another object parameter misattributes them to the engine.
+     */
+    private static function buildShapedParagraphBase(punctuationAtomBuilder:PunctuationAtomBuilder,
+            punctuationSpacingCompressor:PunctuationSpacingCompressor, input:LayoutInput, annotation:WidthIndependentParagraphAnnotation,
+            shapingStage:ParagraphShapingStageResult):ShapedParagraphBase {
         final text = annotation.text;
         final fontSize = input.textStyle.fontSize;
-        final grid = input.paragraphStyle.lineLengthGrid;
-        final containerWidth = input.constraints.maxWidth;
-        var gridCells = Math.floor(containerWidth / fontSize);
-        if (gridCells < 1)
-            gridCells = 1;
-        final gridCellsInt = Std.int(gridCells);
-        var measure = containerWidth;
-        if (grid.enabled) {
-            measure = gridCellsInt * fontSize;
-            if (measure > containerWidth)
-                measure = containerWidth;
-        }
-        final gridSlack = containerWidth - measure;
-        final gridBodyAlignment = grid.bodyAlignment != null ? grid.bodyAlignment : input.paragraphStyle.lastLineAlignment;
-        var gridBodyOffset = 0.0;
-        if (grid.enabled) {
-            if (gridBodyAlignment == LastLineAlignment.Center) {
-                gridBodyOffset = gridSlack / 2.0;
-            } else if (gridBodyAlignment == LastLineAlignment.End) {
-                gridBodyOffset = gridSlack;
-            }
-        }
-        final lineLengthGridDecision = new LineLengthGridDecisionInfo(grid.enabled, containerWidth, fontSize,
-            grid.enabled ? gridCellsInt : Std.int(measure / fontSize), measure, gridSlack, renderNullableLastLineAlignment(gridBodyAlignment), gridBodyOffset,
-            grid.enabled ? "LineLengthGridQuantization" : "GridBypassed");
-        final measureEm = measure / fontSize;
-        final resolvedKinsoku = KinsokuModes.resolve(annotation.clreqProfile.kinsokuMode, measureEm);
-        final kinsokuRule = new ClreqKinsokuRule(resolvedKinsoku.level);
-
-        var hasProgSpan = false;
-        for (i in 0...input.content.lineBreakSpans.length) {
-            if (input.content.lineBreakSpans[i].policy == LineBreakPolicy.ProgressiveTechnical) {
-                hasProgSpan = true;
-                break;
-            }
-        }
-        var hasOverMeasureToken = false;
-        for (i in 0...annotation.baseShapingStage.shapingResults.length) {
-            final res = annotation.baseShapingStage.shapingResults[i];
-            final resTerms:Array<Float> = [];
-            for (c in 0...res.clusters.length)
-                resTerms.push(res.clusters[c].advance);
-            if (AccurateSum.of(resTerms) > measure) {
-                hasOverMeasureToken = true;
-                break;
-            }
-        }
-        final needsDynamicShaping = (rejectedTechnicalTiersBySpan != null && rejectedTechnicalTiersBySpan.size() > 0)
-            || hasProgSpan
-            || hasOverMeasureToken;
-
-        var shapingStage = annotation.baseShapingStage;
-        if (needsDynamicShaping) {
-            shapingStage = ParagraphShapingStage.shapeParagraph(engine, input, text, fontSize, measure, annotation.clusterRanges,
-                annotation.fontDecisionByRange, annotation.inlineObjectByRange, annotation.punctuationGlyphSubstitutor, annotation.styleAt,
-                function(offset:Int):Bool {
-                    for (i in 0...input.decorations.length) {
-                        final d = input.decorations[i];
-                        if (d.kind == DecorationKind.Emphasis && offset >= d.range.start && offset < d.range.end) {
-                            return true;
-                        }
-                    }
-                    return false;
-                }, rejectedTechnicalTiersBySpan, annotation.segmentShapingCache,
-                annotation.substitutionRollbacks);
-        }
 
         final shapingResults = shapingStage.shapingResults;
         final rawNaturalClusters = new Array<Cluster>();
@@ -1066,40 +1039,6 @@ class WidthIndependentAnnotationCacheFns {
             clusterRoles.push(d != null ? d.role : FontRole.Unknown);
         }
 
-        final inlineObjectAttachedMarks = PunctuationGeometryStage.inlineObjectAttachedMarks(naturalClusters, clusterRoles, resolvedKinsoku.level, kinsokuRule);
-
-        final inlineObjectSeparatorSpaceTrimsBuilder = SortedMap.builder();
-        final inlineObjectAttachmentNoStretchBoundariesBuilder = SortedSet.builder();
-        final inlineObjectPunctuationAttachmentDecisions = new Array<InlineObjectPunctuationAttachmentDecisionInfo>();
-
-        for (a in 0...inlineObjectAttachedMarks.length) {
-            final attachment = inlineObjectAttachedMarks[a];
-            for (s in 0...attachment.separatorClusterIndices.length) {
-                final clusterIndex = attachment.separatorClusterIndices[s];
-                inlineObjectSeparatorSpaceTrimsBuilder.put(clusterIndex, naturalClusters[clusterIndex].advance);
-            }
-            for (idx in attachment.objectClusterIndex...attachment.markClusterIndex) {
-                inlineObjectAttachmentNoStretchBoundariesBuilder.put(idx);
-            }
-            if (attachment.separatorClusterIndices.length > 0) {
-                final separatorFirst = naturalClusters[attachment.separatorClusterIndices[0]];
-                final separatorLast = naturalClusters[
-                    attachment.separatorClusterIndices[attachment.separatorClusterIndices.length - 1]
-                ];
-                final mark = naturalClusters[attachment.markClusterIndex];
-                final collapsedTerms:Array<Float> = [];
-                for (s in 0...attachment.separatorClusterIndices.length) {
-                    collapsedTerms.push(naturalClusters[attachment.separatorClusterIndices[s]].advance);
-                }
-                final collapsedAdv = AccurateSum.of(collapsedTerms);
-                inlineObjectPunctuationAttachmentDecisions.push(new InlineObjectPunctuationAttachmentDecisionInfo(naturalClusters[attachment.objectClusterIndex].range,
-                    new TextRange(separatorFirst.range.start, separatorLast.range.end), mark.range,
-                    mark.text, new TextRange(naturalClusters[attachment.objectClusterIndex].range.start, mark.range.end), collapsedAdv));
-            }
-        }
-        final inlineObjectSeparatorSpaceTrims = inlineObjectSeparatorSpaceTrimsBuilder.build();
-        final inlineObjectAttachmentNoStretchBoundaries = inlineObjectAttachmentNoStretchBoundariesBuilder.build();
-
         final mandatoryBreakClustersBuilder = SortedSet.builder();
         final zeroWidthBreakClustersBuilder = SortedSet.builder();
         final mandatoryBreakDecisions = new Array<MandatoryBreakDecisionInfo>();
@@ -1125,20 +1064,13 @@ class WidthIndependentAnnotationCacheFns {
                 continue;
             final cluster = naturalClusters[idx];
             final shapedGlyphs = shapedGlyphsByClusterRange.has(cluster.range) ? shapedGlyphsByClusterRange.get(cluster.range) : [];
-            final atoms = PunctuationGeometryStage.punctuationAtoms(cluster, fontSize, engine.punctuationAtomBuilder, shapedGlyphs,
+            final atoms = PunctuationGeometryStage.punctuationAtoms(cluster, fontSize, punctuationAtomBuilder, shapedGlyphs,
                 annotation.clreqProfile.gluePlacement, annotation.clreqProfile.punctuationWidth);
             for (a in 0...atoms.length)
                 punctuationAtoms.push(atoms[a]);
         }
 
-        final adjacentPunctuationSpacingPlan = engine.punctuationSpacingCompressor.compress(punctuationAtoms, fontSize);
-        final cjkClosingBeforeAsciiPointMarkPlan = engine.punctuationSpacingCompressor.compressCjkClosingBeforeAsciiPointMark(punctuationAtoms, text, fontSize);
-        final allAdjustments = new Array<org.tiqian.layout.PunctuationModel.PunctuationSpacingAdjustment>();
-        for (i in 0...adjacentPunctuationSpacingPlan.adjustments.length)
-            allAdjustments.push(adjacentPunctuationSpacingPlan.adjustments[i]);
-        for (i in 0...cjkClosingBeforeAsciiPointMarkPlan.adjustments.length)
-            allAdjustments.push(cjkClosingBeforeAsciiPointMarkPlan.adjustments[i]);
-        final spacingPlan = new PunctuationSpacingCompressionResult(allAdjustments);
+        final spacingPlan = compressPunctuationSpacing(punctuationSpacingCompressor, punctuationAtoms, text, fontSize);
 
         final rubySpread = computeRubySpread(naturalClusters, annotation.rubyFontSize, annotation.pinyinSpans, annotation.rubyFontGeometryBySpan);
 
@@ -1182,6 +1114,68 @@ class WidthIndependentAnnotationCacheFns {
             }
             rubyAndBopomofoSpread = mergedBuilder.build();
         }
+
+        final shapingDecisionsList = new Array<ShapingDecisionInfo>();
+        for (srIdx in 0...shapingStage.shapingResults.length) {
+            final sr = shapingStage.shapingResults[srIdx];
+            for (dIdx in 0...sr.decisions.length) {
+                shapingDecisionsList.push(sr.decisions[dIdx]);
+            }
+        }
+
+        return new ShapedParagraphBase(shapedGlyphsByClusterRange, openTypeFeaturesByClusterRange, eastAsianSpacingEdges, autoSpaceDecisions,
+            inlineBoxResult, naturalClusters, inlineObjectByClusterIndex, uniformInlineObjectBoundaryAfterClusters,
+            preferredInlineObjectBoundaryAfterClusters, inlineObjectBoundaryUnbreakableRanges, clusterRoles, mandatoryBreakClusters,
+            zeroWidthBreakClusters, mandatoryBreakDecisions, zeroWidthBreakDecisions, punctuationAtoms, spacingPlan, rubyAndBopomofoSpread,
+            shapingDecisionsList);
+    }
+
+    /** The `KinsokuDependentPrep` of one base at one resolved kinsoku level; see that class for what it holds. */
+    private static function buildKinsokuDependentPrep(input:LayoutInput, annotation:WidthIndependentParagraphAnnotation, base:ShapedParagraphBase,
+            resolvedKinsoku:ResolvedKinsoku, kinsokuRule:ClreqKinsokuRule):KinsokuDependentPrep {
+        final fontSize = input.textStyle.fontSize;
+        final naturalClusters = base.naturalClusters;
+        final clusterRoles = base.clusterRoles;
+        final punctuationAtoms = base.punctuationAtoms;
+        final spacingPlan = base.spacingPlan;
+        final inlineBoxResult = base.inlineBoxResult;
+        final rubyAndBopomofoSpread = base.rubyAndBopomofoSpread;
+        final autoSpaceDecisions = base.autoSpaceDecisions;
+        final inlineObjectByClusterIndex = base.inlineObjectByClusterIndex;
+
+        final inlineObjectAttachedMarks = PunctuationGeometryStage.inlineObjectAttachedMarks(naturalClusters, clusterRoles, resolvedKinsoku.level, kinsokuRule);
+
+        final inlineObjectSeparatorSpaceTrimsBuilder = SortedMap.builder();
+        final inlineObjectAttachmentNoStretchBoundariesBuilder = SortedSet.builder();
+        final inlineObjectPunctuationAttachmentDecisions = new Array<InlineObjectPunctuationAttachmentDecisionInfo>();
+
+        for (a in 0...inlineObjectAttachedMarks.length) {
+            final attachment = inlineObjectAttachedMarks[a];
+            for (s in 0...attachment.separatorClusterIndices.length) {
+                final clusterIndex = attachment.separatorClusterIndices[s];
+                inlineObjectSeparatorSpaceTrimsBuilder.put(clusterIndex, naturalClusters[clusterIndex].advance);
+            }
+            for (idx in attachment.objectClusterIndex...attachment.markClusterIndex) {
+                inlineObjectAttachmentNoStretchBoundariesBuilder.put(idx);
+            }
+            if (attachment.separatorClusterIndices.length > 0) {
+                final separatorFirst = naturalClusters[attachment.separatorClusterIndices[0]];
+                final separatorLast = naturalClusters[
+                    attachment.separatorClusterIndices[attachment.separatorClusterIndices.length - 1]
+                ];
+                final mark = naturalClusters[attachment.markClusterIndex];
+                final collapsedTerms:Array<Float> = [];
+                for (s in 0...attachment.separatorClusterIndices.length) {
+                    collapsedTerms.push(naturalClusters[attachment.separatorClusterIndices[s]].advance);
+                }
+                final collapsedAdv = AccurateSum.of(collapsedTerms);
+                inlineObjectPunctuationAttachmentDecisions.push(new InlineObjectPunctuationAttachmentDecisionInfo(naturalClusters[attachment.objectClusterIndex].range,
+                    new TextRange(separatorFirst.range.start, separatorLast.range.end), mark.range,
+                    mark.text, new TextRange(naturalClusters[attachment.objectClusterIndex].range.start, mark.range.end), collapsedAdv));
+            }
+        }
+        final inlineObjectSeparatorSpaceTrims = inlineObjectSeparatorSpaceTrimsBuilder.build();
+        final inlineObjectAttachmentNoStretchBoundaries = inlineObjectAttachmentNoStretchBoundariesBuilder.build();
 
         final adjustmentStyle = annotation.clreqProfile.adjustment;
 
@@ -1274,12 +1268,97 @@ class WidthIndependentAnnotationCacheFns {
             }
         }
 
-        final shapingDecisionsList = new Array<ShapingDecisionInfo>();
-        for (srIdx in 0...shapingStage.shapingResults.length) {
-            final sr = shapingStage.shapingResults[srIdx];
-            for (dIdx in 0...sr.decisions.length) {
-                shapingDecisionsList.push(sr.decisions[dIdx]);
+        return new KinsokuDependentPrep(inlineObjectAttachedMarks, inlineObjectSeparatorSpaceTrims, inlineObjectAttachmentNoStretchBoundaries,
+            inlineObjectPunctuationAttachmentDecisions, finalNaturalInlineAttachments, attachedPunctuationBoundary, baseGeometry,
+            attachedPunctuationTrailingGlueByCluster, clusters, atomClassByRange, shrinkOpportunities);
+    }
+
+    public static function buildParagraphLayoutPrep(engine:ExplainableStubParagraphLayoutEngine, input:LayoutInput,
+            annotation:WidthIndependentParagraphAnnotation, rejectedTechnicalTiersBySpan:SortedMap<TextRange, SortedSet<Int>>):ParagraphLayoutPrep {
+        final text = annotation.text;
+        final fontSize = input.textStyle.fontSize;
+        final grid = input.paragraphStyle.lineLengthGrid;
+        final containerWidth = input.constraints.maxWidth;
+        var gridCells = Math.floor(containerWidth / fontSize);
+        if (gridCells < 1)
+            gridCells = 1;
+        final gridCellsInt = Std.int(gridCells);
+        var measure = containerWidth;
+        if (grid.enabled) {
+            measure = gridCellsInt * fontSize;
+            if (measure > containerWidth)
+                measure = containerWidth;
+        }
+        final gridSlack = containerWidth - measure;
+        final gridBodyAlignment = grid.bodyAlignment != null ? grid.bodyAlignment : input.paragraphStyle.lastLineAlignment;
+        var gridBodyOffset = 0.0;
+        if (grid.enabled) {
+            if (gridBodyAlignment == LastLineAlignment.Center) {
+                gridBodyOffset = gridSlack / 2.0;
+            } else if (gridBodyAlignment == LastLineAlignment.End) {
+                gridBodyOffset = gridSlack;
             }
+        }
+        final lineLengthGridDecision = new LineLengthGridDecisionInfo(grid.enabled, containerWidth, fontSize,
+            grid.enabled ? gridCellsInt : Std.int(measure / fontSize), measure, gridSlack, renderNullableLastLineAlignment(gridBodyAlignment), gridBodyOffset,
+            grid.enabled ? "LineLengthGridQuantization" : "GridBypassed");
+        final measureEm = measure / fontSize;
+        final resolvedKinsoku = KinsokuModes.resolve(annotation.clreqProfile.kinsokuMode, measureEm);
+        final kinsokuRule = new ClreqKinsokuRule(resolvedKinsoku.level);
+
+        var hasProgSpan = false;
+        for (i in 0...input.content.lineBreakSpans.length) {
+            if (input.content.lineBreakSpans[i].policy == LineBreakPolicy.ProgressiveTechnical) {
+                hasProgSpan = true;
+                break;
+            }
+        }
+        var hasOverMeasureToken = false;
+        for (i in 0...annotation.baseShapingStage.shapingResults.length) {
+            final res = annotation.baseShapingStage.shapingResults[i];
+            final resTerms:Array<Float> = [];
+            for (c in 0...res.clusters.length)
+                resTerms.push(res.clusters[c].advance);
+            if (AccurateSum.of(resTerms) > measure) {
+                hasOverMeasureToken = true;
+                break;
+            }
+        }
+        final needsDynamicShaping = (rejectedTechnicalTiersBySpan != null && rejectedTechnicalTiersBySpan.size() > 0)
+            || hasProgSpan
+            || hasOverMeasureToken;
+
+        // `WidthIndependentLayoutMemo`: values derived from the base shaping stage are computed once
+        // per annotation; a prep shaped for this measure gets a memo of its own.
+        final layoutMemo:WidthIndependentLayoutMemo = needsDynamicShaping ? new WidthIndependentLayoutMemo() : annotation.layoutMemo;
+        var shapingStage = annotation.baseShapingStage;
+        if (needsDynamicShaping) {
+            shapingStage = ParagraphShapingStage.shapeParagraph(engine, input, text, fontSize, measure, annotation.clusterRanges,
+                annotation.fontDecisionByRange, annotation.inlineObjectByRange, annotation.punctuationGlyphSubstitutor, annotation.styleAt,
+                function(offset:Int):Bool {
+                    for (i in 0...input.decorations.length) {
+                        final d = input.decorations[i];
+                        if (d.kind == DecorationKind.Emphasis && offset >= d.range.start && offset < d.range.end) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }, rejectedTechnicalTiersBySpan, annotation.segmentShapingCache,
+                annotation.substitutionRollbacks);
+        }
+
+        final cachedBase = layoutMemo.shapedBase.value;
+        final base:ShapedParagraphBase = cachedBase != null ? cachedBase
+            : buildShapedParagraphBase(engine.punctuationAtomBuilder, engine.punctuationSpacingCompressor, input, annotation, shapingStage);
+        if (cachedBase == null)
+            layoutMemo.shapedBase.value = base;
+        final kinsokuKey = kinsokuLevelMemoKey(resolvedKinsoku.level);
+        final cachedKinsokuPart = layoutMemo.kinsokuDependent.cached(kinsokuKey);
+        final kinsokuPart:KinsokuDependentPrep = cachedKinsokuPart != null ? cachedKinsokuPart
+            : buildKinsokuDependentPrep(input, annotation, base, resolvedKinsoku, kinsokuRule);
+        if (cachedKinsokuPart == null) {
+            layoutMemo.kinsokuDependent.key = kinsokuKey;
+            layoutMemo.kinsokuDependent.value = kinsokuPart;
         }
 
         return new ParagraphLayoutPrep(input, rejectedTechnicalTiersBySpan, text, fontSize, annotation.styleAt, annotation.fontSizeAt,
@@ -1287,13 +1366,15 @@ class WidthIndependentAnnotationCacheFns {
             annotation.clreqProfile, annotation.punctuationGlyphSubstitutor, measure, measureEm, gridBodyOffset, lineLengthGridDecision,
             annotation.quotePairs, annotation.roleOverrideInfos, annotation.fontDecisions, shapingStage.hyphenOffsets, shapingStage.hyphenAdvance,
             shapingStage.hyphenGlyphs, shapingStage.substitutionRollbacks, shapingStage.breakOpportunityDecisions,
-            shapingStage.emergencyTrackingEligibilityDecisions, shapingStage.progressiveBreakOffsets, shapedGlyphsByClusterRange,
-            openTypeFeaturesByClusterRange, shapingDecisionsList, eastAsianSpacingEdges, autoSpaceDecisions, inlineBoxResult, naturalClusters,
-            inlineObjectByClusterIndex, uniformInlineObjectBoundaryAfterClusters, preferredInlineObjectBoundaryAfterClusters,
-            inlineObjectBoundaryUnbreakableRanges, clusterRoles, resolvedKinsoku, kinsokuRule, inlineObjectAttachedMarks, inlineObjectSeparatorSpaceTrims,
-            inlineObjectAttachmentNoStretchBoundaries, inlineObjectPunctuationAttachmentDecisions, mandatoryBreakClusters, zeroWidthBreakClusters,
-            mandatoryBreakDecisions, zeroWidthBreakDecisions, punctuationAtoms, spacingPlan, annotation.rubyFontGeometryBySpan, rubyAndBopomofoSpread,
-            finalNaturalInlineAttachments, attachedPunctuationBoundary, baseGeometry, attachedPunctuationTrailingGlueByCluster, clusters, adjustmentStyle,
-            atomClassByRange, shrinkOpportunities);
+            shapingStage.emergencyTrackingEligibilityDecisions, shapingStage.progressiveBreakOffsets, base.shapedGlyphsByClusterRange,
+            base.openTypeFeaturesByClusterRange, base.shapingDecisions, base.eastAsianSpacingEdges, base.autoSpaceDecisions, base.inlineBoxResult,
+            base.naturalClusters, base.inlineObjectByClusterIndex, base.uniformInlineObjectBoundaryAfterClusters,
+            base.preferredInlineObjectBoundaryAfterClusters, base.inlineObjectBoundaryUnbreakableRanges, base.clusterRoles, resolvedKinsoku,
+            kinsokuRule, kinsokuPart.inlineObjectAttachedMarks, kinsokuPart.inlineObjectSeparatorSpaceTrims,
+            kinsokuPart.inlineObjectAttachmentNoStretchBoundaries, kinsokuPart.inlineObjectPunctuationAttachmentDecisions, base.mandatoryBreakClusters,
+            base.zeroWidthBreakClusters, base.mandatoryBreakDecisions, base.zeroWidthBreakDecisions, base.punctuationAtoms, base.spacingPlan,
+            annotation.rubyFontGeometryBySpan, base.rubyAndBopomofoSpread, kinsokuPart.naturalInlineAttachments,
+            kinsokuPart.attachedPunctuationBoundary, kinsokuPart.baseGeometry, kinsokuPart.attachedPunctuationTrailingGlueByCluster,
+            kinsokuPart.clusters, annotation.clreqProfile.adjustment, kinsokuPart.atomClassByRange, kinsokuPart.shrinkOpportunities, layoutMemo);
     }
 }

@@ -51,7 +51,7 @@ import org.tiqian.layout.LineOptimization.RepairCandidate;
 import org.tiqian.layout.LineOptimization.RepairOption;
 import org.tiqian.layout.LineOptimization.RepairOptions;
 import org.tiqian.layout.Justifier.JustificationPlan;
-import org.tiqian.layout.ParagraphLayoutEngine.ExplainableStubParagraphLayoutEngine;
+import org.tiqian.layout.cache.LayoutMemoSlot;
 
 @:dataClass class LayoutDebugStageInput {
     public final text:String;
@@ -208,7 +208,11 @@ class LayoutDebugAssembly {
         return "Unknown";
     }
 
-    public static function buildLayoutDebugInfo(engine:ExplainableStubParagraphLayoutEngine, stage:LayoutDebugStageInput):LayoutDebugInfo {
+    /**
+     * The debug record of each font decision with its display substitution and rollback cause.
+     * It depends only on the stage's text, font decisions, substitutor and substitution rollbacks.
+     */
+    private static function fontDecisionInfos(stage:LayoutDebugStageInput):Array<FontDecisionInfo> {
         final fontDecisionsOut = new Array<FontDecisionInfo>();
         for (fIdx in 0...stage.fontDecisions.length) {
             final decision = stage.fontDecisions[fIdx];
@@ -228,6 +232,26 @@ class LayoutDebugAssembly {
             fontDecisionsOut.push(new FontDecisionInfo(decision.range, clusterText, displayText, Type.enumConstructor(decision.role), decision.candidate.key,
                 decision.reason, substitutionReason));
         }
+        return fontDecisionsOut;
+    }
+
+    /**
+     * Assembles the debug record of one layout. `fontDecisionInfosSlot` is the `fontDecisionInfos`
+     * slot of the prep's `WidthIndependentLayoutMemo`: the annotation's memo when the stage input
+     * comes from the base shaping stage, so the font-decision records are built once per paragraph.
+     *
+     * The function takes the line breaker's strategy name and that one slot instead of the engine
+     * and the whole memo. boring's Rust target projects the last class parameter of a static
+     * function that receives the engine into the fields the function reads (`scanFieldProjections`
+     * in the Rust compiler); with the memo as that parameter, the memo's fields were attributed to
+     * the engine of `LineAdjustmentStage.finishParagraphLayout`.
+     */
+    public static function buildLayoutDebugInfo(lineBreakerStrategyName:String, stage:LayoutDebugStageInput,
+            fontDecisionInfosSlot:LayoutMemoSlot<Array<FontDecisionInfo>>):LayoutDebugInfo {
+        final cachedFontDecisions = fontDecisionInfosSlot.value;
+        final fontDecisionsOut:Array<FontDecisionInfo> = cachedFontDecisions != null ? cachedFontDecisions : fontDecisionInfos(stage);
+        if (cachedFontDecisions == null)
+            fontDecisionInfosSlot.value = fontDecisionsOut;
 
         final metricDecisionsOut = new Array<MetricDecisionInfo>();
         for (mIdx in 0...stage.metricDecisions.length) {
@@ -294,7 +318,7 @@ class LayoutDebugAssembly {
                 notes.push("justify-fallback:" + plan.fallbackReason);
             }
 
-            lineDecisionsOut.push(new LineDecisionInfo(line.range, engine.lineBreaker.strategyName, repairName, repairPenalty, repairDecision,
+            lineDecisionsOut.push(new LineDecisionInfo(line.range, lineBreakerStrategyName, repairName, repairPenalty, repairDecision,
                 repairCandidatesOut, notes));
         }
 

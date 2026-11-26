@@ -58,6 +58,8 @@ import org.tiqian.font.MetricBox;
 import org.tiqian.font.LayoutFontMetrics;
 import org.tiqian.font.FontMetrics.FontMetricsNormalizationInput;
 import org.tiqian.font.FontMetrics.FontMetricsRequest;
+import org.tiqian.font.FontMetrics.FontMetricsNormalizer;
+import org.tiqian.font.FontMetrics.FontMetricsResolver;
 import org.tiqian.layout.PunctuationGeometryStage.InlineBoxApplicationResult;
 import org.tiqian.layout.ParagraphLayoutEngine.ExplainableStubParagraphLayoutEngine;
 import org.tiqian.layout.LineGeometryStage.LineGeometryStageFns;
@@ -130,6 +132,8 @@ class ParagraphLayoutPrep {
     public final adjustmentStyle:AdjustmentStylePolicy;
     public final atomClassByRange:std.SortedMap<TextRange, PunctuationClass>;
     public final shrinkOpportunities:Array<ShrinkOpportunity>;
+    /** The annotation's memo when this prep uses the base shaping stage; a memo of its own when it was shaped for this measure. */
+    public final layoutMemo:WidthIndependentLayoutMemo;
 
     public function new(input:LayoutInput, rejectedTechnicalTiersBySpan:std.SortedMap<TextRange, std.SortedSet<Int>>, text:String, fontSize:Float,
             styleAt:Int->TextStyle, fontSizeAt:Int->Float, bopomofoFontWeightAt:Int->Int, rubyFontSize:Float, rubyStackGap:Float, rubyFontWeight:Int,
@@ -154,7 +158,8 @@ class ParagraphLayoutPrep {
             rubyAndBopomofoSpread:std.SortedMap<Int, Float>, naturalInlineAttachments:Array<InlineAttachment>,
             attachedPunctuationBoundary:AttachedInlinePunctuationBoundaryResult, baseGeometry:PunctuationGeometryLedger,
             attachedPunctuationTrailingGlueByCluster:std.SortedMap<Int, Float>, clusters:Array<Cluster>, adjustmentStyle:AdjustmentStylePolicy,
-            atomClassByRange:std.SortedMap<TextRange, PunctuationClass>, shrinkOpportunities:Array<ShrinkOpportunity>) {
+            atomClassByRange:std.SortedMap<TextRange, PunctuationClass>, shrinkOpportunities:Array<ShrinkOpportunity>,
+            layoutMemo:WidthIndependentLayoutMemo) {
         this.input = input;
         this.rejectedTechnicalTiersBySpan = rejectedTechnicalTiersBySpan;
         this.text = text;
@@ -216,6 +221,7 @@ class ParagraphLayoutPrep {
         this.adjustmentStyle = adjustmentStyle;
         this.atomClassByRange = atomClassByRange;
         this.shrinkOpportunities = shrinkOpportunities;
+        this.layoutMemo = layoutMemo;
     }
 }
 
@@ -410,7 +416,14 @@ class LineBreakPlanningStage {
         return result;
     }
 
-    public static function planParagraphLines(engine:ExplainableStubParagraphLayoutEngine, prep:ParagraphLayoutPrep):LineBreakPlanningStageResult {
+    /**
+     * Raw and normalized font metrics for each font decision of `prep`, in decision order. The
+     * result depends only on the prep's font decisions, natural clusters, styles and locale. It takes
+     * the two engine components it uses instead of the engine; see
+     * `WidthIndependentAnnotationCacheFns.buildShapedParagraphBase` for the Rust-target reason.
+     */
+    private static function resolveMetricDecisions(fontMetricsResolver:FontMetricsResolver, fontMetricsNormalizer:FontMetricsNormalizer,
+            prep:ParagraphLayoutPrep):Array<ClusterMetricDecision> {
         var metricClusterIndex = 0;
         final metricDecisions = new Array<ClusterMetricDecision>();
         for (decIdx in 0...prep.fontDecisions.length) {
@@ -438,11 +451,38 @@ class LineBreakPlanningStage {
                 fontFamiliesCopy.push(decStyle.fontFamilies[f]);
             final request = new FontMetricsRequest(decision.candidate.key, prep.fontSizeAt(decision.range.start), decision.role, prep.input.textStyle.locale,
                 fontFamiliesCopy, decStyle.fontWeight, decStyle.italic, displayedFaceSelectionText);
-            final rawMetrics = engine.fontMetricsResolver.resolve(request);
-            final layoutMetrics = engine.fontMetricsNormalizer.normalize(new FontMetricsNormalizationInput(request, rawMetrics));
+            final rawMetrics = fontMetricsResolver.resolve(request);
+            final layoutMetrics = fontMetricsNormalizer.normalize(new FontMetricsNormalizationInput(request, rawMetrics));
             metricDecisions.push(new ClusterMetricDecision(decision.range, prep.text.substring(decision.range.start, decision.range.end), request, rawMetrics,
                 layoutMetrics));
         }
+        return metricDecisions;
+    }
+
+    /** The metric decision containing each natural cluster, keyed by cluster range. */
+    private static function metricDecisionsByClusterRange(clusters:Array<Cluster>,
+            metricDecisions:Array<ClusterMetricDecision>):SortedMap<TextRange, ClusterMetricDecision> {
+        final containingDecisions = containingClusterMetricDecisions(clusters, metricDecisions);
+        final metricDecisionByRangeBuilder:SortedMapBuilder<TextRange, ClusterMetricDecision> = SortedMap.builder();
+        for (i in 0...clusters.length) {
+            final d = containingDecisions[i];
+            if (d != null) {
+                final decision:ClusterMetricDecision = d;
+                metricDecisionByRangeBuilder.put(clusters[i].range, decision);
+            }
+        }
+        return metricDecisionByRangeBuilder.build();
+    }
+
+    public static function planParagraphLines(engine:ExplainableStubParagraphLayoutEngine, prep:ParagraphLayoutPrep):LineBreakPlanningStageResult {
+        // `WidthIndependentLayoutMemo`: a prep built on the base shaping stage carries the
+        // annotation's memo, so the width-independent values below are computed once per paragraph.
+        final memo = prep.layoutMemo;
+        final cachedMetricDecisions = memo.metricDecisions.value;
+        final metricDecisions:Array<ClusterMetricDecision> = cachedMetricDecisions != null ? cachedMetricDecisions
+            : resolveMetricDecisions(engine.fontMetricsResolver, engine.fontMetricsNormalizer, prep);
+        if (cachedMetricDecisions == null)
+            memo.metricDecisions.value = metricDecisions;
 
         final ideographicDecisions = new Array<ClusterMetricDecision>();
         for (i in 0...metricDecisions.length) {
@@ -487,16 +527,11 @@ class LineBreakPlanningStage {
         final baseLineMetrics = LineGeometryStageFns.lineMetrics(metricDecisions, prep.input.paragraphStyle.lineHeight, defaultBodyLineHeight,
             interlinearSpacingFloor);
 
-        final containingDecisions = containingClusterMetricDecisions(prep.naturalClusters, metricDecisions);
-        final metricDecisionByRangeBuilder:SortedMapBuilder<TextRange, ClusterMetricDecision> = SortedMap.builder();
-        for (i in 0...prep.naturalClusters.length) {
-            final d = containingDecisions[i];
-            if (d != null) {
-                final decision:ClusterMetricDecision = d;
-                metricDecisionByRangeBuilder.put(prep.naturalClusters[i].range, decision);
-            }
-        }
-        final metricDecisionByRange = metricDecisionByRangeBuilder.build();
+        final cachedMetricDecisionByRange = memo.metricDecisionByRange.value;
+        final metricDecisionByRange:SortedMap<TextRange, ClusterMetricDecision> = cachedMetricDecisionByRange != null ? cachedMetricDecisionByRange
+            : metricDecisionsByClusterRange(prep.naturalClusters, metricDecisions);
+        if (cachedMetricDecisionByRange == null)
+            memo.metricDecisionByRange.value = metricDecisionByRange;
 
         final baseFaceHeight = baseAscent + baseDescent;
         var existingInterlineSpace = baseLineMetrics.height - baseFaceHeight;
@@ -561,11 +596,18 @@ class LineBreakPlanningStage {
         }
         final resolvedHangableClusters = resolvedHangableClustersBuilder.build();
 
-        final unicodePunctuationBoundaries = UnicodePunctuationBoundaryResolver.resolveUnicodePunctuationBoundaries(prep.text, prep.naturalClusters,
-            prep.clusterRoles, prep.quotePairs);
+        final cachedUnicodeBoundaries = memo.unicodePunctuationBoundaries.value;
+        final unicodePunctuationBoundaries:UnicodePunctuationBoundaries = cachedUnicodeBoundaries != null ? cachedUnicodeBoundaries
+            : UnicodePunctuationBoundaryResolver.resolveUnicodePunctuationBoundaries(prep.text, prep.naturalClusters, prep.clusterRoles,
+                prep.quotePairs);
+        if (cachedUnicodeBoundaries == null)
+            memo.unicodePunctuationBoundaries.value = unicodePunctuationBoundaries;
         final inlineAttachments = prep.naturalInlineAttachments;
-        final westernBracketBoundaries = UnicodePunctuationBoundaryResolver.resolveWesternBracketCjkInterCharBoundaries(prep.text, prep.naturalClusters,
-            prep.clusterRoles);
+        final cachedWesternBoundaries = memo.westernBracketBoundaries.value;
+        final westernBracketBoundaries:SortedSet<Int> = cachedWesternBoundaries != null ? cachedWesternBoundaries
+            : UnicodePunctuationBoundaryResolver.resolveWesternBracketCjkInterCharBoundaries(prep.text, prep.naturalClusters, prep.clusterRoles);
+        if (cachedWesternBoundaries == null)
+            memo.westernBracketBoundaries.value = westernBracketBoundaries;
         final attachedInlineInterCharBoundaries = UnicodePunctuationBoundaryResolver.resolveAttachedInlineInterCharBoundaries(prep.text, prep.naturalClusters,
             prep.clusterRoles, prep.eastAsianSpacingEdges, westernBracketBoundaries, inlineAttachments);
         final westernBracketCjkInterCharBoundaryAfterClusters = attachedInlineInterCharBoundaries.ordinaryWesternBoundaryAfterClusters;
