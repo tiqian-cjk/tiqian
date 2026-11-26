@@ -68,12 +68,6 @@ public final class CJKTextView: NSScrollView {
         (documentView as? CJKCanvas)?.configure(blocks: blocks, fontSize: fontSize)
     }
 
-    /// A full engine relayout is O(paragraphs), so the canvas skips relayout during live resize and
-    /// flushes the one deferred reflow when the drag ends.
-    public override func viewDidEndLiveResize() {
-        super.viewDidEndLiveResize()
-        (documentView as? CJKCanvas)?.flushDeferredResize()
-    }
 }
 
 /// The scroll view's document view. It is **flipped** (top-left origin) so the scroll view shows the
@@ -90,7 +84,6 @@ final class CJKCanvas: NSView, NSUserInterfaceValidations {
     // SwiftUI also exports a `Document` symbol (a clean-room build hit "'Document' is ambiguous").
     private var document: Tiqian.Document?
     private var laidOutBucket: CGFloat = -1 // grid-column bucket the current document was laid out at
-    private var deferredResize = false      // a live resize crossed a bucket; reflow when it settles
     private var selectionRange = NSRange(location: 0, length: 0)
     private var selectionAnchor: Int?
     private var pressedLinkTarget: String?
@@ -140,22 +133,11 @@ final class CJKCanvas: NSView, NSUserInterfaceValidations {
     }
 
     @objc private func viewportChanged() {
-        // A full relayout re-runs the engine's line-break for every paragraph (~13ms for the essay), so
-        // reflowing on every frame of a live window/pane drag drops frames. During a live resize just
-        // remember that the viewport moved and reflow once, when `CJKTextView.viewDidEndLiveResize`
-        // fires — the drag then stays smooth (the current layout is left-aligned in the new width until
-        // it settles). Non-live changes (initial layout, split-view snaps, zoom) reflow immediately.
-        if enclosingScrollView?.inLiveResize == true || inLiveResize {
-            deferredResize = true
-            return
-        }
-        if relayout() { needsDisplay = true }
-    }
-
-    /// Flush the one relayout deferred during a live resize (called when the drag ends).
-    func flushDeferredResize() {
-        guard deferredResize else { return }
-        deferredResize = false
+        // `LiveResizeImmediateReflow`: every viewport change, including each frame of a live
+        // window or split-view drag, reflows at once, as the iOS canvas does in `layoutSubviews`.
+        // `relayout()` only calls the engine when the width crosses a whole-character column
+        // bucket. Measured on the 引擎自述 sample at 18 pt, one bucket change costs about 3.6 ms
+        // (2.4 ms layout + 1.2 ms draw) in a release build and about 18.5 ms in a debug build.
         if relayout() { needsDisplay = true }
     }
 
