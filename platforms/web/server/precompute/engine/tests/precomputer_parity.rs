@@ -160,20 +160,29 @@ fn precomputer_entries_match_the_js_oracle() {
         let oracle_value = parse_json(oracle).expect(name);
         align_harfbuzz_version(&mut entry, &oracle_value);
         // The recorded oracle predates the restored rendered HTML and its
-        // digest; the rest of the entry still compares exactly.
-        let restored = match &entry {
-            Json::Obj(fields) => {
-                let html = fields.iter().any(|(key, value)| key == "html" && matches!(value, Json::Str(_)));
-                let digest = fields
-                    .iter()
-                    .any(|(key, value)| key == "renderArtifactSha256" && matches!(value, Json::Str(_)));
-                html && digest
-            }
+        // digest; a prepared entry must carry both, and the rest of the entry
+        // still compares exactly.
+        let prepared = match &entry {
+            Json::Obj(fields) => fields.iter().any(|(key, value)| {
+                key == "status" && matches!(value, Json::Str(status) if status == "prepared")
+            }),
             _ => false,
         };
-        assert!(restored, "case {name}: html and renderArtifactSha256");
-        if let Json::Obj(fields) = &mut entry {
-            fields.retain(|(key, _)| key != "html" && key != "renderArtifactSha256");
+        if prepared {
+            let restored = match &entry {
+                Json::Obj(fields) => {
+                    let html = fields.iter().any(|(key, value)| key == "html" && matches!(value, Json::Str(_)));
+                    let digest = fields
+                        .iter()
+                        .any(|(key, value)| key == "renderArtifactSha256" && matches!(value, Json::Str(_)));
+                    html && digest
+                }
+                _ => false,
+            };
+            assert!(restored, "case {name}: html and renderArtifactSha256");
+            if let Json::Obj(fields) = &mut entry {
+                fields.retain(|(key, _)| key != "html" && key != "renderArtifactSha256");
+            }
         }
         assert_eq!(stable_stringify(&entry), *oracle, "case {name}");
     }

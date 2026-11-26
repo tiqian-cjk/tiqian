@@ -307,7 +307,14 @@ impl Precomputer {
         let inline_boxes_json = inline_boxes_value(&inline_boxes);
         let semantics_value = semantics_json(&semantics);
         let (prepared_html, prepared_artifact) =
-            crate::shared_render::render_shared_artifact(&plan, &typography.locale, &semantics, false)?;
+            crate::shared_render::render_shared_artifact(
+                &plan,
+                &typography.locale,
+                &semantics,
+                false,
+                &render_text_spans,
+                &inline_boxes,
+            )?;
         Ok(Json::Obj(vec![
             ("status".to_string(), Json::str("prepared")),
             (

@@ -6,6 +6,7 @@ use crate::shared_prepared::to_prepared_plan;
 use crate::snapshot_source::SemanticSpan;
 use crate::NamedError;
 use tiqian_shared_gen::org::tiqian::shared::prepared_dom::attribute_entry::AttributeEntry;
+use tiqian_shared_gen::org::tiqian::shared::prepared_dom::inline_box_entry::InlineBoxEntry;
 use tiqian_shared_gen::org::tiqian::shared::prepared_dom::markup_artifact::MarkupArtifact;
 use tiqian_shared_gen::org::tiqian::shared::prepared_dom::prepared_artifact::PreparedArtifact;
 use tiqian_shared_gen::org::tiqian::shared::prepared_dom::prepared_artifact_options::PreparedArtifactOptions;
@@ -45,15 +46,33 @@ pub fn render_shared_artifact(
     locale: &str,
     semantics: &[SemanticSpan],
     live: bool,
+    render_text_spans: &[(i32, i32, Vec<String>)],
+    inline_boxes: &[crate::paragraph::InlineBoxInput],
 ) -> Result<(String, Vec<MarkupArtifact>), NamedError> {
     let prepared = to_prepared_plan(plan);
     let options = PreparedArtifactOptions {
         style_class_for: None,
         live_source: live,
         semantics: semantic_spans(semantics),
-        render_text_spans: Vec::<PreparedRenderTextSpan>::new(),
+        render_text_spans: render_text_spans
+            .iter()
+            .map(|(start, end, families)| PreparedRenderTextSpan {
+                start: f64::from(*start),
+                end: f64::from(*end),
+                font_families: families.iter().map(|family| shared(family)).collect(),
+                signature: shared(""),
+            })
+            .collect(),
         cjk_strong_semantics: Vec::new(),
-        inline_boxes: Vec::new(),
+        inline_boxes: inline_boxes
+            .iter()
+            .map(|inline_box| InlineBoxEntry {
+                start: f64::from(inline_box.start),
+                end: f64::from(inline_box.end),
+                inline_start_px: inline_box.inline_start,
+                inline_end_px: inline_box.inline_end,
+            })
+            .collect(),
         emphasis_dot_color: None,
     };
     let locale_text = shared(locale);
