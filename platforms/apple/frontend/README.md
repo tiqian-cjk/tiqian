@@ -4,8 +4,8 @@ The Apple peer of [`frontend/compose`](../compose): a reusable Swift Package tha
 content-agnostic views over the Tiqian CJK typesetting engine, so apps consume a component instead
 of copying view code.
 
-> **Scope: macOS 14+ and iOS 15+ read-only frontend.** The engine, Core Text pipeline and
-> `Tiqian.xcframework` build for macOS and iOS (`iosArm64` + simulator). `CJKText` uses
+> **Scope: macOS 14+ and iOS 15+ read-only frontend.** The generated Swift engine, the Core Text
+> pipeline and the views build from source for macOS and iOS (ADR 0064). `CJKText` uses
 > `NSViewRepresentable` on macOS and `UIViewRepresentable` on iOS. Both preserve source text for
 > selection and accessibility; clipboard text follows the Web frontend's annotation projection.
 > Editor / IME remains a separate follow-up.
@@ -19,9 +19,11 @@ of copying view code.
   the content is (the analogue of Compose's `CjkText`). Selection and hit testing consume engine
   `LayoutQueries`: iOS delegates gestures, handles and the edit menu to non-editable
   `UITextInteraction`; macOS uses AppKit mouse/responder actions and `NSPasteboard`.
-- Links the engine SDK (`Tiqian.xcframework`) as a binary target, so consumers only `import TiqianUI`
-  to reach `CJKTextView` / `CJKText` + the `CJKBlock` / `AttributedString` authoring API; the engine's Kotlin/Native
-  types stay internal to the package.
+- Depends on two sibling packages: `../engine` (`TiqianEngine`, the Swift engine boring generates from
+  `engine-haxe/src`) and `../shaping` (`TiqianCoreText`, the Core Text shaper and font metrics). The
+  internal `Tiqian` module holds the Core Text renderer and the document facade. Consumers only
+  `import TiqianUI` to reach `CJKTextView` / `CJKText` + the `CJKBlock` / `AttributedString` authoring
+  API; engine and facade types stay internal to the package.
 
 Native word selection delegates semantic word expansion to Apple's simplified-Chinese
 `NLTokenizer`; caret and selection geometry remain engine-owned. Ruby annotations carry their own
@@ -59,13 +61,15 @@ textView.setContent(updatedBlocks, fontSize: 20)
 
 ## Build
 
-The binary target expects `Tiqian.xcframework` next to `Package.swift`. Produce it with:
+`../engine/Sources/TiqianEngine` is a symlink to the gitignored `engine-haxe/out/swift-f32/gen`.
+Generate the engine once per engine change, from the repository root:
 
 ```shell
-frontend/apple/build-xcframework.sh   # assembles :frontend:apple and syncs the xcframework here
+nix develop -c boring gen swift-f32 --project boring.json
 ```
 
-Then any Xcode project or SwiftPM target can depend on this local package and `import TiqianUI`.
+Then build this package with `swift build`, or let any Xcode project or SwiftPM target depend on
+this local package and `import TiqianUI`. Gradle, the JDK and the Android SDK are not involved.
 The bundled demo (`demo/apple`) does exactly that, with macOS and iOS targets in one Xcode project.
 
 The views have native runtime coverage for layout, Core Text drawing, width reflow, scroll content
@@ -74,7 +78,7 @@ native-link routing:
 
 ```shell
 xcodebuild test -scheme TiqianUI \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro'
 
 xcodebuild test -scheme TiqianUI \
   -destination 'platform=macOS,arch=arm64'

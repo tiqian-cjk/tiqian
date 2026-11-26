@@ -118,9 +118,10 @@ cluster、glyph、advance 和 ink bounds。可重放后端还用稳定 `FontFace
 - `platforms/android/shaping`：Compose 默认的 Android 公开平台后端。API 31+ 保留
   `TextRunShaper` 返回的 glyph id、placement 与 `Font`；API 23–30 以
   `LegacyPlatformRunReplay` 保证测量与 `drawTextRun` 共用同一 run 接口；
-- `platforms/apple/shaping`：Apple Core Text shaping、系统字体度量与 glyph ink。语言和显式 OpenType
-  feature 进入同一条 `CTLine` 测绘路径；无法施加的 feature 以具名 capability issue 降级，不能
-  只把请求原样写进 `GlyphRun`。
+- `platforms/apple/shaping`：SwiftPM 包，模块 `TiqianCoreText` 实现生成 Swift 引擎的
+  `TextShaper` 与 `FontMetricsResolver`，提供 Apple Core Text shaping、系统字体度量与 glyph ink。
+  语言和显式 OpenType feature 进入同一个 `CTLine` 缓存条目，shaping 与绘制读取同一个条目；无法施加的
+  feature 以具名 capability issue 降级，不能只把请求原样写进 `GlyphRun`。
 
 AWT 对照实现 `AwtTextShaper`（包 `org.tiqian.shaping.jvm`）不发布，也不是平台模块：它只服务
 `tools/engine-probes` 里 `AwtSkiaShapingComparisonTest` 与标点探针的 AWT ↔ Skia 对照。
@@ -268,17 +269,23 @@ child 的测量不能反向改变段落几何。
 
 ### Apple
 
-`platforms/apple/frontend/coretext-render` 在 macOS 与 iOS 上用 Core Text 重放 `LayoutResult`。正文字形沿用 shaping
+Apple 端由 `platforms/apple` 下三个本地 SwiftPM 包组成（ADR 0064）：`platforms/apple/engine` 的
+`TiqianEngine` 是 boring 从 `swift-f32` bundle 生成的 Swift 引擎，`Sources/TiqianEngine` 为指向
+`engine-haxe/out/swift-f32/gen` 的符号链接；`platforms/apple/shaping` 的 `TiqianCoreText` 提供 Core Text
+shaping 与度量；`platforms/apple/frontend` 的 `Tiqian` 模块与 `TiqianUI` 模块提供绘制与视图。构建前先执行
+`nix develop -c boring gen swift-f32 --project boring.json`，不需要 Gradle。
+
+`platforms/apple/frontend` 的 `Tiqian` 模块在 macOS 与 iOS 上用 Core Text 重放 `LayoutResult`。正文字形沿用 shaping
 时的 language、OpenType feature、font 与 glyph 选择；拼音、注音和行间装饰消费核心给出的最终几何。
 装饰颜色继承对应 source range，专名号和书名号只依据 `LayoutResult` 已记录的 glyph ink bounds
 做避让，renderer 不重新 shaping 来推导布局真值。
 
-`platforms/apple/frontend` 是 Apple frontend 的唯一根：Gradle 模块把引擎、内部 Core Text renderer 与窄
-Swift-facing authoring/document facade 打成静态 `Tiqian.xcframework`（macOS arm64、iOS device
-arm64、iOS simulator arm64），同目录 Swift Package 用原生 `AttributedString` 表达字体、颜色、ruby
+`platforms/apple/frontend` 是 Apple frontend 的唯一根：`Tiqian` 模块包含 Core Text renderer、paragraph
+backend 与 authoring/document facade，facade 以 UTF-16 码元保存源文本，偏移均为 UTF-16 偏移；
+`TiqianUI` 模块用原生 `AttributedString` 表达字体、颜色、ruby
 、链接与装饰，并将同一 run 上的组合属性 lowering 到同一 source range。正文与注文语言独立 lowering：
 注音使用 `zh-TW`，不会覆盖简体横排正文默认的 `zh-Hans`。公共 Swift 类型使用 `CJKText`、
-`CJKBlock`、`CJKAttributes` 等领域名称；品牌名只保留在 `TiqianUI` 模块和包内二进制 artifact。
+`CJKBlock`、`CJKAttributes` 等领域名称；品牌名只保留在 `TiqianUI`、`Tiqian` 等模块名中。
 `CJKTextView` 直接提供 `NSScrollView` / `UIScrollView` 原生入口，`CJKText` 只用
 `NSViewRepresentable` / `UIViewRepresentable` 包装同一个 view；AppKit/UIKit 只处理 viewport、滚动、动态系统颜色、坐标变换与
 无障碍 source text，宽度变化复用已 lowering 的 builder，并按整字栏宽重排。`platforms/apple/frontend`
@@ -300,16 +307,17 @@ caret/selection 几何；平台 tokenizer 不参与 shaping、断行或字位计
   font contract、断行机会与西文断词、中文 profile / 标点分类 / 禁则 / 空间策略、段落布局 / 修复 /
   行调整与结构化 decision。
 - `platforms/compose/skia-jvm`、`platforms/android/{shaping,native-font,rendering}`、
-  `platforms/apple/shaping`：各宿主的 shaping / replayable font 实现；
+  `platforms/apple/shaping`：各宿主的 shaping / replayable font 实现（Apple 为 SwiftPM 包）；
   `platforms/android/shaping` 是 Compose Android 默认的公开平台 run 后端，
   `platforms/android/native-font` 持有宿主可显式选择的共享字体源、受控 face、
   HarfBuzz / FreeType 与同源 outline replay；`platforms/android/rendering` 是 Compose 与 View
   共用的 Android Canvas replay 和 paragraph measurement backend。
 - `platforms/compose/compose`、`platforms/web/client`、`platforms/android/view`：前端
   lowering 与呈现。
-- `platforms/apple/frontend/coretext-render`：Apple 内部 Core Text renderer 与 paragraph backend。
-- `platforms/apple/frontend`：生产 Swift facade、静态 XCFramework、`AttributedString` authoring 与 Apple
-  原生 view package；不拥有示例内容或排版规则。
+- `platforms/apple/engine`：以 SwiftPM 包装 boring 生成的 Swift 引擎；清单由本仓库维护，源码不入库。
+- `platforms/apple/frontend`：Swift Package，`Tiqian` 模块是 Core Text renderer、paragraph backend 与
+  document facade，`TiqianUI` 模块是 `AttributedString` authoring 与 Apple 原生 view；不拥有示例内容或
+  排版规则。
 - `ffi/native`：引擎层面 packed C ABI 的 Kotlin/Native 对外接口；不拥有排版规则。
 - `ffi/js`：引擎的 Kotlin/JS 对外接口（`@JsExport` wire 与 HarfBuzz session 后端）；不拥有排版规则。
 - `platforms/web/server`：Rust workspace（`tiqian-precompute`、`tiqian-precompute-neon`）与

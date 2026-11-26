@@ -118,6 +118,15 @@ npm install --no-audit --no-fund
 
 Rust 侧的 `engine-gen` 是构建期生成物（`node tools/generate-engine-gen.mjs`，产物在 `engine-haxe/out/engine-rust/gen`），不入库；生成器需要 `nix develop` 提供的 `boring` 驱动。先跑生成器再 `cargo build -p tiqian`。JS 侧的 `engine-gen` 仍入库，缺口见 `t-mwckjk9n-orhm`。
 
+Apple 端是 `platforms/apple` 下的三个 SwiftPM 包，不经 Gradle。先在 Nix shell 中生成 Swift 引擎，再在 Nix shell 之外用 Xcode.app 构建与测试（devShell 在 macOS 上引入 Nix 自带的 Apple SDK）。iOS 设备名取 `xcrun simctl list devices available` 中存在的机型：
+
+```shell
+nix develop -c boring gen swift-f32 --project boring.json
+(cd platforms/apple/shaping && swift test)
+(cd platforms/apple/frontend && swift test)
+(cd platforms/apple/frontend && xcodebuild test -scheme TiqianUI -destination 'platform=iOS Simulator,name=iPhone 18 Pro')
+```
+
 根目录 `npm install` 安装所有 workspace 依赖；预编译平台二进制的 optional dependencies 未发布到 npm 仓库，lock 文件不包含其解析条目，npm 11 以上版本执行 `npm ci` 会报错，因此统一使用 `npm install`。
 
 排版布局报告输出至 `engine/build/reports/tiqian-layout-report/index.html`。
@@ -136,8 +145,8 @@ Rust 侧的 `engine-gen` 是构建期生成物（`node tools/generate-engine-gen
 - **排版核心**：`engine`（单一发布模块，整合原 `core`、`font`、`linebreak`、`clreq`、`layout`、`shaping/api`）定义数据结构、字体策略、断行规则、中文排版规则、塑造接口定义与最终 `LayoutResult`；代码按 `org.tiqian.{core,font,linebreak,clreq,layout,shaping}` 包组织。
 - **平台字形塑造**：塑造接口定义于 `engine`；`platforms/compose/skia-jvm`、`platforms/android/{shaping,native-font}`、`platforms/apple/shaping` 提供各平台实现。
 - **前端适配**：`platforms/compose/{compose,material3}`、`platforms/web/client`、`platforms/android/view`、`platforms/apple/frontend` 接收排版结果并执行界面呈现。
-- **外部语言接口**：`platforms/web/client/engine-runtime` 提供 Web 客户端使用的 npm 引擎包；`platforms/web/server/precompute/tiqian` 与 `platforms/web/server/precompute/engine-gen` 提供 Rust 预计算绑定。`platforms/web/server` 由项目维护者管理。
-- **示例与工具**：`demo` 包含跨平台 Desktop 与 Android 示例界面，`demo/android` 提供 Android 运行壳；`engine` 模块的 `commonTest` 包含测试用例数据与排版报告生成工具。
+- **外部语言接口**：`platforms/web/client/engine-runtime` 提供 Web 客户端使用的 npm 引擎包；`platforms/web/server/precompute/tiqian` 与 `platforms/web/server/precompute/engine-gen` 提供 Rust 预计算绑定；`platforms/apple/engine` 以 SwiftPM 包装 boring 生成的 Swift 引擎（ADR 0064）。`platforms/web/server` 由项目维护者管理。
+- **示例与工具**：`demo` 包含跨平台 Desktop 与 Android 示例界面，`demo/android` 提供 Android 运行壳，`demo/apple` 提供 macOS 与 iOS 示例工程；`engine` 模块的 `commonTest` 包含测试用例数据与排版报告生成工具。
 
 平台适配层负责字体加载、字形塑造、字形度量、绘制与宿主样式读取，不自行计算字体回退、标点间距、避头尾、行调整或两端对齐。依赖平台度量数据的规则将数据返回排版核心决策流程，不在呈现层补充视觉偏移。
 

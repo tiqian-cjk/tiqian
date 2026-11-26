@@ -9,19 +9,19 @@ frontend. The gallery exercises 中西自动间距, 避头尾,
 ## Layout
 
 ```
-platforms/apple/shaping/                 Core Text shaping and font-metrics adapter.
-platforms/apple/frontend/coretext-render/  Internal LayoutResult renderer and Apple paragraph backend.
-platforms/apple/frontend/                  :platforms:apple:frontend XCFramework facade + TiqianUI Swift Package.
+platforms/apple/engine/     SwiftPM wrapper of the Swift engine boring generates (TiqianEngine).
+platforms/apple/shaping/    Core Text shaping and font-metrics adapter (TiqianCoreText).
+platforms/apple/frontend/   Renderer, document facade (Tiqian) and the TiqianUI Swift Package.
 demo/apple/                      One Xcode project; shared sources, macOS target and iOS target.
 ```
 
-The app owns the **content**; `TiqianUI` owns the **view**; the Kotlin/Native framework owns
-typesetting and drawing. Pagination is not here — that is the pageflow engine's job.
+The app owns the **content**; `TiqianUI` owns the **view**; the generated engine (`TiqianEngine`)
+owns typesetting and the `Tiqian` module owns Core Text drawing. Pagination is not here — that is the pageflow engine's job.
 
 ## Run it
 
 ```sh
-../../platforms/apple/frontend/build-xcframework.sh
+(cd ../.. && nix develop -c boring gen swift-f32 --project boring.json)
 open TiqianDemo.xcodeproj
 ```
 
@@ -55,5 +55,5 @@ Draws base glyphs + rich-text spans (weight/italic/color/size/family) + 拼音/�
 glyphs + 着重号 dots + 专名号/书名号/示亡号 lines; 书名号 uses the same wavy geometry as Compose.
 macOS and iOS both support source-faithful read-only selection/accessibility, Web-compatible ruby
 clipboard projection, and native link activation. Editing, IME and vertical text remain outside the
-current scope. `Tiqian.xcframework` is a regenerable, gitignored build artifact produced by
-`platforms/apple/frontend/build-xcframework.sh`.
+current scope. The engine sources under `engine-haxe/out/swift-f32/gen` are a regenerable, gitignored
+build artifact produced by `boring gen swift-f32`.
