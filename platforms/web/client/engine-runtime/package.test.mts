@@ -286,6 +286,66 @@ test("precompute entries run the generated engine through host callbacks", async
   assert.equal(shapeCalls.length > 0, true, "the callbacks-object form reaches the same engine");
 });
 
+test("precompute entries pass shaper glyph ink bounds to punctuation geometry", async () => {
+  const ffi = (await import("@tiqian/ffi")) as unknown as FfiExports;
+
+  // A 14px full-width comma whose ink sits in the middle of the em box, as in
+  // MiSans TC (canvas measureText on Chrome reads x 6.03..7.71). The other
+  // characters are plain 14px ideographs. Eight ideographs, the comma and
+  // two more ideographs need 154px; the 147px line forces the engine to take
+  // the comma's 7px of compressible space.
+  const centeredCommaInk = { left: 6.03, top: -6.79, right: 7.71, bottom: -3.22 };
+  const ideographInk = { left: 1, top: -12, right: 13, bottom: 2 };
+  const shapeJson = (requestJson: string): string => {
+    const raw = JSON.parse(requestJson) as { text: string; range: { start: number; end: number }; displayText?: string };
+    const { start, end } = raw.range;
+    const text = raw.displayText ?? raw.text.slice(start, end);
+    const advance = 14 * (end - start);
+    const bounds = text === "，" ? centeredCommaInk : ideographInk;
+    return JSON.stringify({
+      clusters: [{ range: { start, end }, text, displayText: text, fontKey: "font", advance, baselineShift: 0 }],
+      glyphRuns: [{ range: { start, end }, fontKey: "font", glyphs: [{ id: 1, clusterRange: { start, end }, advance, x: 0, y: 0, bounds }], advance, openTypeFeatures: [] }],
+      decisions: [],
+    });
+  };
+  const metricsJson = (): string => JSON.stringify({ ascent: 0.8, descent: -0.2, leading: 0, source: "RawTables" });
+
+  const request: PrepareParagraphRequest = {
+    text: "一二三四五六七八，九十一二三四五六七八九十",
+    maxWidthPx: 147,
+    fontFamilies: ["Test"],
+    fontSizePx: 14,
+    lineHeightPx: 22,
+    locale: "zh-Hans",
+    fontWeight: 400,
+    italic: false,
+    firstLineIndentIc: 0,
+    lineLengthGridEnabled: false,
+    sourceBoundaries: [],
+    textSpans: [],
+    inlineBoxes: [],
+    lineBreakSpans: [],
+    inlineObjects: [],
+    decorations: [],
+    emphasisDotGapEm: null,
+    renderEvidenceOverride: null,
+  };
+
+  const { plan } = ffi.precomputeParagraphWithDiagnostics(request, 0.05, shapeJson, metricsJson);
+  const lines = plan.lines as Array<{ cells: Array<{ display: string; drawX: number }> }>;
+  const cells = lines[0].cells;
+  const comma = cells.findIndex((cell) => cell.display === "，");
+  assert.ok(comma > 0, "the comma stays on the first line");
+  // InkBoundsFittedBodyCompression picks the centered half-width frame, so the
+  // engine trims 3.5px on each side: the comma glyph moves left into the
+  // previous cell's box and the next ideograph starts 7px after the box start.
+  // Without the bounds the engine takes ProfileGlueFallbackWithoutFontGeometry
+  // and trims all 7px from the trailing side (drawX stays at 112).
+  assert.equal(cells[comma - 1].drawX, 98);
+  assert.equal(cells[comma].drawX, 108.5);
+  assert.equal(cells[comma + 1].drawX, 119);
+});
+
 test("precompute entries keep the domain validation error names", async () => {
   const ffi = (await import("@tiqian/ffi")) as unknown as FfiExports;
 

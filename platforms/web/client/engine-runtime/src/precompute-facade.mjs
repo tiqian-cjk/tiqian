@@ -50,6 +50,7 @@ import { DecorationSpan } from "./engine-gen/org/tiqian/core/DecorationSpan.js";
 import { DecorationKind } from "./engine-gen/org/tiqian/core/DecorationKind.js";
 import { Cluster } from "./engine-gen/org/tiqian/core/Cluster.js";
 import { Glyph } from "./engine-gen/org/tiqian/core/Glyph.js";
+import { Rect } from "./engine-gen/org/tiqian/core/Rect.js";
 import { GlyphRun } from "./engine-gen/org/tiqian/core/GlyphRun.js";
 import { ShapingDecisionInfo } from "./engine-gen/org/tiqian/core/ShapingDecisionInfo.js";
 import { FontMetricsRequest } from "./engine-gen/org/tiqian/font/FontMetrics.js";
@@ -146,6 +147,20 @@ function optionalNumberMember(raw, name) {
   const value = raw[name];
   if (value === undefined || value === null) return 0.0;
   return typeof value === "number" ? value : Number.NaN;
+}
+
+/**
+ * Reads glyph ink bounds the way WireJson.kt parseBounds did: a missing or
+ * non-object member is null, and a missing side reads as 0. The punctuation
+ * geometry stage needs these bounds to choose the compressed body frame
+ * (ADR 0014 InkBoundsFittedBodyCompression); without them every punctuation
+ * atom falls back to ProfileGlueFallbackWithoutFontGeometry.
+ */
+function boundsMember(raw) {
+  const value = raw === null ? null : raw.bounds;
+  if (value === null || value === undefined || typeof value !== "object") return null;
+  const side = (name) => (typeof value[name] === "number" ? value[name] : 0);
+  return new Rect(side("left"), side("top"), side("right"), side("bottom"));
 }
 
 /** Reads a JSON string array the way WireJson.kt parseDynamicStringList does. */
@@ -261,6 +276,8 @@ function parseShapingResultJson(json) {
       numberMember(glyph, "advance"),
       numberMember(glyph, "x"),
       numberMember(glyph, "y"),
+      null,
+      boundsMember(glyph),
     )),
     numberMember(g, "advance"),
     stringListMember(g, "openTypeFeatures"),
