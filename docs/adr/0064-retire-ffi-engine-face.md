@@ -45,6 +45,11 @@ bundle 产物已经发布，core 却仍从 `@tiqian/ffi` 取用。
 - `core` 包不再有 JSON 字符串形式的引擎入参出参；`demo/web` 的三个浏览器测试改由
   `tests/browser-engine.ts` 把生成树编译为 ESM 后提供给 Chromium。
 - npm 上的 `@tiqian/ffi` 历史版本保留；后续版本不再发布，需要时可 `npm deprecate`。
+- 预计算侧的 `prepared_dom.rs` 从未在 `lib.rs` 声明，属于未编译代码，已删除；`snapshot_source.rs`、
+  `plan.rs`、`snapshot_table_binary.rs`、`replay.rs` 是平台外壳或对浏览器 `core` 的 TypeScript 模块的
+  移植，不是 `platforms/web/shared` 的副本。
+- 生成的 `@tiqian/engine`、`@tiqian/protocol`、`@tiqian/shared` 的 `package.json` 不含 `dependencies`；
+  发布与快照两条打包路径需要在消费方按 `dependencies.tsv` 补入依赖声明。
 
 ## Alternatives
 
