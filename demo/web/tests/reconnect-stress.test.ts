@@ -34,7 +34,10 @@ import type {
   CdpWsMessage,
 } from "./types.js";
 
+import { browserTreePrefix, browserTreeDirectory, buildBrowserTrees, rewriteWorkerEngineSpecifiers } from "./browser-engine.js";
 const repoRoot: string = fileURLToPath(new URL("../../..", import.meta.url));
+
+buildBrowserTrees(repoRoot);
 const npmDir: string = join(repoRoot, "platforms/web/client/web-component");
 const npmCoreDir: string = join(repoRoot, "platforms/web/client/core");
 const ffiRuntimeDir: string = join(repoRoot, "platforms/web/client/engine-runtime/runtime");
@@ -117,6 +120,21 @@ async function waitForCdpEndpoint(port: number, timeoutMs: number = 15000): Prom
 function startFixtureServer(): Promise<Server> {
   const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const path: string = decodeURIComponent(new URL(req.url!, "http://x").pathname);
+    const generatedTree = browserTreePrefix(path);
+    if (generatedTree !== null) {
+      const rest: string = path.slice(generatedTree.prefix.length);
+      const file: string = join(browserTreeDirectory(repoRoot, generatedTree.tree), rest);
+      const data: Buffer | null = await readFile(file).catch(() => null);
+      if (data === null) {
+        res.statusCode = 404;
+        res.end("not found");
+        return;
+      }
+      res.setHeader("content-type", "text/javascript");
+      res.end(data);
+      return;
+    }
+
     const send = (data: string | Buffer, type: string): void => {
       res.setHeader("content-type", type);
       res.end(data);
@@ -125,11 +143,8 @@ function startFixtureServer(): Promise<Server> {
       const data: Buffer | null = await readFile(file).catch(() => null);
       if (data) {
         if (file === join(npmCoreDir, "layout-worker.js")) {
-          const source: string = data.toString("utf8");
-          if (source.includes('from "@tiqian/ffi"')) {
-            send(source.replace('from "@tiqian/ffi"', 'from "/npm-engine-runtime/Tiqian-tiqian-ffi-js.mjs"'), type);
-            return;
-          }
+          send(rewriteWorkerEngineSpecifiers(data.toString("utf8")), type);
+          return;
         }
         send(data, type);
       } else {
@@ -155,7 +170,9 @@ function startFixtureServer(): Promise<Server> {
     "@tiqian/web-component/element": "/npm/element.js",
     "@tiqian/web-component/": "/npm/",
     "@tiqian/core/": "/core/",
-    "@tiqian/ffi": "/npm-engine-runtime/Tiqian-tiqian-ffi-js.mjs"
+    "@tiqian/engine/": "/engine/",
+    "@tiqian/protocol/": "/protocol/",
+    "@tiqian/shared/": "/shared/"
   }
 }
 </script>
@@ -289,7 +306,7 @@ const LONG_FILLER: string =
   "快速重连压力测试旨在验证这些异步操作在" +
   "高频断开重连场景下的稳定性与安全性。".repeat(3);
 
-test("ReconnectStress: rapid reconnection through the adoption path", { skip: "the demo served the removed @tiqian/ffi runtime; the engine now ships as the @tiqian/engine workspace tree, whose .ts sources the browser cannot load" }, async (t: TestContext) => {
+test("ReconnectStress: rapid reconnection through the adoption path", async (t: TestContext) => {
   const server: Server = await startFixtureServer();
   let browserProc: ChildProcess | null = null;
   let client: CdpClient | null = null;

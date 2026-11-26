@@ -30,7 +30,10 @@ import type {
 } from "./types.js";
 
 const webDemoDir: string = fileURLToPath(new URL("..", import.meta.url));
+import { browserTreePrefix, browserTreeDirectory, buildBrowserTrees, rewriteWorkerEngineSpecifiers } from "./browser-engine.js";
 const repoRoot: string = fileURLToPath(new URL("../../../", import.meta.url));
+
+buildBrowserTrees(repoRoot);
 const devPkgDir: string = join(repoRoot, "platforms/web/client/web-component");
 const ffiRuntimeDir: string = join(repoRoot, "platforms/web/client/engine-runtime/runtime");
 
@@ -248,11 +251,26 @@ function startDemoServer(port: number, pkgDir: string): Promise<DemoServerHandle
   const notFound: string[] = [];
   const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const path: string = decodeURIComponent(new URL(req.url!, "http://x").pathname);
+    const generatedTree = browserTreePrefix(path);
+    if (generatedTree !== null) {
+      const rest: string = path.slice(generatedTree.prefix.length);
+      const file: string = join(browserTreeDirectory(repoRoot, generatedTree.tree), rest);
+      const data: Buffer | null = await readFile(file).catch(() => null);
+      if (data === null) {
+        res.statusCode = 404;
+        res.end("not found");
+        return;
+      }
+      res.setHeader("content-type", "text/javascript");
+      res.end(data);
+      return;
+    }
+
     try {
       if (path === "/") {
         const html: string = (await readFile(join(webDemoDir, "index.html"), "utf8")).replace(
           "</head>",
-          `<script type="importmap">{"imports":{"@tiqian/web-component/element":"/platforms/web/client/web-component/element.js","@tiqian/web-component/auto":"/platforms/web/client/web-component/auto.js","@tiqian/web-component/":"/platforms/web/client/web-component/","@tiqian/web-component":"/platforms/web/client/web-component/element.js","@tiqian/core/":"/platforms/web/client/core/","@tiqian/ffi":"/engine-runtime/Tiqian-tiqian-ffi-js.mjs"}}</script></head>`,
+          `<script type="importmap">{"imports":{"@tiqian/web-component/element":"/platforms/web/client/web-component/element.js","@tiqian/web-component/auto":"/platforms/web/client/web-component/auto.js","@tiqian/web-component/":"/platforms/web/client/web-component/","@tiqian/web-component":"/platforms/web/client/web-component/element.js","@tiqian/core/":"/platforms/web/client/core/","@tiqian/engine/":"/engine/","@tiqian/protocol/":"/protocol/","@tiqian/shared/":"/shared/"}}</script></head>`,
         );
         res.setHeader("content-type", "text/html; charset=utf-8");
         res.end(html);
@@ -284,14 +302,9 @@ function startDemoServer(port: number, pkgDir: string): Promise<DemoServerHandle
       const data: Buffer | null = file ? await readFile(file).catch(() => null) : null;
       if (data) {
         if (path === "/platforms/web/client/core/layout-worker.js") {
-          const source: string = data.toString("utf8");
-          const occurrences: number = source.split('from "@tiqian/ffi"').length - 1;
-          if (occurrences > 1) throw new Error(`unexpected engine import count ${occurrences}`);
-          if (occurrences === 1) {
-            res.setHeader("content-type", type);
-            res.end(source.replace('from "@tiqian/ffi"', 'from "/engine-runtime/Tiqian-tiqian-ffi-js.mjs"'));
-            return;
-          }
+          res.setHeader("content-type", type);
+          res.end(rewriteWorkerEngineSpecifiers(data.toString("utf8")));
+          return;
         }
         res.setHeader("content-type", type);
         res.end(data);
@@ -459,7 +472,7 @@ function geometryReport(dev: GeometryNodeReport[], pub: GeometryNodeReport[]): G
   return { firstDiff, childDiffs, paraRectDiffs, maxDelta, examples };
 }
 
-test("NpmPublishedVsDev: published @tiqian/web-component matches the working tree visually and geometrically", { skip: "the demo served the removed @tiqian/ffi runtime; the engine now ships as the @tiqian/engine workspace tree, whose .ts sources the browser cannot load" }, async () => {
+test("NpmPublishedVsDev: published @tiqian/web-component matches the working tree visually and geometrically", async () => {
   const tmpBase: string = await mkdtemp(join(tmpdir(), "tq-npm-pub-"));
   let chromeProc: ChildProcess | null = null;
   let dev: CdpClient | null = null;
