@@ -31,7 +31,7 @@
   -> break candidates + mandatory breaks + unbreakable ranges
   -> line breaking + kinsoku repair
   -> compression / justification / neighbor adjustment
-  -> LayoutResult + structured debug decisions
+  -> LayoutResult + presentation decisions + structured debug decisions
   -> Compose / DOM / Android / Core Text renderer
 ```
 
@@ -159,7 +159,9 @@ cluster，只有最终判为 `CjkPunctuation` 的 run 才能进入 CLREQ display
 6. annotation、decoration、inline object 与 rich text geometry 在同一份最终行几何上解析。
 
 每一步都把原因写入 `LayoutResult.debug` 和 layout dump。视觉结果与 decision 不一致时，
-应修正 pipeline 或平台证据，不能只在前端移动 glyph。
+应修正 pipeline 或平台证据，不能只在前端移动 glyph。renderer、绘制计划与选择查询读取的决策放在
+`LayoutResult.presentation`；引擎参数 `recordsDebugInfo` 为 false 时不生成 `LayoutResult.debug`，
+Apple 前端默认使用 false（ADR 0065）。
 
 ## 前端
 

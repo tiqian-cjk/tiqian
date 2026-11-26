@@ -21,6 +21,7 @@ ADR 记录已经做出的架构与排版决定。它们按编号保留当时的 
 - [0010 LineEdgeGlueTrim](0010-line-edge-glue-trim.md)
 - [0011 PunctuationGeometryLedger](0011-punctuation-geometry-ledger.md)
 - [0012 CarryPrevious 溢出验证](0012-carry-previous-overflow-validation.md)
+- [0065 呈现决策记录与可选调试信息](0065-presentation-decisions-and-optional-debug-info.md)
 
 ## 平台 shaping 与绘制
 
@@ -106,5 +107,7 @@ ADR 记录已经做出的架构与排版决定。它们按编号保留当时的 
 - 0049 的逻辑文档选区模型由 0058 在 Android View 前端复用。
 - 0045、0046、0047 的 Kotlin/Native 实现与 `Tiqian.xcframework` 打包由 0064 改为 Swift 实现与本地 SwiftPM 包；
   0046 的 shaping 接口约定与 0047 的绘制规则不变。
+- 0005 的结构化决策由 0065 分为两份记录：呈现代码读取 `LayoutResult.presentation`，
+  `LayoutResult.debug` 由引擎参数 `recordsDebugInfo` 控制是否生成；`LayoutDebugInfo` 的字段不变。
 - 0039 / 0040 的 Node precompute 运行时由 0050 迁往 Kotlin/Native 静态库加 Rust 绑定，precompute
   迁入独立的 `@tiqian/precompute` 包；迁移完成前两文中的 WASM 依赖与 npm 结构描述仍有效。
