@@ -36,6 +36,7 @@ pub mod renderer;
 pub mod replay;
 pub mod schema;
 pub mod selection;
+pub mod shared_prepared;
 pub mod session;
 pub mod sfnt;
 pub mod shaping;
