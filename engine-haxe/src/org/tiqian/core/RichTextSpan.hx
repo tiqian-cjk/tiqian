@@ -19,7 +19,7 @@ class RichTextSpan {
         this.paint = paint == null ? RichTextPaint.Default : paint;
     }
 
-    @:allow(org.tiqian.core.LayoutQueries)
+    @:allow(org.tiqian.core.RichTextLayoutQueries)
     private static function sameRole(a:RichTextRole, b:RichTextRole):Bool {
         if (Std.isOfType(a, Link) && Std.isOfType(b, Link))
             return (cast(a, Link)).target == (cast(b, Link)).target;
