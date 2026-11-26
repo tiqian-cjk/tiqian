@@ -105,7 +105,7 @@ class LineAdjustmentStage {
     private static function buildLineBoxes(input:LayoutInput, lineSolution:LineSolution, trimmedClusters:Array<Cluster>, finalClusters:Array<Cluster>,
             firstLineIndent:Float, blockIndent:Float, measure:Float, gridBodyOffset:Float, lineBaseline:Array<Float>, lineTop:Array<Float>,
             lineBottom:Array<Float>, hyphenOffsets:SortedSet<Int>, naturalClusters:Array<Cluster>, hyphenAdvance:Float, hyphenGlyphs:Array<Glyph>,
-            justificationPlans:Array<Null<JustificationPlan>>):LineBoxStageResult {
+            justificationPlans:Array<Null<JustificationPlan>>, recordsDebugInfo:Bool):LineBoxStageResult {
         final laidOutLines = new Array<LineBox>();
         for (lineIndex in 0...lineSolution.lines.length) {
             final lineCandidate = lineSolution.lines[lineIndex];
@@ -160,24 +160,14 @@ class LineAdjustmentStage {
                 }
             }
 
-            final repairStr = lineCandidate.repair != null ? (repairOptionName(lineCandidate.repair) + ":" + RepairOptions.reason(lineCandidate.repair)) : null;
-            final notes = new Array<String>();
-            if (lineCandidate.clusterRange.isEmpty) {
-                notes.push("line:" + lineIndex + ":clusters=empty");
-            } else {
-                notes.push("line:" + lineIndex + ":clusters=" + lineCandidate.clusterRange.start + "-" + lineCandidate.clusterRange.end);
-            }
-            notes.push("end:" + Std.string(lineCandidate.endReason));
-            notes.push("natural=" + lineCandidate.naturalWidth + ",adjusted=" + lineCandidate.adjustedWidth + ",visual=" + visualWidth);
-            final planForLine = justificationPlans[lineIndex];
-            if (planForLine != null && planForLine.fallbackReason != null) {
-                notes.push("justify-fallback:" + planForLine.fallbackReason);
-            }
+            // `recordsDebugInfo`: the per-line explanation strings belong to the debug record, so an
+            // engine that skips that record also skips them.
+            final lineDebug = recordsDebugInfo ? lineDebugInfo(lineIndex, lineCandidate, visualWidth, justificationPlans[lineIndex]) : LineDebugInfo.Default;
 
             final hGlyphs = lineHyphenAdvance > 0.0 ? hyphenGlyphs : [];
             laidOutLines.push(new LineBox(lineCandidate.sourceRange, lineCandidate.clusterRange, lineBaseline[lineIndex], lineTop[lineIndex],
                 lineBottom[lineIndex], lineCandidate.naturalWidth, adjustedWidth, visualWidth, hangingPunctuationAdvance,
-                gridBodyOffset + baseIndent + alignmentInset, lineCandidate.endReason, lineHyphenAdvance, hGlyphs, new LineDebugInfo(repairStr, notes)));
+                gridBodyOffset + baseIndent + alignmentInset, lineCandidate.endReason, lineHyphenAdvance, hGlyphs, lineDebug));
         }
 
         final visibleLines = new Array<LineBox>();
@@ -195,6 +185,24 @@ class LineAdjustmentStage {
         }
 
         return new LineBoxStageResult(laidOutLines, visibleLines, maxLinesDecision, visibleLineRanges);
+    }
+
+    /** The repair and notes of one laid-out line, recorded in `LineBox.debug`. */
+    private static function lineDebugInfo(lineIndex:Int, lineCandidate:LineCandidate, visualWidth:Float,
+            planForLine:Null<JustificationPlan>):LineDebugInfo {
+        final repairStr = lineCandidate.repair != null ? (repairOptionName(lineCandidate.repair) + ":" + RepairOptions.reason(lineCandidate.repair)) : null;
+        final notes = new Array<String>();
+        if (lineCandidate.clusterRange.isEmpty) {
+            notes.push("line:" + lineIndex + ":clusters=empty");
+        } else {
+            notes.push("line:" + lineIndex + ":clusters=" + lineCandidate.clusterRange.start + "-" + lineCandidate.clusterRange.end);
+        }
+        notes.push("end:" + Std.string(lineCandidate.endReason));
+        notes.push("natural=" + lineCandidate.naturalWidth + ",adjusted=" + lineCandidate.adjustedWidth + ",visual=" + visualWidth);
+        if (planForLine != null && planForLine.fallbackReason != null) {
+            notes.push("justify-fallback:" + planForLine.fallbackReason);
+        }
+        return new LineDebugInfo(repairStr, notes);
     }
 
     private static function isFixedBoundary(b:org.tiqian.core.InlineObjectBoundaryAdjustment):Bool {
@@ -756,7 +764,7 @@ class LineAdjustmentStage {
 
         final lineBoxes = buildLineBoxes(prep.input, plan.lineSolution, trimmedClusters, finalClusters, plan.firstLineIndent, plan.blockIndent, prep.measure,
             prep.gridBodyOffset, lineBaseline, lineTop, lineBottom, prep.hyphenOffsets, prep.naturalClusters, prep.hyphenAdvance, prep.hyphenGlyphs,
-            justificationPlans);
+            justificationPlans, engine.recordsDebugInfo);
         final laidOutLines = lineBoxes.laidOutLines;
         final lines = lineBoxes.visibleLines;
         final maxLinesDecision = lineBoxes.maxLinesDecision;

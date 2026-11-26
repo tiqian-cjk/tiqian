@@ -12,9 +12,18 @@ class LayoutDebugRecordingTestSupport {
         return engine.layout(new LayoutInput(new TiqianTextContent("中文，“提椠”排版English。再来一句话。"), null, null, new LayoutConstraints(120.0)));
     }
 
-    /** `result` with the debug record replaced by `LayoutDebugInfo.Default`. */
+    /** `result` with the debug record and every line's `LineBox.debug` replaced by their defaults. */
     public static function withoutDebug(result:LayoutResult):LayoutResult {
-        return new LayoutResult(result.input, result.size, result.clusters, result.glyphRuns, result.lines, null, result.presentation);
+        final lines = new Array<LineBox>();
+        for (i in 0...result.lines.length) {
+            final l = result.lines[i];
+            final hyphenGlyphs = new Array<Glyph>();
+            for (g in 0...l.hyphenGlyphs.length)
+                hyphenGlyphs.push(l.hyphenGlyphs[g]);
+            lines.push(new LineBox(l.range, l.clusterRange, l.baseline, l.top, l.bottom, l.naturalWidth, l.adjustedWidth, l.visualWidth,
+                l.hangingPunctuationAdvance, l.indent, l.endReason, l.hyphenAdvance, hyphenGlyphs, null));
+        }
+        return new LayoutResult(result.input, result.size, result.clusters, result.glyphRuns, lines, null, result.presentation);
     }
 
     public static function lineSpacingText(value:Null<LineSpacingDecisionInfo>):String {

@@ -64,8 +64,9 @@ class ExplainableStubParagraphLayoutEngine implements ParagraphLayoutEngine {
      * `recordsDebugInfo`: whether each `LayoutResult` carries the full explanation record
      * (`LayoutResult.debug`). Defaults to true, which tests, dumps and layout reports rely on. A
      * frontend that only presents layouts passes false; its results carry
-     * `LayoutDebugInfo.Default` and the same `LayoutResult.presentation` records, and the
-     * engine skips `LayoutDebugAssembly.buildLayoutDebugInfo`.
+     * `LayoutDebugInfo.Default`, lines whose `LineBox.debug` is `LineDebugInfo.Default`, and the
+     * same `LayoutResult.presentation` records, and the engine skips
+     * `LayoutDebugAssembly.buildLayoutDebugInfo` and the per-line explanation strings.
      */
     public final recordsDebugInfo:Bool;
 
