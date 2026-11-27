@@ -96,7 +96,7 @@ class CoreUnitsGeometryTest {
             TracedAssertions.fail();
             return;
         }
-        final decision:MaxLinesDecisionInfo = debug.maxLinesDecision;
+        final decision:Null<MaxLinesDecisionInfo> = debug.maxLinesDecision;
         TracedAssertions.assertEqualsInt(5, decision.laidOutLines);
         TracedAssertions.assertEqualsInt(3, decision.visibleLines);
     }
