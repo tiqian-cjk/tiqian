@@ -250,28 +250,8 @@ class LineAdjustmentStage {
         final decorationDecisions = AnnotationGeometryStage.computeDecorationDecisions(input.decorations, visibleLineRanges, lines, finalClusters,
             clusterRoles, justifyDeltaByCluster, rubyAndBopomofoSpread, metricDecisions, fontSize, input.paragraphStyle.emphasisDotGapEm);
         final autoSpaceGapPx = clreqProfile.autoSpace.gapEm * fontSize;
-        final geometryByRangeBuilder = SortedMap.builder();
-        for (gi in 0...geometryDecisions.length) {
-            final gd = geometryDecisions[gi];
-            geometryByRangeBuilder.put(gd.range, gd);
-        }
-        final geometryByRange = geometryByRangeBuilder.build();
-
-        final leadingGapRangesBuilder = SortedSet.builder();
-        final trailingGapRangesBuilder = SortedSet.builder();
-        for (ai in 0...autoSpaceDecisions.length) {
-            final ad = autoSpaceDecisions[ai];
-            if (ad.side == "leading") {
-                leadingGapRangesBuilder.put(ad.clusterRange);
-            } else if (ad.side == "trailing") {
-                trailingGapRangesBuilder.put(ad.clusterRange);
-            }
-        }
-        final leadingGapRanges = leadingGapRangesBuilder.build();
-        final trailingGapRanges = trailingGapRangesBuilder.build();
-
         final decorationSegments = AnnotationGeometryStage.computeDecorationSegments(input.decorations, visibleLineRanges, lines, finalClusters,
-            justifyDeltaByCluster, geometryByRange, leadingGapRanges, trailingGapRanges, autoSpaceGapPx, fontSize);
+            justifyDeltaByCluster, geometryDecisions, autoSpaceDecisions, autoSpaceGapPx, fontSize);
         final rubyDecisions = AnnotationGeometryStage.computeRubyDecisions(pinyinSpans, visibleLineRanges, lines, finalClusters, naturalClusters,
             metricDecisions, rubyFontGeometryBySpan, rubyStackGap, baseAscent, rubyFontSize, rubyFontWeight, input.textStyle.locale);
         final bopomofoSpans = bopomofoSpansOf(input.rubySpans);

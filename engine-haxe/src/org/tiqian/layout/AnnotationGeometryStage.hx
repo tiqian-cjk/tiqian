@@ -15,6 +15,7 @@ import org.tiqian.core.LineBox;
 import org.tiqian.core.Cluster;
 import org.tiqian.core.TextRange;
 import org.tiqian.core.ClusterGeometryDecisionInfo;
+import org.tiqian.core.AutoSpaceDecisionInfo;
 import org.tiqian.font.FontRole;
 import org.tiqian.layout.LineGeometryStage.ClusterMetricDecision;
 import org.tiqian.layout.LineBreakPlanningStage;
@@ -262,8 +263,36 @@ class AnnotationGeometryStage {
      * time).
      */
     public static function computeDecorationSegments(decorations:ReadOnlyArray<DecorationSpan>, lineRanges:Array<IntRange>, lineBoxes:Array<LineBox>,
-            finalClusters:Array<Cluster>, justifyDeltaByCluster:SortedMap<Int, Float>, geometryByRange:SortedMap<TextRange, ClusterGeometryDecisionInfo>,
-            leadingGapRanges:SortedSet<TextRange>, trailingGapRanges:SortedSet<TextRange>, autoSpaceGapPx:Float, fontSize:Float):Array<DecorationSegmentInfo> {
+            finalClusters:Array<Cluster>, justifyDeltaByCluster:SortedMap<Int, Float>, geometryDecisions:Array<ClusterGeometryDecisionInfo>,
+            autoSpaceDecisions:Array<AutoSpaceDecisionInfo>, autoSpaceGapPx:Float, fontSize:Float):Array<DecorationSegmentInfo> {
+        final boxSpans = new Array<DecorationSpan>();
+        for (si in 0...decorations.length) {
+            final s = decorations[si];
+            if (s.kind == DecorationKind.Mourning || s.kind == DecorationKind.ProperNoun || s.kind == DecorationKind.BookTitle) {
+                boxSpans.push(s);
+            }
+        }
+        if (boxSpans.length == 0)
+            return [];
+        // The lookups below serve only the box spans, so they are built after the early return.
+        final geometryByRangeBuilder = SortedMap.builder();
+        for (gi in 0...geometryDecisions.length) {
+            final gd = geometryDecisions[gi];
+            geometryByRangeBuilder.put(gd.range, gd);
+        }
+        final geometryByRange:SortedMap<TextRange, ClusterGeometryDecisionInfo> = geometryByRangeBuilder.build();
+        final leadingGapRangesBuilder = SortedSet.builder();
+        final trailingGapRangesBuilder = SortedSet.builder();
+        for (ai in 0...autoSpaceDecisions.length) {
+            final ad = autoSpaceDecisions[ai];
+            if (ad.side == "leading") {
+                leadingGapRangesBuilder.put(ad.clusterRange);
+            } else if (ad.side == "trailing") {
+                trailingGapRangesBuilder.put(ad.clusterRange);
+            }
+        }
+        final leadingGapRanges:SortedSet<TextRange> = leadingGapRangesBuilder.build();
+        final trailingGapRanges:SortedSet<TextRange> = trailingGapRangesBuilder.build();
         // Remaining edge blank to strip off a covered cluster so 行间线 hugs the ink/body
         // (CLREQ 避两侧空白): the autospace gap + the punctuation glue still present
         // (开/闭标点 half-width), mirroring how the renderer positions the glyph.
@@ -279,15 +308,6 @@ class AnnotationGeometryStage {
             final auto = (trailingGapRanges.has(range) && !atLineEnd) ? autoSpaceGapPx : 0.0;
             return glue + auto;
         };
-        final boxSpans = new Array<DecorationSpan>();
-        for (si in 0...decorations.length) {
-            final s = decorations[si];
-            if (s.kind == DecorationKind.Mourning || s.kind == DecorationKind.ProperNoun || s.kind == DecorationKind.BookTitle) {
-                boxSpans.push(s);
-            }
-        }
-        if (boxSpans.length == 0)
-            return [];
 
         final segments = new Array<DecorationSegmentInfo>();
         for (bi in 0...boxSpans.length) {
