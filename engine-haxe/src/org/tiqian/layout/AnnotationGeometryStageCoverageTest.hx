@@ -1,7 +1,6 @@
 package org.tiqian.layout;
 
 import org.tiqian.core.*;
-import org.tiqian.layout.cache.LayoutMemoSlot;
 import org.tiqian.font.BaselinePolicy;
 import org.tiqian.font.FontMetrics.FontMetricsRequest;
 import org.tiqian.font.FontMetricsPolicy;
@@ -174,7 +173,7 @@ class AnnotationGeometryStageCoverageTest {
         rfgBuilder.put(pinyinA, new RubyFontGeometry(20.0, 8.0, 2.0, 10.0, []));
         rfgBuilder.put(pinyinB, new RubyFontGeometry(20.0, 8.0, 2.0, 10.0, []));
         final rfgMap = rfgBuilder.build();
-        final res1 = LineAdjustmentStage.resolveAnnotationGeometry(engine, input, 16.0, inlineObjMap, lineSolution, clreqProfile, [geomDecision], [
+        final res1 = LineAdjustmentStage.resolveAnnotationGeometry(input, 16.0, inlineObjMap, lineSolution, clreqProfile, [geomDecision], [
             new AutoSpaceDecisionInfo(new TextRange(0, 2), "leading", "Wide", "Normal", 1, 0.0, 0.0, "test"),
             new AutoSpaceDecisionInfo(new TextRange(2, 3), "leading", "Wide", "Normal", 1, 0.0, 0.0, "test"),
             new AutoSpaceDecisionInfo(new TextRange(3, 5), "trailing", "Wide", "Normal", 1, 0.0, 0.0, "test"),
@@ -182,7 +181,8 @@ class AnnotationGeometryStageCoverageTest {
         ],
             [new IntRange(0, 2), new IntRange(3, 3)], lineBoxes, clusters, [FontRole.CjkText, FontRole.CjkPunctuation, FontRole.CjkText, FontRole.LatinText],
             justifyMap, spreadMap, [], [pinyinA, pinyinB], clusters, rfgMap, 0.0, 16.0, 8.0, 400, 4.0, function(_:Int) return 400,
-            new LayoutMemoSlot<Array<Array<BopomofoPlacementShape>>>());
+            AnnotationGeometryStage.shapeBopomofoPlacements(engine, LineAdjustmentStage.bopomofoSpansOf(input.rubySpans), 16.0, function(_:Int) return 400,
+                input.textStyle));
         TracedAssertions.recordRenderedNotNull(res1 == null ? "null" : TestTraceRender.cap(Std.string(res1)));
         TracedAssertions.assertEquals(3, res1.inlineObjectDecisions.length);
         TracedAssertions.assertEquals(-1, res1.inlineObjectDecisions[res1.inlineObjectDecisions.length - 1].lineIndex);
@@ -192,10 +192,12 @@ class AnnotationGeometryStageCoverageTest {
         final rfgBuilder2 = SortedMap.builder();
         rfgBuilder2.put(pinyinC, new RubyFontGeometry(20.0, 8.0, 2.0, 10.0, []));
         final rfgMap2 = rfgBuilder2.build();
-        final res2 = LineAdjustmentStage.resolveAnnotationGeometry(engine, input, 16.0, SortedMap.builder().build(), lineSolution, clreqProfile, [], [],
+        final res2 = LineAdjustmentStage.resolveAnnotationGeometry(input, 16.0, SortedMap.builder().build(), lineSolution, clreqProfile, [], [],
             [new IntRange(0, 2), new IntRange(3, 3)], lineBoxes, clusters, [FontRole.CjkText, FontRole.CjkPunctuation, FontRole.CjkText, FontRole.LatinText],
             SortedMap.builder().build(), SortedMap.builder().build(), [metricDecision], [pinyinC], clusters, rfgMap2, 0.0, 16.0, 8.0, 400, 4.0,
-            function(_:Int) return 400, new LayoutMemoSlot<Array<Array<BopomofoPlacementShape>>>());
+            function(_:Int) return 400,
+            AnnotationGeometryStage.shapeBopomofoPlacements(engine, LineAdjustmentStage.bopomofoSpansOf(input.rubySpans), 16.0, function(_:Int) return 400,
+                input.textStyle));
         TracedAssertions.recordRenderedNotNull(res2 == null ? "null" : TestTraceRender.cap(Std.string(res2)));
     }
 
@@ -267,7 +269,7 @@ class AnnotationGeometryStageCoverageTest {
         rfgBuilder.put(pinyinB, new RubyFontGeometry(10.0, 8.0, 2.0, 10.0, []));
         rfgBuilder.put(pinyinC, new RubyFontGeometry(20.0, 8.0, 2.0, 10.0, []));
         final rfgMap = rfgBuilder.build();
-        final res = LineAdjustmentStage.resolveAnnotationGeometry(engine, input, 16.0, inlineObjMap, lineSolution, clreqProfile, [geomDecision], [
+        final res = LineAdjustmentStage.resolveAnnotationGeometry(input, 16.0, inlineObjMap, lineSolution, clreqProfile, [geomDecision], [
             new AutoSpaceDecisionInfo(new TextRange(0, 2), "leading", "Wide", "Normal", 1, 0.0, 0.0, "test"),
             new AutoSpaceDecisionInfo(new TextRange(2, 3), "leading", "Wide", "Normal", 1, 0.0, 0.0, "test"),
             new AutoSpaceDecisionInfo(new TextRange(2, 3), "trailing", "Wide", "Normal", 1, 0.0, 0.0, "test"),
@@ -275,7 +277,9 @@ class AnnotationGeometryStageCoverageTest {
         ],
             [new IntRange(1, 0), new IntRange(0, 2)], lineBoxes, clusters, [FontRole.CjkText, FontRole.CjkPunctuation, FontRole.CjkText, FontRole.LatinText],
             SortedMap.builder().build(), SortedMap.builder().build(), [metricDecision1, metricDecision2], [pinyinA, pinyinB, pinyinC], clusters, rfgMap, 0.0,
-            16.0, 8.0, 400, 4.0, function(_:Int) return 400, new LayoutMemoSlot<Array<Array<BopomofoPlacementShape>>>());
+            16.0, 8.0, 400, 4.0, function(_:Int) return 400,
+            AnnotationGeometryStage.shapeBopomofoPlacements(engine, LineAdjustmentStage.bopomofoSpansOf(input.rubySpans), 16.0, function(_:Int) return 400,
+                input.textStyle));
         TracedAssertions.recordRenderedNotNull(res == null ? "null" : TestTraceRender.cap(Std.string(res)));
     }
 

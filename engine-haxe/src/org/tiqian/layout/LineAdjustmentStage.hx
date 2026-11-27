@@ -3,7 +3,6 @@ package org.tiqian.layout;
 using org.tiqian.layout.ProgressiveBreakTierPriority;
 using std.Functional;
 
-import org.tiqian.layout.cache.LayoutMemoSlot;
 import org.tiqian.core.AccurateSum;
 import org.tiqian.core.LayoutInput;
 import org.tiqian.core.LayoutResult;
@@ -211,14 +210,14 @@ class LineAdjustmentStage {
             && !b.preventsLineBreak;
     }
 
-    public static function resolveAnnotationGeometry(engine:ExplainableStubParagraphLayoutEngine, input:LayoutInput, fontSize:Float,
+    public static function resolveAnnotationGeometry(input:LayoutInput, fontSize:Float,
             inlineObjectByClusterIndex:SortedMap<Int, InlineObjectSpan>, lineSolution:LineSolution, clreqProfile:ClreqProfile,
             geometryDecisions:Array<ClusterGeometryDecisionInfo>, autoSpaceDecisions:Array<AutoSpaceDecisionInfo>, visibleLineRanges:Array<IntRange>,
             lines:Array<LineBox>, finalClusters:Array<Cluster>, clusterRoles:Array<FontRole>, justifyDeltaByCluster:SortedMap<Int, Float>,
             rubyAndBopomofoSpread:SortedMap<Int, Float>, metricDecisions:Array<ClusterMetricDecision>, pinyinSpans:Array<RubySpan>,
             naturalClusters:Array<Cluster>, rubyFontGeometryBySpan:SortedMap<RubySpan, RubyFontGeometry>, rubyStackGap:Float, baseAscent:Float,
             rubyFontSize:Float, rubyFontWeight:Int, baseDescent:Float, bopomofoFontWeightAt:Int->Int,
-            bopomofoShapes:LayoutMemoSlot<Array<Array<BopomofoPlacementShape>>>):AnnotationGeometryStageResult {
+            bopomofoShapes:Array<Array<BopomofoPlacementShape>>):AnnotationGeometryStageResult {
         final inlineObjectDecisions = new Array<InlineObjectDecisionInfo>();
         for (i in 0...inlineObjectByClusterIndex.size()) {
             final clusterIndex = inlineObjectByClusterIndex.keyAt(i);
@@ -275,22 +274,22 @@ class LineAdjustmentStage {
             justifyDeltaByCluster, geometryByRange, leadingGapRanges, trailingGapRanges, autoSpaceGapPx, fontSize);
         final rubyDecisions = AnnotationGeometryStage.computeRubyDecisions(pinyinSpans, visibleLineRanges, lines, finalClusters, naturalClusters,
             metricDecisions, rubyFontGeometryBySpan, rubyStackGap, baseAscent, rubyFontSize, rubyFontWeight, input.textStyle.locale);
-        final bopomofoSpans = new Array<RubySpan>();
-        for (ri in 0...input.rubySpans.length) {
-            final rs = input.rubySpans[ri];
-            if (rs.kind == RubyKind.Bopomofo) {
-                bopomofoSpans.push(rs);
-            }
-        }
-        final cachedShapes = bopomofoShapes.value;
-        final shapes = cachedShapes != null ? cachedShapes : AnnotationGeometryStage.shapeBopomofoPlacements(engine, bopomofoSpans, fontSize,
-            bopomofoFontWeightAt, input.textStyle);
-        if (cachedShapes == null)
-            bopomofoShapes.value = shapes;
-        final bopomofoDecisions = AnnotationGeometryStage.computeBopomofoDecisions(engine, bopomofoSpans, visibleLineRanges, lines, finalClusters,
-            naturalClusters, baseAscent, baseDescent, fontSize, bopomofoFontWeightAt, input.textStyle, shapes);
+        final bopomofoSpans = bopomofoSpansOf(input.rubySpans);
+        final bopomofoDecisions = AnnotationGeometryStage.computeBopomofoDecisions(bopomofoSpans, visibleLineRanges, lines, finalClusters,
+            naturalClusters, baseAscent, baseDescent, fontSize, bopomofoFontWeightAt, input.textStyle, bopomofoShapes);
 
         return new AnnotationGeometryStageResult(inlineObjectDecisions, decorationDecisions, decorationSegments, rubyDecisions, bopomofoDecisions);
+    }
+
+    /** The bopomofo spans of `rubySpans`, in order. */
+    public static function bopomofoSpansOf(rubySpans:std.ReadOnlyArray<RubySpan>):Array<RubySpan> {
+        final out = new Array<RubySpan>();
+        for (ri in 0...rubySpans.length) {
+            final rs = rubySpans[ri];
+            if (rs.kind == RubyKind.Bopomofo)
+                out.push(rs);
+        }
+        return out;
     }
 
     private static function trimEdge(lineSourceRange:TextRange, clusterIdx:Int, side:String, naturalClusters:Array<Cluster>,
@@ -768,10 +767,20 @@ class LineAdjustmentStage {
         final maxLinesDecision = lineBoxes.maxLinesDecision;
         final visibleLineRanges = lineBoxes.visibleLineRanges;
 
-        final annotationGeometry = resolveAnnotationGeometry(engine, prep.input, prep.fontSize, prep.inlineObjectByClusterIndex, plan.lineSolution,
+        // The shaped bopomofo placements depend only on the annotation (`WidthIndependentLayoutMemo.bopomofoShapes`).
+        // The slot is read here: a static taking the slot object as its last class parameter has the slot's field
+        // projected into parameters by boring's Rust target.
+        final bopomofoShapesSlot = prep.layoutMemo.bopomofoShapes;
+        final cachedBopomofoShapes = bopomofoShapesSlot.value;
+        final bopomofoShapes:Array<Array<BopomofoPlacementShape>> = cachedBopomofoShapes != null ? cachedBopomofoShapes
+            : AnnotationGeometryStage.shapeBopomofoPlacements(engine, bopomofoSpansOf(prep.input.rubySpans), prep.fontSize, prep.bopomofoFontWeightAt,
+                prep.input.textStyle);
+        if (cachedBopomofoShapes == null)
+            bopomofoShapesSlot.value = bopomofoShapes;
+        final annotationGeometry = resolveAnnotationGeometry(prep.input, prep.fontSize, prep.inlineObjectByClusterIndex, plan.lineSolution,
             prep.clreqProfile, geometryDecisions, prep.autoSpaceDecisions, visibleLineRanges, lines, finalClusters, prep.clusterRoles, justifyDeltaByCluster,
             prep.rubyAndBopomofoSpread, plan.metricDecisions, prep.pinyinSpans, prep.naturalClusters, prep.rubyFontGeometryBySpan, prep.rubyStackGap,
-            plan.baseAscent, prep.rubyFontSize, prep.rubyFontWeight, plan.baseDescent, prep.bopomofoFontWeightAt, prep.layoutMemo.bopomofoShapes);
+            plan.baseAscent, prep.rubyFontSize, prep.rubyFontWeight, plan.baseDescent, prep.bopomofoFontWeightAt, bopomofoShapes);
         final inlineObjectDecisions = annotationGeometry.inlineObjectDecisions;
         final decorationDecisions = annotationGeometry.decorationDecisions;
         final decorationSegments = annotationGeometry.decorationSegments;

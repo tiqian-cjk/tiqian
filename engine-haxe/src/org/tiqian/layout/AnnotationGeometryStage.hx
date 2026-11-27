@@ -638,7 +638,7 @@ class AnnotationGeometryStage {
      * and the 调号 (5×5 份 / 轻声) in the base's right-side 15-份 zone, mapping the
      * 30-份 grid onto the base 字身框 (typo box). `BopomofoParser` derives the tone.
      */
-    public static function computeBopomofoDecisions(engine:ExplainableStubParagraphLayoutEngine, rubySpans:Array<RubySpan>, lineRanges:Array<IntRange>,
+    public static function computeBopomofoDecisions(rubySpans:Array<RubySpan>, lineRanges:Array<IntRange>,
             lineBoxes:Array<LineBox>, finalClusters:Array<Cluster>, naturalClusters:Array<Cluster>, baseAscent:Float, baseDescent:Float, fontSize:Float,
             bopomofoFontWeightAt:Int->Int, baseTextStyle:TextStyle, shapes:Array<Array<BopomofoPlacementShape>>):Array<BopomofoDecisionInfo> {
         if (rubySpans.length == 0)

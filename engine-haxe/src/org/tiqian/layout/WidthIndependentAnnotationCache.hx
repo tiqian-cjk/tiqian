@@ -608,7 +608,7 @@ class WidthIndependentAnnotationCacheFns {
         // own memo keeps it; only the comparison with the measure runs per layout.
         final widthsSlot = annotation.layoutMemo.baseShapingResultWidths;
         final cachedWidths = widthsSlot.value;
-        final shapingResultWidths = cachedWidths != null ? cachedWidths : baseShapingResultWidths(annotation.baseShapingStage);
+        final shapingResultWidths:Array<Float> = cachedWidths != null ? cachedWidths : baseShapingResultWidths(annotation.baseShapingStage);
         if (cachedWidths == null)
             widthsSlot.value = shapingResultWidths;
         var hasOverMeasureToken = false;

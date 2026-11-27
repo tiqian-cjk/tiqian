@@ -954,12 +954,12 @@ class LineBreakPlanningStage {
             }
             final naturalAdvancesSlot = prep.layoutMemo.naturalClusterAdvances;
             final cachedNaturalAdvances = naturalAdvancesSlot.value;
-            final naturalClusterAdvances = cachedNaturalAdvances != null ? cachedNaturalAdvances : LineBreakerLines.advancesOf(prep.naturalClusters);
+            final naturalClusterAdvances:Array<Float> = cachedNaturalAdvances != null ? cachedNaturalAdvances : LineBreakerLines.advancesOf(prep.naturalClusters);
             if (cachedNaturalAdvances == null)
                 naturalAdvancesSlot.value = naturalClusterAdvances;
             final adjustedAdvancesSlot = prep.layoutMemo.adjustedClusterAdvances[WidthIndependentAnnotationCacheFns.kinsokuLevelMemoKey(prep.resolvedKinsoku.level)];
             final cachedAdjustedAdvances = adjustedAdvancesSlot.value;
-            final adjustedClusterAdvances = cachedAdjustedAdvances != null ? cachedAdjustedAdvances : LineBreakerLines.advancesOf(prep.clusters);
+            final adjustedClusterAdvances:Array<Float> = cachedAdjustedAdvances != null ? cachedAdjustedAdvances : LineBreakerLines.advancesOf(prep.clusters);
             if (cachedAdjustedAdvances == null)
                 adjustedAdvancesSlot.value = adjustedClusterAdvances;
             lineSolution = engine.lineBreaker.breakLines(prep.naturalClusters, prep.clusters, prep.measure - blockIndent, prep.shrinkOpportunities,
