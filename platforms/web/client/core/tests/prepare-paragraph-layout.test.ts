@@ -8,7 +8,7 @@ import { emptyDomRectList } from "./snapshot-dom-fixtures.js";
 import type { FixtureFontBackend } from "./fixture-font-backend.js";
 import type { LoweredParagraph, TextStyle, TextSpan, InlineBoxSpan, LineBreakSpan, InlineObjectSpan, DecorationSpan, DomSourceSpan, DomInlineBoxStyle, DomInlineObject } from "../src/engine/lowered-paragraph.js";
 import type { PrepareLayoutResult, PrepareReadyResult } from "../src/engine/prepare-paragraph-layout.js";
-import { toEngineFontMetrics, toEngineShapingResult } from "../src/engine/engine-access/host-result.js";
+import { toEngineFontMetrics, toEngineShapingResult } from "../src/engine/host-result.js";
 import type { ShapingInput, ShapingResult } from "@tiqian/engine/org/tiqian/shaping/TextShaper";
 import type { FontMetricsRequest } from "@tiqian/engine/org/tiqian/font/FontMetrics";
 import type { RawFontMetrics } from "@tiqian/engine/org/tiqian/font/RawFontMetrics";

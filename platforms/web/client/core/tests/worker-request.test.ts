@@ -17,8 +17,8 @@ import {
   workerLayoutRequest,
 } from "../src/engine/worker-request.js";
 import { effectiveLineMeasure } from "../src/engine/responsive-measure.js";
-import { firstDivergentInlineShapingProperty, unsupportedInlineShapingProperties } from "../src/engine/engine-access/font-role.js";
 import { InlineShapingStylePolicy } from "@tiqian/engine/org/tiqian/font/InlineShapingStylePolicy";
+
 
 function asType<T>(value: unknown): T {
   return value as T;
@@ -259,15 +259,7 @@ interface WorkerRequestDto {
   firstLineIndentIc: number;
   lineLengthGridEnabled: boolean;
   sourceBoundaries: number[];
-  textSpans: {
-    start: number;
-    end: number;
-    fontFamilies: string[];
-    fontSize: number;
-    fontWeight: number;
-    italic: boolean;
-    baselineShift: number;
-  }[];
+  textSpans: TextSpanDto[];
   inlineBoxes: InlineBoxDto[];
   lineBreakSpans: LineBreakSpanDto[];
   inlineObjects: InlineObjectDto[];
@@ -587,8 +579,8 @@ const RICH_EXPECTED: WorkerRequestDto = {
     {
       start: 0,
       end: 4,
-      fontFamilies: ["A", "B"],
-      fontSize: 12.5,
+      families: ["A", "B"],
+      fontSizePx: 12.5,
       fontWeight: 500,
       italic: true,
       baselineShift: 1.5,
@@ -596,8 +588,8 @@ const RICH_EXPECTED: WorkerRequestDto = {
     {
       start: 4,
       end: 8,
-      fontFamilies: ["C"],
-      fontSize: 13.25,
+      families: ["C"],
+      fontSizePx: 13.25,
       fontWeight: 600,
       italic: false,
       baselineShift: 0,
@@ -645,15 +637,15 @@ test("buildWorkerLayoutRequest DTO shape has correct textSpans array with typed 
   for (const spanItem of actual.textSpans) {
     assert.ok(typeof spanItem.start === "number");
     assert.ok(typeof spanItem.end === "number");
-    assert.ok(Array.isArray(spanItem.fontFamilies));
-    assert.ok(typeof spanItem.fontSize === "number");
+    assert.ok(Array.isArray(spanItem.families));
+    assert.ok(typeof spanItem.fontSizePx === "number");
     assert.ok(typeof spanItem.fontWeight === "number");
     assert.ok(typeof spanItem.italic === "boolean");
     assert.ok(typeof spanItem.baselineShift === "number");
   }
   // Verify member order preserved
-  assert.deepEqual(actual.textSpans[0].fontFamilies, ["A", "B"]);
-  assert.deepEqual(actual.textSpans[1].fontFamilies, ["C"]);
+  assert.deepEqual(actual.textSpans[0].families, ["A", "B"]);
+  assert.deepEqual(actual.textSpans[1].families, ["C"]);
 });
 
 test("buildWorkerLayoutRequest DTO shape has correct inlineBoxes with Narrow outerSpacing", () => {
@@ -1020,7 +1012,7 @@ test("workerLayoutRequestForRoot inlineShapingDecision wraps the ffi divergence 
   withComputedStyle((): void => {
     // The divergence decision feeds the real firstDivergentInlineShapingProperty
     // over the element and paragraph shaping-value arrays, one value per
-    // unsupportedInlineShapingProperties() position. text-transform is the
+    // InlineShapingStylePolicy.unsupportedInlineShapingProperties() position. text-transform is the
     // 15th property (index 14), so a divergent element value there fails the
     // inline element, the paragraph lowers with ok !== true, and the root
     // overload reports null.

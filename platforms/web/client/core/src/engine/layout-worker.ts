@@ -58,18 +58,7 @@ function errorDetail(error: unknown): string {
     const session = sessions.get(sessionKey);
     if (!session) throw new Error("LayoutWorkerFontSessionMissing");
     const request: WorkerLayoutRequestBody = message.request;
-    const textSpans = request.textSpans.map(function (span) {
-      return {
-        start: span.start,
-        end: span.end,
-        families: span.fontFamilies,
-        fontSizePx: span.fontSize,
-        fontWeight: span.fontWeight,
-        italic: span.italic,
-        baselineShift: span.baselineShift,
-      };
-    });
-    const additionalBoundaries = workerSnapshotSubsetSourceBoundaries(session.faces, { ...request, textSpans: textSpans });
+    const additionalBoundaries = workerSnapshotSubsetSourceBoundaries(session.faces, request);
     const sourceBoundaries = [
       ...new Set([
         ...request.sourceBoundaries,
@@ -98,7 +87,7 @@ function errorDetail(error: unknown): string {
       firstLineIndentIc: request.firstLineIndentIc,
       lineLengthGridEnabled: true,
       sourceBoundaries: sourceBoundaries,
-      textSpans: textSpans,
+      textSpans: request.textSpans,
       inlineBoxes: request.inlineBoxes,
       lineBreakSpans: request.lineBreakSpans,
       inlineObjects: request.inlineObjects,

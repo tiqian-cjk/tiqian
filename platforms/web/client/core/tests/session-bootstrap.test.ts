@@ -200,5 +200,5 @@ test("layout-worker calls the prepared-paragraph entry and keeps the snapshot-su
   assert.match(source, /createManifestFontSession/u);
   assert.match(source, /from "\.\/prepared-paragraph\.js"/u);
   assert.doesNotMatch(source, /@tiqian\/ffi/u);
-  assert.match(source, /workerSnapshotSubsetSourceBoundaries\(session\.faces, \{ \.\.\.request, textSpans: textSpans \}\)/u);
+  assert.match(source, /workerSnapshotSubsetSourceBoundaries\(session\.faces, request\)/u);
 });

@@ -20,11 +20,9 @@ import { allowsSnapshotLayout, conformingSnapshotFontSessionId, withRootDefaults
 import {
   classifyRole as classifyFontRole,
   classifyRoles as classifyFontRoles,
-  firstDivergentInlineShapingProperty,
-  unsupportedInlineShapingProperties,
-} from "./engine-access/font-role.js";
+} from "./font-role.js";
 import { InlineShapingStylePolicy } from "@tiqian/engine/org/tiqian/font/InlineShapingStylePolicy";
-import type { WorkerLayoutRequest } from "./engine-access/wire-types.js";
+import type { WorkerLayoutRequest } from "./web-worker/wire-types.js";
 import {
   inlineBoxWires,
   inlineObjectWires,
@@ -225,17 +223,7 @@ export function buildWorkerLayoutRequest(paragraph: Element, lowered: LoweredPar
     firstLineIndentIc: firstLineIndentIc,
     lineLengthGridEnabled: true,
     sourceBoundaries: sourceBoundaries,
-    textSpans: textSpans.map(function (span) {
-      return {
-        start: span.start,
-        end: span.end,
-        fontFamilies: span.families,
-        fontSize: span.fontSizePx,
-        fontWeight: span.fontWeight,
-        italic: span.italic,
-        baselineShift: span.baselineShift,
-      };
-    }),
+    textSpans: textSpans,
     inlineBoxes: inlineBoxes,
     lineBreakSpans: lineBreakSpans,
     inlineObjects: inlineObjects,

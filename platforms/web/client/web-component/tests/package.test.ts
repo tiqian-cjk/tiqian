@@ -253,7 +253,7 @@ test("the custom element validates a snapshot before dynamically loading the bro
   assert.match(layoutWorkerSource, /from "\.\/prepared-paragraph\.js"/u);
   assert.doesNotMatch(layoutWorkerSource, /@tiqian\/ffi/u);
   assert.doesNotMatch(layoutWorkerSource, /precompute-runtime/u);
-  assert.match(layoutWorkerSource, /workerSnapshotSubsetSourceBoundaries\(session\.faces, \{ \.\.\.request, textSpans: textSpans \}\)/u);
+  assert.match(layoutWorkerSource, /workerSnapshotSubsetSourceBoundaries\(session\.faces, request\)/u);
   assert.doesNotMatch(browserFontsSource, /harfbuzzjs|woff2-encoder/u);
   assert.doesNotMatch(sessionSource, /tiqian:retry-cjk-dash/u);
   assert.match(sessionSource, /BrowserDashCapabilityBeforeDispatch/u);
