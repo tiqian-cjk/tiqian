@@ -50,6 +50,8 @@ pub struct Plan {
     pub decoration_segments: Vec<PlanDecorationSegment>,
     /// `emphasisDots`: emphasis dot anchors.
     pub emphasis_dots: Vec<PlanEmphasisDot>,
+    /// `spacingCarrierAdvances`: U+00A0 advance per shaped segment range.
+    pub spacing_carrier_advances: Vec<PlanSpacingCarrierAdvance>,
 }
 
 /// One `inlineEdges` entry: `{offset, inlineStart?, inlineEnd?}`. Each
@@ -123,6 +125,14 @@ pub struct PlanDecorationSegment {
 /// One `emphasisDots` entry: `{clusterRangeStart, anchorX, anchorY,
 /// dotDiameter}`. `clusterRangeStart` feeds the optional live color callback
 /// uncoerced, so absent stays none.
+/// One `spacingCarrierAdvances` entry: `{rangeStart, rangeEnd, advance}`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlanSpacingCarrierAdvance {
+    pub range_start: i32,
+    pub range_end: i32,
+    pub advance: f64,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlanEmphasisDot {
     pub cluster_range_start: Option<f64>,
@@ -316,6 +326,23 @@ impl Plan {
             })
             .collect();
         fields.push(("lines".to_string(), Json::Arr(lines)));
+        if !self.spacing_carrier_advances.is_empty() {
+            fields.push((
+                "spacingCarrierAdvances".to_string(),
+                Json::Arr(
+                    self.spacing_carrier_advances
+                        .iter()
+                        .map(|entry| {
+                            Json::Obj(vec![
+                                ("rangeStart".to_string(), Json::Num(f64::from(entry.range_start))),
+                                ("rangeEnd".to_string(), Json::Num(f64::from(entry.range_end))),
+                                ("advance".to_string(), Json::Num(entry.advance)),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ));
+        }
         if !self.emphasis_ranges.is_empty() {
             fields.push((
                 "emphasisRanges".to_string(),
@@ -589,6 +616,18 @@ impl Plan {
             Some(_) => return Err(NamedError("InvalidPlanJsonField:emphasisDots".to_string())),
             None => Vec::new(),
         };
+        let spacing_carrier_advances = match find(&fields, "spacingCarrierAdvances") {
+            Some(Json::Arr(items)) => items
+                .iter()
+                .map(PlanSpacingCarrierAdvance::from_json)
+                .collect::<Result<Vec<_>, _>>()?,
+            Some(_) => {
+                return Err(NamedError(
+                    "InvalidPlanJsonField:spacingCarrierAdvances".to_string(),
+                ))
+            }
+            None => Vec::new(),
+        };
         Ok(Plan {
             width,
             height,
@@ -601,6 +640,7 @@ impl Plan {
             overlay_width,
             decoration_segments,
             emphasis_dots,
+            spacing_carrier_advances,
         })
     }
 }
@@ -681,6 +721,17 @@ impl PlanDecorationSegment {
             left: number_field(&fields, "left").map_err(field_error("left"))?,
             top: number_field(&fields, "top").map_err(field_error("top"))?,
             right: number_field(&fields, "right").map_err(field_error("right"))?,
+        })
+    }
+}
+
+impl PlanSpacingCarrierAdvance {
+    fn from_json(value: &Json) -> Result<PlanSpacingCarrierAdvance, NamedError> {
+        let fields = object_value(value, "spacingCarrierAdvances")?;
+        Ok(PlanSpacingCarrierAdvance {
+            range_start: integer_field(&fields, "rangeStart").map_err(field_error("rangeStart"))?,
+            range_end: integer_field(&fields, "rangeEnd").map_err(field_error("rangeEnd"))?,
+            advance: number_field(&fields, "advance").map_err(field_error("advance"))?,
         })
     }
 }

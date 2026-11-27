@@ -91,7 +91,7 @@ mod tests {
         assert_eq!(SNAPSHOT_SCHEMA, 1);
         assert_eq!(SNAPSHOT_TABLES_SCHEMA, 2);
         assert_eq!(LAYOUT_REVISION.as_str(), "tiqian-layout-v2");
-        assert_eq!(RENDER_REVISION.as_str(), "prebroken-dom-v16");
+        assert_eq!(RENDER_REVISION.as_str(), "prebroken-dom-v17");
         assert_eq!(FONT_SOURCE_POLICY.as_str(), "host-compatible-stylesheet-v1");
         assert_eq!(FONT_BACKEND_REVISION.as_str(), "tiqian-shared-harfbuzz-v5");
         assert_eq!(

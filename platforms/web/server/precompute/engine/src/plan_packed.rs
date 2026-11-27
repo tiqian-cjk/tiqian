@@ -10,11 +10,11 @@ use tiqian::NamedError;
 use crate::json::Json;
 use crate::plan::{
     Plan, PlanBopomofo, PlanBopomofoPlacement, PlanCell, PlanDecorationSegment, PlanEmphasisDot,
-    PlanEndReason, PlanInlineEdge, PlanLine, PlanRuby,
+    PlanEndReason, PlanInlineEdge, PlanLine, PlanRuby, PlanSpacingCarrierAdvance,
 };
 
 const PLAN_MAGIC: u32 = 0x5451_5050;
-const PLAN_PROTOCOL_REVISION: u32 = 1;
+const PLAN_PROTOCOL_REVISION: u32 = 2;
 const PLAN_STRING_ABSENT: u32 = 0xFFFF_FFFF;
 
 fn invalid() -> NamedError {
@@ -298,6 +298,15 @@ pub fn decode(bytes: &[u8]) -> Result<Plan, NamedError> {
     pos = checked_add(pos, checked_mul(emphasis_dot_count, 8)?)?;
     let dot_diameter = pos;
     pos = checked_add(pos, checked_mul(emphasis_dot_count, 8)?)?;
+
+    let spacing_carrier_count = try_usize(read_u32_at(bytes, pos)?)?;
+    pos = checked_add(pos, 4)?;
+    let carrier_range_start = pos;
+    pos = checked_add(pos, checked_mul(spacing_carrier_count, 4)?)?;
+    let carrier_range_end = pos;
+    pos = checked_add(pos, checked_mul(spacing_carrier_count, 4)?)?;
+    let carrier_advance = pos;
+    pos = checked_add(pos, checked_mul(spacing_carrier_count, 8)?)?;
 
     if pos != bytes.len() {
         return Err(invalid());
@@ -696,6 +705,19 @@ pub fn decode(bytes: &[u8]) -> Result<Plan, NamedError> {
         });
     }
 
+    // Spacing carrier advances
+    let mut carriers: Vec<PlanSpacingCarrierAdvance> = Vec::with_capacity(spacing_carrier_count);
+    for i in 0..spacing_carrier_count {
+        let start = read_u32_at(bytes, checked_add(carrier_range_start, checked_mul(i, 4)?)?)?;
+        let end = read_u32_at(bytes, checked_add(carrier_range_end, checked_mul(i, 4)?)?)?;
+        let advance = read_f64_at(bytes, checked_add(carrier_advance, checked_mul(i, 8)?)?)?;
+        carriers.push(PlanSpacingCarrierAdvance {
+            range_start: i32::try_from(start).map_err(|_| invalid())?,
+            range_end: i32::try_from(end).map_err(|_| invalid())?,
+            advance,
+        });
+    }
+
     Ok(Plan {
         width,
         height,
@@ -716,6 +738,7 @@ pub fn decode(bytes: &[u8]) -> Result<Plan, NamedError> {
         },
         decoration_segments: deco_segments,
         emphasis_dots: dots,
+        spacing_carrier_advances: carriers,
     })
 }
 
@@ -774,6 +797,7 @@ mod tests {
             overlay_width: None,
             decoration_segments: vec![],
             emphasis_dots: vec![],
+            spacing_carrier_advances: vec![],
         };
         // Encode by using the Kotlin writer would be ideal, but for unit test we
         // synthesize packed bytes directly via a minimal encoder that follows the
@@ -838,6 +862,7 @@ mod tests {
         w(&(0u32).to_le_bytes()); // feature offset
         w(&(0u32).to_le_bytes()); // feature count
                                   // no feature pool, no other regions
+        w(&(0u32).to_le_bytes()); // spacing carrier advance count
         let decoded = decode(&bytes).expect("decodes");
         assert_eq!(decoded.width, 80.0);
         assert_eq!(decoded.lines.len(), 1);
