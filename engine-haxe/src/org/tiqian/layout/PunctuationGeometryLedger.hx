@@ -104,11 +104,47 @@ import std.SortedMap.SortedMapBuilder;
         return new PunctuationGeometryLedger(naturalClusters, geometries, budgetBuilder.build()).consumeSpacing(spacingPlan);
     }
 
+    /**
+     * Every cluster after the ledger's adjustments. A cluster with no entry in any of the ledger's
+     * maps is resolved by `untouchedCluster` without the map lookups; every other cluster goes
+     * through `resolveCluster`.
+     */
     public function resolveClusters():Array<Cluster> {
+        final n = naturalClusters.length;
+        final touched = new Array<Bool>();
+        for (i in 0...n)
+            touched.push(false);
+        markKeys(touched, geometries.size(), i -> geometries.keyAt(i));
+        markKeys(touched, budgets.size(), i -> budgets.keyAt(i));
+        markKeys(touched, justificationDeltaByCluster.size(), i -> justificationDeltaByCluster.keyAt(i));
+        markKeys(touched, rawEdgeTrimByCluster.size(), i -> rawEdgeTrimByCluster.keyAt(i));
+        markKeys(touched, rubySpreadByCluster.size(), i -> rubySpreadByCluster.keyAt(i));
+        markKeys(touched, inlineBoxAdvanceByCluster.size(), i -> inlineBoxAdvanceByCluster.keyAt(i));
+        markKeys(touched, attachedInlineTrailingGlueByCluster.size(), i -> attachedInlineTrailingGlueByCluster.keyAt(i));
         final result:Array<Cluster> = [];
-        for (i in 0...naturalClusters.length)
-            result.push(resolveCluster(i));
+        for (i in 0...n)
+            result.push(touched[i] ? resolveCluster(i) : untouchedCluster(naturalClusters[i]));
         return result;
+    }
+
+    static function markKeys(touched:Array<Bool>, count:Int, keyAt:Int->Int):Void {
+        for (i in 0...count) {
+            final k = keyAt(i);
+            if (k >= 0 && k < touched.length)
+                touched[k] = true;
+        }
+    }
+
+    /**
+     * `resolveCluster` of a cluster with no entry in any map: every amount is 0 and there is no
+     * geometry, so the advance is `resolvedAdvance`'s no-geometry formula with zero amounts, added
+     * in the same order.
+     */
+    static function untouchedCluster(c:Cluster):Cluster {
+        final zero:Float = 0;
+        final v = Math.max(0, c.advance + zero + zero + zero - zero);
+        return v == c.advance ? c : new Cluster(c.range, c.text, c.fontKey, v, c.displayText, c.baselineShift, c.leadingLayoutAdvance, c.glyphInlineShift
+            + zero);
     }
 
     /**
