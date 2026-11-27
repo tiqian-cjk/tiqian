@@ -325,3 +325,34 @@ Syllable → Syllable 仍是普通 `LineAdjustmentPushIn`，不得因更早存�
 普通西文仍按本 ADR 的单词/音节/连字符路径。只有显式 `ProgressiveTechnical` span 或命中上述
 强 non-lexical 证据的 source range，才可在必要硬断后开放下一份 ADR 0023 所述的 emergency
 tracking；source range、复制和搜索语义不变。
+
+## Amendment (2026-11-27): HyphenationTablePacking 与 LazyHyphenatorSlot
+
+`engine-haxe/data/hyph-en-us.tex` 改为在编译期解析。`engine-haxe/macros/HyphenationTables.hx`
+的 `texPatternFields` 按 `ParseTexHyphenationPatterns.parse` 的同一规则读取 TeX 文件，规则包括
+`%` 注释、`\patterns` 与 `\hyphenation` 两个块，以及同一字母串的后一条覆盖前一条。宏输出两个
+`Array<Int>` 字段：模式记号码元 `PATTERN_UNITS` 与例外记号码元 `EXCEPTION_UNITS`；这些字段按
+boring 特性规格 20 的数据表形式生成。模式记号保留 TeX 原样，例如 `.ach4`，例外记号保留 `-`
+断点，两类记号都按去掉标记后的字母串以码元顺序排列，相邻记号之间用换行符（码元 10）分隔。字段
+不带起点偏移表：递增的偏移在 Web 包里压缩效果差，gzip 后约 11.8 KB。`PackedHyphenationTable`
+在构造时扫描一遍两个序列，记下每个记号的起点，再通过 `HyphenationTableData` 接口按下标读取
+码元，以二分查找定位记号；`PackedLiangHyphenator` 在这张表上执行与 `LiangHyphenator` 相同的
+Liang 算法。某段字母串已不是任何模式的前缀时，`PackedLiangHyphenator` 停止向右延伸这段字母串，
+这一步只省去不可能命中的查找。`EnglishHyphenationTest.packedTableMatchesTheParsedTex` 检查并要求
+打包表的模式数与例外数、全部模式与例外的内容，以及一组单词的断点，都等于运行时
+解析同一 TeX 文件得到的结果。
+
+引擎默认断字器改为每个引擎各自持有的懒加载槽位。`DefaultHyphenator.defaultHyphenator()` 为每个
+引擎返回一个新的 `LazyHyphenator`，它在该引擎第一次请求断字时才向 `EnglishHyphenatorSource` 取得
+断字器，并把结果保存下来。构造引擎因此不再读取断字数据；没有西文断字请求的段落也不读取。
+槽位不跨引擎共享，Apple 前端多个引擎在不同线程上并行排版时，槽位不需要同步。
+
+断字数据可以由宿主替换，替换有三个入口：引擎构造参数 `hyphenator` 接受任意 `Hyphenator`；
+`LazyHyphenator` 接受任意 `HyphenatorSource`；`PackedLiangHyphenator` 接受任意
+`HyphenationTableData`，宿主自带的语言模式可以用 `ArrayHyphenationTableData` 按同一打包形式提供。
+`LiangHyphenator` 与 `ParseTexHyphenationPatterns` 保留，供宿主在运行时加载 TeX 文本使用，例如 Web
+`liangHyphenate` 导出。
+
+测量（引擎自述样例，Apple Release，性能核）：修改前，进程中第一次构造引擎耗时 7.7 ms，执行
+2.73 亿条指令，其中 2.48 亿条来自解析 TeX。Web 引擎包在 Node 中第一次构造引擎时解析 TeX 耗时
+5.0 ms。
