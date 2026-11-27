@@ -81,7 +81,13 @@ def archive_manifest(path: pathlib.Path) -> dict:
             member = archive.extractfile("package/package.json")
             if member is None:
                 raise Misconfigured("%s carries no package/package.json" % path)
-            return json.loads(member.read().decode("utf-8"))
+            text = member.read().decode("utf-8")
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                # The pack action rewrites the manifest through a JSON writer
+                # that leaves a trailing comma before a closing brace.
+                return json.loads(re.sub(r",(\s*[}\]])", r"\1", text))
     except tarfile.ReadError as error:
         raise Misconfigured("%s is not a readable archive: %s" % (path, error))
 
