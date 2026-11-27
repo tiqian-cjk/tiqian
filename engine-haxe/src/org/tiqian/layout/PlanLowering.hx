@@ -17,8 +17,6 @@ class PlanLowering {
      * Haxe Int coerces to Float with an explicit .toFloat() (a plain
      * assignment emits no conversion and fails Kotlin typing). */
     static function f32(v:Float):Float return v;
-    static function rangeKey(r:TextRange):String
-        return Std.string(r.start) + ":" + Std.string(r.end);
 
     static function styleAt(result:LayoutResult, offset:Int):TextStyle {
         final spanSrc = result.input.content.spans;
@@ -31,47 +29,82 @@ class PlanLowering {
     }
 
     public static function toPlan(result:LayoutResult, renderEvidence:Bool = false):Plan {
-        final naturalB:SortedMapBuilder<String, Float> = SortedMap.builder();
-        final featuresB = SortedMap.builder();
-        final fontsB:SortedMapBuilder<String, String> = SortedMap.builder();
-        final glyphIdsB = SortedMap.builder();
+        // Per-cluster-range accumulators indexed by ClusterRangeSlots. A later write to the same
+        // range replaces an earlier one, as SortedMapBuilder.build keeps the last put of a key.
+        // A glyph or decision range that is no cluster's range is skipped: the cell loop below
+        // reads only cluster ranges. (PlanClusterRangeSlots)
+        final slots = new ClusterRangeSlots(result.clusters);
+        final slotCount = slots.count();
+        final naturalBySlot = new Array<Float>();
+        final hasGlyphBySlot = new Array<Bool>();
+        final featuresBySlot = new Array<Array<String>>();
+        final fontRunBySlot = new Array<Int>();
+        final fontGlyphBySlot = new Array<Int>();
+        final glyphIdsBySlot = new Array<Array<String>>();
+        final zeroBySlot = new Array<Bool>();
+        final shapingBySlot = new Array<Int>();
+        final punctBySlot = new Array<Int>();
+        final inlineAdvanceBySlot = new Array<Float>();
+        final hasInlineAdvanceBySlot = new Array<Bool>();
+        for (_ in 0...slotCount) {
+            naturalBySlot.push(0.0);
+            hasGlyphBySlot.push(false);
+            featuresBySlot.push([]);
+            fontRunBySlot.push(-1);
+            fontGlyphBySlot.push(-1);
+            glyphIdsBySlot.push([]);
+            zeroBySlot.push(false);
+            shapingBySlot.push(-1);
+            punctBySlot.push(-1);
+            inlineAdvanceBySlot.push(0.0);
+            hasInlineAdvanceBySlot.push(false);
+        }
         for (ri in 0...result.glyphRuns.length) {
             final run = result.glyphRuns[ri];
             for (gi in 0...run.glyphs.length) {
                 final glyph = run.glyphs[gi];
-                final k = rangeKey(glyph.clusterRange);
-                final priorNatural = naturalB.get(k);
-                final priorN:Float = priorNatural == null ? 0.0 : priorNatural;
-                naturalB.put(k, priorN + glyph.advance);
+                final slot = slots.slotOf(glyph.clusterRange);
+                if (slot < 0)
+                    continue;
+                naturalBySlot[slot] = naturalBySlot[slot] + glyph.advance;
+                hasGlyphBySlot[slot] = true;
                 if (run.openTypeFeatures.length > 0) {
-                    var fs = featuresB.get(k);
-                    if (fs == null) fs = [];
+                    // Push through the element: a local alias of an inner array is a copy on Rust.
                     for (fi in 0...run.openTypeFeatures.length) {
                         final f = run.openTypeFeatures[fi];
-                        if (fs.indexOf(f) < 0) fs.push(f);
+                        if (featuresBySlot[slot].indexOf(f) < 0) featuresBySlot[slot].push(f);
                     }
-                    featuresB.put(k, fs);
                 }
-                final rfk = glyph.renderFontKey;
-                if (rfk != null) fontsB.put(k, rfk);
-                var ids = glyphIdsB.get(k);
-                if (ids == null) ids = [];
-                ids.push(Std.string(glyph.id));
-                glyphIdsB.put(k, ids);
+                if (glyph.renderFontKey != null) {
+                    fontRunBySlot[slot] = ri;
+                    fontGlyphBySlot[slot] = gi;
+                }
+                glyphIdsBySlot[slot].push(Std.string(glyph.id));
             }
         }
-        final zeroB = SortedMap.builder();
         final zeroSrc = result.presentation.zeroWidthBreakDecisions;
-        for (zi in 0...zeroSrc.length) zeroB.put(rangeKey(zeroSrc[zi].range), true);
-        final shapingB = SortedMap.builder();
+        for (zi in 0...zeroSrc.length) {
+            final slot = slots.slotOf(zeroSrc[zi].range);
+            if (slot >= 0) zeroBySlot[slot] = true;
+        }
         final shapingSrc = result.presentation.shapingDecisions;
-        for (zi in 0...shapingSrc.length) shapingB.put(rangeKey(shapingSrc[zi].range), shapingSrc[zi]);
-        final punctB = SortedMap.builder();
+        for (zi in 0...shapingSrc.length) {
+            final slot = slots.slotOf(shapingSrc[zi].range);
+            if (slot >= 0) shapingBySlot[slot] = zi;
+        }
         final punctSrc = result.presentation.punctuationDecisions;
-        for (zi in 0...punctSrc.length) punctB.put(rangeKey(punctSrc[zi].range), punctSrc[zi]);
-        final inlineAdvanceB = SortedMap.builder();
+        for (zi in 0...punctSrc.length) {
+            final slot = slots.slotOf(punctSrc[zi].range);
+            if (slot >= 0) punctBySlot[slot] = zi;
+        }
         final inlineObjSrc = result.input.inlineObjects;
-        for (zi in 0...inlineObjSrc.length) inlineAdvanceB.put(rangeKey(inlineObjSrc[zi].range), inlineObjSrc[zi].advance);
+        for (zi in 0...inlineObjSrc.length) {
+            final slot = slots.slotOf(inlineObjSrc[zi].range);
+            if (slot >= 0) {
+                inlineAdvanceBySlot[slot] = inlineObjSrc[zi].advance;
+                hasInlineAdvanceBySlot[slot] = true;
+            }
+        }
         final edgeStartB:SortedMapBuilder<String, Float> = SortedMap.builder();
         final edgeEndB:SortedMapBuilder<String, Float> = SortedMap.builder();
         final boxSrc = result.input.inlineBoxes;
@@ -90,14 +123,6 @@ class PlanLowering {
                 edgeEndB.put(ek, pEnd + b.inlineEnd);
             }
         }
-        final natural = naturalB.build();
-        final features = featuresB.build();
-        final fonts = fontsB.build();
-        final glyphIds = glyphIdsB.build();
-        final zero = zeroB.build();
-        final shaping = shapingB.build();
-        final punct = punctB.build();
-        final inlineAdvance = inlineAdvanceB.build();
         final edgeStart = edgeStartB.build();
         final edgeEnd = edgeEndB.build();
 
@@ -108,11 +133,10 @@ class PlanLowering {
             final cells:Array<Plan.PlanCell> = [];
             for (p in positionedByLine[li]) {
                 final c = result.clusters[p.clusterIndex];
-                final ck = rangeKey(c.range);
-                if (!(c.displayText.length > 0 || zero.has(ck) || (renderEvidence && inlineAdvance.has(ck))))
+                final slot = slots.slotOf(c.range);
+                if (!(c.displayText.length > 0 || zeroBySlot[slot] || (renderEvidence && hasInlineAdvanceBySlot[slot])))
                     continue;
-                final naturalEntry = natural.get(ck);
-                final natW:Float = naturalEntry == null ? c.advance : naturalEntry;
+                final natW:Float = hasGlyphBySlot[slot] ? naturalBySlot[slot] : c.advance;
                 var inlineObj:Null<Float> = null; var advOverride:Null<Float> = null;
                 var renderFam:Null<String> = null; var dash:Null<String> = null;
                 var lang:Null<String> = null; var face:Null<String> = null;
@@ -120,18 +144,30 @@ class PlanLowering {
                 var inkFloor:Null<Float> = null; var bodyW:Null<Float> = null;
                 var latin = false; var styleDelta:Null<PlanStyleDelta> = null;
                 if (renderEvidence) {
-                    inlineObj = inlineAdvance.get(ck);
-                    final glyphW:Float = inlineObj == null ? natW : inlineObj;
+                    if (hasInlineAdvanceBySlot[slot]) {
+                        final inlineAdvance:Float = inlineAdvanceBySlot[slot];
+                        inlineObj = inlineAdvance;
+                    }
+                    final glyphW:Float = hasInlineAdvanceBySlot[slot] ? inlineAdvanceBySlot[slot] : natW;
                     advOverride = (c.advance != glyphW) ? c.advance : null;
-                    renderFam = fonts.get(ck);
-                    final sd = shaping.get(ck);
-                    dash = sd != null ? sd.strategy : null;
-                    lang = sd != null ? sd.language : null;
-                    face = sd != null ? sd.resolvedFace : null;
-                    final glyphIdsEntry = glyphIds.get(ck);
-                    gIds = glyphIdsEntry == null ? null : (glyphIdsEntry.length > 0 ? glyphIdsEntry.join(",") : null);
-                    ev = sd != null ? sd.reason : null;
-                    final pd = punct.get(ck);
+                    final fontRun = fontRunBySlot[slot];
+                    if (fontRun >= 0)
+                        renderFam = result.glyphRuns[fontRun].glyphs[fontGlyphBySlot[slot]].renderFontKey;
+                    final shapingIndex = shapingBySlot[slot];
+                    if (shapingIndex >= 0) {
+                        final sd = shapingSrc[shapingIndex];
+                        dash = sd.strategy;
+                        lang = sd.language;
+                        face = sd.resolvedFace;
+                        ev = sd.reason;
+                    }
+                    final ids = glyphIdsBySlot[slot];
+                    if (ids.length > 0) {
+                        final joined:String = ids.join(",");
+                        gIds = joined;
+                    }
+                    final punctIndex = punctBySlot[slot];
+                    final pd = punctIndex >= 0 ? punctSrc[punctIndex] : null;
                     if (pd != null && pd.inkContainmentApplied && pd.inkContainmentBodyFloor != null) {
                         inkFloor = pd.inkContainmentBodyFloor;
                         bodyW = pd.bodyWidth;
@@ -149,13 +185,13 @@ class PlanLowering {
                         italic: cs.italic != result.input.textStyle.italic ? cs.italic : null,
                     } else null;
                 }
-                final feats = features.get(ck);
+                final feats = featuresBySlot[slot];
                 cells.push({
                     rangeStart: c.range.start, rangeEnd: c.range.end,
                     source: c.text, display: c.displayText,
                     drawX: p.drawX, naturalWidth: natW, leadingLayoutAdvance: c.leadingLayoutAdvance,
                     shapingBoundary: c.range.end - c.range.start > 1,
-                    openTypeFeatures: feats != null ? feats : [],
+                    openTypeFeatures: feats,
                     renderFontFamily: renderFam, dashStrategy: dash,
                     shapingLanguage: lang, resolvedFace: face,
                     glyphIds: gIds, shapingEvidence: ev,
@@ -276,4 +312,64 @@ class PlanLowering {
         for (i in 0...src.length) out.push(src[i]);
         return out;
     }
+}
+/**
+ * Numbers the distinct cluster ranges of one layout result (`PlanClusterRangeSlots`): the ranges are
+ * ordered by start, then end, duplicates share one slot, and `slotOf` finds the slot of a range by
+ * binary search, or -1 when no cluster has exactly that range.
+ */
+class ClusterRangeSlots {
+    final starts:Array<Int>;
+    final ends:Array<Int>;
+
+    public function new(clusters:ReadOnlyArray<Cluster>) {
+        final order = new Array<Int>();
+        for (i in 0...clusters.length)
+            order.push(i);
+        // Clusters arrive in text order, so the insertion sort below normally moves nothing.
+        var i = 1;
+        while (i < order.length) {
+            final moving = order[i];
+            var j = i - 1;
+            while (j >= 0 && compare(clusters[order[j]].range, clusters[moving].range) > 0) {
+                order[j + 1] = order[j];
+                j--;
+            }
+            order[j + 1] = moving;
+            i++;
+        }
+        final distinctStarts = new Array<Int>();
+        final distinctEnds = new Array<Int>();
+        for (k in 0...order.length) {
+            final range = clusters[order[k]].range;
+            final last = distinctStarts.length - 1;
+            if (last < 0 || distinctStarts[last] != range.start || distinctEnds[last] != range.end) {
+                distinctStarts.push(range.start);
+                distinctEnds.push(range.end);
+            }
+        }
+        this.starts = distinctStarts;
+        this.ends = distinctEnds;
+    }
+
+    public function count():Int
+        return starts.length;
+
+    public function slotOf(range:TextRange):Int {
+        var low = 0;
+        var high = starts.length;
+        while (low < high) {
+            final mid = (low + high) >> 1;
+            final s = starts[mid];
+            final e = ends[mid];
+            if (s < range.start || (s == range.start && e < range.end))
+                low = mid + 1;
+            else
+                high = mid;
+        }
+        return low < starts.length && starts[low] == range.start && ends[low] == range.end ? low : -1;
+    }
+
+    static function compare(a:TextRange, b:TextRange):Int
+        return a.start != b.start ? a.start - b.start : a.end - b.end;
 }
