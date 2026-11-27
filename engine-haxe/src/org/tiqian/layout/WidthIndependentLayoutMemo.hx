@@ -72,6 +72,18 @@ class WidthIndependentLayoutMemo {
     /** The per-cluster lookups of `LineAdjustmentStage.finishParagraphLayout`, keyed by `kinsokuLevelMemoKey`. */
     public final finishClusterLookups:Array<LayoutMemoSlot<FinishClusterLookups>>;
 
+    /** The width of each base shaping result (`buildParagraphLayoutPrep`'s over-measure token check). */
+    public final baseShapingResultWidths:LayoutMemoSlot<Array<Float>>;
+
+    /** `LineBreakerLines.advancesOf` of the prep's natural clusters, passed to the line breaker. */
+    public final naturalClusterAdvances:LayoutMemoSlot<Array<Float>>;
+
+    /** `LineBreakerLines.advancesOf` of the prep's adjusted clusters, keyed by `kinsokuLevelMemoKey`. */
+    public final adjustedClusterAdvances:Array<LayoutMemoSlot<Array<Float>>>;
+
+    /** The shaped bopomofo placements (`AnnotationGeometryStage.shapeBopomofoPlacements`). */
+    public final bopomofoShapes:LayoutMemoSlot<Array<Array<BopomofoPlacementShape>>>;
+
     public function new() {
         this.shapedBase = new LayoutMemoSlot<ShapedParagraphBase>();
         this.kinsokuDependent = [new LayoutMemoSlot<KinsokuDependentPrep>(), new LayoutMemoSlot<KinsokuDependentPrep>(), new LayoutMemoSlot<KinsokuDependentPrep>(), new LayoutMemoSlot<KinsokuDependentPrep>()];
@@ -84,5 +96,9 @@ class WidthIndependentLayoutMemo {
         this.metricDecisionInfos = new LayoutMemoSlot<Array<MetricDecisionInfo>>();
         this.punctuationDecisionInfos = new LayoutMemoSlot<Array<PunctuationDecisionInfo>>();
         this.finishClusterLookups = [new LayoutMemoSlot<FinishClusterLookups>(), new LayoutMemoSlot<FinishClusterLookups>(), new LayoutMemoSlot<FinishClusterLookups>(), new LayoutMemoSlot<FinishClusterLookups>()];
+        this.baseShapingResultWidths = new LayoutMemoSlot<Array<Float>>();
+        this.naturalClusterAdvances = new LayoutMemoSlot<Array<Float>>();
+        this.adjustedClusterAdvances = [new LayoutMemoSlot<Array<Float>>(), new LayoutMemoSlot<Array<Float>>(), new LayoutMemoSlot<Array<Float>>(), new LayoutMemoSlot<Array<Float>>()];
+        this.bopomofoShapes = new LayoutMemoSlot<Array<Array<BopomofoPlacementShape>>>();
     }
 }

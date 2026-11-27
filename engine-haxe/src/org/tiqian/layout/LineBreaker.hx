@@ -33,7 +33,7 @@ interface LineBreaker {
         ?cjkInterCharBoundaries:SortedSet<Int>, ?maxCjkStretchPerGap:Float, ?sinoWesternBoundaries:SortedSet<Int>, sinoWesternStretchCap:Float = 0.0,
         lineAdjustmentPushIn:Bool = false, lineAdjustmentCompressBias:Float = 1.0, ?hardBreakAfterClusters:SortedSet<Int>, ?nonRenderingControlClusters:SortedSet<Int>,
         ?progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>,
-            ?lineGapBoundaries:SortedSet<Int>):LineSolution;
+            ?lineGapBoundaries:SortedSet<Int>, ?naturalClusterAdvances:Array<Float>, ?adjustedClusterAdvances:Array<Float>):LineSolution;
 }
 
 /**
@@ -69,7 +69,7 @@ class GreedyLineBreaker implements LineBreaker {
             ?cjkInterCharBoundaries:SortedSet<Int>, ?maxCjkStretchPerGap:Float, ?sinoWesternBoundaries:SortedSet<Int>, sinoWesternStretchCap:Float = 0.0,
             lineAdjustmentPushIn:Bool = false, lineAdjustmentCompressBias:Float = 1.0, ?hardBreakAfterClusters:SortedSet<Int>,
             ?nonRenderingControlClusters:SortedSet<Int>, ?progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>,
-            ?lineGapBoundaries:SortedSet<Int>):LineSolution {
+            ?lineGapBoundaries:SortedSet<Int>, ?naturalClusterAdvances:Array<Float>, ?adjustedClusterAdvances:Array<Float>):LineSolution {
         if (a.length == 0)
             return new LineSolution([]);
         if (n.length != a.length)
@@ -88,8 +88,8 @@ class GreedyLineBreaker implements LineBreaker {
         final hard = hardBreakAfterClusters == null ? LineBreakerLines.emptyIntSet() : hardBreakAfterClusters;
         final controls = nonRenderingControlClusters == null ? LineBreakerLines.emptyIntSet() : nonRenderingControlClusters;
         final progressive = progressiveBreakOpportunities == null ? LineBreakerLines.emptyProgressiveMap() : progressiveBreakOpportunities;
-        final naturalAdvances = LineBreakerLines.advancesOf(n);
-        final adjustedAdvances = LineBreakerLines.advancesOf(a);
+        final naturalAdvances = naturalClusterAdvances == null ? LineBreakerLines.advancesOf(n) : naturalClusterAdvances;
+        final adjustedAdvances = adjustedClusterAdvances == null ? LineBreakerLines.advancesOf(a) : adjustedClusterAdvances;
         final greedy = greedyFill(n, a, naturalAdvances, adjustedAdvances, maxWidth, ranges, indent, forbidEnd, hyphens, cjk, maxStretch, sino, sinoCap, hard,
             controls, progressive);
         final repaired = LineRepair.applyKinsokuRepairs(greedy, a, naturalAdvances, adjustedAdvances, maxWidth, this.kinsoku, shrinkOps, pushInPenalty, carryPreviousPenalty,
@@ -189,7 +189,7 @@ class LookaheadLineBreaker implements LineBreaker {
             ?cjkInterCharBoundaries:SortedSet<Int>, ?maxCjkStretchPerGap:Float, ?sinoWesternBoundaries:SortedSet<Int>, sinoWesternStretchCap:Float = 0.0,
             lineAdjustmentPushIn:Bool = false, lineAdjustmentCompressBias:Float = 1.0, ?hardBreakAfterClusters:SortedSet<Int>,
             ?nonRenderingControlClusters:SortedSet<Int>, ?progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>,
-            ?lineGapBoundaries:SortedSet<Int>):LineSolution {
+            ?lineGapBoundaries:SortedSet<Int>, ?naturalClusterAdvances:Array<Float>, ?adjustedClusterAdvances:Array<Float>):LineSolution {
         if (adjustedClusters.length == 0)
             return new LineSolution([]);
         if (naturalClusters.length != adjustedClusters.length)
@@ -216,8 +216,8 @@ class LookaheadLineBreaker implements LineBreaker {
         final controls = nonRenderingControlClusters == null ? LineBreakerLines.emptyIntSet() : nonRenderingControlClusters;
         final progressive = progressiveBreakOpportunities == null ? LineBreakerLines.emptyProgressiveMap() : progressiveBreakOpportunities;
 
-        final naturalAdvances = LineBreakerLines.advancesOf(naturalClusters);
-        final adjustedAdvances = LineBreakerLines.advancesOf(adjustedClusters);
+        final naturalAdvances = naturalClusterAdvances == null ? LineBreakerLines.advancesOf(naturalClusters) : naturalClusterAdvances;
+        final adjustedAdvances = adjustedClusterAdvances == null ? LineBreakerLines.advancesOf(adjustedClusters) : adjustedClusterAdvances;
         final committed:Array<LineCandidate> = [];
         var lineStart = 0;
 
@@ -476,9 +476,10 @@ class LineBreakerLines {
     }
 
     /**
-     * The advance of every cluster, in cluster order. A breaker computes the natural and adjusted
-     * advances once per `breakLines` call; `rebuildLine` then sums numbers instead of reading
-     * each `Cluster` object.
+     * The advance of every cluster, in cluster order. A breaker uses the natural and adjusted
+     * advances its caller passes (`LineBreakPlanningStage` keeps them in `WidthIndependentLayoutMemo`)
+     * or computes them once per `breakLines` call; `rebuildLine` then sums numbers instead of
+     * reading each `Cluster` object.
      */
     public static function advancesOf(clusters:Array<Cluster>):Array<Float> {
         final out = new Array<Float>();

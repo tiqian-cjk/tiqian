@@ -542,6 +542,19 @@ class WidthIndependentAnnotationCacheFns {
     /** The number of keys `kinsokuLevelMemoKey` returns, one per `KinsokuLevel` constructor; `WidthIndependentLayoutMemo` keeps this many slots per kinsoku-dependent value. */
     public static inline final KINSOKU_LEVEL_MEMO_KEY_COUNT:Int = 4;
 
+    /** The `AccurateSum` of the cluster advances of each shaping result of `stage`, in order. */
+    static function baseShapingResultWidths(stage:ParagraphShapingStageResult):Array<Float> {
+        final widths = new Array<Float>();
+        for (i in 0...stage.shapingResults.length) {
+            final res = stage.shapingResults[i];
+            final resTerms:Array<Float> = [];
+            for (c in 0...res.clusters.length)
+                resTerms.push(res.clusters[c].advance);
+            widths.push(AccurateSum.of(resTerms));
+        }
+        return widths;
+    }
+
     public static function kinsokuLevelMemoKey(level:KinsokuLevel):Int {
         return switch (level) {
             case KinsokuLevel.None: 0;
@@ -591,13 +604,16 @@ class WidthIndependentAnnotationCacheFns {
                 break;
             }
         }
+        // The width of each base shaping result depends only on the annotation, so the annotation's
+        // own memo keeps it; only the comparison with the measure runs per layout.
+        final widthsSlot = annotation.layoutMemo.baseShapingResultWidths;
+        final cachedWidths = widthsSlot.value;
+        final shapingResultWidths = cachedWidths != null ? cachedWidths : baseShapingResultWidths(annotation.baseShapingStage);
+        if (cachedWidths == null)
+            widthsSlot.value = shapingResultWidths;
         var hasOverMeasureToken = false;
-        for (i in 0...annotation.baseShapingStage.shapingResults.length) {
-            final res = annotation.baseShapingStage.shapingResults[i];
-            final resTerms:Array<Float> = [];
-            for (c in 0...res.clusters.length)
-                resTerms.push(res.clusters[c].advance);
-            if (AccurateSum.of(resTerms) > measure) {
+        for (i in 0...shapingResultWidths.length) {
+            if (shapingResultWidths[i] > measure) {
                 hasOverMeasureToken = true;
                 break;
             }

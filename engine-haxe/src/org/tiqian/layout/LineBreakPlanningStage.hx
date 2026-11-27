@@ -952,12 +952,23 @@ class LineBreakPlanningStage {
             } else if (prep.adjustmentStyle.lineAdjustment == LineAdjustmentStrategy.PushOutFirst) {
                 lineAdjustmentCompressBias = 0.5;
             }
+            final naturalAdvancesSlot = prep.layoutMemo.naturalClusterAdvances;
+            final cachedNaturalAdvances = naturalAdvancesSlot.value;
+            final naturalClusterAdvances = cachedNaturalAdvances != null ? cachedNaturalAdvances : LineBreakerLines.advancesOf(prep.naturalClusters);
+            if (cachedNaturalAdvances == null)
+                naturalAdvancesSlot.value = naturalClusterAdvances;
+            final adjustedAdvancesSlot = prep.layoutMemo.adjustedClusterAdvances[WidthIndependentAnnotationCacheFns.kinsokuLevelMemoKey(prep.resolvedKinsoku.level)];
+            final cachedAdjustedAdvances = adjustedAdvancesSlot.value;
+            final adjustedClusterAdvances = cachedAdjustedAdvances != null ? cachedAdjustedAdvances : LineBreakerLines.advancesOf(prep.clusters);
+            if (cachedAdjustedAdvances == null)
+                adjustedAdvancesSlot.value = adjustedClusterAdvances;
             lineSolution = engine.lineBreaker.breakLines(prep.naturalClusters, prep.clusters, prep.measure - blockIndent, prep.shrinkOpportunities,
                 unbreakableRanges, firstLineIndent - blockIndent, resolvedHangableClusters, combinedExtendableHangRanges, forbiddenLineStartClusters,
                 forbiddenLineEndClusters, hyphenBreakClusters, cjkInterCharBoundaries, HYPHEN_LAST_RESORT_CJK_STRETCH_EM * prep.fontSize,
                 sinoWesternBoundaries, HYPHEN_SINO_WESTERN_STRETCH_CAP_EM * prep.fontSize,
                 prep.adjustmentStyle.lineAdjustment != LineAdjustmentStrategy.PushOutOnly, lineAdjustmentCompressBias, prep.mandatoryBreakClusters,
-                prep.zeroWidthBreakClusters, progressiveBreakOpportunities, kinsokuPlanning.lineGapBoundaries);
+                prep.zeroWidthBreakClusters, progressiveBreakOpportunities, kinsokuPlanning.lineGapBoundaries, naturalClusterAdvances,
+                adjustedClusterAdvances);
         }
 
         return new LineBreakPlanningStageResult(metricDecisions, metricDecisionByRange, baseAscent, baseDescent, baseBoxDescent, baseFaceHeight,

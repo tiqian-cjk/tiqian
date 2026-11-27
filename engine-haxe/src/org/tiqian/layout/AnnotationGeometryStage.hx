@@ -525,13 +525,122 @@ class AnnotationGeometryStage {
     }
 
     /**
+     * The placements of the bopomofo reading `rubyText` in the zone whose left edge is `zoneLeft`
+     * and whose box top is `boxTop`. Each placement's text, role and width depend only on the
+     * reading and `hUnit`.
+     */
+    public static function bopomofoPlacements(rubyText:String, zoneLeft:Float, boxTop:Float, hUnit:Float, vUnit:Float):Array<BopomofoGlyphPlacement> {
+        final parsed = BopomofoParser.parse(rubyText);
+        var n = parsed.symbols.length;
+        if (n < 1)
+            n = 1;
+        else if (n > 3)
+            n = 3;
+        final neutral = parsed.tone == BopomofoTone.Neutral;
+        final placements = new Array<BopomofoGlyphPlacement>();
+        if (parsed.tone == BopomofoTone.Neutral) {
+            // 轻声在视觉/阅读顺序上都先于注音符号；它仍放在同一个符号列内。
+            final row = bopomofoNeutralRow(n);
+            placements.push(bopomofoBox(zoneLeft, boxTop, hUnit, vUnit, 1.0, 9.0, row.start, row.end, BopomofoGlyphRole.Neutral, "˙"));
+        }
+        // ㄅㄆㄇ symbols: 9-份 column at [1,10]份.
+        final rows = bopomofoSymbolRows(n, neutral);
+        final symCount = parsed.symbols.length < 3 ? parsed.symbols.length : 3;
+        for (i in 0...symCount) {
+            final sym = parsed.symbols[i];
+            final row = rows[i];
+            placements.push(bopomofoBox(zoneLeft, boxTop, hUnit, vUnit, 1.0, 9.0, row.start, row.end, BopomofoGlyphRole.Symbol, sym));
+        }
+        switch (parsed.tone) {
+            case Neutral:
+                null;
+            case Yangping:
+                final row = bopomofoRegularToneRow(n);
+                placements.push(bopomofoBox(zoneLeft, boxTop, hUnit, vUnit, 10.0, 5.0, row.start, row.end, BopomofoGlyphRole.Tone,
+                    bopomofoToneGlyph(parsed.tone)));
+            case Shang:
+                final row = bopomofoRegularToneRow(n);
+                placements.push(bopomofoBox(zoneLeft, boxTop, hUnit, vUnit, 10.0, 5.0, row.start, row.end, BopomofoGlyphRole.Tone,
+                    bopomofoToneGlyph(parsed.tone)));
+            case Qu:
+                final row = bopomofoRegularToneRow(n);
+                placements.push(bopomofoBox(zoneLeft, boxTop, hUnit, vUnit, 10.0, 5.0, row.start, row.end, BopomofoGlyphRole.Tone,
+                    bopomofoToneGlyph(parsed.tone)));
+            case Ru:
+                final row = bopomofoRuToneRow(n);
+                placements.push(bopomofoBox(zoneLeft, boxTop, hUnit, vUnit, 10.0, 5.0, row.start, row.end, BopomofoGlyphRole.Tone,
+                    bopomofoToneGlyph(parsed.tone)));
+            case Yinping:
+                null;
+        }
+        return placements;
+    }
+
+    /**
+     * The shaped glyphs of every bopomofo placement, per ruby span in `rubySpans` order and per
+     * placement in `bopomofoPlacements` order. Shaping reads each placement's text, role and width,
+     * the paragraph font size and the span's fonts, locale and weight; none of them depends on the
+     * line or the measure, so `LineAdjustmentStage.resolveAnnotationGeometry` keeps the result in
+     * `WidthIndependentLayoutMemo.bopomofoShapes` instead of shaping again on every layout.
+     */
+    public static function shapeBopomofoPlacements(engine:ExplainableStubParagraphLayoutEngine, rubySpans:Array<RubySpan>, fontSize:Float,
+            bopomofoFontWeightAt:Int->Int, baseTextStyle:TextStyle):Array<Array<BopomofoPlacementShape>> {
+        final hUnit = fontSize / 30.0;
+        final out = new Array<Array<BopomofoPlacementShape>>();
+        for (ri in 0...rubySpans.length) {
+            final ruby = rubySpans[ri];
+            final rubyLocale = ruby.locale != null ? ruby.locale : baseTextStyle.locale;
+            final placements = bopomofoPlacements(ruby.text, 0.0, 0.0, hUnit, 0.0);
+            final placementWeight = bopomofoFontWeightAt(ruby.baseRange.start);
+            final rubyShapes = new Array<BopomofoPlacementShape>();
+            for (pi in 0...placements.length) {
+                final placement = placements[pi];
+                var replayFontSize:Float = 0.0;
+                switch (placement.role) {
+                    case Neutral:
+                        replayFontSize = placement.width;
+                    case Symbol:
+                        replayFontSize = fontSize * BOPOMOFO_ANNOTATION_FONT_EM;
+                    case Tone:
+                        replayFontSize = fontSize * BOPOMOFO_ANNOTATION_FONT_EM;
+                }
+                // BopomofoToneSharedAnnotationEmSizing: keep the previously verified
+                // annotation size; the 5×5 tone slot only supplies the centre target.
+                final range = new TextRange(0, placement.text.length);
+                final preferredFamilies:Array<String> = copyFontFamilies(ruby.fontFamilies);
+                final decision = engine.fallbackResolver.resolve(placement.text, range,
+                    new FontRequest(preferredFamilies, rubyLocale, FontRole.CjkText));
+                final styled:TextStyle = new TextStyle(preferredFamilies, replayFontSize, rubyLocale, placementWeight, false,
+                    baseTextStyle.baselineShift, baseTextStyle.inlineAttachment);
+                final shaped = engine.textShaper.shape(new ShapingInput(placement.text, range, styled, decision, placement.text, ["vert=1"]));
+                final glyphs = new Array<Glyph>();
+                for (rri in 0...shaped.glyphRuns.length) {
+                    final run = shaped.glyphRuns[rri];
+                    for (gi in 0...run.glyphs.length) {
+                        glyphs.push(run.glyphs[gi]);
+                    }
+                }
+                final advanceTerms:Array<Float> = [];
+                for (ci in 0...shaped.clusters.length) {
+                    advanceTerms.push(shaped.clusters[ci].advance);
+                }
+                final advance:Float = AccurateSum.of(advanceTerms);
+                final ink = bopomofoInkBounds(shaped);
+                rubyShapes.push(new BopomofoPlacementShape(replayFontSize, glyphs, advance, ink));
+            }
+            out.push(rubyShapes);
+        }
+        return out;
+    }
+
+    /**
      * 注音 geometry (ADR 0033): for each Bopomofo span, lay the ㄅㄆㄇ symbols (9×9 份)
      * and the 调号 (5×5 份 / 轻声) in the base's right-side 15-份 zone, mapping the
      * 30-份 grid onto the base 字身框 (typo box). `BopomofoParser` derives the tone.
      */
     public static function computeBopomofoDecisions(engine:ExplainableStubParagraphLayoutEngine, rubySpans:Array<RubySpan>, lineRanges:Array<IntRange>,
             lineBoxes:Array<LineBox>, finalClusters:Array<Cluster>, naturalClusters:Array<Cluster>, baseAscent:Float, baseDescent:Float, fontSize:Float,
-            bopomofoFontWeightAt:Int->Int, baseTextStyle:TextStyle):Array<BopomofoDecisionInfo> {
+            bopomofoFontWeightAt:Int->Int, baseTextStyle:TextStyle, shapes:Array<Array<BopomofoPlacementShape>>):Array<BopomofoDecisionInfo> {
         if (rubySpans.length == 0)
             return [];
         final hUnit = fontSize / 30.0;
@@ -539,6 +648,7 @@ class AnnotationGeometryStage {
         final out = new Array<BopomofoDecisionInfo>();
         for (ri in 0...rubySpans.length) {
             final ruby = rubySpans[ri];
+            final rubyShapes = shapes[ri];
             final rubyLocale = ruby.locale != null ? ruby.locale : baseTextStyle.locale;
             for (lineIndex in 0...lineRanges.length) {
                 final clusterRange = lineRanges[lineIndex];
@@ -561,85 +671,16 @@ class AnnotationGeometryStage {
                     continue;
                 final zoneLeft = contentLeft + contentWidth; // 注音 zone = right of base content
                 final boxTop = lineBoxes[lineIndex].baseline - baseAscent;
-                final parsed = BopomofoParser.parse(ruby.text);
-                var n = parsed.symbols.length;
-                if (n < 1)
-                    n = 1;
-                else if (n > 3)
-                    n = 3;
-                final neutral = parsed.tone == BopomofoTone.Neutral;
-                final placements = new Array<BopomofoGlyphPlacement>();
-                if (parsed.tone == BopomofoTone.Neutral) {
-                    // 轻声在视觉/阅读顺序上都先于注音符号；它仍放在同一个符号列内。
-                    final row = bopomofoNeutralRow(n);
-                    placements.push(bopomofoBox(zoneLeft, boxTop, hUnit, vUnit, 1.0, 9.0, row.start, row.end, BopomofoGlyphRole.Neutral, "˙"));
-                }
-                // ㄅㄆㄇ symbols: 9-份 column at [1,10]份.
-                final rows = bopomofoSymbolRows(n, neutral);
-                final symCount = parsed.symbols.length < 3 ? parsed.symbols.length : 3;
-                for (i in 0...symCount) {
-                    final sym = parsed.symbols[i];
-                    final row = rows[i];
-                    placements.push(bopomofoBox(zoneLeft, boxTop, hUnit, vUnit, 1.0, 9.0, row.start, row.end, BopomofoGlyphRole.Symbol, sym));
-                }
-                switch (parsed.tone) {
-                    case Neutral:
-                        null;
-                    case Yangping:
-                        final row = bopomofoRegularToneRow(n);
-                        placements.push(bopomofoBox(zoneLeft, boxTop, hUnit, vUnit, 10.0, 5.0, row.start, row.end, BopomofoGlyphRole.Tone,
-                            bopomofoToneGlyph(parsed.tone)));
-                    case Shang:
-                        final row = bopomofoRegularToneRow(n);
-                        placements.push(bopomofoBox(zoneLeft, boxTop, hUnit, vUnit, 10.0, 5.0, row.start, row.end, BopomofoGlyphRole.Tone,
-                            bopomofoToneGlyph(parsed.tone)));
-                    case Qu:
-                        final row = bopomofoRegularToneRow(n);
-                        placements.push(bopomofoBox(zoneLeft, boxTop, hUnit, vUnit, 10.0, 5.0, row.start, row.end, BopomofoGlyphRole.Tone,
-                            bopomofoToneGlyph(parsed.tone)));
-                    case Ru:
-                        final row = bopomofoRuToneRow(n);
-                        placements.push(bopomofoBox(zoneLeft, boxTop, hUnit, vUnit, 10.0, 5.0, row.start, row.end, BopomofoGlyphRole.Tone,
-                            bopomofoToneGlyph(parsed.tone)));
-                    case Yinping:
-                        null;
-                }
+                final placements = bopomofoPlacements(ruby.text, zoneLeft, boxTop, hUnit, vUnit);
                 if (placements.length > 0) {
-                    final placementWeight = bopomofoFontWeightAt(ruby.baseRange.start);
                     final replayPlacements = new Array<BopomofoGlyphPlacement>();
                     for (pi in 0...placements.length) {
                         final placement = placements[pi];
-                        var replayFontSize:Float = 0.0;
-                        switch (placement.role) {
-                            case Neutral:
-                                replayFontSize = placement.width;
-                            case Symbol:
-                                replayFontSize = fontSize * BOPOMOFO_ANNOTATION_FONT_EM;
-                            case Tone:
-                                replayFontSize = fontSize * BOPOMOFO_ANNOTATION_FONT_EM;
-                        }
-                        // BopomofoToneSharedAnnotationEmSizing: keep the previously verified
-                        // annotation size; the 5×5 tone slot only supplies the centre target.
-                        final range = new TextRange(0, placement.text.length);
-                        final preferredFamilies:Array<String> = copyFontFamilies(ruby.fontFamilies);
-                        final decision = engine.fallbackResolver.resolve(placement.text, range,
-                            new FontRequest(preferredFamilies, rubyLocale, FontRole.CjkText));
-                        final styled:TextStyle = new TextStyle(preferredFamilies, replayFontSize, rubyLocale, placementWeight, false,
-                            baseTextStyle.baselineShift, baseTextStyle.inlineAttachment);
-                        final shaped = engine.textShaper.shape(new ShapingInput(placement.text, range, styled, decision, placement.text, ["vert=1"]));
-                        final glyphs = new Array<Glyph>();
-                        for (rri in 0...shaped.glyphRuns.length) {
-                            final run = shaped.glyphRuns[rri];
-                            for (gi in 0...run.glyphs.length) {
-                                glyphs.push(run.glyphs[gi]);
-                            }
-                        }
-                        final advanceTerms:Array<Float> = [];
-                        for (ci in 0...shaped.clusters.length) {
-                            advanceTerms.push(shaped.clusters[ci].advance);
-                        }
-                        final advance:Float = AccurateSum.of(advanceTerms);
-                        final ink = bopomofoInkBounds(shaped);
+                        final shape = rubyShapes[pi];
+                        final replayFontSize = shape.replayFontSize;
+                        final glyphs = shape.glyphs;
+                        final advance = shape.advance;
+                        final ink = shape.ink;
                         // Skia/Android/web replay this horizontal-baseline origin directly:
                         // the ㄅㄆㄇ symbol centres by its advance and sits on the 字身框
                         // baseline. Core Text draws a real vertical run, so its renderer derives

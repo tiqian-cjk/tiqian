@@ -1,6 +1,7 @@
 package org.tiqian.layout;
 
 import org.tiqian.core.*;
+import org.tiqian.layout.cache.LayoutMemoSlot;
 import org.tiqian.font.BaselinePolicy;
 import org.tiqian.font.FontMetrics.FontMetricsRequest;
 import org.tiqian.font.FontMetricsPolicy;
@@ -180,7 +181,8 @@ class AnnotationGeometryStageCoverageTest {
             new AutoSpaceDecisionInfo(new TextRange(5, 12), "trailing", "Wide", "Normal", 1, 0.0, 0.0, "test")
         ],
             [new IntRange(0, 2), new IntRange(3, 3)], lineBoxes, clusters, [FontRole.CjkText, FontRole.CjkPunctuation, FontRole.CjkText, FontRole.LatinText],
-            justifyMap, spreadMap, [], [pinyinA, pinyinB], clusters, rfgMap, 0.0, 16.0, 8.0, 400, 4.0, function(_:Int) return 400);
+            justifyMap, spreadMap, [], [pinyinA, pinyinB], clusters, rfgMap, 0.0, 16.0, 8.0, 400, 4.0, function(_:Int) return 400,
+            new LayoutMemoSlot<Array<Array<BopomofoPlacementShape>>>());
         TracedAssertions.recordRenderedNotNull(res1 == null ? "null" : TestTraceRender.cap(Std.string(res1)));
         TracedAssertions.assertEquals(3, res1.inlineObjectDecisions.length);
         TracedAssertions.assertEquals(-1, res1.inlineObjectDecisions[res1.inlineObjectDecisions.length - 1].lineIndex);
@@ -193,7 +195,7 @@ class AnnotationGeometryStageCoverageTest {
         final res2 = LineAdjustmentStage.resolveAnnotationGeometry(engine, input, 16.0, SortedMap.builder().build(), lineSolution, clreqProfile, [], [],
             [new IntRange(0, 2), new IntRange(3, 3)], lineBoxes, clusters, [FontRole.CjkText, FontRole.CjkPunctuation, FontRole.CjkText, FontRole.LatinText],
             SortedMap.builder().build(), SortedMap.builder().build(), [metricDecision], [pinyinC], clusters, rfgMap2, 0.0, 16.0, 8.0, 400, 4.0,
-            function(_:Int) return 400);
+            function(_:Int) return 400, new LayoutMemoSlot<Array<Array<BopomofoPlacementShape>>>());
         TracedAssertions.recordRenderedNotNull(res2 == null ? "null" : TestTraceRender.cap(Std.string(res2)));
     }
 
@@ -273,7 +275,7 @@ class AnnotationGeometryStageCoverageTest {
         ],
             [new IntRange(1, 0), new IntRange(0, 2)], lineBoxes, clusters, [FontRole.CjkText, FontRole.CjkPunctuation, FontRole.CjkText, FontRole.LatinText],
             SortedMap.builder().build(), SortedMap.builder().build(), [metricDecision1, metricDecision2], [pinyinA, pinyinB, pinyinC], clusters, rfgMap, 0.0,
-            16.0, 8.0, 400, 4.0, function(_:Int) return 400);
+            16.0, 8.0, 400, 4.0, function(_:Int) return 400, new LayoutMemoSlot<Array<Array<BopomofoPlacementShape>>>());
         TracedAssertions.recordRenderedNotNull(res == null ? "null" : TestTraceRender.cap(Std.string(res)));
     }
 

@@ -58,7 +58,7 @@ class ParagraphDpLineBreaker implements LineBreaker {
             ?cjkInterCharBoundaries:SortedSet<Int>, ?maxCjkStretchPerGap:Float, ?sinoWesternBoundaries:SortedSet<Int>, sinoWesternStretchCap:Float = 0.0,
             lineAdjustmentPushIn:Bool = false, lineAdjustmentCompressBias:Float = 1.0, ?hardBreakAfterClusters:SortedSet<Int>,
             ?nonRenderingControlClusters:SortedSet<Int>, ?progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>,
-            ?lineGapBoundaries:SortedSet<Int>):LineSolution {
+            ?lineGapBoundaries:SortedSet<Int>, ?naturalClusterAdvances:Array<Float>, ?adjustedClusterAdvances:Array<Float>):LineSolution {
         if (adjustedClusters.length == 0)
             return new LineSolution([]);
         if (naturalClusters.length != adjustedClusters.length)
