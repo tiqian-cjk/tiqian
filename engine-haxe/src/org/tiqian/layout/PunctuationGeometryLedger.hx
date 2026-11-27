@@ -15,6 +15,7 @@ import org.tiqian.layout.PunctuationModel.PunctuationSpacingCompressionResult;
 import org.tiqian.clreq.PunctuationClass;
 import org.tiqian.clreq.ClreqPunctuationPolicies;
 import std.SortedMap;
+import std.SortedMap.SortedMapBuilder;
 
 @:dataClass class PunctuationGeometryLedger {
     public final naturalClusters:Array<Cluster>;
@@ -187,23 +188,27 @@ import std.SortedMap;
         return replace(this, deltaByCluster);
 
     function consumeSide(deltaByCluster:SortedMap<Int, Float>, lead:Bool):PunctuationGeometryLedger {
-        // One builder holds every budget, then one put per consumed cluster; a later put of the
-        // same key wins, and each key of `deltaByCluster` replaces the budget it had before.
-        final b = SortedMap.builder();
-        for (j in 0...budgets.size())
-            b.put(budgets.keyAt(j), budgets.valueAt(j));
-        for (i in 0...deltaByCluster.size()) {
-            final k = deltaByCluster.keyAt(i);
-            final amount = deltaByCluster.valueAt(i);
-            final q = budgets.get(k);
-            if (q != null && amount > 0) {
-                final replacement = lead ? new GlueBudget(q.leadingNatural, Math.min(q.leadingNatural, q.leadingConsumed + amount), q.trailingNatural,
+        // One pass over the budgets in key order puts each key once: the budget a consumed cluster
+        // gets, or the budget it had. A ledger whose budgets all stay the same is returned as is.
+        if (deltaByCluster.size() == 0)
+            return this;
+        var changed = false;
+        final b:SortedMapBuilder<Int, GlueBudget> = SortedMap.builder();
+        for (j in 0...budgets.size()) {
+            final k = budgets.keyAt(j);
+            final q = budgets.valueAt(j);
+            final amountEntry = deltaByCluster.get(k);
+            final amount:Float = amountEntry == null ? 0 : amountEntry;
+            if (amount > 0) {
+                changed = true;
+                b.put(k, lead ? new GlueBudget(q.leadingNatural, Math.min(q.leadingNatural, q.leadingConsumed + amount), q.trailingNatural,
                     q.trailingConsumed) : new GlueBudget(q.leadingNatural, q.leadingConsumed, q.trailingNatural,
-                        Math.min(q.trailingNatural, q.trailingConsumed + amount));
-                b.put(k, replacement);
+                        Math.min(q.trailingNatural, q.trailingConsumed + amount)));
+            } else {
+                b.put(k, q);
             }
         }
-        return replace(this, null, null, null, null, null, b.build());
+        return changed ? replace(this, null, null, null, null, null, b.build()) : this;
     }
 
     public function consumeLeadingByCluster(consumptionByCluster:SortedMap<Int, Float>):PunctuationGeometryLedger
@@ -216,29 +221,26 @@ import std.SortedMap;
      * either order.
      */
     public function consumeLeadingAndTrailingByCluster(leading:SortedMap<Int, Float>, trailing:SortedMap<Int, Float>):PunctuationGeometryLedger {
-        final b = SortedMap.builder();
-        for (j in 0...budgets.size())
-            b.put(budgets.keyAt(j), budgets.valueAt(j));
-        for (i in 0...leading.size()) {
-            final k = leading.keyAt(i);
-            final q = budgets.get(k);
-            if (q != null) {
-                final trailingEntry = trailing.get(k);
-                final replacement = consumedBudget(q, leading.valueAt(i), trailingEntry == null ? 0 : trailingEntry);
-                if (replacement != null)
-                    b.put(k, replacement);
+        // One pass over the budgets in key order puts each key once, as `consumeSide` does.
+        if (leading.size() == 0 && trailing.size() == 0)
+            return this;
+        var changed = false;
+        final b:SortedMapBuilder<Int, GlueBudget> = SortedMap.builder();
+        for (j in 0...budgets.size()) {
+            final k = budgets.keyAt(j);
+            final q = budgets.valueAt(j);
+            final leadingEntry = leading.get(k);
+            final trailingEntry = trailing.get(k);
+            final replacement = leadingEntry == null
+                && trailingEntry == null ? null : consumedBudget(q, leadingEntry == null ? 0 : leadingEntry, trailingEntry == null ? 0 : trailingEntry);
+            if (replacement != null) {
+                changed = true;
+                b.put(k, replacement);
+            } else {
+                b.put(k, q);
             }
         }
-        for (i in 0...trailing.size()) {
-            final k = trailing.keyAt(i);
-            final q = budgets.get(k);
-            if (q != null && leading.get(k) == null) {
-                final replacement = consumedBudget(q, 0, trailing.valueAt(i));
-                if (replacement != null)
-                    b.put(k, replacement);
-            }
-        }
-        return replace(this, null, null, null, null, null, b.build());
+        return changed ? replace(this, null, null, null, null, null, b.build()) : this;
     }
 
     /** `q` after consuming `lead` and `trail`, or null when neither amount is positive. */
