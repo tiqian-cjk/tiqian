@@ -6,7 +6,8 @@
   2026-07-15 Kotlin/JS-only runtime + semantic snapshot amendment;
   2026-07-16 server shaping replay + mixed snapshot/runtime amendment;
   2026-07-18 direct SSR / navigation transport + progressive proof amendment;
-  2026-08-20 native precompute migration pointer, see ADR 0050)
+  2026-08-20 native precompute migration pointer, see ADR 0050;
+  2026-11-26 inline spacing carrier amendment)
 - Date: 2026-07-07
 - Relates: [ADR 0008](0008-shaping-adapter-contract.md)(shaping adapter 接口)、
   [ADR 0014](0014-ink-bounds-calibrated-punctuation-geometry.md)(`halt` = 度量入口非渲染依赖)、
@@ -829,3 +830,37 @@ Kotlin 侧不变：quota 是凭证携带的条款，排版循环照读。冷启�
 scroll 套件只防最严重的回退：headless Chromium 的原生后续远低于 Gecko 的逐节点 a11y
 记录，实测拆掉自适应后帧距仅 16.8 升到 33.4ms，无法在此环境做灵敏度断言，
 方向性验证留在 npm 单测。
+
+## Amendment (2026-11-26): 行内间距元素保留宿主下划线（SpacingCarrierInlineText）
+
+本修订取代 `ExplicitBreakSemanticFlow` 一节中正间距写法的描述。2026-11-24 起，塑造段末尾的
+正间距不再写成 `letter-spacing`，改由塑造段内的 `[data-tq-spacing-carrier]` 元素承载。原因是
+Firefox 的对称字距模型（`layout.css.letter-spacing.model`）把字距平分到字形两侧，字形会偏离
+引擎给出的 `drawX`。该元素原为 `display:inline-block`，宽度精确，但浏览器不在原子行内元素下方
+绘制祖先的文字装饰，两端对齐拉宽的西文词间距因此切断宿主 `<u>`、`<a>` 的下划线。
+
+修订后，引擎为每个字体段按该段的 `FontDecision` 与 `TextStyle` 塑造一次 U+00A0，结果记入
+`LayoutDebugInfo.spacingCarrierAdvanceDecisions`，再由 `PlanLowering` 写入计划的
+`spacingCarrierAdvances` 表。这张表在普通计划与渲染证据计划中都存在，并排在所有渲染证据字段
+之前，构建期快照因此也能拿到。`PreparedDom.renderRun` 按下表选择间距元素的写法：
+
+| 条件 | 写法 |
+|---|---|
+| 间距位于语义元素末尾（带 `data-tq-spacing-boundary`） | `inline-block`，宿主装饰在语义元素末尾停止 |
+| 间距位于行末单元格之后 | `inline-block`，行末剩余空白不画装饰 |
+| 单元格以证据字体绘制（`renderFontFamily`） | `inline-block` |
+| 计划中没有覆盖该单元格的 U+00A0 前进量 | `inline-block` |
+| 其余情况 | 行内 U+00A0，`word-spacing` 为间距减去 U+00A0 前进量 |
+
+行内间距元素继承塑造段的字体设置，所以浏览器选中的字面与引擎塑造 U+00A0 时相同。
+`styles.css` 的 `SpacingCarrierInlineText` 规则把它的 `letter-spacing` 置零，并把字体特性重置为
+`normal`。U+00A0 测量只在引擎构造参数 `measureSpacingCarrierAdvance` 为真时进行，Web 运行时与 Rust
+预计算传入真值。宿主塑造器的失败统一以 `IllegalStateException` 到达引擎（TS 端由 `prepared-paragraph.ts` 的
+`HostShapingFault` 承载，离开引擎时还原为宿主的原始错误），字体段的字面缺少 U+00A0 或回放清单缺少记录时，该字体段不产生记录，
+对应间距保持 `inline-block`。
+
+2026-11-26 用 `@tiqian/web-component` 的运行时打包在 Chrome 156、Firefox 162（对称字距模型）与 WebKit（与 Safari 27.3 同版本）
+上实测：宿主下划线、链接下划线与波浪线都跨过了拉宽的词间距；Chrome 与 WebKit 中带行内间距元素
+的塑造段宽度与 `data-tq-advance` 的偏差不超过 0.01px。Firefox 中一个纯空格塑造段偏差 0.44px，
+测量显示其间距元素与引擎前进量只差 0.009px，偏差来自空格字形本身的宽度差。被排除的写法与实测数值记录在
+[Web 间距元素保留宿主下划线的修改规格](../web-spacing-carrier-decoration-spec.md)。
