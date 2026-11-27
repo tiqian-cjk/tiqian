@@ -514,6 +514,199 @@ step_verify_test() {
     echo "verify-test needs --bundles; the comparison stage covers the whole set" >&2
     return 2
   fi
+  # A bundle whose target configuration opts out of the test action has no
+  # suite to run; asking the test action for it fails.
+  ids="$(python3 - "$ids" <<'PY'
+import json, re, sys
+text = re.sub(r'^\\s*//.*
+
+step_verify_compare() {
+  in_devshell "boring compare --project boring.json"
+}
+
+# Generate and test one shard of bundles from the source tree. The shard builds
+# its own trees so no generated directory has to travel between jobs, and it
+# keeps only the suite results for the comparison stage.
+step_verify_shard() {
+  local ids="${BUNDLES_OVERRIDE:-}"
+  if [ -z "$ids" ]; then
+    echo "verify-shard needs --bundles; every bundle runs in one shard of the matrix" >&2
+    return 2
+  fi
+  local id started
+  for id in $ids; do
+    started=$SECONDS
+    in_devshell "boring gen $id --project boring.json" || return $?
+    in_devshell "boring test $id --project boring.json" || return $?
+    echo "shard timing test $id $((SECONDS - started))"
+  done
+}
+
+step_summary() {
+  local report="$ROOT/report.md"
+  {
+    echo "# Staging pipeline report"
+    echo
+    echo "- version: $STAGING_VERSION"
+    echo "- staging root: $ROOT"
+    echo "- registry owner: $OWNER"
+    echo "- asset base: $ASSET_BASE"
+    echo
+    echo "| step | rc | seconds |"
+    echo "| --- | --- | --- |"
+    local index
+    for index in "${!STEP_NAMES[@]}"; do
+      echo "| ${STEP_NAMES[$index]} | ${STEP_RCS[$index]} | ${STEP_SECONDS[$index]} |"
+    done
+  } >"$report"
+  cat "$report"
+}
+
+run_named_step() {
+  case "$1" in
+    align) run_step align step_align ;;
+    pack) run_step pack step_pack ;;
+    compile-bundles) run_step compile-bundles step_compile_bundles ;;
+    collect-artifacts) run_step collect-artifacts step_collect ;;
+    publish-contract) run_step publish-contract step_publish_contract ;;
+    registry-tree) run_step registry-tree step_check_tree ;;
+    staging-isolation) run_step staging-isolation step_isolation ;;
+    maven-artifact-ids) run_step maven-artifact-ids step_maven_artifact_ids ;;
+    cargo-consume) run_step cargo-consume step_cargo ;;
+    maven-local-publish) run_step maven-local-publish step_maven_publish ;;
+    maven-local-repo) run_step maven-local-repo step_maven_local_repo ;;
+    verify) run_step verify step_verify ;;
+    verify-test) run_step verify-test step_verify_test ;;
+    verify-compare) run_step verify-compare step_verify_compare ;;
+    verify-shard) run_step verify-shard step_verify_shard ;;
+    summary) run_step summary step_summary ;;
+    *) echo "unknown stage: $1" >&2; exit 2 ;;
+  esac
+}
+
+for stage in $STAGES; do
+  run_named_step "$stage"
+done
+
+echo
+if [ "$FAILED" -ne 0 ]; then
+  echo "staging pipeline: FAILED (see $LOGS)"
+  exit 1
+fi
+echo "staging pipeline: OK"
+exit 0
+, '', open('boring.json').read(), flags=re.M)
+data = json.loads(text)
+by_id = {bundle['id']: bundle for bundle in data['bundles']}
+kept = [bundle for bundle in sys.argv[1].split() if by_id.get(bundle, {}).get('test', True) is not False]
+print(' '.join(kept))
+PY
+)"
+  if [ -z "$ids" ]; then
+    echo "verify-test: every bundle in this shard opts out of the test action"
+    return 0
+  fi
+  # A dependent bundle's suite reads its dependencies' module manifests, which
+  # the pack shard that owns the dependency does not ship here.
+  local id dependency
+  for id in $ids; do
+    for dependency in $(python3 - "$id" <<'PY'
+import json, re, sys
+text = re.sub(r'^\\s*//.*
+
+step_verify_compare() {
+  in_devshell "boring compare --project boring.json"
+}
+
+# Generate and test one shard of bundles from the source tree. The shard builds
+# its own trees so no generated directory has to travel between jobs, and it
+# keeps only the suite results for the comparison stage.
+step_verify_shard() {
+  local ids="${BUNDLES_OVERRIDE:-}"
+  if [ -z "$ids" ]; then
+    echo "verify-shard needs --bundles; every bundle runs in one shard of the matrix" >&2
+    return 2
+  fi
+  local id started
+  for id in $ids; do
+    started=$SECONDS
+    in_devshell "boring gen $id --project boring.json" || return $?
+    in_devshell "boring test $id --project boring.json" || return $?
+    echo "shard timing test $id $((SECONDS - started))"
+  done
+}
+
+step_summary() {
+  local report="$ROOT/report.md"
+  {
+    echo "# Staging pipeline report"
+    echo
+    echo "- version: $STAGING_VERSION"
+    echo "- staging root: $ROOT"
+    echo "- registry owner: $OWNER"
+    echo "- asset base: $ASSET_BASE"
+    echo
+    echo "| step | rc | seconds |"
+    echo "| --- | --- | --- |"
+    local index
+    for index in "${!STEP_NAMES[@]}"; do
+      echo "| ${STEP_NAMES[$index]} | ${STEP_RCS[$index]} | ${STEP_SECONDS[$index]} |"
+    done
+  } >"$report"
+  cat "$report"
+}
+
+run_named_step() {
+  case "$1" in
+    align) run_step align step_align ;;
+    pack) run_step pack step_pack ;;
+    compile-bundles) run_step compile-bundles step_compile_bundles ;;
+    collect-artifacts) run_step collect-artifacts step_collect ;;
+    publish-contract) run_step publish-contract step_publish_contract ;;
+    registry-tree) run_step registry-tree step_check_tree ;;
+    staging-isolation) run_step staging-isolation step_isolation ;;
+    maven-artifact-ids) run_step maven-artifact-ids step_maven_artifact_ids ;;
+    cargo-consume) run_step cargo-consume step_cargo ;;
+    maven-local-publish) run_step maven-local-publish step_maven_publish ;;
+    maven-local-repo) run_step maven-local-repo step_maven_local_repo ;;
+    verify) run_step verify step_verify ;;
+    verify-test) run_step verify-test step_verify_test ;;
+    verify-compare) run_step verify-compare step_verify_compare ;;
+    verify-shard) run_step verify-shard step_verify_shard ;;
+    summary) run_step summary step_summary ;;
+    *) echo "unknown stage: $1" >&2; exit 2 ;;
+  esac
+}
+
+for stage in $STAGES; do
+  run_named_step "$stage"
+done
+
+echo
+if [ "$FAILED" -ne 0 ]; then
+  echo "staging pipeline: FAILED (see $LOGS)"
+  exit 1
+fi
+echo "staging pipeline: OK"
+exit 0
+, '', open('boring.json').read(), flags=re.M)
+data = json.loads(text)
+by_id = {bundle['id']: bundle for bundle in data['bundles']}
+seen = set()
+def walk(bundle_id):
+    for dependency in by_id[bundle_id].get('dependsOn') or []:
+        if dependency not in seen:
+            seen.add(dependency)
+            walk(dependency)
+walk(sys.argv[1])
+print(' '.join(sorted(seen)))
+PY
+); do
+      if [ ! -f "engine-haxe/out/$dependency/modules.txt" ]; then
+        in_devshell "boring gen $dependency --project boring.json" || return $?
+      fi
+    done
+  done
   in_devshell "boring test $ids --project boring.json"
 }
 

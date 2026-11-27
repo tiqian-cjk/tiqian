@@ -196,6 +196,11 @@ def plan_command(project_root: pathlib.Path, out_root: pathlib.Path, bundle: dic
             "env": env,
             "skip": False,
         }
+    if target == "rust" and bundle.get("dependsOn"):
+        # A dependent crate's manifest is rewritten to registry dependencies by
+        # pack, so building it here would resolve packages this checkout does
+        # not have. Pack compiles and verifies the crate instead.
+        return {"bundle": bundle_id, "target": target, "point": "boring pack", "skip": True}
     if target == "rust":
         manifest = gen / "Cargo.toml"
         if not manifest.is_file():
