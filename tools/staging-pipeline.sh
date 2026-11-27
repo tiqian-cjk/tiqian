@@ -204,7 +204,7 @@ step_pack() {
 pack_dependencies() {
   local bundle="$1"
   local dependencies dependency
-  dependencies="$(python3 -c 'import json,sys; data=json.load(open("boring.json")); by_id={b["id"]:b for b in data["bundles"]}; print(" ".join(by_id[sys.argv[1]].get("dependsOn") or []))' "$bundle")"
+  dependencies="$(python3 -c 'import json,re,sys; text=re.sub(r"^\s*//.*$","",open("boring.json").read(),flags=re.M); data=json.loads(text); by_id={b["id"]:b for b in data["bundles"]}; print(" ".join(by_id[sys.argv[1]].get("dependsOn") or []))' "$bundle")"
   for dependency in $dependencies; do
     case " $PACKED_DEPS " in
       *" $dependency "*) continue ;;
