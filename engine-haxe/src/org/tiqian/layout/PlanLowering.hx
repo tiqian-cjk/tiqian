@@ -102,10 +102,11 @@ class PlanLowering {
         final edgeEnd = edgeEndB.build();
 
         final lines:Array<Plan.PlanLine> = [];
+        final positionedByLine = LayoutQueries.positionedClustersByLine(result);
         for (li in 0...result.lines.length) {
             final line = result.lines[li];
             final cells:Array<Plan.PlanCell> = [];
-            for (p in LayoutQueries.positionedClustersForLine(result, line)) {
+            for (p in positionedByLine[li]) {
                 final c = result.clusters[p.clusterIndex];
                 final ck = rangeKey(c.range);
                 if (!(c.displayText.length > 0 || zero.has(ck) || (renderEvidence && inlineAdvance.has(ck))))

@@ -165,14 +165,32 @@ class LayoutQueries {
 
     public static function positionedClusters(result:LayoutResult):Array<PositionedCluster> {
         final output:Array<PositionedCluster> = [];
+        final byLine:Array<Array<PositionedCluster>> = positionedClustersByLine(result);
         var lineIndex:Int = 0;
-        while (lineIndex < result.lines.length) {
-            final linePositions:Array<PositionedCluster> = positionedClustersAt(result, lineIndex, result.lines[lineIndex]);
+        while (lineIndex < byLine.length) {
+            final linePositions:Array<PositionedCluster> = byLine[lineIndex];
             var index:Int = 0;
             while (index < linePositions.length) {
                 output.push(linePositions[index]);
                 index += 1;
             }
+            lineIndex += 1;
+        }
+        return output;
+    }
+
+    /**
+     * The positioned clusters of every line, indexed by line. The per-paragraph lookups that
+     * `positionedClustersAt` builds for one line (leading glue consumed and leading auto-space
+     * gaps by cluster range) are built once here and shared by all lines.
+     */
+    public static function positionedClustersByLine(result:LayoutResult):Array<Array<PositionedCluster>> {
+        final leadingConsumed:Array<FloatRangeValue> = leadingConsumedByRange(result);
+        final leadingAutoSpaceGaps:Array<FloatRangeValue> = leadingAutoSpaceGapsByRange(result);
+        final output:Array<Array<PositionedCluster>> = [];
+        var lineIndex:Int = 0;
+        while (lineIndex < result.lines.length) {
+            output.push(positionedClustersWith(result, lineIndex, result.lines[lineIndex], leadingConsumed, leadingAutoSpaceGaps));
             lineIndex += 1;
         }
         return output;
@@ -457,6 +475,10 @@ class LayoutQueries {
     }
 
     private static function positionedClustersAt(result:LayoutResult, lineIndex:Int, line:LineBox):Array<PositionedCluster> {
+        return positionedClustersWith(result, lineIndex, line, leadingConsumedByRange(result), leadingAutoSpaceGapsByRange(result));
+    }
+
+    private static function leadingConsumedByRange(result:LayoutResult):Array<FloatRangeValue> {
         final leadingConsumed:Array<FloatRangeValue> = [];
         var index:Int = 0;
         while (index < result.presentation.geometryDecisions.length) {
@@ -466,8 +488,12 @@ class LayoutQueries {
             }
             index += 1;
         }
+        return leadingConsumed;
+    }
+
+    private static function leadingAutoSpaceGapsByRange(result:LayoutResult):Array<FloatRangeValue> {
         final leadingAutoSpaceGaps:Array<FloatRangeValue> = [];
-        index = 0;
+        var index:Int = 0;
         while (index < result.presentation.autoSpaceDecisions.length) {
             final decision:AutoSpaceDecisionInfo = result.presentation.autoSpaceDecisions[index];
             if (decision.side == "leading") {
@@ -475,7 +501,11 @@ class LayoutQueries {
             }
             index += 1;
         }
+        return leadingAutoSpaceGaps;
+    }
 
+    private static function positionedClustersWith(result:LayoutResult, lineIndex:Int, line:LineBox, leadingConsumed:Array<FloatRangeValue>,
+            leadingAutoSpaceGaps:Array<FloatRangeValue>):Array<PositionedCluster> {
         final positioned:Array<PositionedCluster> = [];
         var x:Float = line.indent;
         var clusterIndex:Int = line.clusterRange.start;
