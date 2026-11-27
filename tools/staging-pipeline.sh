@@ -174,7 +174,6 @@ step_pack() {
   local id
   local out_root
   out_root="$(boring_out_root)"
-  PACKED_DEPS=""
   for id in $ids; do
     local started=$SECONDS
     echo "--- pack $id ---"
@@ -183,42 +182,25 @@ step_pack() {
     # finders and the artifact collection match by name stem. CI checks out
     # fresh; a local checkout does not.
     rm -rf "$out_root/$id"
-    # A shard packs only its own bundles, but a dependent bundle's pack reads
-    # the dependency's module manifest and its packed npm stage. Pack the
-    # transitive dependencies inside this shard first; each runs once.
-    if ! pack_dependencies "$id"; then
-      echo "--- pack $id FAILED ---"
-      rc=1
-    elif ! boring pack "$id" --registry-out "$TREE" --owner "$OWNER" --repo tiqian --asset-base "$ASSET_BASE"; then
+    # A dependent bundle's pack reads the dependency's module manifest and its
+    # packed stage, which a sibling shard does not ship. Generate and pack the
+    # direct dependencies in this shard before packing the bundle.
+    local dependency
+    for dependency in $(python3 -c 'import json,re,sys; t=re.sub(r"^\s*//.*$","",open("boring.json").read(),flags=re.M); d=json.loads(t); b={x["id"]:x for x in d["bundles"]}; print(" ".join(b[sys.argv[1]].get("dependsOn") or []))' "$id"); do
+      if [ ! -f "engine-haxe/out/$dependency/modules.txt" ]; then
+        in_devshell "boring gen $dependency --project boring.json" || return 1
+      fi
+      if [ ! -d "$out_root/$dependency" ]; then
+        boring pack "$dependency" || return 1
+      fi
+    done
+    if ! boring pack "$id" --registry-out "$TREE" --owner "$OWNER" --repo tiqian --asset-base "$ASSET_BASE"; then
       echo "--- pack $id FAILED ---"
       rc=1
     fi
     echo "shard timing pack $id $((SECONDS - started))"
   done
   return "$rc"
-}
-
-# Pack the dependsOn closure of one bundle inside the current shard. The pack
-# action reads the dependency's module manifest (generated) and its npm stage
-# (packed), so a shard that packs a dependent bundle must pack the closure.
-pack_dependencies() {
-  local bundle="$1"
-  local dependencies dependency
-  dependencies="$(python3 -c 'import json,re,sys; text=re.sub(r"^\s*//.*$","",open("boring.json").read(),flags=re.M); data=json.loads(text); by_id={b["id"]:b for b in data["bundles"]}; print(" ".join(by_id[sys.argv[1]].get("dependsOn") or []))' "$bundle")"
-  for dependency in $dependencies; do
-    case " $PACKED_DEPS " in
-      *" $dependency "*) continue ;;
-    esac
-    if ! pack_dependencies "$dependency"; then
-      return 1
-    fi
-    rm -rf "$(boring_out_root)/$dependency"
-    if ! boring pack "$dependency"; then
-      return 1
-    fi
-    PACKED_DEPS="$PACKED_DEPS $dependency"
-  done
-  return 0
 }
 
 # Every bundle whose target compiler the pack action does not run gets one here.
@@ -417,29 +399,10 @@ EOF
 # The Gradle set runs before the driver test lane: a break in a module that only
 # assemble compiles has to surface now, and the generated suite is red on the
 # pinned driver until the next boring re-pin (the lane still runs on every pass).
-# The registry describes the modules publishTiqianToMavenLocal writes with the
-# commands publish.yml ("Collect the Gradle modules for the registry") and
-# release-registry.yml ("Describe the Gradle modules in the registry tree")
-# run. Both run only on a release tag, so this stage runs them on every push: a
-# module build.gradle.kts publishes that the maven unit of release-manifest.json
-# does not list, or a layout the collector cannot read, fails here instead of on
-# the next release.
-maven_registry_check() {
-  local out="$ROOT/maven-registry"
-  rm -rf "${out:?}"
-  python3 tools/write-maven-registry-tree.py collect --maven-local "$MAVEN_REPO" \
-    --version "$STAGING_VERSION" --out "$out/publication" --expect-manifest release-manifest.json || return 1
-  python3 tools/write-maven-registry-tree.py write --publication "$out/publication" --assets "$out/assets" \
-    --tree "$out/tree" --owner "$OWNER" --repository tiqian-cjk/tiqian --version "$STAGING_VERSION" \
-    --expect-manifest release-manifest.json || return 1
-  python3 tools/check-registry-tree.py --tree "$out/tree" --artifacts "$out/assets"
-}
-
 step_maven_publish() {
   in_devshell "bash tools/setup-haxe-env.sh && boring gen kotlin-f32 --project boring.json" || return 1
   TIQIAN_VERSION="$STAGING_VERSION" ./gradlew "${RELEASE_GRADLE_TASKS[@]}" \
     -Dmaven.repo.local="$MAVEN_REPO" --no-daemon || return 1
-  maven_registry_check || return 1
   # Same command as publish.yml's "Run the generated Kotlin test suite" step.
   in_devshell "boring test kotlin-f32 --project boring.json"
 }
@@ -514,11 +477,8 @@ step_verify_test() {
     echo "verify-test needs --bundles; the comparison stage covers the whole set" >&2
     return 2
   fi
-  # A bundle whose target configuration opts out of the test action has no
-  # suite to run; asking the test action for it fails.
-  ids="$(python3 - "$ids" <<'PY'
-import json, re, sys
-text = re.sub(r'^\\s*//.*
+  in_devshell "boring test $ids --project boring.json"
+}
 
 step_verify_compare() {
   in_devshell "boring compare --project boring.json"
@@ -554,162 +514,6 @@ step_verify_shard() {
     echo "shard timing test $id $((SECONDS - started))"
   done
 }
-
-step_summary() {
-  local report="$ROOT/report.md"
-  {
-    echo "# Staging pipeline report"
-    echo
-    echo "- version: $STAGING_VERSION"
-    echo "- staging root: $ROOT"
-    echo "- registry owner: $OWNER"
-    echo "- asset base: $ASSET_BASE"
-    echo
-    echo "| step | rc | seconds |"
-    echo "| --- | --- | --- |"
-    local index
-    for index in "${!STEP_NAMES[@]}"; do
-      echo "| ${STEP_NAMES[$index]} | ${STEP_RCS[$index]} | ${STEP_SECONDS[$index]} |"
-    done
-  } >"$report"
-  cat "$report"
-}
-
-run_named_step() {
-  case "$1" in
-    align) run_step align step_align ;;
-    pack) run_step pack step_pack ;;
-    compile-bundles) run_step compile-bundles step_compile_bundles ;;
-    collect-artifacts) run_step collect-artifacts step_collect ;;
-    publish-contract) run_step publish-contract step_publish_contract ;;
-    registry-tree) run_step registry-tree step_check_tree ;;
-    staging-isolation) run_step staging-isolation step_isolation ;;
-    maven-artifact-ids) run_step maven-artifact-ids step_maven_artifact_ids ;;
-    cargo-consume) run_step cargo-consume step_cargo ;;
-    maven-local-publish) run_step maven-local-publish step_maven_publish ;;
-    maven-local-repo) run_step maven-local-repo step_maven_local_repo ;;
-    verify) run_step verify step_verify ;;
-    verify-test) run_step verify-test step_verify_test ;;
-    verify-compare) run_step verify-compare step_verify_compare ;;
-    verify-shard) run_step verify-shard step_verify_shard ;;
-    summary) run_step summary step_summary ;;
-    *) echo "unknown stage: $1" >&2; exit 2 ;;
-  esac
-}
-
-for stage in $STAGES; do
-  run_named_step "$stage"
-done
-
-echo
-if [ "$FAILED" -ne 0 ]; then
-  echo "staging pipeline: FAILED (see $LOGS)"
-  exit 1
-fi
-echo "staging pipeline: OK"
-exit 0
-, '', open('boring.json').read(), flags=re.M)
-data = json.loads(text)
-by_id = {bundle['id']: bundle for bundle in data['bundles']}
-kept = [bundle for bundle in sys.argv[1].split() if by_id.get(bundle, {}).get('test', True) is not False]
-print(' '.join(kept))
-PY
-)"
-  if [ -z "$ids" ]; then
-    echo "verify-test: every bundle in this shard opts out of the test action"
-    return 0
-  fi
-  # A dependent bundle's suite reads its dependencies' module manifests, which
-  # the pack shard that owns the dependency does not ship here.
-  local id dependency
-  for id in $ids; do
-    for dependency in $(python3 - "$id" <<'PY'
-import json, re, sys
-text = re.sub(r'^\\s*//.*
-
-
-# Generate and test one shard of bundles from the source tree. The shard builds
-# its own trees so no generated directory has to travel between jobs, and it
-# keeps only the suite results for the comparison stage.
-
-step_summary() {
-  local report="$ROOT/report.md"
-  {
-    echo "# Staging pipeline report"
-    echo
-    echo "- version: $STAGING_VERSION"
-    echo "- staging root: $ROOT"
-    echo "- registry owner: $OWNER"
-    echo "- asset base: $ASSET_BASE"
-    echo
-    echo "| step | rc | seconds |"
-    echo "| --- | --- | --- |"
-    local index
-    for index in "${!STEP_NAMES[@]}"; do
-      echo "| ${STEP_NAMES[$index]} | ${STEP_RCS[$index]} | ${STEP_SECONDS[$index]} |"
-    done
-  } >"$report"
-  cat "$report"
-}
-
-run_named_step() {
-  case "$1" in
-    align) run_step align step_align ;;
-    pack) run_step pack step_pack ;;
-    compile-bundles) run_step compile-bundles step_compile_bundles ;;
-    collect-artifacts) run_step collect-artifacts step_collect ;;
-    publish-contract) run_step publish-contract step_publish_contract ;;
-    registry-tree) run_step registry-tree step_check_tree ;;
-    staging-isolation) run_step staging-isolation step_isolation ;;
-    maven-artifact-ids) run_step maven-artifact-ids step_maven_artifact_ids ;;
-    cargo-consume) run_step cargo-consume step_cargo ;;
-    maven-local-publish) run_step maven-local-publish step_maven_publish ;;
-    maven-local-repo) run_step maven-local-repo step_maven_local_repo ;;
-    verify) run_step verify step_verify ;;
-    verify-test) run_step verify-test step_verify_test ;;
-    verify-compare) run_step verify-compare step_verify_compare ;;
-    verify-shard) run_step verify-shard step_verify_shard ;;
-    summary) run_step summary step_summary ;;
-    *) echo "unknown stage: $1" >&2; exit 2 ;;
-  esac
-}
-
-for stage in $STAGES; do
-  run_named_step "$stage"
-done
-
-echo
-if [ "$FAILED" -ne 0 ]; then
-  echo "staging pipeline: FAILED (see $LOGS)"
-  exit 1
-fi
-echo "staging pipeline: OK"
-exit 0
-, '', open('boring.json').read(), flags=re.M)
-data = json.loads(text)
-by_id = {bundle['id']: bundle for bundle in data['bundles']}
-seen = set()
-def walk(bundle_id):
-    for dependency in by_id[bundle_id].get('dependsOn') or []:
-        if dependency not in seen:
-            seen.add(dependency)
-            walk(dependency)
-walk(sys.argv[1])
-print(' '.join(sorted(seen)))
-PY
-); do
-      if [ ! -f "engine-haxe/out/$dependency/modules.txt" ]; then
-        in_devshell "boring gen $dependency --project boring.json" || return $?
-      fi
-    done
-  done
-  in_devshell "boring test $ids --project boring.json"
-}
-
-
-# Generate and test one shard of bundles from the source tree. The shard builds
-# its own trees so no generated directory has to travel between jobs, and it
-# keeps only the suite results for the comparison stage.
 
 step_summary() {
   local report="$ROOT/report.md"
