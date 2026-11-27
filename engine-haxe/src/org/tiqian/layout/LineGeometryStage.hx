@@ -171,9 +171,9 @@ class LineGeometryStageFns {
                 expandedRuby.push(i);
         }
         var hasRubyExtra = expandedRuby.length > 0;
-        final rubyReason = hasRubyExtra ? "ConditionalRubyLineHeight" : "ExistingInterlineSpaceFitsRuby";
         final rd = pinyinSpans.length == 0 ? null : new RubyLineHeightDecisionInfo(Type.enumConstructor(input.paragraphStyle.rubyLineHeightMode),
-            baseLineMetrics.height, baseFaceHeight, rubyExtent, existingInterlineSpace, maxExtra, lineRubyTopExtra, expandedRuby, rubyReason);
+            baseLineMetrics.height, baseFaceHeight, rubyExtent, existingInterlineSpace, maxExtra, lineRubyTopExtra, expandedRuby,
+            hasRubyExtra ? "ConditionalRubyLineHeight" : "ExistingInterlineSpaceFitsRuby");
 
         final baseBaseline = f32(baseLineMetrics.baseline);
         final baseHeight = f32(baseLineMetrics.height);
@@ -183,19 +183,22 @@ class LineGeometryStageFns {
         final fBaseDescent = f32(baseDescent);
         final lineObjectAscent:Array<Float> = [];
         final lineObjectDescent:Array<Float> = [];
+        // Without inline objects every lookup misses and both extents stay 0, so the per-cluster
+        // walk runs only when the paragraph has inline objects.
+        final objects = inlineObjectByClusterIndex;
         for (line in lineSolution.lines) {
             var ascent = 0.0;
             var descent = 0.0;
-            var idx = line.clusterRange.start;
-            while (idx <= line.clusterRange.end) {
-                if (inlineObjectByClusterIndex != null) {
-                    final obj = inlineObjectByClusterIndex.get(idx);
+            if (objects != null && objects.size() > 0) {
+                var idx = line.clusterRange.start;
+                while (idx <= line.clusterRange.end) {
+                    final obj = objects.get(idx);
                     if (obj != null) {
                         ascent = Math.max(ascent, f32(obj.ascent));
                         descent = Math.max(descent, f32(obj.descent));
                     }
+                    idx++;
                 }
-                idx++;
             }
             lineObjectAscent.push(ascent);
             lineObjectDescent.push(descent);
