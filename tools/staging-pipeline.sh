@@ -190,7 +190,7 @@ step_pack() {
       if [ ! -f "engine-haxe/out/$dependency/modules.txt" ]; then
         in_devshell "boring gen $dependency --project boring.json" || return 1
       fi
-      if [ ! -d "$out_root/$dependency" ]; then
+      if [ ! -d "$out_root/$dependency/npm" ] && [ ! -d "$out_root/$dependency/cargo" ]; then
         boring pack "$dependency" || return 1
       fi
     done
