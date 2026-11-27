@@ -2,6 +2,10 @@ package org.tiqian.linebreak;
 
 import runtime.SortedTable;
 
+// Public API for hosts that load TeX patterns at run time (Web `liangHyphenate`); the engine's
+// default hyphenator reads the compile-time packed table instead, so only tests reference this
+// type inside the engine and `@:mainOnly` keeps it in the main tree.
+@:mainOnly
 class LiangHyphenator implements Hyphenator {
     private final patterns:runtime.SortedTable.SortedMapTable<String, Array<Int>>;
     private final exceptions:runtime.SortedTable.SortedMapTable<String, Array<Int>>;

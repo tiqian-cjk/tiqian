@@ -1,18 +1,30 @@
 package org.tiqian.linebreak;
 
-@:build(DataTables.codeUnitsField("engine-haxe/data/hyph-en-us.tex", "TEX_UNITS"))
-class EnglishHyphenationPatterns {
-    public static function raw():String {
-        return load();
-    }
+import org.tiqian.linebreak.PackedHyphenationTable.HyphenationTableData;
 
-    public static function load():String {
-        final output = new std.StringBuf();
-        var index = 0;
-        while (index < TEX_UNITS.length) {
-            output.add(String.fromCharCode(TEX_UNITS[index]));
-            index++;
-        }
-        return output.toString();
-    }
+/**
+ * The bundled en-US patterns (`engine-haxe/data/hyph-en-us.tex`), packed at compile time by
+ * `HyphenationTables.texPatternFields` into the `PATTERN_UNITS` and `EXCEPTION_UNITS` fields.
+ */
+@:build(HyphenationTables.texPatternFields("engine-haxe/data/hyph-en-us.tex"))
+class EnglishHyphenationPatterns {
+    public static function table():PackedHyphenationTable
+        return new PackedHyphenationTable(new EnglishHyphenationTableData());
+}
+
+/** Reads the static `EnglishHyphenationPatterns` fields in place, without copying them. */
+class EnglishHyphenationTableData implements HyphenationTableData {
+    public function new() {}
+
+    public function patternUnitCount():Int
+        return EnglishHyphenationPatterns.PATTERN_UNITS.length;
+
+    public function patternUnit(offset:Int):Int
+        return EnglishHyphenationPatterns.PATTERN_UNITS[offset];
+
+    public function exceptionUnitCount():Int
+        return EnglishHyphenationPatterns.EXCEPTION_UNITS.length;
+
+    public function exceptionUnit(offset:Int):Int
+        return EnglishHyphenationPatterns.EXCEPTION_UNITS[offset];
 }

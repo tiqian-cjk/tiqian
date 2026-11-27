@@ -119,6 +119,8 @@ class Main {
         run("hyphenatesCommonWordsAtSyllablePoints", EnglishHyphenationTest.hyphenatesCommonWordsAtSyllablePoints);
         run("respectsMarginsAndShortWords", EnglishHyphenationTest.respectsMarginsAndShortWords);
         run("honoursTheExceptionList", EnglishHyphenationTest.honoursTheExceptionList);
+        run("packedTableMatchesTheParsedTex", EnglishHyphenationTest.packedTableMatchesTheParsedTex);
+        run("lazySlotBuildsOnTheFirstRequestOnly", EnglishHyphenationTest.lazySlotBuildsOnTheFirstRequestOnly);
         run("noHyphenatorYieldsNoOpportunities", LiangHyphenatorTest.noHyphenatorYieldsNoOpportunities);
         run("oddLevelGapBecomesABreakOutsideTheMargins", LiangHyphenatorTest.oddLevelGapBecomesABreakOutsideTheMargins);
         run("maxLevelWinsAndEvenForbidsTheBreak", LiangHyphenatorTest.maxLevelWinsAndEvenForbidsTheBreak);

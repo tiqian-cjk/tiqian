@@ -11,9 +11,9 @@ import org.tiqian.test.trace.TracedAssertions;
 class LineBreakCoverageTest {
     @:test public static function testBundledHyphenationResource():Void {
         new TestTraceRecorder("LineBreakCoverageTest").section("testBundledHyphenationResource");
-        final p = EnglishHyphenationPatterns.load();
-        TracedAssertions.assertTrue(p.length > 0);
-        TracedAssertions.assertTrue(p.indexOf("\\patterns") >= 0);
+        final table = EnglishHyphenationPatterns.table();
+        TracedAssertions.assertTrue(table.patternCount() > 0);
+        TracedAssertions.assertTrue(table.exceptionCount() > 0);
     }
 
     @:test public static function testLineBreakModelsAndEnums():Void {

@@ -1,15 +1,20 @@
 package org.tiqian.linebreak;
 
-import org.tiqian.linebreak.ParseTexHyphenationPatterns;
+import org.tiqian.linebreak.LazyHyphenator.HyphenatorSource;
 
 class EnglishHyphenation {
-    private static var enUsCache:Null<Hyphenator> = null;
+    /**
+     * The en-US hyphenator over the compile-time packed table, left margin 2, right margin 3.
+     * Construction reads the static table fields and parses nothing.
+     */
+    public static function enUs():Hyphenator
+        return new PackedLiangHyphenator(EnglishHyphenationPatterns.table(), 2, 3);
+}
 
-    public static function enUs():Hyphenator {
-        if (enUsCache == null) {
-            final parsed = ParseTexHyphenationPatterns.parse(EnglishHyphenationPatterns.load());
-            enUsCache = new LiangHyphenator(parsed.patterns, parsed.exceptions, 2, 3);
-        }
-        return enUsCache;
-    }
+/** The `HyphenatorSource` of the bundled en-US patterns. */
+class EnglishHyphenatorSource implements HyphenatorSource {
+    public function new() {}
+
+    public function createHyphenator():Hyphenator
+        return EnglishHyphenation.enUs();
 }

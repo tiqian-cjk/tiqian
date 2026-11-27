@@ -95,7 +95,7 @@ final class AppleParagraphEngines {
                 LookaheadLineBreaker(),
                 Justifier(),
                 shaper,
-                nil,
+                DefaultHyphenator.defaultHyphenator(),
                 LruWidthIndependentAnnotationCache(),
                 recordsDebugInfo,
             )
