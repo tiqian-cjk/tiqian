@@ -207,20 +207,6 @@ class LineCandidate {
         return NoHanging.value;
 }
 
-/**
- * `EmptyClusterIndexSet` holds one empty set of cluster indices. boring accepts only null,
- * literal, array and `new` forms as static field initializers, so a static constant holds this
- * class and its constructor builds the set.
- */
-class EmptyClusterIndexSet {
-    public final value:SortedSet<Int>;
-
-    public function new() {
-        final b = SortedSet.builder();
-        this.value = b.build();
-    }
-}
-
 /** Text helper for LineCandidate's requirement messages (Kotlin renders IntRange as 0..4). */
 class LineCandidates {
     public static function renderRange(r:IntRange):String
