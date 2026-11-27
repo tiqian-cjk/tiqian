@@ -385,23 +385,24 @@ function wideNarrowPairWith(a:Null<EastAsianSpacingValue>, b:Null<EastAsianSpaci
     return (a == EastAsianSpacingValue.Wide && b == EastAsianSpacingValue.Narrow)
         || (a == EastAsianSpacingValue.Narrow && b == EastAsianSpacingValue.Wide);
 
+// Both predicates test the neighbours' East Asian spacing edges before scanning cluster text:
+// the edges rarely match in CJK text, and the conjunction gives the same result in any order.
 function wordSpaceBetweenNarrow(c:Array<Cluster>, i:Int, e:Array<EastAsianSpacingEdges>):Bool {
-    if (i < 0 || i >= c.length || !allSpaces(c[i].text))
-        return false;
     return i > 0
         && i < c.length - 1
         && e[i - 1].trailing == EastAsianSpacingValue.Narrow
         && e[i + 1].leading == EastAsianSpacingValue.Narrow
+        && allSpaces(c[i].text)
         && !allSpaces(c[i - 1].text)
         && !allSpaces(c[i + 1].text);
 }
 
 function wideNarrowTypedSpace(c:Array<Cluster>, i:Int, e:Array<EastAsianSpacingEdges>):Bool {
-    if (i < 0 || i >= c.length || !allSpaces(c[i].text))
+    if (i < 0 || i >= c.length)
         return false;
     var l:Null<EastAsianSpacingValue> = i > 0 ? e[i - 1].trailing : null;
     var x:Null<EastAsianSpacingValue> = i + 1 < c.length ? e[i + 1].leading : null;
-    return wideNarrowPairWith(l, x);
+    return wideNarrowPairWith(l, x) && allSpaces(c[i].text);
 }
 
 function allSpaces(s:String):Bool {
