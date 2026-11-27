@@ -182,6 +182,29 @@ step_pack() {
     # finders and the artifact collection match by name stem. CI checks out
     # fresh; a local checkout does not.
     rm -rf "$out_root/$id"
+    # A shard packs only its own bundles, but a dependent bundle's pack reads
+    # the dependency's module manifest, which generation writes. Generate the
+    # transitive dependencies inside this shard before packing the bundle.
+    local deps
+    deps="$(python3 - "$id" <<'PY'
+import json, re, sys
+text = re.sub(r'^\s*//.*$', '', open('boring.json').read(), flags=re.M)
+data = json.loads(text)
+by_id = {bundle['id']: bundle for bundle in data['bundles']}
+seen = set()
+def walk(bundle_id):
+    for dependency in by_id[bundle_id].get('dependsOn') or []:
+        if dependency not in seen:
+            seen.add(dependency)
+            walk(dependency)
+walk(sys.argv[1])
+print(' '.join(sorted(seen)))
+PY
+)"
+    local dependency
+    for dependency in $deps; do
+      boring gen "$dependency" --project boring.json || return 1
+    done
     if ! boring pack "$id" --registry-out "$TREE" --owner "$OWNER" --repo tiqian --asset-base "$ASSET_BASE"; then
       echo "--- pack $id FAILED ---"
       rc=1
