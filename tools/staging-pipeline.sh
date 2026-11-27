@@ -634,20 +634,6 @@ step_verify_compare() {
 # Generate and test one shard of bundles from the source tree. The shard builds
 # its own trees so no generated directory has to travel between jobs, and it
 # keeps only the suite results for the comparison stage.
-step_verify_shard() {
-  local ids="${BUNDLES_OVERRIDE:-}"
-  if [ -z "$ids" ]; then
-    echo "verify-shard needs --bundles; every bundle runs in one shard of the matrix" >&2
-    return 2
-  fi
-  local id started
-  for id in $ids; do
-    started=$SECONDS
-    in_devshell "boring gen $id --project boring.json" || return $?
-    in_devshell "boring test $id --project boring.json" || return $?
-    echo "shard timing test $id $((SECONDS - started))"
-  done
-}
 
 step_summary() {
   local report="$ROOT/report.md"
@@ -730,20 +716,6 @@ step_verify_compare() {
 # Generate and test one shard of bundles from the source tree. The shard builds
 # its own trees so no generated directory has to travel between jobs, and it
 # keeps only the suite results for the comparison stage.
-step_verify_shard() {
-  local ids="${BUNDLES_OVERRIDE:-}"
-  if [ -z "$ids" ]; then
-    echo "verify-shard needs --bundles; every bundle runs in one shard of the matrix" >&2
-    return 2
-  fi
-  local id started
-  for id in $ids; do
-    started=$SECONDS
-    in_devshell "boring gen $id --project boring.json" || return $?
-    in_devshell "boring test $id --project boring.json" || return $?
-    echo "shard timing test $id $((SECONDS - started))"
-  done
-}
 
 step_summary() {
   local report="$ROOT/report.md"
