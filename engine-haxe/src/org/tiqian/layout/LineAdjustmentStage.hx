@@ -475,15 +475,7 @@ class LineAdjustmentStage {
             }
         }
 
-        final pushInTrailingMapBuilder = SortedMap.builder();
-        final pushInLeadingMapBuilder = SortedMap.builder();
-        for (i in 0...prep.naturalClusters.length) {
-            if (pushInTrailing[i] != 0.0)
-                pushInTrailingMapBuilder.put(i, pushInTrailing[i]);
-            if (pushInLeading[i] != 0.0)
-                pushInLeadingMapBuilder.put(i, pushInLeading[i]);
-        }
-        final pushInGeometry = prep.baseGeometry.consumeLeadingAndTrailingByCluster(pushInLeadingMapBuilder.build(), pushInTrailingMapBuilder.build());
+        final pushInGeometry = prep.baseGeometry.consumeLeadingAndTrailingByIndex(pushInLeading, pushInTrailing);
 
         final edgeTrimResult = pushInGeometry.consumeLineEdgeGlue(plan.lineSolution.lines,
             prep.adjustmentStyle.lineEndPunctuation == LineEndPunctuationStyle.ForceHalfWidth);

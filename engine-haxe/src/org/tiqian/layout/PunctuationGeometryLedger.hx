@@ -252,23 +252,21 @@ import std.SortedMap.SortedMapBuilder;
 
     /**
      * `consumeLeadingByCluster(leading).consumeTrailingByCluster(trailing)` in one rebuild of the
-     * budgets. The leading consumption changes only `leadingConsumed` and the trailing one only
+     * budgets, with each side given as an array indexed by cluster (0 where nothing is consumed).
+     * The leading consumption changes only `leadingConsumed` and the trailing one only
      * `trailingConsumed`, so applying both to each budget gives the budget the two calls give, in
-     * either order.
+     * either order. One pass over the budgets in key order puts each key once; a ledger whose
+     * budgets all stay the same is returned as is.
      */
-    public function consumeLeadingAndTrailingByCluster(leading:SortedMap<Int, Float>, trailing:SortedMap<Int, Float>):PunctuationGeometryLedger {
-        // One pass over the budgets in key order puts each key once, as `consumeSide` does.
-        if (leading.size() == 0 && trailing.size() == 0)
-            return this;
+    public function consumeLeadingAndTrailingByIndex(leading:Array<Float>, trailing:Array<Float>):PunctuationGeometryLedger {
         var changed = false;
         final b:SortedMapBuilder<Int, GlueBudget> = SortedMap.builder();
         for (j in 0...budgets.size()) {
             final k = budgets.keyAt(j);
             final q = budgets.valueAt(j);
-            final leadingEntry = leading.get(k);
-            final trailingEntry = trailing.get(k);
-            final replacement = leadingEntry == null
-                && trailingEntry == null ? null : consumedBudget(q, leadingEntry == null ? 0 : leadingEntry, trailingEntry == null ? 0 : trailingEntry);
+            final lead:Float = k < leading.length ? leading[k] : 0;
+            final trail:Float = k < trailing.length ? trailing[k] : 0;
+            final replacement = consumedBudget(q, lead, trail);
             if (replacement != null) {
                 changed = true;
                 b.put(k, replacement);
@@ -445,7 +443,32 @@ import std.SortedMap.SortedMapBuilder;
                 ds.push(new LineEdgeTrimDecisionInfo(line.sourceRange, naturalClusters[index].range, side, total, consumed, natural, reason));
             }
         }
-        return new LineEdgeTrimResult(consumeLeadingAndTrailingByCluster(amountMap(leadKeys, leadValues), amountMap(trailKeys, trailValues)), ds);
+        return new LineEdgeTrimResult(consumeLeadingAndTrailingAmounts(leadKeys, leadValues, trailKeys, trailValues), ds);
+    }
+
+    /**
+     * `consumeLeadingAndTrailingByIndex` with each side given as parallel arrays (cluster index,
+     * amount) instead of an array indexed by cluster. Every recorded amount is positive and an
+     * index absent from a side reads 0, which `consumedBudget` treats as no consumption.
+     */
+    function consumeLeadingAndTrailingAmounts(leadKeys:Array<Int>, leadValues:Array<Float>, trailKeys:Array<Int>,
+            trailValues:Array<Float>):PunctuationGeometryLedger {
+        if (leadKeys.length == 0 && trailKeys.length == 0)
+            return this;
+        var changed = false;
+        final b:SortedMapBuilder<Int, GlueBudget> = SortedMap.builder();
+        for (j in 0...budgets.size()) {
+            final k = budgets.keyAt(j);
+            final q = budgets.valueAt(j);
+            final replacement = consumedBudget(q, amountAt(leadKeys, leadValues, k), amountAt(trailKeys, trailValues, k));
+            if (replacement != null) {
+                changed = true;
+                b.put(k, replacement);
+            } else {
+                b.put(k, q);
+            }
+        }
+        return changed ? replace(this, null, null, null, null, null, b.build()) : this;
     }
 
     /** The amount recorded for `index` in the parallel arrays, or 0. */
@@ -466,13 +489,6 @@ import std.SortedMap.SortedMapBuilder;
         }
         keys.push(index);
         values.push(amount);
-    }
-
-    static function amountMap(keys:Array<Int>, values:Array<Float>):SortedMap<Int, Float> {
-        final b = SortedMap.builder();
-        for (i in 0...keys.length)
-            b.put(keys[i], values[i]);
-        return b.build();
     }
 
     public function resolveAttachedInlinePunctuationBoundaries(inlineAttachments:Array<InlineAttachment>, punctuationAtoms:Array<PunctuationAtom>,
