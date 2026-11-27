@@ -138,7 +138,7 @@ using std.RecordCopy;
         var y = PunctuationGeometryLedger.from(cs, aa, new PunctuationSpacingCompressionResult([a]));
         TracedAssertions.assertEqualsFloat(4, y.glueCapacities().get(0).leading);
         TracedAssertions.assertEqualsFloat(8, y.glueCapacities().get(1).leading);
-        var atom = PunctuationGeometryLedgerCoverageSupport.builder.build('·', new TextRange(0, 1), PunctuationGeometryLedgerCoverageSupport.em,
+        var atom:PunctuationAtom = PunctuationGeometryLedgerCoverageSupport.builder.build('·', new TextRange(0, 1), PunctuationGeometryLedgerCoverageSupport.em,
             new PunctuationInkInput(16, new Rect(2, 4, 10, 12), 8, -2));
         var ca = [
             PunctuationGeometryLedgerCoverageSupport.c("·", 0),
