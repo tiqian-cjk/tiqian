@@ -40,6 +40,7 @@ import org.tiqian.core.ZeroWidthBreakDecisionInfo;
 import org.tiqian.core.BreakOpportunityDecisionInfo;
 import org.tiqian.core.EmergencyTrackingEligibilityDecisionInfo;
 import org.tiqian.core.ShapingDecisionInfo;
+import org.tiqian.core.SpacingCarrierAdvanceDecisionInfo;
 import org.tiqian.core.ClusterGeometryDecisionInfo;
 import org.tiqian.layout.LineGeometryStage.ClusterMetricDecision;
 import org.tiqian.layout.ProgressiveBreakDecisions.ProgressiveBreakOpportunity;
@@ -91,6 +92,7 @@ import org.tiqian.layout.ParagraphLayoutEngine.ExplainableStubParagraphLayoutEng
     public final breakOpportunityDecisions:Array<BreakOpportunityDecisionInfo>;
     public final emergencyTrackingEligibilityDecisions:Array<EmergencyTrackingEligibilityDecisionInfo>;
     public final progressiveBreakOpportunities:std.SortedMap<Int, ProgressiveBreakOpportunity>;
+    public final spacingCarrierAdvanceDecisions:Array<SpacingCarrierAdvanceDecisionInfo>;
 
     public function new(text:String, fontDecisions:Array<FontDecision>, punctuationGlyphSubstitutor:ClreqPunctuationGlyphSubstitutor,
             substitutionRollbacks:std.SortedMap<TextRange, String>, shapingDecisions:Array<ShapingDecisionInfo>, metricDecisions:Array<ClusterMetricDecision>,
@@ -108,7 +110,8 @@ import org.tiqian.layout.ParagraphLayoutEngine.ExplainableStubParagraphLayoutEng
             inlineObjectPunctuationAttachmentDecisions:Array<InlineObjectPunctuationAttachmentDecisionInfo>,
             zeroWidthBreakDecisions:Array<ZeroWidthBreakDecisionInfo>, breakOpportunityDecisions:Array<BreakOpportunityDecisionInfo>,
             emergencyTrackingEligibilityDecisions:Array<EmergencyTrackingEligibilityDecisionInfo>,
-            progressiveBreakOpportunities:std.SortedMap<Int, ProgressiveBreakOpportunity>) {
+            progressiveBreakOpportunities:std.SortedMap<Int, ProgressiveBreakOpportunity>,
+            ?spacingCarrierAdvanceDecisions:Array<SpacingCarrierAdvanceDecisionInfo>) {
         this.text = text;
         this.fontDecisions = fontDecisions;
         this.punctuationGlyphSubstitutor = punctuationGlyphSubstitutor;
@@ -146,6 +149,7 @@ import org.tiqian.layout.ParagraphLayoutEngine.ExplainableStubParagraphLayoutEng
         this.breakOpportunityDecisions = breakOpportunityDecisions;
         this.emergencyTrackingEligibilityDecisions = emergencyTrackingEligibilityDecisions;
         this.progressiveBreakOpportunities = progressiveBreakOpportunities;
+        this.spacingCarrierAdvanceDecisions = spacingCarrierAdvanceDecisions == null ? [] : spacingCarrierAdvanceDecisions;
     }
 }
 
@@ -319,6 +323,6 @@ class LayoutDebugAssembly {
             stage.mandatoryBreakDecisions, stage.lineSpacingDecision, stage.rubyLineHeightDecision, stage.inlineObjectLineHeightDecision,
             stage.kinsokuDecision, stage.contextualKinsokuDecisions, stage.lineLengthGridDecision, stage.firstLineIndentDecision, stage.inlineBoxDecisions,
             stage.inlineObjectDecisions, stage.inlineObjectPunctuationAttachmentDecisions, stage.zeroWidthBreakDecisions, stage.breakOpportunityDecisions,
-            stage.emergencyTrackingEligibilityDecisions);
+            stage.emergencyTrackingEligibilityDecisions, stage.spacingCarrierAdvanceDecisions);
     }
 }

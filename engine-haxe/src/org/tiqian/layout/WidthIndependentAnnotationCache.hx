@@ -24,6 +24,7 @@ import org.tiqian.core.RoleOverrideInfo;
 import org.tiqian.shaping.TextShaper.ShapingResult;
 import org.tiqian.shaping.TextShaper.ShapingInput;
 import org.tiqian.core.ShapingDecisionInfo;
+import org.tiqian.core.SpacingCarrierAdvanceDecisionInfo;
 import org.tiqian.layout.ProgressiveBreakDecisions.ProgressiveBreakTier;
 import org.tiqian.layout.ProgressiveBreakDecisions.ShrinkOpportunity;
 import org.tiqian.layout.ProgressiveBreakDecisions.ShrinkChannel;
@@ -127,6 +128,7 @@ class WidthIndependentParagraphAnnotation {
     public final substitutionRollbacks:SortedMap<TextRange, String>;
     public final rubyFontGeometryBySpan:SortedMap<RubySpan, RubyFontGeometry>;
     public final baseShapingStage:ParagraphShapingStageResult;
+    public final spacingCarrierAdvanceDecisions:Array<SpacingCarrierAdvanceDecisionInfo>;
 
     public function new(text:String, fontSize:Float, styleAt:Int->TextStyle, fontSizeAt:Int->Float, bopomofoFontWeightAt:Int->Int, rubyFontSize:Float,
             rubyStackGap:Float, rubyFontWeight:Int, pinyinSpans:Array<RubySpan>, clreqProfile:ClreqProfile,
@@ -134,7 +136,7 @@ class WidthIndependentParagraphAnnotation {
             fontDecisions:Array<FontDecision>, clusterRanges:Array<ResolvedClusterRange>, fontDecisionByRange:SortedMap<TextRange, FontDecision>,
             inlineObjectByRange:SortedMap<TextRange, InlineObjectSpan>, segmentShapingCache:SortedMap<TextRange, ShapingResult>,
             substitutionRollbacks:SortedMap<TextRange, String>, rubyFontGeometryBySpan:SortedMap<RubySpan, RubyFontGeometry>,
-            baseShapingStage:ParagraphShapingStageResult) {
+            baseShapingStage:ParagraphShapingStageResult, ?spacingCarrierAdvanceDecisions:Array<SpacingCarrierAdvanceDecisionInfo>) {
         this.text = text;
         this.fontSize = fontSize;
         this.styleAt = styleAt;
@@ -156,6 +158,7 @@ class WidthIndependentParagraphAnnotation {
         this.substitutionRollbacks = substitutionRollbacks;
         this.rubyFontGeometryBySpan = rubyFontGeometryBySpan;
         this.baseShapingStage = baseShapingStage;
+        this.spacingCarrierAdvanceDecisions = spacingCarrierAdvanceDecisions == null ? [] : spacingCarrierAdvanceDecisions;
     }
 }
 
@@ -227,7 +230,6 @@ class WidthIndependentAnnotationCacheFns {
     private static inline final RUBY_FONT_EM:Float = 0.5;
     private static inline final RUBY_FONT_WEIGHT_BOOST:Int = 100;
     private static inline final BOPOMOFO_FONT_WEIGHT_BOOST:Int = 300;
-    private static inline final RUBY_MIN_GAP_EM_OF_RUBY:Float = 0.25;
     private static inline final RUBY_STACK_GAP_EM:Float = 0.0;
     private static inline final WORD_SPACE_MIN_EM:Float = 0.25;
     private static inline final SINO_WESTERN_GAP_MIN_EM:Float = 0.125;
@@ -521,6 +523,9 @@ class WidthIndependentAnnotationCacheFns {
 
         final baseShapingStage = ParagraphShapingStage.shapeParagraph(engine, input, text, fontSize, 1e9, clusterRanges, fontDecisionByRange,
             inlineObjectByRange, punctuationGlyphSubstitutor, styleAt, emphasisItalicAt, rejectedTechnicalTiersBySpan);
+        final spacingCarrierAdvanceDecisions = engine.measureSpacingCarrierAdvance
+            ? SpacingCarrierAdvance.measure(engine.textShaper, baseShapingStage.segmentShapingCache, fontDecisionByRange, styleAt, emphasisItalicAt)
+            : [];
 
         final rubyFontGeometryBuilder = SortedMap.builder();
         for (i in 0...pinyinSpans.length) {
@@ -565,93 +570,8 @@ class WidthIndependentAnnotationCacheFns {
 
         return new WidthIndependentParagraphAnnotation(text, fontSize, styleAt, fontSizeAt, bopomofoFontWeightAt, rubyFontSize, rubyStackGap, rubyFontWeight,
             pinyinSpans, clreqProfile, punctuationGlyphSubstitutor, quotePairs, roleOverrideInfos, fontDecisions, clusterRanges, fontDecisionByRange,
-            inlineObjectByRange, baseShapingStage.segmentShapingCache, baseShapingStage.substitutionRollbacks, rubyFontGeometryBySpan, baseShapingStage);
-    }
-
-    private static function computeRubySpread(natural:Array<Cluster>, rubySize:Float, pinyinSpans:Array<RubySpan>,
-            rubyFontGeometryBySpan:SortedMap<RubySpan, RubyFontGeometry>):SortedMap<Int, Float> {
-        if (pinyinSpans.length == 0)
-            return SortedMap.builder().build();
-        final wordSpace = rubySize * RUBY_MIN_GAP_EM_OF_RUBY;
-        final leftX = new Array<Float>();
-        var acc = 0.0;
-        for (i in 0...natural.length) {
-            leftX.push(acc);
-            acc += natural[i].advance;
-        }
-
-        final measuresFirstCluster = new Array<Int>();
-        final measuresCenter = new Array<Float>();
-        final measuresRw = new Array<Float>();
-        for (i in 0...pinyinSpans.length) {
-            final ruby = pinyinSpans[i];
-            final idxRange = PunctuationGeometryLedger.clusterIndexRangeFor(natural, ruby.baseRange);
-            if (idxRange == null)
-                continue;
-            final center = (leftX[idxRange.start] + leftX[idxRange.end] + natural[idxRange.end].advance) / 2.0;
-            final geom = rubyFontGeometryBySpan.get(ruby);
-            measuresFirstCluster.push(idxRange.start);
-            measuresCenter.push(center);
-            measuresRw.push(geom.width);
-        }
-        var mIdx = 1;
-        while (mIdx < measuresFirstCluster.length) {
-            final currFc = measuresFirstCluster[mIdx];
-            final currCenter = measuresCenter[mIdx];
-            final currRw = measuresRw[mIdx];
-            var j = mIdx - 1;
-            while (j >= 0 && measuresFirstCluster[j] > currFc) {
-                measuresFirstCluster[j + 1] = measuresFirstCluster[j];
-                measuresCenter[j + 1] = measuresCenter[j];
-                measuresRw[j + 1] = measuresRw[j];
-                j--;
-            }
-            measuresFirstCluster[j + 1] = currFc;
-            measuresCenter[j + 1] = currCenter;
-            measuresRw[j + 1] = currRw;
-            mIdx++;
-        }
-
-        final spreadBuilder = SortedMap.builder();
-        final spreadKeys = new Array<Int>();
-        final spreadValues = new Array<Float>();
-        function getSpread(key:Int):Float {
-            for (i in 0...spreadKeys.length) {
-                if (spreadKeys[i] == key)
-                    return spreadValues[i];
-            }
-            return 0.0;
-        }
-        function putSpread(key:Int, val:Float):Void {
-            for (i in 0...spreadKeys.length) {
-                if (spreadKeys[i] == key) {
-                    spreadValues[i] = val;
-                    return;
-                }
-            }
-            spreadKeys.push(key);
-            spreadValues.push(val);
-        }
-
-        var shift = 0.0;
-        var prevRight = -1e9;
-        for (m in 0...measuresFirstCluster.length) {
-            final firstCluster = measuresFirstCluster[m];
-            final rw = measuresRw[m];
-            var center = measuresCenter[m] + shift;
-            final needed = prevRight + wordSpace - (center - rw / 2.0);
-            if (needed > 0.0 && firstCluster > 0) {
-                final key = firstCluster - 1;
-                putSpread(key, getSpread(key) + needed);
-                shift += needed;
-                center += needed;
-            }
-            prevRight = center + rw / 2.0;
-        }
-        for (i in 0...spreadKeys.length) {
-            spreadBuilder.put(spreadKeys[i], spreadValues[i]);
-        }
-        return spreadBuilder.build();
+            inlineObjectByRange, baseShapingStage.segmentShapingCache, baseShapingStage.substitutionRollbacks, rubyFontGeometryBySpan, baseShapingStage,
+            spacingCarrierAdvanceDecisions);
     }
 
     private static function addGeometryAwareOpportunity(shrinkOpportunities:Array<ShrinkOpportunity>,
@@ -1140,7 +1060,7 @@ class WidthIndependentAnnotationCacheFns {
             allAdjustments.push(cjkClosingBeforeAsciiPointMarkPlan.adjustments[i]);
         final spacingPlan = new PunctuationSpacingCompressionResult(allAdjustments);
 
-        final rubySpread = computeRubySpread(naturalClusters, annotation.rubyFontSize, annotation.pinyinSpans, annotation.rubyFontGeometryBySpan);
+        final rubySpread = RubySpread.compute(naturalClusters, annotation.rubyFontSize, annotation.pinyinSpans, annotation.rubyFontGeometryBySpan);
 
         final bopomofoSpans = new Array<RubySpan>();
         for (i in 0...input.rubySpans.length) {
@@ -1294,6 +1214,6 @@ class WidthIndependentAnnotationCacheFns {
             inlineObjectAttachmentNoStretchBoundaries, inlineObjectPunctuationAttachmentDecisions, mandatoryBreakClusters, zeroWidthBreakClusters,
             mandatoryBreakDecisions, zeroWidthBreakDecisions, punctuationAtoms, spacingPlan, annotation.rubyFontGeometryBySpan, rubyAndBopomofoSpread,
             finalNaturalInlineAttachments, attachedPunctuationBoundary, baseGeometry, attachedPunctuationTrailingGlueByCluster, clusters, adjustmentStyle,
-            atomClassByRange, shrinkOpportunities);
+            atomClassByRange, shrinkOpportunities, annotation.spacingCarrierAdvanceDecisions);
     }
 }

@@ -34,6 +34,7 @@ class PlanJson {
             appendLine(out, line);
         }
         out.push("]");
+        appendSpacingCarrierAdvances(out, plan);
         appendParagraphEvidence(out, plan);
         out.push("}");
         return out.join("");
@@ -184,6 +185,27 @@ class PlanJson {
             out.push(italic ? "true" : "false");
         }
         out.push("}");
+    }
+
+    /** Rides both plain and evidence plans, ahead of every evidence-only field. */
+    static function appendSpacingCarrierAdvances(out:Array<String>, plan:Plan):Void {
+        if (plan.spacingCarrierAdvances.length > 0) {
+            out.push(",\"spacingCarrierAdvances\":[");
+            var firstCarrier = true;
+            for (carrier in plan.spacingCarrierAdvances) {
+                if (!firstCarrier)
+                    out.push(",");
+                firstCarrier = false;
+                out.push("{\"rangeStart\":");
+                out.push(Std.string(carrier.rangeStart));
+                out.push(",\"rangeEnd\":");
+                out.push(Std.string(carrier.rangeEnd));
+                out.push(",\"advance\":");
+                out.push(PlanJsonNumber.ecmaJsonNumber(carrier.advance));
+                out.push("}");
+            }
+            out.push("]");
+        }
     }
 
     static function appendParagraphEvidence(out:Array<String>, plan:Plan):Void {

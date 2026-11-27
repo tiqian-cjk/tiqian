@@ -177,6 +177,7 @@ class PlanLowering {
         var bopomofoDecisions:Array<Plan.PlanBopomofo> = [];
         var decorationSegments:Array<Plan.PlanDecorationSegment> = [];
         var emphasisDots:Array<Plan.PlanEmphasisDot> = [];
+        var spacingCarrierAdvances:Array<Plan.PlanSpacingCarrierAdvance> = [];
         var fontSize:Null<Float> = null;
         var overlayWidth:Null<Float> = null;
         if (renderEvidence) {
@@ -250,6 +251,11 @@ class PlanLowering {
                     emphasisDots.push({clusterRangeStart: f32(d.clusterRange.start), anchorX: d.anchorX, anchorY: d.anchorY, dotDiameter: d.dotDiameter});
             }
         }
+        final carrierSrc = result.debug.spacingCarrierAdvanceDecisions;
+        for (ci in 0...carrierSrc.length) {
+            final c = carrierSrc[ci];
+            spacingCarrierAdvances.push({rangeStart: c.range.start, rangeEnd: c.range.end, advance: c.advance});
+        }
         return {
             width: result.input.constraints.maxWidth, height: result.size.height,
             lines: lines,
@@ -257,6 +263,7 @@ class PlanLowering {
             rubyDecisions: rubyDecisions, bopomofoDecisions: bopomofoDecisions,
             fontSize: fontSize, overlayWidth: overlayWidth,
             decorationSegments: decorationSegments, emphasisDots: emphasisDots,
+            spacingCarrierAdvances: spacingCarrierAdvances,
         };
     }
 

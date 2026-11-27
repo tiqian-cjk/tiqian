@@ -59,11 +59,14 @@ class ExplainableStubParagraphLayoutEngine implements ParagraphLayoutEngine {
     public final textShaper:TextShaper;
     public final hyphenator:Hyphenator;
     public final annotationCache:WidthIndependentAnnotationCache;
+    /** Shapes U+00A0 per font segment for the Web spacing carrier (SpacingCarrierAdvance). */
+    public final measureSpacingCarrierAdvance:Bool;
 
     public function new(?fontRoleClassifier:FontRoleClassifier, ?fallbackResolver:FallbackResolver, ?clreqProfileResolver:ClreqProfileResolver,
             ?fontMetricsResolver:FontMetricsResolver, ?fontMetricsNormalizer:FontMetricsNormalizer, ?punctuationAtomBuilder:PunctuationAtomBuilder,
             ?punctuationSpacingCompressor:PunctuationSpacingCompressor, ?quotePairAnalyzer:QuotePairAnalyzer, ?lineBreaker:LineBreaker, ?justifier:Justifier,
-            ?textShaper:TextShaper, ?hyphenator:Hyphenator, ?annotationCache:WidthIndependentAnnotationCache) {
+            ?textShaper:TextShaper, ?hyphenator:Hyphenator, ?annotationCache:WidthIndependentAnnotationCache,
+            ?measureSpacingCarrierAdvance:Null<Bool>) {
         this.fontRoleClassifier = fontRoleClassifier == null ? new CjkFontRoleClassifier() : fontRoleClassifier;
         this.fallbackResolver = fallbackResolver == null ? new ParagraphLayoutFallbackResolver() : fallbackResolver;
         this.clreqProfileResolver = clreqProfileResolver == null ? new BuiltInClreqProfileResolver() : clreqProfileResolver;
@@ -77,6 +80,7 @@ class ExplainableStubParagraphLayoutEngine implements ParagraphLayoutEngine {
         this.textShaper = textShaper == null ? new ExplainableStubTextShaper() : textShaper;
         this.hyphenator = hyphenator == null ? DefaultHyphenator.defaultHyphenator() : hyphenator;
         this.annotationCache = annotationCache == null ? new LruWidthIndependentAnnotationCache() : annotationCache;
+        this.measureSpacingCarrierAdvance = measureSpacingCarrierAdvance == true;
     }
 
     public function layout(input:LayoutInput):LayoutResult {

@@ -15,6 +15,7 @@ import org.tiqian.core.BreakOpportunityDecisionInfo;
 import org.tiqian.core.EmergencyTrackingEligibilityDecisionInfo;
 import org.tiqian.layout.ProgressiveBreakDecisions.ProgressiveBreakOpportunity;
 import org.tiqian.core.ShapingDecisionInfo;
+import org.tiqian.core.SpacingCarrierAdvanceDecisionInfo;
 import org.tiqian.core.AutoSpaceDecisionInfo;
 import org.tiqian.core.Cluster;
 import org.tiqian.core.InlineObjectSpan;
@@ -130,6 +131,7 @@ class ParagraphLayoutPrep {
     public final adjustmentStyle:AdjustmentStylePolicy;
     public final atomClassByRange:std.SortedMap<TextRange, PunctuationClass>;
     public final shrinkOpportunities:Array<ShrinkOpportunity>;
+    public final spacingCarrierAdvanceDecisions:Array<SpacingCarrierAdvanceDecisionInfo>;
 
     public function new(input:LayoutInput, rejectedTechnicalTiersBySpan:std.SortedMap<TextRange, std.SortedSet<Int>>, text:String, fontSize:Float,
             styleAt:Int->TextStyle, fontSizeAt:Int->Float, bopomofoFontWeightAt:Int->Int, rubyFontSize:Float, rubyStackGap:Float, rubyFontWeight:Int,
@@ -154,7 +156,8 @@ class ParagraphLayoutPrep {
             rubyAndBopomofoSpread:std.SortedMap<Int, Float>, naturalInlineAttachments:Array<InlineAttachment>,
             attachedPunctuationBoundary:AttachedInlinePunctuationBoundaryResult, baseGeometry:PunctuationGeometryLedger,
             attachedPunctuationTrailingGlueByCluster:std.SortedMap<Int, Float>, clusters:Array<Cluster>, adjustmentStyle:AdjustmentStylePolicy,
-            atomClassByRange:std.SortedMap<TextRange, PunctuationClass>, shrinkOpportunities:Array<ShrinkOpportunity>) {
+            atomClassByRange:std.SortedMap<TextRange, PunctuationClass>, shrinkOpportunities:Array<ShrinkOpportunity>,
+            ?spacingCarrierAdvanceDecisions:Array<SpacingCarrierAdvanceDecisionInfo>) {
         this.input = input;
         this.rejectedTechnicalTiersBySpan = rejectedTechnicalTiersBySpan;
         this.text = text;
@@ -216,6 +219,7 @@ class ParagraphLayoutPrep {
         this.adjustmentStyle = adjustmentStyle;
         this.atomClassByRange = atomClassByRange;
         this.shrinkOpportunities = shrinkOpportunities;
+        this.spacingCarrierAdvanceDecisions = spacingCarrierAdvanceDecisions == null ? [] : spacingCarrierAdvanceDecisions;
     }
 }
 

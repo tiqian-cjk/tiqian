@@ -45,7 +45,7 @@ class Revision {
     public static final LAYOUT_REVISION:String = "tiqian-layout-v2";
 
     /** RENDER_REVISION of the prepared DOM lowering. */
-    public static final RENDER_REVISION:String = "prebroken-dom-v16";
+    public static final RENDER_REVISION:String = "prebroken-dom-v17";
 
     /** FONT_SOURCE_POLICY of the snapshot font evidence. */
     public static final FONT_SOURCE_POLICY:String = "host-compatible-stylesheet-v1";

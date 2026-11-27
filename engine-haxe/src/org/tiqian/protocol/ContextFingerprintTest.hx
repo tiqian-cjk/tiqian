@@ -17,7 +17,7 @@ class ContextFingerprintTest {
         final digest = ContextFingerprint.contextFingerprint(
             ContextFingerprintTestSupport.typography(), [], ContextFingerprintTestSupport.harfbuzzVersion());
         org.tiqian.test.trace.TracedAssertions.assertEqualsString(
-            "c8767d59df53c8929c7caac8afd7ab84f6e7aa2dc0bfd37809b6fb67b20e6ca6",
+            "adc029fd65cfe3ad8cadd66dc8339885ef4369c12668a5b9984e3e9f27ad49c6",
             ContextFingerprintTestSupport.hexBytes(digest));
     }
 
@@ -29,7 +29,7 @@ class ContextFingerprintTest {
             ContextFingerprintTestSupport.typography(), [ContextFingerprintTestSupport.face()],
             ContextFingerprintTestSupport.harfbuzzVersion());
         org.tiqian.test.trace.TracedAssertions.assertEqualsString(
-            "31ef79198777efe20c3b105d570b981bf6c836f0e5c400842e25ddf7c4cc2294",
+            "46b7f03d94c2ab5c51b91bb91a7ed3a4c9ed9608ad54182941778cb41dbed4d4",
             ContextFingerprintTestSupport.hexBytes(digest));
     }
 
@@ -40,7 +40,7 @@ class ContextFingerprintTest {
         final digest = ContextFingerprint.contextFingerprint(
             ContextFingerprintTestSupport.typographyAt(19.0), [], ContextFingerprintTestSupport.harfbuzzVersion());
         org.tiqian.test.trace.TracedAssertions.assertEqualsString(
-            "daad02265747bd6052418b898d019a5c38834f37b9460913ae1cfe94edadec14",
+            "b0bed999f5a3e580299287820febf8a5b818090126b9dc7adcd64627cf7db0f5",
             ContextFingerprintTestSupport.hexBytes(digest));
     }
 
