@@ -533,9 +533,22 @@ step_verify_shard() {
     echo "verify-shard needs --bundles; every bundle runs in one shard of the matrix" >&2
     return 2
   fi
-  local id started
+  # A bundle whose target configuration opts out of the test action has no
+  # suite to run; asking the test action for it fails.
+  ids="$(python3 -c 'import json,re,sys; t=re.sub(r"^\s*//.*$","",open("boring.json").read(),flags=re.M); d=json.loads(t); b={x["id"]:x for x in d["bundles"]}; print(" ".join([i for i in sys.argv[1].split() if b.get(i,{}).get("test",True) is not False]))' "$ids")"
+  if [ -z "$ids" ]; then
+    echo "verify-shard: every bundle in this shard opts out of the test action"
+    return 0
+  fi
+  local id dependency started
   for id in $ids; do
     started=$SECONDS
+    # A dependent bundle's suite reads its dependencies' module manifests.
+    for dependency in $(python3 -c 'import json,re,sys; t=re.sub(r"^\s*//.*$","",open("boring.json").read(),flags=re.M); d=json.loads(t); b={x["id"]:x for x in d["bundles"]}; print(" ".join(b[sys.argv[1]].get("dependsOn") or []))' "$id"); do
+      if [ ! -f "engine-haxe/out/$dependency/modules.txt" ]; then
+        in_devshell "boring gen $dependency --project boring.json" || return $?
+      fi
+    done
     in_devshell "boring gen $id --project boring.json" || return $?
     in_devshell "boring test $id --project boring.json" || return $?
     echo "shard timing test $id $((SECONDS - started))"
