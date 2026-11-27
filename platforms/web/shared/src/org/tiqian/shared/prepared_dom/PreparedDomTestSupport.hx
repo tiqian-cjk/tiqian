@@ -8,7 +8,7 @@ class PreparedDomTestSupport {
         italicEffect:Bool, dashStrategy:Null<String>, shapingLanguage:Null<String>,
         resolvedFace:Null<String>, glyphIds:Null<String>, shapingEvidence:Null<String>,
         punctuationInkFloor:Null<Float>, punctuationBodyWidth:Null<Float>,
-        evidenceRenderFontFamily:Null<String>):PreparedRunRenderInput {
+        evidenceRenderFontFamily:Null<String>, ?spacingCarrierAdvance:Null<Float>):PreparedRunRenderInput {
         return {
             source: source,
             display: display,
@@ -28,6 +28,7 @@ class PreparedDomTestSupport {
             shapingEvidence: shapingEvidence,
             punctuationInkFloor: punctuationInkFloor,
             punctuationBodyWidth: punctuationBodyWidth,
+            spacingCarrierAdvance: spacingCarrierAdvance,
             evidenceRenderFontFamily: evidenceRenderFontFamily
         };
     }

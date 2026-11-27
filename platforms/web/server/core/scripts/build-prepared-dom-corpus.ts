@@ -77,6 +77,7 @@ interface LayoutPlan {
   lines: PlanLine[];
   emphasisRanges?: [number, number][];
   inlineEdges?: { offset: number; inlineEnd: number }[];
+  spacingCarrierAdvances?: { rangeStart: number; rangeEnd: number; advance: number }[];
   rubyDecisions?: {
     baseRangeStart: number;
     baseRangeEnd: number;
@@ -256,6 +257,50 @@ const cases: CorpusCase[] = [
     plan: plan([
       line([cell(0, 2, "排版", "排版", 0, 16)], { visualWidth: 16.4 }),
     ]),
+    locale: "zh-Hans",
+    options: {},
+  },
+  {
+    name: "inline-spacing-carrier",
+    plan: {
+      ...plan([
+        line([
+          cell(0, 5, "Hello", "Hello", 0, 40),
+          cell(5, 10, "World", "World", 52, 44),
+          cell(10, 11, "中", "中", 100, 16),
+        ], { visualWidth: 120 }),
+      ]),
+      spacingCarrierAdvances: [{ rangeStart: 0, rangeEnd: 11, advance: 4.5 }],
+    },
+    locale: "zh-Hans",
+    options: { semantics: [{ start: 0, end: 10, tagName: "u" }] },
+  },
+  {
+    name: "inline-spacing-carrier-with-classes",
+    plan: {
+      ...plan([
+        line([
+          cell(0, 5, "Hello", "Hello", 0, 40),
+          cell(5, 10, "World", "World", 52, 44),
+        ], { visualWidth: 96 }),
+      ]),
+      spacingCarrierAdvances: [{ rangeStart: 0, rangeEnd: 10, advance: 4.5 }],
+    },
+    locale: "zh-Hans",
+    options: { styleClassFor: "declaration-length" },
+  },
+  {
+    name: "inline-spacing-carrier-evidence-face",
+    plan: {
+      ...plan([
+        line([
+          cell(0, 2, "——", "——", 0, 32, { renderFontFamily: "Dash Evidence" }),
+          cell(2, 3, "中", "中", 36, 16),
+          cell(3, 4, "文", "文", 52, 16),
+        ], { visualWidth: 68 }),
+      ]),
+      spacingCarrierAdvances: [{ rangeStart: 0, rangeEnd: 4, advance: 4.5 }],
+    },
     locale: "zh-Hans",
     options: {},
   },

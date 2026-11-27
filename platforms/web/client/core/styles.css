@@ -77,6 +77,19 @@ tiqian-prose [data-tq-rendered="true"] {
   fill: var(--tq-decoration-color) !important;
 }
 
+/* SpacingCarrierInlineText: an inline U+00A0 carries a positive gap so host
+   text decoration crosses it. word-spacing is the gap minus the engine-shaped
+   U+00A0 advance; inherited font properties keep the same face. */
+[data-tq-rendered="true"] span[data-tq-geometry="true"][data-tq-spacing-carrier-inline] {
+  display: inline !important;
+  white-space: pre !important;
+  letter-spacing: 0 !important;
+  font-feature-settings: normal !important;
+  font-variant: normal !important;
+  text-transform: none !important;
+  vertical-align: baseline !important;
+}
+
 [data-tq-rendered="true"] br[data-tq-engine-break] {
   all: unset !important;
 }

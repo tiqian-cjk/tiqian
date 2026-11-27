@@ -231,6 +231,25 @@ class PreparedDomTest {
     }
 
     @:test
+    public static function renderRunTrailingLetterInlineCarrierKeepsDecoration():Void {
+        final run = PreparedDomTestSupport.input("a", "a", 0.0, 5.0, false, null, [], 0.0,
+            { kind: "trailing-letter", px: 2.5 }, null, false, null, null, null,
+            null, null, null, null, null, 0.75);
+        final node = PreparedDom.renderRun(run, null);
+        TracedAssertions.assertEqualsString("<span data-tq-advance=\"5\" data-tq-geometry=\"true\" data-tq-x=\"0\">a<span aria-hidden=\"true\" data-tq-copy-ignore=\"true\" data-tq-geometry=\"true\" data-tq-spacing-carrier=\"true\" data-tq-spacing-carrier-inline style=\"word-spacing:1.75px!important\">\u00A0</span></span>", node.html, "inline carrier html");
+    }
+
+    @:test
+    public static function renderRunTrailingLetterAtSemanticEndKeepsBlockCarrier():Void {
+        final run = PreparedDomTestSupport.input("a", "a", 0.0, 5.0, false, null, [], 0.0,
+            { kind: "trailing-letter", px: 2.5 }, null, false, null, null, null,
+            null, null, null, null, null, 0.75);
+        final node = PreparedDom.renderRun(run, null, "a");
+        TracedAssertions.assertTrue(node.html.indexOf("display:inline-block!important;inline-size:2.5px!important") >= 0, "semantic end carrier stays inline-block");
+        TracedAssertions.assertTrue(node.html.indexOf("data-tq-spacing-carrier-inline") < 0, "semantic end carrier is not inline");
+    }
+
+    @:test
     public static function renderRunUnsupportedOpenTypeFeaturesThrows():Void {
         final run = PreparedDomTestSupport.input("a", "a", 0.0, 5.0, false, ["pwid", "palt", "bogus"], [], 0.0,
             { kind: "none", px: 0.0 }, null, false, null, null, null, null, null,

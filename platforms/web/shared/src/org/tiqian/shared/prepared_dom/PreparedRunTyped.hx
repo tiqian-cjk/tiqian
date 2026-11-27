@@ -28,6 +28,7 @@ typedef PreparedRunTyped = {
     var shapingEvidence: Null<String>;
     var punctuationInkFloor: Null<Float>;
     var punctuationBodyWidth: Null<Float>;
+    var spacingCarrierAdvance: Null<Float>;
     var evidenceRenderFontFamily: Null<String>;
     var inlineObjectAdvance: Null<Float>;
     var bopomofoAdvanceWidth: Float;

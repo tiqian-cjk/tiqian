@@ -14,6 +14,7 @@ typedef PreparedPlan = {
     var inlineEdges: Array<InlineEdgeEntry>;
     var decorationSegments: Null<Array<EvidenceDecorationSegment>>;
     var emphasisDots: Null<Array<EvidenceEmphasisDot>>;
+    var spacingCarrierAdvances: Null<Array<PreparedSpacingCarrierAdvance>>;
     var fontSize: Float;
     var overlayWidth: Float;
 }

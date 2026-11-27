@@ -231,6 +231,7 @@ type GlobalGetComputedStyle = (element: Element, pseudo?: string | null) => CSSS
 // stable and synchronous execution for raw-DOM backup relayout and destruction tests.
 
 import assert from "node:assert/strict";
+import { computedLetterSpacingPx, computedWordSpacingPx } from "./runtime-host-text-spacing.js";
 import {
   FakeDocument,
   FakeElement,
@@ -1491,10 +1492,12 @@ function inlineContentAdvance(node: FakeNode): number {
     const data = ((node as FakeNode & { data?: string }).data ?? "").replace(/[\u200B\uFEFF]/g, "");
     if (data.length === 0) return 0;
     const baseFontSize = node.parentElement ? blockFontSizePx(node.parentElement) : 18;
-    const letterSpacing = computedLetterSpacingPx(node.parentElement);
+    const letterSpacing = computedLetterSpacingPx(node.parentElement as Element | null);
+    const wordSpacing = computedWordSpacingPx(node.parentElement as Element | null, (element) => preparedValueStyleProperty(element as unknown as FakeElement, "word-spacing"));
     let advance = 0;
     for (const ch of data) {
       advance += fakeCharNaturalAdvance(ch, baseFontSize) + letterSpacing;
+      if (ch === " " || ch === "\u00A0") advance += wordSpacing;
     }
     return advance;
   }
@@ -1535,7 +1538,7 @@ function pseudoContentAdvance(element: FakeElement, pseudo: string): number {
   }
   if (!content) return 0;
   const fontSize = cssPx(cs.getPropertyValue?.("font-size")) || 18;
-  const letterSpacing = computedLetterSpacingPx(element);
+  const letterSpacing = computedLetterSpacingPx(element as unknown as Element);
   return content.length * (fontSize + letterSpacing);
 }
 
@@ -2608,14 +2611,6 @@ function blockFontSizePx(element: FakeElement): number {
   return 18;
 }
 
-function computedLetterSpacingPx(element: FakeElement | null): number {
-  if (!element || element.nodeType !== 1) return 0;
-  const computed = (globalThis as Record<string, unknown>).getComputedStyle as GlobalGetComputedStyle | undefined;
-  const raw = computed?.(element as FakeElement & Element)?.getPropertyValue("letter-spacing") ?? "";
-  const match = /^(-?\d+(?:\.\d+)?)px/.exec(String(raw).trim());
-  return match ? Number.parseFloat(match[1]) : 0;
-}
-
 export class FakeRange {
   startContainer: FakeNode | null;
   startOffset: number;
@@ -2734,7 +2729,7 @@ export class FakeRange {
         const end = this.endOffset ?? full.length;
         const anchorElement = this.startContainer.parentElement;
         const baseFontSize = anchorElement ? blockFontSizePx(anchorElement) : 18;
-        const letterSpacing = computedLetterSpacingPx(anchorElement);
+        const letterSpacing = computedLetterSpacingPx(anchorElement as unknown as Element);
         const charAdvance = (ch: string) => fakeCharNaturalAdvance(ch, baseFontSize) + letterSpacing;
         const chars = Array.from(full);
         left = inlineStartOffset(this.startContainer as FakeElement);

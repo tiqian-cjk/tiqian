@@ -128,7 +128,7 @@ class PreparedParagraphLayout {
         );
         final engine = new ExplainableStubParagraphLayoutEngine(null, null, null,
             new CallbackFontMetricsResolver(callbacks.resolve), null, null, null, null, new LookaheadLineBreaker(), null,
-            new CallbackTextShaper(callbacks.shape), null, cache);
+            new CallbackTextShaper(callbacks.shape), null, cache, true);
         return engine.layout(input);
     }
 

@@ -62,7 +62,7 @@ function tablesManifestFixture(): SnapshotManifestWire {
     schema: 2,
     tables: tablesPin,
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v16",
+    renderRevision: "prebroken-dom-v17",
     fontSourcePolicy: "host-compatible-stylesheet-v1",
     paragraphSelector: "p[data-tq-snapshot-key]",
     renderFontFamilies: ["Fixture CJK"],

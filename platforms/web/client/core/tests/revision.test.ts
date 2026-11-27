@@ -25,7 +25,7 @@ test("the generated revision family pins the hand-written literals", () => {
   assert.equal(Revision.SNAPSHOT_SCHEMA, 1);
   assert.equal(Revision.SNAPSHOT_TABLES_SCHEMA, 2);
   assert.equal(Revision.LAYOUT_REVISION, "tiqian-layout-v2");
-  assert.equal(Revision.RENDER_REVISION, "prebroken-dom-v16");
+  assert.equal(Revision.RENDER_REVISION, "prebroken-dom-v17");
   assert.equal(Revision.FONT_SOURCE_POLICY, "host-compatible-stylesheet-v1");
   assert.equal(Revision.FONT_BACKEND_REVISION, "tiqian-shared-harfbuzz-v5");
   assert.equal(Revision.FONT_REPLAY_REVISION, "tiqian-server-shaping-replay-v1");

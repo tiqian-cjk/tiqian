@@ -181,7 +181,7 @@ function fixturePrepared(input: { key: string; text: string }): PreparedBranch {
     status: "prepared",
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v16",
+    renderRevision: "prebroken-dom-v17",
     key: input.key,
     sourceText: input.text,
     sourceSha256: sha256(input.text),

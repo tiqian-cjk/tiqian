@@ -446,7 +446,7 @@ function fixture(options: FixtureOptions = {}): FixtureResult {
     schema: 2,
     tables: { snapshot: snapshotTablesSha ?? sha256(tableBytes) },
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v16",
+    renderRevision: "prebroken-dom-v17",
     fontSourcePolicy: "host-compatible-stylesheet-v1",
     ...(entrySource === undefined ? {} : { entrySource }),
     renderFontFamilies: ["Fixture CJK"],
