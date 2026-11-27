@@ -138,8 +138,8 @@ using std.RecordCopy;
         var y = PunctuationGeometryLedger.from(cs, aa, new PunctuationSpacingCompressionResult([a]));
         TracedAssertions.assertEqualsFloat(4, y.glueCapacities().get(0).leading);
         TracedAssertions.assertEqualsFloat(8, y.glueCapacities().get(1).leading);
-        var atom:PunctuationAtom = PunctuationGeometryLedgerCoverageSupport.builder.build('·', new TextRange(0, 1), PunctuationGeometryLedgerCoverageSupport.em,
-            new PunctuationInkInput(16, new Rect(2, 4, 10, 12), 8, -2));
+        var atom:PunctuationAtom = PunctuationGeometryLedgerCoverageSupport.requireAtom(PunctuationGeometryLedgerCoverageSupport.builder.build('·', new TextRange(0, 1), PunctuationGeometryLedgerCoverageSupport.em,
+            new PunctuationInkInput(16, new Rect(2, 4, 10, 12), 8, -2)));
         var ca = [
             PunctuationGeometryLedgerCoverageSupport.c("·", 0),
             PunctuationGeometryLedgerCoverageSupport.c("中", 1)
@@ -305,8 +305,8 @@ using std.RecordCopy;
 
     @:test public static function lineEdgeTrimConsumesCentredPunctuationOncePerLine():Void {
         PunctuationGeometryLedgerCoverageSupport.start("lineEdgeTrimConsumesCentredPunctuationOncePerLine");
-        var atom:PunctuationAtom = PunctuationGeometryLedgerCoverageSupport.builder.build('·', new TextRange(0, 1),
-            PunctuationGeometryLedgerCoverageSupport.em, new PunctuationInkInput(16, new Rect(2, 4, 10, 12), 8, -2));
+        var atom:PunctuationAtom = PunctuationGeometryLedgerCoverageSupport.requireAtom(PunctuationGeometryLedgerCoverageSupport.builder.build('·', new TextRange(0, 1),
+            PunctuationGeometryLedgerCoverageSupport.em, new PunctuationInkInput(16, new Rect(2, 4, 10, 12), 8, -2)));
         var x = PunctuationGeometryLedger.from([PunctuationGeometryLedgerCoverageSupport.c("·", 0)], [atom], new PunctuationSpacingCompressionResult([]));
         var r = x.consumeLineEdgeGlue([PunctuationGeometryLedgerCoverageSupport.line(0, 0)]);
         TracedAssertions.assertEqualsString("both", r.decisions[0].side);
@@ -345,6 +345,11 @@ using std.RecordCopy;
 class PunctuationGeometryLedgerCoverageSupport {
     public static final em:Float = 16;
     public static final builder = new PunctuationAtomBuilder();
+
+    public static function requireAtom(atom:Null<PunctuationAtom>):PunctuationAtom {
+        TracedAssertions.assertTrue(atom != null);
+        return atom;
+    }
 
     public static function start(n:String):Void
         new TestTraceRecorder("PunctuationGeometryLedgerCoverageTest").section(n);
