@@ -213,7 +213,7 @@ pack_dependencies() {
       return 1
     fi
     rm -rf "$(boring_out_root)/$dependency"
-    if ! boring pack "$dependency" --registry-out "$TREE" --owner "$OWNER" --repo tiqian --asset-base "$ASSET_BASE"; then
+    if ! boring pack "$dependency"; then
       return 1
     fi
     PACKED_DEPS="$PACKED_DEPS $dependency"
