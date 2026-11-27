@@ -121,7 +121,7 @@ import std.SortedMap.SortedMapBuilder;
         markKeys(touched, rubySpreadByCluster.size(), i -> rubySpreadByCluster.keyAt(i));
         markKeys(touched, inlineBoxAdvanceByCluster.size(), i -> inlineBoxAdvanceByCluster.keyAt(i));
         markKeys(touched, attachedInlineTrailingGlueByCluster.size(), i -> attachedInlineTrailingGlueByCluster.keyAt(i));
-        final result:Array<Cluster> = [];
+        final result = new Array<Cluster>();
         for (i in 0...n)
             result.push(touched[i] ? resolveCluster(i) : untouchedCluster(naturalClusters[i]));
         return result;
@@ -155,7 +155,7 @@ import std.SortedMap.SortedMapBuilder;
      * delta in either ledger is resolved again.
      */
     public function resolveClustersChangedFrom(previous:Array<Cluster>, previousDeltas:SortedMap<Int, Float>):Array<Cluster> {
-        final result:Array<Cluster> = [];
+        final result = new Array<Cluster>();
         for (i in 0...previous.length)
             result.push(previous[i]);
         for (i in 0...previousDeltas.size()) {

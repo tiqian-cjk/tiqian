@@ -114,17 +114,21 @@ class LineAdjustmentStage {
             // exact total instead of rounding on every step. `sumOfFloat` carries
             // the Double accumulator; a binary32 accumulator would leave
             // 479.999817 where the reference records 480.
-            final adjustedTerms:Array<Float> = [];
-            final visualTerms:Array<Float> = [];
-            if (!lineCandidate.clusterRange.isEmpty) {
-                for (idx in lineCandidate.clusterRange.start...lineCandidate.clusterRange.end + 1) {
-                    adjustedTerms.push(lineCandidate.hangingClusterIndices.has(idx) ? 0.0 : trimmedClusters[idx].advance);
-                    visualTerms.push(finalClusters[idx].advance);
-                }
-            }
+            // Each term array is filled by its own loop directly after its declaration, so boring's
+            // counted-fill lowering reserves the line length once. The loops count from 0: the Rust
+            // target's counted fill at boring 4a87c173 prints `for k in 0..<bound>` and drops a
+            // nonzero start (`fillFusion` in `RustExpr.hx`). An empty range counts 0 clusters.
+            final firstCluster = lineCandidate.clusterRange.start;
+            final lineClusterCount = lineCandidate.clusterRange.isEmpty ? 0 : lineCandidate.clusterRange.end - firstCluster + 1;
+            final adjustedTerms = new Array<Float>();
+            for (k in 0...lineClusterCount)
+                adjustedTerms.push(lineCandidate.hangingClusterIndices.has(firstCluster + k) ? 0.0 : trimmedClusters[firstCluster + k].advance);
+            final visualTerms = new Array<Float>();
+            for (k in 0...lineClusterCount)
+                visualTerms.push(finalClusters[firstCluster + k].advance);
             final adjustedWidth = AccurateSum.of(adjustedTerms);
             final visualWidth = AccurateSum.of(visualTerms);
-            final hangingTerms:Array<Float> = [];
+            final hangingTerms = new Array<Float>();
             for (hIdx in 0...lineCandidate.hangingClusterIndices.size()) {
                 hangingTerms.push(finalClusters[lineCandidate.hangingClusterIndices.at(hIdx)].advance);
             }
@@ -356,14 +360,17 @@ class LineAdjustmentStage {
             }
         }
 
+        // One fill loop per array, each directly after its declaration: boring's counted-fill
+        // lowering (`FusionPlan`) then reserves the length once instead of growing the buffer.
         final pushInTrailing = new Array<Float>();
-        final pushInLeading = new Array<Float>();
-        final pushInRawTrims = new Array<Float>();
-        for (i in 0...prep.naturalClusters.length) {
+        for (i in 0...prep.naturalClusters.length)
             pushInTrailing.push(0.0);
+        final pushInLeading = new Array<Float>();
+        for (i in 0...prep.naturalClusters.length)
             pushInLeading.push(0.0);
+        final pushInRawTrims = new Array<Float>();
+        for (i in 0...prep.naturalClusters.length)
             pushInRawTrims.push(0.0);
-        }
 
         for (lIdx in 0...plan.lineSolution.lines.length) {
             final line = plan.lineSolution.lines[lIdx];
@@ -684,22 +691,20 @@ class LineAdjustmentStage {
         final lookups:FinishClusterLookups = cachedLookups != null ? cachedLookups : FinishClusterLookups.build(prep, plan.metricDecisionByRange);
         if (cachedLookups == null)
             lookupsSlot.value = lookups;
+        // One unconditional push per cluster, so boring's counted-fill lowering reserves the length.
         final finalClusters = new Array<Cluster>();
         for (clusterIndex in 0...resolvedFinalClusters.length) {
             final c = resolvedFinalClusters[clusterIndex];
             final metricDecision = lookups.metricDecisions[clusterIndex];
-            if (metricDecision == null) {
-                finalClusters.push(c);
-            } else {
+            var shifted = c;
+            if (metricDecision != null) {
                 final m = metricDecision.layoutMetrics;
                 final metricShift = m.baselineClass == BaselineClass.Roman ? 0.0 : plan.baseBoxDescent - m.descent;
                 final shift = c.baselineShift + metricShift + prep.styleAt(c.range.start).baselineShift;
-                if (shift > -0.01 && shift < 0.01) {
-                    finalClusters.push(c);
-                } else {
-                    finalClusters.push(new Cluster(c.range, c.text, c.fontKey, c.advance, c.displayText, shift, c.leadingLayoutAdvance, c.glyphInlineShift));
-                }
+                if (!(shift > -0.01 && shift < 0.01))
+                    shifted = new Cluster(c.range, c.text, c.fontKey, c.advance, c.displayText, shift, c.leadingLayoutAdvance, c.glyphInlineShift);
             }
+            finalClusters.push(shifted);
         }
         final geometryDecisions = finalGeometry.toDecisionInfo();
 
@@ -711,7 +716,7 @@ class LineAdjustmentStage {
             final openTypeFeaturesEntry = lookups.openTypeFeatures[runClusterIndices[0]];
             final openTypeFeatures:Array<String> = openTypeFeaturesEntry == null ? [] : openTypeFeaturesEntry;
             final runGlyphs = new Array<Glyph>();
-            final runAdvanceTerms:Array<Float> = [];
+            final runAdvanceTerms = new Array<Float>();
             for (clusterIdx in 0...runClusterIndices.length) {
                 final naturalIndex = runClusterIndices[clusterIdx];
                 final cluster = finalClusters[naturalIndex];
