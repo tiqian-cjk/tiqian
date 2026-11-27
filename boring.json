@@ -212,6 +212,7 @@
     },
     {
       "id": "dart",
+      "test": false,
       "target": "dart",
       "sourceSet": "engine",
       "haxeArgs": [
