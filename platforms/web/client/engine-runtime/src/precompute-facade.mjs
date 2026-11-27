@@ -354,9 +354,38 @@ function callbackTextShaper(shapeJson) {
   };
 }
 
-function callbackFontMetricsResolver(metricsJson) {
+/**
+ * Per-measurement-session font metrics cache (`WebFontMetricsCache`), the
+ * counterpart of the Apple frontend's CachingFontMetricsResolver
+ * (platforms/apple/shaping/Sources/TiqianCoreText/ShapingCaches.swift). The
+ * host metrics function (or the callbacks object that carries it) scopes the
+ * cache the same way the shaper function scopes the annotation cache above:
+ * one host function answers for one font session. Inside a session the key
+ * is the serialized request, i.e. exactly the JSON the host function
+ * receives, so two requests share an entry only when the host would see
+ * identical input. At most 256 entries per session are kept, evicting the
+ * oldest insertion first; weak keys release a session's cache with its host
+ * function.
+ */
+const metricsCacheStore = new WeakMap();
+const METRICS_CACHE_MAX_ENTRIES = 256;
+
+function callbackFontMetricsResolver(metricsJson, cacheKey = metricsJson) {
+  let cache = metricsCacheStore.get(cacheKey);
+  if (cache === undefined) {
+    cache = new Map();
+    metricsCacheStore.set(cacheKey, cache);
+  }
   return {
-    resolve: (request) => parseRawFontMetricsJson(metricsJson(appendFontMetricsRequestJson(request))),
+    resolve: (request) => {
+      const requestJson = appendFontMetricsRequestJson(request);
+      const cached = cache.get(requestJson);
+      if (cached !== undefined) return cached;
+      const metrics = parseRawFontMetricsJson(metricsJson(requestJson));
+      if (cache.size >= METRICS_CACHE_MAX_ENTRIES) cache.delete(cache.keys().next().value);
+      cache.set(requestJson, metrics);
+      return metrics;
+    },
   };
 }
 
@@ -576,7 +605,7 @@ export function precomputeParagraphWithBrowserMetrics(request, zeroAdvanceEpsilo
     request,
     zeroAdvanceEpsilonPx,
     callbackTextShaper((requestJson) => callbacks.shapeJson(requestJson)),
-    callbackFontMetricsResolver((requestJson) => callbacks.metricsJson(requestJson)),
+    callbackFontMetricsResolver((requestJson) => callbacks.metricsJson(requestJson), callbacks),
     cachedAnnotationCache(callbacks),
   );
 }
