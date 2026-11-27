@@ -47,7 +47,8 @@ import std.SortedMap;
 typedef ShrinkTierEntry = {final key:Int; final value:ShrinkOpportunity;};
 
 class LineRepair {
-    public static function applyKinsokuRepairs(initial:Array<LineCandidate>, naturalClusters:Array<Cluster>, adjustedClusters:Array<Cluster>, maxWidth:Float,
+    public static function applyKinsokuRepairs(initial:Array<LineCandidate>, adjustedClusters:Array<Cluster>, naturalAdvances:Array<Float>,
+            adjustedAdvances:Array<Float>, maxWidth:Float,
             kinsoku:KinsokuRule, shrinkOpportunities:Array<ShrinkOpportunity>, pushInPenalty:Int, carryPreviousPenalty:Int, leaveRaggedPenalty:Int,
             ?unbreakableRanges:Null<UnbreakableRanges>, ?firstLineIndent:Null<Float>, ?hangableClusters:Null<SortedSet<Int>>,
             ?extendableHangRanges:Null<Array<IntRange>>, ?hangPenalty:Null<Int>, ?forbiddenLineStartClusters:Null<SortedSet<Int>>):LineSolution {
@@ -76,7 +77,7 @@ class LineRepair {
             }
 
             final repairCandidates:Array<RepairCandidate> = [];
-            final pushIn = LineRepair.tryPushIn(prev, curr, naturalClusters, adjustedClusters,
+            final pushIn = LineRepair.tryPushIn(prev, curr, adjustedClusters, naturalAdvances, adjustedAdvances,
                 ProgressiveBreakDecisions.lineLimit(maxWidth, indent, prev.clusterRange.start), shrinkOpportunities, pushInPenalty, null,
                 "ForbiddenAtLineStart");
             repairCandidates.push(pushIn.candidate);
@@ -124,7 +125,7 @@ class LineRepair {
                 final mergedTerms:Array<Float> = [];
                 var wi = prev.clusterRange.end + 1;
                 while (wi <= mergeEndIndex) {
-                    mergedTerms.push(naturalClusters[wi].advance);
+                    mergedTerms.push(naturalAdvances[wi]);
                     wi++;
                 }
                 final mergedNatural = prev.naturalWidth + AccurateSum.of(mergedTerms);
@@ -152,8 +153,8 @@ class LineRepair {
                 if (mergeEndIndex == curr.clusterRange.end) {
                     mutable.splice(i, 1);
                 } else {
-                    mutable[i] = LineBreakerLines.rebuildLine(new IntRange(mergeEndIndex + 1, curr.clusterRange.end), naturalClusters, adjustedClusters,
-                        curr.endReason);
+                    mutable[i] = LineBreakerLines.rebuildLine(new IntRange(mergeEndIndex + 1, curr.clusterRange.end), adjustedClusters, naturalAdvances,
+                        adjustedAdvances, curr.endReason);
                 }
                 continue;
             }
@@ -183,7 +184,7 @@ class LineRepair {
             }
             final newPrevRange = new IntRange(prev.clusterRange.start, carriedIndex - 1);
             final newCurrRange = new IntRange(carriedIndex, curr.clusterRange.end);
-            final carriedCurrent = LineBreakerLines.rebuildLine(newCurrRange, naturalClusters, adjustedClusters, curr.endReason);
+            final carriedCurrent = LineBreakerLines.rebuildLine(newCurrRange, adjustedClusters, naturalAdvances, adjustedAdvances, curr.endReason);
             if (carriedCurrent.adjustedWidth > maxWidth) {
                 repairCandidates.push(new RepairCandidate("CarryPrevious", "ForbiddenAtLineStart", firstIndex, carryPreviousPenalty, false, "carry-overflows",
                     null, carriedIndex));
@@ -197,7 +198,7 @@ class LineRepair {
 
             repairCandidates.push(new RepairCandidate("CarryPrevious", "ForbiddenAtLineStart", firstIndex, carryPreviousPenalty, true, null, null,
                 carriedIndex));
-            mutable[i - 1] = LineBreakerLines.rebuildLine(newPrevRange, naturalClusters, adjustedClusters, prev.endReason);
+            mutable[i - 1] = LineBreakerLines.rebuildLine(newPrevRange, adjustedClusters, naturalAdvances, adjustedAdvances, prev.endReason);
             mutable[i] = new LineCandidate(carriedCurrent.clusterRange, carriedCurrent.sourceRange, carriedCurrent.naturalWidth, carriedCurrent.adjustedWidth,
                 carriedCurrent.endReason,
                 RepairOption.CarryPrevious(carryPreviousPenalty,
@@ -213,7 +214,8 @@ class LineRepair {
         return new LineSolution(mutable, totalBadness);
     }
 
-    public static function tryPushIn(prev:LineCandidate, curr:LineCandidate, naturalClusters:Array<Cluster>, adjustedClusters:Array<Cluster>, maxWidth:Float,
+    public static function tryPushIn(prev:LineCandidate, curr:LineCandidate, adjustedClusters:Array<Cluster>, naturalAdvances:Array<Float>,
+            adjustedAdvances:Array<Float>, maxWidth:Float,
             shrinkOpportunities:Array<ShrinkOpportunity>, pushInPenalty:Int, ?mergeThroughClusterIndex:Null<Int>, ?reasonCode:Null<String>):PushInResult {
         final code = reasonCode == null ? "ForbiddenAtLineStart" : reasonCode;
         final offenderIndex = mergeThroughClusterIndex == null ? curr.clusterRange.start : mergeThroughClusterIndex;
@@ -221,7 +223,7 @@ class LineRepair {
             throw new TiqianIllegalArgumentException(Message("PushIn merge-through cluster must belong to the current line."));
         final mergeEndIndex = LineRepair.mandatoryBreakTailEnd(curr, offenderIndex, adjustedClusters);
         final expandedRange = new IntRange(prev.clusterRange.start, mergeEndIndex);
-        final expanded = LineBreakerLines.rebuildLine(expandedRange, naturalClusters, adjustedClusters);
+        final expanded = LineBreakerLines.rebuildLine(expandedRange, adjustedClusters, naturalAdvances, adjustedAdvances);
         final overflow = expanded.adjustedWidth - maxWidth;
 
         final inLine:Array<ShrinkOpportunity> = shrinkOpportunities.filter(opp -> opp.clusterIndex >= expandedRange.start
@@ -261,7 +263,7 @@ class LineRepair {
             mergeEndIndex == curr.clusterRange.end ? curr.endReason : prev.endReason,
             RepairOption.PushIn(pushInPenalty, reasonText, offenderIndex, allocations, shrink, totalCapacity), candidateList, expanded.hangingClusterIndices);
         final repairedCurrent = mergeEndIndex == curr.clusterRange.end ? null : LineBreakerLines.rebuildLine(new IntRange(mergeEndIndex + 1,
-            curr.clusterRange.end), naturalClusters, adjustedClusters, curr.endReason);
+            curr.clusterRange.end), adjustedClusters, naturalAdvances, adjustedAdvances, curr.endReason);
         return new PushInResult(repairedPrevious, repairedCurrent, candidate);
     }
 
@@ -387,7 +389,8 @@ class LineRepair {
         return null;
     }
 
-    public static function applyFillPushIn(lines:Array<LineCandidate>, naturalClusters:Array<Cluster>, adjustedClusters:Array<Cluster>, maxWidth:Float,
+    public static function applyFillPushIn(lines:Array<LineCandidate>, adjustedClusters:Array<Cluster>, naturalAdvances:Array<Float>,
+            adjustedAdvances:Array<Float>, maxWidth:Float,
             shrinkOpportunities:Array<ShrinkOpportunity>, firstLineIndent:Float, compressBias:Float, forbiddenLineStartClusters:Null<SortedSet<Int>>,
             forbiddenLineEndClusters:SortedSet<Int>, unbreakableRanges:UnbreakableRanges, pushInPenalty:Int, ?gapBoundaries:Null<SortedSet<Int>>,
             ?progressiveBreakOpportunities:Null<SortedMap<Int, ProgressiveBreakOpportunity>>):Array<LineCandidate> {
@@ -492,7 +495,7 @@ class LineRepair {
                     continue;
                 }
             }
-            final result = tryPushIn(prev, curr, naturalClusters, adjustedClusters, limit, shrinkOpportunities, pushInPenalty, groupEnd,
+            final result = tryPushIn(prev, curr, adjustedClusters, naturalAdvances, adjustedAdvances, limit, shrinkOpportunities, pushInPenalty, groupEnd,
                 promotesProgressiveTier ? "ProgressiveTechnicalTierPromotion" : "LineAdjustmentPushIn");
             if (result.candidate.accepted) {
                 out[i] = result.previous;
@@ -511,14 +514,14 @@ class LineRepair {
     }
 
     /** Gated [applyFillPushIn] over a [LineSolution] — no-op when not [enabled]. */
-    public static function withFillPushIn(solution:LineSolution, enabled:Bool, naturalClusters:Array<Cluster>, adjustedClusters:Array<Cluster>,
-            maxWidth:Float, shrinkOpportunities:Array<ShrinkOpportunity>, firstLineIndent:Float, compressBias:Float,
+    public static function withFillPushIn(solution:LineSolution, enabled:Bool, adjustedClusters:Array<Cluster>, naturalAdvances:Array<Float>,
+            adjustedAdvances:Array<Float>, maxWidth:Float, shrinkOpportunities:Array<ShrinkOpportunity>, firstLineIndent:Float, compressBias:Float,
             forbiddenLineStartClusters:Null<SortedSet<Int>>, forbiddenLineEndClusters:SortedSet<Int>, unbreakableRanges:UnbreakableRanges, pushInPenalty:Int,
             ?gapBoundaries:Null<SortedSet<Int>>, ?progressiveBreakOpportunities:Null<SortedMap<Int, ProgressiveBreakOpportunity>>):LineSolution {
         if (!enabled) {
             return solution;
         }
-        return new LineSolution(applyFillPushIn(solution.lines, naturalClusters, adjustedClusters, maxWidth, shrinkOpportunities, firstLineIndent,
+        return new LineSolution(applyFillPushIn(solution.lines, adjustedClusters, naturalAdvances, adjustedAdvances, maxWidth, shrinkOpportunities, firstLineIndent,
             compressBias, forbiddenLineStartClusters, forbiddenLineEndClusters, unbreakableRanges, pushInPenalty, gapBoundaries, progressiveBreakOpportunities),
             solution.totalBadness);
     }

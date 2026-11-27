@@ -88,17 +88,20 @@ class GreedyLineBreaker implements LineBreaker {
         final hard = hardBreakAfterClusters == null ? LineBreakerLines.emptyIntSet() : hardBreakAfterClusters;
         final controls = nonRenderingControlClusters == null ? LineBreakerLines.emptyIntSet() : nonRenderingControlClusters;
         final progressive = progressiveBreakOpportunities == null ? LineBreakerLines.emptyProgressiveMap() : progressiveBreakOpportunities;
-        final greedy = greedyFill(n, a, maxWidth, ranges, indent, forbidEnd, hyphens, cjk, maxStretch, sino, sinoCap, hard, controls, progressive);
-        final repaired = LineRepair.applyKinsokuRepairs(greedy, n, a, maxWidth, this.kinsoku, shrinkOps, pushInPenalty, carryPreviousPenalty,
+        final naturalAdvances = LineBreakerLines.advancesOf(n);
+        final adjustedAdvances = LineBreakerLines.advancesOf(a);
+        final greedy = greedyFill(n, a, naturalAdvances, adjustedAdvances, maxWidth, ranges, indent, forbidEnd, hyphens, cjk, maxStretch, sino, sinoCap, hard,
+            controls, progressive);
+        final repaired = LineRepair.applyKinsokuRepairs(greedy, a, naturalAdvances, adjustedAdvances, maxWidth, this.kinsoku, shrinkOps, pushInPenalty, carryPreviousPenalty,
             leaveRaggedPenalty, ranges, indent, hangables, extendables, 5, forbiddenLineStartClusters);
         final gapBoundaries = lineGapBoundaries == null ? LineBreakerLines.unionLineGapBoundaries(cjk, sino) : lineGapBoundaries;
         final pushIn = lineAdjustmentPushIn;
         final compressBias = lineAdjustmentCompressBias;
-        return LineRepair.withFillPushIn(repaired, pushIn, n, a, maxWidth, shrinkOps, indent, compressBias, forbiddenLineStartClusters, forbidEnd, ranges,
+        return LineRepair.withFillPushIn(repaired, pushIn, a, naturalAdvances, adjustedAdvances, maxWidth, shrinkOps, indent, compressBias, forbiddenLineStartClusters, forbidEnd, ranges,
             pushInPenalty, gapBoundaries, progressive);
     }
 
-    function greedyFill(n:Array<Cluster>, a:Array<Cluster>, maxWidth:Float, unbreakableRanges:UnbreakableRanges, firstLineIndent:Float,
+    function greedyFill(n:Array<Cluster>, a:Array<Cluster>, naturalAdvances:Array<Float>, adjustedAdvances:Array<Float>, maxWidth:Float, unbreakableRanges:UnbreakableRanges, firstLineIndent:Float,
             forbiddenLineEndClusters:SortedSet<Int>, hyphenBreakClusters:SortedSet<Int>, cjkInterCharBoundaries:SortedSet<Int>, maxCjkStretchPerGap:Float,
             sinoWesternBoundaries:SortedSet<Int>, sinoWesternStretchCap:Float, hardBreakAfterClusters:SortedSet<Int>,
             nonRenderingControlClusters:SortedSet<Int>, progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>):Array<LineCandidate> {
@@ -118,7 +121,7 @@ class GreedyLineBreaker implements LineBreaker {
                     maxCjkStretchPerGap, sinoWesternBoundaries, sinoWesternStretchCap);
                 final afterUnbreak = ProgressiveBreakDecisions.adjustBreakForUnbreakables(decided, lineStart, unbreakableRanges);
                 final breakAt = ProgressiveBreakDecisions.adjustBreakForLineEnd(afterUnbreak, lineStart, forbiddenLineEndClusters);
-                lines.push(LineBreakerLines.closeFilledLine(new IntRange(lineStart, breakAt - 1), afterUnbreak, n, a));
+                lines.push(LineBreakerLines.closeFilledLine(new IntRange(lineStart, breakAt - 1), afterUnbreak, a, naturalAdvances, adjustedAdvances));
                 lineStart = breakAt;
                 adjustedAccum = a[breakAt].advance;
                 naturalAccum = n[breakAt].advance;
@@ -130,7 +133,7 @@ class GreedyLineBreaker implements LineBreaker {
                 if (!nonRenderingControlClusters.has(i))
                     hasRenderingContent = true;
                 if (hardBreakAfterClusters.has(i)) {
-                    lines.push(LineBreakerLines.rebuildLine(new IntRange(lineStart, i), n, a, LineEndReason.MandatoryBreak));
+                    lines.push(LineBreakerLines.rebuildLine(new IntRange(lineStart, i), a, naturalAdvances, adjustedAdvances, LineEndReason.MandatoryBreak));
                     lineStart = i + 1;
                     adjustedAccum = 0;
                     naturalAccum = 0;
@@ -140,7 +143,8 @@ class GreedyLineBreaker implements LineBreaker {
             }
         }
         if (lineStart < a.length)
-            lines.push(LineBreakerLines.rebuildLine(new IntRange(lineStart, a.length - 1), n, a, LineEndReason.ParagraphEnd));
+            lines.push(LineBreakerLines.rebuildLine(new IntRange(lineStart, a.length - 1), a, naturalAdvances, adjustedAdvances,
+                LineEndReason.ParagraphEnd));
         else if (hardBreakAfterClusters.has(a.length - 1))
             lines.push(LineBreakerLines.emptyLineCandidate(a[a.length - 1].range.end, LineEndReason.ParagraphEnd));
         return lines;
@@ -212,6 +216,8 @@ class LookaheadLineBreaker implements LineBreaker {
         final controls = nonRenderingControlClusters == null ? LineBreakerLines.emptyIntSet() : nonRenderingControlClusters;
         final progressive = progressiveBreakOpportunities == null ? LineBreakerLines.emptyProgressiveMap() : progressiveBreakOpportunities;
 
+        final naturalAdvances = LineBreakerLines.advancesOf(naturalClusters);
+        final adjustedAdvances = LineBreakerLines.advancesOf(adjustedClusters);
         final committed:Array<LineCandidate> = [];
         var lineStart = 0;
 
@@ -244,8 +250,8 @@ class LookaheadLineBreaker implements LineBreaker {
 
             if (greedyEnd >= segmentEndExclusive) {
                 if (mandatoryEnd != null) {
-                    committed.push(LineBreakerLines.rebuildLine(new IntRange(lineStart, mandatoryEnd), naturalClusters, adjustedClusters,
-                        LineEndReason.MandatoryBreak));
+                    committed.push(LineBreakerLines.rebuildLine(new IntRange(lineStart, mandatoryEnd), adjustedClusters, naturalAdvances,
+                        adjustedAdvances, LineEndReason.MandatoryBreak));
                     committedDensity = 0.0;
                     committedSyntheticHyphenRun = 0;
                     lineStart = mandatoryEnd + 1;
@@ -255,8 +261,8 @@ class LookaheadLineBreaker implements LineBreaker {
                     }
                     continue;
                 }
-                committed.push(LineBreakerLines.rebuildLine(new IntRange(lineStart, adjustedClusters.length - 1), naturalClusters, adjustedClusters,
-                    LineEndReason.ParagraphEnd));
+                committed.push(LineBreakerLines.rebuildLine(new IntRange(lineStart, adjustedClusters.length - 1), adjustedClusters, naturalAdvances,
+                    adjustedAdvances, LineEndReason.ParagraphEnd));
                 break;
             }
 
@@ -283,7 +289,7 @@ class LookaheadLineBreaker implements LineBreaker {
             var bestEnd = greedyEnd;
             var bestScore = Math.POSITIVE_INFINITY;
             for (e in candidates) {
-                final score = scoreCandidate(lineStart, e, naturalClusters, adjustedClusters, maxWidth, shrinkOps, indent, hangables, extendables,
+                final score = scoreCandidate(lineStart, e, adjustedClusters, naturalAdvances, adjustedAdvances, maxWidth, shrinkOps, indent, hangables, extendables,
                     forbiddenLineStartClusters, hyphens, cjk, maxStretch, sino, sinoCap, segmentEndExclusive, committedDensity, committedSyntheticHyphenRun,
                     gapBoundaries, dRef, ranges, controls, progressive);
                 if (score < bestScore) {
@@ -294,8 +300,8 @@ class LookaheadLineBreaker implements LineBreaker {
 
             final committedEnd = ProgressiveBreakDecisions.adjustBreakForLineEnd(bestEnd, lineStart, forbidEnd);
             if (hard.has(committedEnd) && lineStart < committedEnd) {
-                committed.push(LineBreakerLines.rebuildLine(new IntRange(lineStart, committedEnd), naturalClusters, adjustedClusters,
-                    LineEndReason.MandatoryBreak));
+                committed.push(LineBreakerLines.rebuildLine(new IntRange(lineStart, committedEnd), adjustedClusters, naturalAdvances,
+                    adjustedAdvances, LineEndReason.MandatoryBreak));
                 committedDensity = 0.0;
                 committedSyntheticHyphenRun = 0;
                 lineStart = committedEnd + 1;
@@ -305,7 +311,8 @@ class LookaheadLineBreaker implements LineBreaker {
                 continue;
             }
 
-            committed.push(LineBreakerLines.closeFilledLine(new IntRange(lineStart, committedEnd - 1), bestEnd, naturalClusters, adjustedClusters));
+            committed.push(LineBreakerLines.closeFilledLine(new IntRange(lineStart, committedEnd - 1), bestEnd, adjustedClusters, naturalAdvances,
+                adjustedAdvances));
             final lastLine = committed[committed.length - 1];
             final limit = ProgressiveBreakDecisions.lineLimit(maxWidth, indent, lastLine.clusterRange.start);
             committedDensity = LineBreakerLines.lineAdjustmentDensity(lastLine, limit, false, gapBoundaries);
@@ -313,23 +320,23 @@ class LookaheadLineBreaker implements LineBreaker {
             lineStart = committedEnd;
         }
 
-        final repaired = LineRepair.applyKinsokuRepairs(committed, naturalClusters, adjustedClusters, maxWidth, kinsoku, shrinkOps, pushInPenalty,
+        final repaired = LineRepair.applyKinsokuRepairs(committed, adjustedClusters, naturalAdvances, adjustedAdvances, maxWidth, kinsoku, shrinkOps, pushInPenalty,
             carryPreviousPenalty, leaveRaggedPenalty, ranges, indent, hangables, extendables, 5, forbiddenLineStartClusters);
-        return LineRepair.withFillPushIn(repaired, pushIn, naturalClusters, adjustedClusters, maxWidth, shrinkOps, indent, compressBias,
+        return LineRepair.withFillPushIn(repaired, pushIn, adjustedClusters, naturalAdvances, adjustedAdvances, maxWidth, shrinkOps, indent, compressBias,
             forbiddenLineStartClusters, forbidEnd, ranges, pushInPenalty, gapBoundaries, progressive);
     }
 
-    function scoreCandidate(s:Int, e:Int, natural:Array<Cluster>, adjusted:Array<Cluster>, maxWidth:Float, shrinkOpportunities:Array<ShrinkOpportunity>,
+    function scoreCandidate(s:Int, e:Int, adjusted:Array<Cluster>, naturalAdvances:Array<Float>, adjustedAdvances:Array<Float>, maxWidth:Float, shrinkOpportunities:Array<ShrinkOpportunity>,
             firstLineIndent:Float, hangableClusters:SortedSet<Int>, extendableHangRanges:Array<IntRange>, forbiddenLineStartClusters:Null<SortedSet<Int>>,
             hyphenBreakClusters:SortedSet<Int>, cjkInterCharBoundaries:SortedSet<Int>, maxCjkStretchPerGap:Float, sinoWesternBoundaries:SortedSet<Int>,
             sinoWesternStretchCap:Float, segmentEndExclusive:Int, prevCommittedDensity:Float, prevSyntheticHyphenRun:Int, gapBoundaries:SortedSet<Int>,
             dRef:Float, unbreakableRanges:UnbreakableRanges, nonRenderingControlClusters:SortedSet<Int>,
             progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>):Float {
-        final firstLine = LineBreakerLines.rebuildLine(new IntRange(s, e - 1), natural, adjusted);
-        final future = rawGreedyLinesFrom(e, natural, adjusted, maxWidth, hyphenBreakClusters, cjkInterCharBoundaries, maxCjkStretchPerGap,
+        final firstLine = LineBreakerLines.rebuildLine(new IntRange(s, e - 1), adjusted, naturalAdvances, adjustedAdvances);
+        final future = rawGreedyLinesFrom(e, adjusted, naturalAdvances, adjustedAdvances, maxWidth, hyphenBreakClusters, cjkInterCharBoundaries, maxCjkStretchPerGap,
             sinoWesternBoundaries, sinoWesternStretchCap, segmentEndExclusive, unbreakableRanges, nonRenderingControlClusters, futureLineHorizon + 1,
             progressiveBreakOpportunities);
-        final spliced = LineRepair.applyKinsokuRepairs([firstLine].concat(future), natural, adjusted, maxWidth, kinsoku, shrinkOpportunities, pushInPenalty,
+        final spliced = LineRepair.applyKinsokuRepairs([firstLine].concat(future), adjusted, naturalAdvances, adjustedAdvances, maxWidth, kinsoku, shrinkOpportunities, pushInPenalty,
             carryPreviousPenalty, leaveRaggedPenalty, unbreakableRanges, firstLineIndent, hangableClusters, extendableHangRanges, 5, forbiddenLineStartClusters)
             .lines;
 
@@ -355,7 +362,7 @@ class LookaheadLineBreaker implements LineBreaker {
         return score;
     }
 
-    function rawGreedyLinesFrom(start:Int, natural:Array<Cluster>, adjusted:Array<Cluster>, maxWidth:Float, hyphenBreakClusters:SortedSet<Int>,
+    function rawGreedyLinesFrom(start:Int, adjusted:Array<Cluster>, naturalAdvances:Array<Float>, adjustedAdvances:Array<Float>, maxWidth:Float, hyphenBreakClusters:SortedSet<Int>,
             cjkInterCharBoundaries:SortedSet<Int>, maxCjkStretchPerGap:Float, sinoWesternBoundaries:SortedSet<Int>, sinoWesternStretchCap:Float,
             endExclusive:Int, unbreakableRanges:UnbreakableRanges, nonRenderingControlClusters:SortedSet<Int>, maxLines:Int,
             progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>):Array<LineCandidate> {
@@ -379,7 +386,7 @@ class LookaheadLineBreaker implements LineBreaker {
                 final decided = ProgressiveBreakDecisions.decideHyphenBreak(lineStart, prog, adjusted, maxWidth, hyphenBreakClusters, cjkInterCharBoundaries,
                     maxCjkStretchPerGap, sinoWesternBoundaries, sinoWesternStretchCap);
                 final breakAt = ProgressiveBreakDecisions.adjustBreakForUnbreakables(decided, lineStart, unbreakableRanges);
-                lines.push(LineBreakerLines.rebuildLine(new IntRange(lineStart, breakAt - 1), natural, adjusted));
+                lines.push(LineBreakerLines.rebuildLine(new IntRange(lineStart, breakAt - 1), adjusted, naturalAdvances, adjustedAdvances));
                 if (lines.length >= maxLines)
                     return lines;
                 lineStart = breakAt;
@@ -394,7 +401,8 @@ class LookaheadLineBreaker implements LineBreaker {
             }
         }
 
-        lines.push(LineBreakerLines.rebuildLine(new IntRange(lineStart, endExclusive - 1), natural, adjusted, LineEndReason.ParagraphEnd));
+        lines.push(LineBreakerLines.rebuildLine(new IntRange(lineStart, endExclusive - 1), adjusted, naturalAdvances, adjustedAdvances,
+            LineEndReason.ParagraphEnd));
         return lines;
     }
 
@@ -436,8 +444,9 @@ class LineBreakerLines {
      * (line-end kinsoku), records CarryNext for the mark moved to the next
      * line.
      */
-    public static function closeFilledLine(range:IntRange, naturalBreakAt:Int, n:Array<Cluster>, a:Array<Cluster>):LineCandidate {
-        final line = rebuildLine(range, n, a);
+    public static function closeFilledLine(range:IntRange, naturalBreakAt:Int, a:Array<Cluster>, naturalAdvances:Array<Float>,
+            adjustedAdvances:Array<Float>):LineCandidate {
+        final line = rebuildLine(range, a, naturalAdvances, adjustedAdvances);
         if (range.end + 1 == naturalBreakAt)
             return line;
         final moved = range.end + 1;
@@ -445,20 +454,37 @@ class LineBreakerLines {
             RepairOption.CarryNext(0, "ForbiddenAtLineEnd:" + a[moved].text + ":moved-to-next-line", moved), line.repairCandidates, line.hangingClusterIndices);
     }
 
-    public static function rebuildLine(clusterRange:IntRange, n:Array<Cluster>, a:Array<Cluster>, ?endReason:Null<LineEndReason>, ?repair:Null<RepairOption>,
-            ?repairCandidates:Null<Array<RepairCandidate>>):LineCandidate {
+    /**
+     * Builds the line candidate for `clusterRange`. The widths add `naturalAdvances` and
+     * `adjustedAdvances` (`advancesOf` of the natural and adjusted clusters) from the range start
+     * in index order.
+     */
+    public static function rebuildLine(clusterRange:IntRange, a:Array<Cluster>, naturalAdvances:Array<Float>, adjustedAdvances:Array<Float>,
+            ?endReason:Null<LineEndReason>, ?repair:Null<RepairOption>, ?repairCandidates:Null<Array<RepairCandidate>>):LineCandidate {
         if (clusterRange.isEmpty)
             throw new TiqianIllegalArgumentException(Message("Use emptyLineCandidate for an empty line."));
         var natural = 0.0;
         var adjusted = 0.0;
         var idx = clusterRange.start;
         while (idx <= clusterRange.end) {
-            natural += n[idx].advance;
-            adjusted += a[idx].advance;
+            natural += naturalAdvances[idx];
+            adjusted += adjustedAdvances[idx];
             idx++;
         }
         return new LineCandidate(clusterRange, new TextRange(a[clusterRange.start].range.start, a[clusterRange.end].range.end), natural, adjusted, endReason,
             repair, repairCandidates);
+    }
+
+    /**
+     * The advance of every cluster, in cluster order. A breaker computes the natural and adjusted
+     * advances once per `breakLines` call; `rebuildLine` then sums numbers instead of reading
+     * each `Cluster` object.
+     */
+    public static function advancesOf(clusters:Array<Cluster>):Array<Float> {
+        final out = new Array<Float>();
+        for (i in 0...clusters.length)
+            out.push(clusters[i].advance);
+        return out;
     }
 
     public static function emptyLineCandidate(sourceOffset:Int, ?endReason:Null<LineEndReason>):LineCandidate {

@@ -96,7 +96,7 @@ class ParagraphDpLineBreaker implements LineBreaker {
             commitSegment(committed, ends, segmentStart, mandatory, context, hard);
             segmentStart = end;
         }
-        return LineRepair.applyKinsokuRepairs(committed, naturalClusters, adjustedClusters, maxWidth, kinsoku, shrink, pushInPenalty, carryPreviousPenalty,
+        return LineRepair.applyKinsokuRepairs(committed, adjustedClusters, context.naturalAdvances, context.adjustedAdvances, maxWidth, kinsoku, shrink, pushInPenalty, carryPreviousPenalty,
             leaveRaggedPenalty, ranges, indent, hangables, extendableHangRanges == null ? [] : extendableHangRanges, 5, forbidStart);
     }
 
@@ -335,7 +335,8 @@ class ParagraphDpLineBreaker implements LineBreaker {
                 && mandatoryEnd != null ? LineEndReason.MandatoryBreak : (finalLine ? LineEndReason.ParagraphEnd : LineEndReason.AutoWrap);
             final lastIndex = finalLine && mandatoryEnd != null ? mandatoryEnd : chosenEnd - 1;
             final limit = ProgressiveBreakDecisions.lineLimit(context.maxWidth, context.firstLineIndent, lineStart);
-            final naturalLine = LineBreakerLines.rebuildLine(new IntRange(lineStart, lastIndex), context.naturalClusters, context.adjustedClusters, reason);
+            final naturalLine = LineBreakerLines.rebuildLine(new IntRange(lineStart, lastIndex), context.adjustedClusters, context.naturalAdvances,
+                context.adjustedAdvances, reason);
             var compressed:Null<LineCandidate> = null;
             if (naturalLine.adjustedWidth > limit && lastIndex > lineStart) {
                 final resultingBreak = context.progressiveBreakOpportunities.get(chosenEnd);
@@ -351,10 +352,11 @@ class ParagraphDpLineBreaker implements LineBreaker {
                     && resultingBreak.tier.priority() < originalBreak.tier.priority();
                 // CompressionAsDpEdge realization: identical repair records to
                 // the fill pass. Same tiered capacity, same promotion reason.
-                final result = LineRepair.tryPushIn(LineBreakerLines.rebuildLine(new IntRange(lineStart, lineStart), context.naturalClusters,
-                    context.adjustedClusters),
-                    LineBreakerLines.rebuildLine(new IntRange(lineStart + 1, lastIndex), context.naturalClusters, context.adjustedClusters, reason),
-                    context.naturalClusters, context.adjustedClusters, limit, context.shrinkOpportunities, pushInPenalty, lastIndex,
+                final result = LineRepair.tryPushIn(LineBreakerLines.rebuildLine(new IntRange(lineStart, lineStart), context.adjustedClusters,
+                    context.naturalAdvances, context.adjustedAdvances),
+                    LineBreakerLines.rebuildLine(new IntRange(lineStart + 1, lastIndex), context.adjustedClusters, context.naturalAdvances,
+                        context.adjustedAdvances, reason),
+                    context.adjustedClusters, context.naturalAdvances, context.adjustedAdvances, limit, context.shrinkOpportunities, pushInPenalty, lastIndex,
                     promotesProgressiveTier ? "ProgressiveTechnicalTierPromotion" : "LineAdjustmentPushIn");
                 if (result.candidate.accepted && result.current == null)
                     compressed = result.previous;
@@ -371,12 +373,12 @@ class ParagraphDpLineBreaker implements LineBreaker {
             } else {
                 final committedEnd = ProgressiveBreakDecisions.adjustBreakForLineEnd(chosenEnd, lineStart, context.forbiddenLineEndClusters);
                 if (hardBreakAfterClusters.has(committedEnd) && lineStart < committedEnd) {
-                    committed.push(LineBreakerLines.rebuildLine(new IntRange(lineStart, committedEnd), context.naturalClusters, context.adjustedClusters,
-                        LineEndReason.MandatoryBreak));
+                    committed.push(LineBreakerLines.rebuildLine(new IntRange(lineStart, committedEnd), context.adjustedClusters, context.naturalAdvances,
+                        context.adjustedAdvances, LineEndReason.MandatoryBreak));
                     lineStart = committedEnd + 1;
                 } else {
-                    committed.push(LineBreakerLines.closeFilledLine(new IntRange(lineStart, committedEnd - 1), chosenEnd, context.naturalClusters,
-                        context.adjustedClusters));
+                    committed.push(LineBreakerLines.closeFilledLine(new IntRange(lineStart, committedEnd - 1), chosenEnd, context.adjustedClusters,
+                        context.naturalAdvances, context.adjustedAdvances));
                     lineStart = committedEnd;
                 }
             }
@@ -400,6 +402,10 @@ class ParagraphDpLineBreaker implements LineBreaker {
 
 class DpContext {
     public final naturalClusters:Array<Cluster>;
+
+    /** `LineBreakerLines.advancesOf(naturalClusters)` and of `adjustedClusters`, for `LineBreakerLines.rebuildLine`. */
+    public final naturalAdvances:Array<Float>;
+    public final adjustedAdvances:Array<Float>;
     public final adjustedClusters:Array<Cluster>;
     public final maxWidth:Float;
     public final shrinkOpportunities:Array<ShrinkOpportunity>;
@@ -431,8 +437,14 @@ class DpContext {
             forbiddenLineEndClusters:SortedSet<Int>, hyphenBreakClusters:SortedSet<Int>, cjkInterCharBoundaries:SortedSet<Int>, maxCjkStretchPerGap:Float,
             sinoWesternBoundaries:SortedSet<Int>, sinoWesternStretchCap:Float, nonRenderingControlClusters:SortedSet<Int>, gapBoundaries:SortedSet<Int>,
             dRef:Float, allowCompressionEdges:Bool, progressiveBreakOpportunities:SortedMap<Int, ProgressiveBreakOpportunity>) {
+        // Computed before the cluster arrays are stored: boring's Rust target moves a parameter
+        // into the struct at its field assignment, so a later read of the parameter fails (E0382).
+        final naturalAdvances = LineBreakerLines.advancesOf(naturalClusters);
+        final adjustedAdvances = LineBreakerLines.advancesOf(adjustedClusters);
         this.naturalClusters = naturalClusters;
         this.adjustedClusters = adjustedClusters;
+        this.naturalAdvances = naturalAdvances;
+        this.adjustedAdvances = adjustedAdvances;
         this.maxWidth = maxWidth;
         this.shrinkOpportunities = shrinkOpportunities;
         this.unbreakableRanges = unbreakableRanges;

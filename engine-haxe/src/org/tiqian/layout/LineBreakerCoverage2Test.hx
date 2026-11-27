@@ -108,7 +108,8 @@ class LineBreakerCoverage2Test {
         final testTrace = new TestTraceRecorder("LineBreakerCoverage2Test");
         testTrace.section("testRebuildLineEmptyRangeThrows");
         final clusters = LineBreakerCoverage2TestSupport.hanClusters(2);
-        TracedAssertions.assertFailsWith(null, function() LineBreakerLines.rebuildLine(new IntRange(1, 0), clusters, clusters));
+        TracedAssertions.assertFailsWith(null, function() LineBreakerLines.rebuildLine(new IntRange(1, 0), clusters,
+            LineBreakerLines.advancesOf(clusters), LineBreakerLines.advancesOf(clusters)));
     }
 
     @:test public static function testFindGreedyEndDefaultArgs():Void {

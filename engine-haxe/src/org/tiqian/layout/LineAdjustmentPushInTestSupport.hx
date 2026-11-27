@@ -11,6 +11,7 @@ import org.tiqian.layout.ProgressiveBreakDecisions.ShrinkChannel;
 import org.tiqian.layout.ProgressiveBreakDecisions.UnbreakableRanges;
 import org.tiqian.layout.ProgressiveBreakDecisions.ProgressiveBreakOpportunity;
 import org.tiqian.layout.ProgressiveBreakDecisions.ProgressiveBreakTier;
+import org.tiqian.layout.LineBreaker.LineBreakerLines;
 import org.tiqian.layout.LineBreaker.LookaheadLineBreaker;
 import org.tiqian.layout.ParagraphLayoutEngine.ExplainableStubParagraphLayoutEngine;
 import std.SortedSet;
@@ -85,7 +86,7 @@ class LineAdjustmentPushInTestSupport {
         var gapsArr = [];
         for (i in 0...(cs.length - 1))
             gapsArr.push(i);
-        return LineRepair.applyFillPushIn(a, cs, cs, width, shrink == null ? [] : shrink, 0, 1000000,
+        return LineRepair.applyFillPushIn(a, cs, LineBreakerLines.advancesOf(cs), LineBreakerLines.advancesOf(cs), width, shrink == null ? [] : shrink, 0, 1000000,
             starts == null ? null : LineAdjustmentPushInTestSupport.ints(starts), LineAdjustmentPushInTestSupport.ints(ends == null ? [] : ends),
             LineAdjustmentPushInTestSupport.emptyRanges(), 2, LineAdjustmentPushInTestSupport.ints(gapsArr), progressive);
     }
