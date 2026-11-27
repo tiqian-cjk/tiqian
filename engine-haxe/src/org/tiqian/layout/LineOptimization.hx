@@ -192,9 +192,32 @@ class LineCandidate {
         return firstHanging == null ? clusterRange : new IntRange(clusterRange.start, firstHanging - 1);
     }
 
-    public static function emptyHanging():SortedSet<Int> {
+    /**
+     * The empty hanging suffix shared by every line that hangs nothing. A `SortedSet` has no
+     * mutating operation, so one value serves all lines.
+     */
+    public static final NoHanging = new EmptyClusterIndexSet();
+
+    /**
+     * Reads `NoHanging`. The constructor's null default goes through this function: boring's Swift
+     * target turns that default into a parameter default value and writes a static field read there
+     * with its Haxe module path, which Swift cannot resolve.
+     */
+    public static function emptyHanging():SortedSet<Int>
+        return NoHanging.value;
+}
+
+/**
+ * `EmptyClusterIndexSet` holds one empty set of cluster indices. boring accepts only null,
+ * literal, array and `new` forms as static field initializers, so a static constant holds this
+ * class and its constructor builds the set.
+ */
+class EmptyClusterIndexSet {
+    public final value:SortedSet<Int>;
+
+    public function new() {
         final b = SortedSet.builder();
-        return b.build();
+        this.value = b.build();
     }
 }
 
