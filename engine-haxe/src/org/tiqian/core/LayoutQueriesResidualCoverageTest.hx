@@ -782,10 +782,7 @@ class LayoutQueriesResidualCoverageTest {
         ], [], [],
             LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         final ink:Rect = LayoutQueries.glyphInkBounds(usable);
-        TracedAssertions.assertEqualsFloat(3.0, ink.left);
-        TracedAssertions.assertEqualsFloat(20.0, ink.right);
-        TracedAssertions.assertEqualsFloat(16.0, ink.top);
-        TracedAssertions.assertEqualsFloat(20.0, ink.bottom);
+        LayoutQueriesResidualCoverageTestHelpers.assertInkBounds(ink);
     }
 
     @:test
@@ -1544,6 +1541,7 @@ class LayoutQueriesResidualCoverageTest {
     public static function flushTestTrace():Void {
         TestTraceRecorder.flushClass("LayoutQueriesResidualCoverageTest");
     }
+
 }
 
 class LayoutQueriesResidualCoverageTestHelpers {
@@ -1667,4 +1665,12 @@ class LayoutQueriesResidualCoverageTestHelpers {
             LayoutQueriesResidualCoverageTestHelpers.emptyDebug(), LayoutQueriesResidualCoverageTestHelpers.style(10.0));
         return LayoutQueries.glyphInkBounds(content);
     }
+
+    public static function assertInkBounds(ink:Rect):Void {
+        TracedAssertions.assertEqualsFloat(3.0, ink.left);
+        TracedAssertions.assertEqualsFloat(20.0, ink.right);
+        TracedAssertions.assertEqualsFloat(16.0, ink.top);
+        TracedAssertions.assertEqualsFloat(20.0, ink.bottom);
+    }
+
 }
