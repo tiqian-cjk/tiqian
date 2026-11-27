@@ -281,6 +281,7 @@
     },
     {
       "id": "shared-ts",
+      "test": false,
       "compare": false,
       "target": "ts",
       "dependsOn": ["ts", "protocol-ts"],
@@ -302,6 +303,7 @@
         "org.tiqian.shared.prepared_dom.PreparedArtifact",
         "org.tiqian.shared.prepared_dom.PreparedArtifactTest",
         "org.tiqian.shared.prepared_dom.PreparedDomTest",
+          "org.tiqian.test.trace.TracedAssertions",
         "org.tiqian.shared.html.CompoundSelector",
         "org.tiqian.shared.html.DomAttribute",
         "org.tiqian.shared.html.DomNode",
