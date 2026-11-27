@@ -627,9 +627,6 @@ PY
 import json, re, sys
 text = re.sub(r'^\\s*//.*
 
-step_verify_compare() {
-  in_devshell "boring compare --project boring.json"
-}
 
 # Generate and test one shard of bundles from the source tree. The shard builds
 # its own trees so no generated directory has to travel between jobs, and it
@@ -709,9 +706,6 @@ PY
   in_devshell "boring test $ids --project boring.json"
 }
 
-step_verify_compare() {
-  in_devshell "boring compare --project boring.json"
-}
 
 # Generate and test one shard of bundles from the source tree. The shard builds
 # its own trees so no generated directory has to travel between jobs, and it
