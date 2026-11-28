@@ -510,7 +510,7 @@ jobs:
     secrets: inherit
 
   registry:
-    needs: [gate, npm-precompute, npm-core, npm-web-component, npm-web-adapters, npm-web-adapters-latest, maven, publish, publish-npm]
+    needs: [gate, npm-precompute, npm-core, npm-web-component, npm-web-adapters, npm-web-adapters-latest, maven, publish, publish-npm, release-assets]
     permissions:
       contents: write
       actions: read
