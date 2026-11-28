@@ -125,7 +125,7 @@
         "-D", "package-artifact-stem=tiqian-engine"
       ],
       "kmpPublication": true,
-      "package": { "name": "tiqian-engine", "version": "0.1.0", "license": "MPL-2.0" },
+      "package": { "name": "tiqian-engine", "version": "0.1.0-alpha.19", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -145,7 +145,7 @@
         "-D", "package-artifact-stem=tiqian-engine-f64",
         "-D", "package-group=org.tiqian"
       ],
-      "package": { "name": "tiqian-engine", "version": "0.1.0", "license": "MPL-2.0" },
+      "package": { "name": "tiqian-engine", "version": "0.1.0-alpha.19", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -164,7 +164,7 @@
         "-D", "runtime-emit=.",
         "-D", "package-shell=none"
       ],
-      "package": { "name": "tiqian-engine", "npmName": "@tiqian/engine", "version": "0.1.0", "license": "MPL-2.0" },
+      "package": { "name": "tiqian-engine", "npmName": "@tiqian/engine", "version": "0.1.0-alpha.19", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -185,7 +185,7 @@
         "-D", "package-shell=none",
         "-D", "package-artifact-stem=tiqian-engine-f32"
       ],
-      "package": { "name": "tiqian-engine", "version": "0.1.0", "license": "MPL-2.0" },
+      "package": { "name": "tiqian-engine", "version": "0.1.0-alpha.19", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -205,7 +205,7 @@
         "-D", "package-shell=none",
         "-D", "package-artifact-stem=tiqian-engine-f64"
       ],
-      "package": { "name": "tiqian-engine", "version": "0.1.0", "license": "MPL-2.0" },
+      "package": { "name": "tiqian-engine", "version": "0.1.0-alpha.19", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -223,7 +223,7 @@
         "-D", "runtime-import=@tiqian/runtime",
         "-D", "runtime-emit=."
       ],
-      "package": { "name": "tiqian-engine", "version": "0.1.0", "license": "MPL-2.0" },
+      "package": { "name": "tiqian-engine", "version": "0.1.0-alpha.19", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -275,7 +275,7 @@
         "org.tiqian.protocol.ContextFingerprintTest",
         "org.tiqian.protocol.ParagraphRequestFields"
       ],
-      "package": { "name": "tiqian-protocol", "npmName": "@tiqian/protocol", "version": "0.1.0", "license": "MPL-2.0" },
+      "package": { "name": "tiqian-protocol", "npmName": "@tiqian/protocol", "version": "0.1.0-alpha.19", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -321,7 +321,7 @@
         "org.tiqian.shared.layout.PreparedParagraphRequest",
         "org.tiqian.shared.layout.PreparedParagraphLayout"
       ],
-      "package": { "name": "tiqian-shared", "npmName": "@tiqian/shared", "version": "0.1.0", "license": "MPL-2.0" },
+      "package": { "name": "tiqian-shared", "npmName": "@tiqian/shared", "version": "0.1.0-alpha.19", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -375,7 +375,7 @@
         "org.tiqian.protocol.ContextFingerprint",
         "org.tiqian.protocol.ContextFingerprintTest"
       ],
-      "package": { "name": "tiqian-protocol", "version": "0.1.0", "license": "MPL-2.0" },
+      "package": { "name": "tiqian-protocol", "version": "0.1.0-alpha.19", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -420,7 +420,7 @@
         "org.tiqian.protocol.ContextFingerprint",
         "org.tiqian.protocol.ContextFingerprintTest"
       ],
-      "package": { "name": "tiqian-protocol", "version": "0.1.0", "license": "MPL-2.0" },
+      "package": { "name": "tiqian-protocol", "version": "0.1.0-alpha.19", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -467,7 +467,7 @@
         "org.tiqian.protocol.ContextFingerprint",
         "org.tiqian.protocol.ContextFingerprintTest"
       ],
-      "package": { "name": "tiqian-protocol", "version": "0.1.0", "license": "MPL-2.0" },
+      "package": { "name": "tiqian-protocol", "version": "0.1.0-alpha.19", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -515,7 +515,7 @@
         "org.tiqian.protocol.ContextFingerprint",
         "org.tiqian.protocol.ContextFingerprintTest"
       ],
-      "package": { "name": "tiqian-protocol", "version": "0.1.0", "license": "MPL-2.0" },
+      "package": { "name": "tiqian-protocol", "version": "0.1.0-alpha.19", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -534,7 +534,7 @@
         "-D", "package-name=tiqian-engine",
         "-D", "package-license=MPL-2.0"
       ],
-      "package": { "name": "tiqian-engine", "version": "0.1.0", "license": "MPL-2.0" },
+      "package": { "name": "tiqian-engine", "version": "0.1.0-alpha.19", "license": "MPL-2.0" },
       "run": {
         "env": { "BORING_TEST_TIMEOUT_MS": "600000" }
       }
@@ -564,7 +564,7 @@
         "org.tiqian.shared.prepared_dom.PreparedDom",
         "org.tiqian.shared.prepared_dom.Evidence"
       ],
-      "package": { "name": "tiqian-shared", "version": "0.1.0", "license": "MPL-2.0" }
+      "package": { "name": "tiqian-shared", "version": "0.1.0-alpha.19", "license": "MPL-2.0" }
     }
   ]
 }
