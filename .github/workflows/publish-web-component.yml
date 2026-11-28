@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
       id-token: write
     outputs:
       version: ${{ steps.release.outputs.version }}
@@ -176,8 +177,20 @@ jobs:
           bash "${GITHUB_WORKSPACE}/tools/check-npm-package.sh" "${tarball}" \
             --expect @tiqian/web-component --entry @tiqian/web-component "${siblings[@]}"
 
+      - name: Fix the release tarball for this run
+        # The first attempt of the release run keeps the verified tarball as an
+        # artifact and a re-run publishes that kept file instead of its rebuild,
+        # so npm and the registry receive the same bytes.
+        uses: ./.github/actions/keep-release-files
+        with:
+          name: npm-tarball-web-component
+          root: ${{ runner.temp }}/tiqian-web-component-release
+          path: ${{ runner.temp }}/tiqian-web-component-release/*.tgz
+
       - name: Publish the verified tarball to alpha
         shell: bash
+        env:
+          NPM_PUBLISH_DIVERGED_LOG: ${{ runner.temp }}/npm-diverged.txt
         run: |
           set -euo pipefail
           tarball="$(find "${RUNNER_TEMP}/tiqian-web-component-release" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
@@ -186,6 +199,17 @@ jobs:
             exit 1
           fi
           bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarball}" --tag alpha
+
+      - name: Report a version npm already holds with other bytes
+        # npm-publish.sh keeps a published copy that differs from this run's
+        # tarball, which happens when an earlier run of the same version
+        # published it. The registry lane refuses to describe such a tarball.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-diverged-web-component
+          path: ${{ runner.temp }}/npm-diverged.txt
+          if-no-files-found: ignore
+          overwrite: true
 
   sync-latest:
     name: Synchronize latest dist-tag
