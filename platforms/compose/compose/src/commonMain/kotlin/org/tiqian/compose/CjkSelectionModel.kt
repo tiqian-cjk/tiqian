@@ -32,6 +32,24 @@ class CjkSelectionDocument(fragments: List<CjkSelectionDocumentFragment>) {
     }
 }
 
+/**
+ * A half-open UTF-16 source range in a [CjkSelectionDocumentFragment]. [fragmentText] is the
+ * fragment's original annotated source, independent of its copy projection. A range may be empty
+ * when the selection touches a fragment boundary or crosses an empty fragment.
+ */
+@Immutable
+data class CjkSelectionDocumentRange(
+    val fragmentKey: Any,
+    val start: Int,
+    val end: Int,
+    val fragmentText: AnnotatedString,
+)
+
+internal data class CjkSelectionProjection(
+    val text: AnnotatedString? = null,
+    val ranges: List<CjkSelectionDocumentRange>? = null,
+)
+
 internal data class CjkSelectionScopeInfo(
     val ownerKey: Any,
     val retentionKey: Any,
@@ -46,12 +64,27 @@ internal interface CjkSelectable {
     fun selectionWordRangeAt(localPosition: Offset): TextRange?
     fun selectionParagraphRangeAt(localPosition: Offset): TextRange?
     fun coerceSelectionOffset(offset: Int, bias: SourceBoundaryBias): Int
-    fun selectionCursorPosition(offset: Int): Offset?
-    fun selectionLineRange(offset: Int): TextRange?
+    fun selectionCursorPosition(offset: Int, isEnd: Boolean = false): Offset?
+    fun selectionLineRange(offset: Int, isEnd: Boolean = false): TextRange?
     fun selectionLineLeft(offset: Int): Float
     fun selectionLineRight(offset: Int): Float
-    fun selectionLineCenterY(offset: Int): Float
-    fun selectionLineHeight(offset: Int): Float
+    fun selectionLineCenterY(offset: Int, isEnd: Boolean = false): Float
+    fun selectionLineHeight(offset: Int, isEnd: Boolean = false): Float
     fun selectionBoxes(range: TextRange): List<org.tiqian.core.Rect>
     fun invalidateSelection()
 }
+
+internal class CjkSystemContextMenu(
+    val show: () -> Unit,
+    val hide: () -> Unit,
+)
+
+internal data class CjkSelectionAnchor(
+    val key: Any,
+    val offset: Int,
+)
+
+internal data class CjkSelection(
+    val anchor: CjkSelectionAnchor,
+    val extent: CjkSelectionAnchor,
+)

@@ -399,6 +399,8 @@ object SkiaSystemTypefaces {
         "Sarasa UI SC",
         "Heiti SC",
         "STHeiti",
+        "Noto Sans SC",
+        "Microsoft YaHei",
     )
 
     val LATIN_CANDIDATES: List<String> = listOf(
@@ -409,6 +411,8 @@ object SkiaSystemTypefaces {
         "Roboto",
         "Noto Sans",
         "Helvetica Neue",
+        "Segoe UI",
+        "Arial",
     )
 
     val cjk: Typeface? by lazy {

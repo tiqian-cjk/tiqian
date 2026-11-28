@@ -41,6 +41,7 @@ import org.tiqian.core.SourceBoundaryBias
 import org.tiqian.core.coerceSelectionOffset
 import org.tiqian.core.getLineForOffset
 import org.tiqian.core.getTextForCopy
+import org.tiqian.core.projectTextForCopy
 import org.tiqian.core.layoutAutoSpaceSuppressedRanges
 import org.tiqian.core.layoutInlineBoxes
 import org.tiqian.core.layoutLineBreakSpans
@@ -78,13 +79,14 @@ internal class CjkTextLayoutElement(
     private val selectionScope: CjkSelectionScopeInfo?,
     private val selectionBridge: CjkTextSelectionBridge,
     private val inlineObjectPlacements: List<CjkInlineObjectPlacement>,
+    private val inlineOffsetMapping: CjkInlineObjectOffsetMapping,
 ) : ModifierNodeElement<CjkTextLayoutNode>() {
     override fun create() = CjkTextLayoutNode(
         text, semanticsText, textStyle, paragraphStyle, color,
         decorations, colorSpans, richTextSpans, spans, rubySpans, inlineObjects,
         softWrap, overflow, maxLines, minLines, measurer, onTextLayout,
         precomputedLayout,
-        selectionState, selectionScope, selectionBridge, inlineObjectPlacements,
+        selectionState, selectionScope, selectionBridge, inlineObjectPlacements, inlineOffsetMapping,
     )
 
     override fun update(node: CjkTextLayoutNode) = node.update(
@@ -92,7 +94,7 @@ internal class CjkTextLayoutElement(
         decorations, colorSpans, richTextSpans, spans, rubySpans, inlineObjects,
         softWrap, overflow, maxLines, minLines, measurer, onTextLayout,
         precomputedLayout,
-        selectionState, selectionScope, selectionBridge, inlineObjectPlacements,
+        selectionState, selectionScope, selectionBridge, inlineObjectPlacements, inlineOffsetMapping,
     )
 
     override fun equals(other: Any?): Boolean =
@@ -108,7 +110,8 @@ internal class CjkTextLayoutElement(
             onTextLayout === other.onTextLayout && selectionState === other.selectionState &&
             selectionScope == other.selectionScope &&
             selectionBridge === other.selectionBridge &&
-            inlineObjectPlacements === other.inlineObjectPlacements
+            inlineObjectPlacements === other.inlineObjectPlacements &&
+            inlineOffsetMapping === other.inlineOffsetMapping
 
     override fun hashCode(): Int {
         var r = text.hashCode()
@@ -135,6 +138,7 @@ internal class CjkTextLayoutElement(
         r = 31 * r + (selectionScope?.hashCode() ?: 0)
         r = 31 * r + selectionBridge.hashCode()
         r = 31 * r + inlineObjectPlacements.hashCode()
+        r = 31 * r + inlineOffsetMapping.hashCode()
         return r
     }
 }
@@ -162,6 +166,7 @@ internal class CjkTextLayoutNode(
     private var selectionScope: CjkSelectionScopeInfo?,
     private var selectionBridge: CjkTextSelectionBridge,
     private var inlineObjectPlacements: List<CjkInlineObjectPlacement>,
+    private var inlineOffsetMapping: CjkInlineObjectOffsetMapping,
 ) : Modifier.Node(), LayoutModifierNode, DrawModifierNode, SemanticsModifierNode,
     CjkSelectable {
 
@@ -200,14 +205,20 @@ internal class CjkTextLayoutNode(
         val start = range.start.coerceIn(0, semanticsText.length)
         val end = range.end.coerceIn(start, semanticsText.length)
         val layout = result
-        // `wbr()` markers are left out by projecting each range between them on its own. Ruby
-        // builders take a plain String base, so a ruby base never contains a marker.
+        val readings = if (layout != null && inlineOffsetMapping.hasRenderOnlyObjects) {
+            mutableListOf<RubySpan>().apply {
+                layout.debug.rubyDecisions.forEach { add(RubySpan(inlineOffsetMapping.toLogical(it.baseRange), it.text)) }
+                layout.debug.bopomofoDecisions.forEach { add(RubySpan(inlineOffsetMapping.toLogical(it.baseRange), it.text)) }
+            }
+        } else null
         return buildString {
             semanticsText.cjkWbrOffsets().forEachWbrFreeRange(start, end) { from, to ->
-                append(
-                    layout?.getTextForCopy(org.tiqian.core.TextRange(from, to))
-                        ?: semanticsText.text.substring(from, to),
-                )
+                val logicalRange = org.tiqian.core.TextRange(from, to)
+                append(when {
+                    readings != null -> projectTextForCopy(semanticsText.text, logicalRange, readings)
+                    layout != null -> layout.getTextForCopy(logicalRange)
+                    else -> semanticsText.text.substring(from, to)
+                })
             }
         }
     }
@@ -250,6 +261,7 @@ internal class CjkTextLayoutNode(
         selectionScope: CjkSelectionScopeInfo?,
         selectionBridge: CjkTextSelectionBridge,
         inlineObjectPlacements: List<CjkInlineObjectPlacement>,
+        inlineOffsetMapping: CjkInlineObjectOffsetMapping,
     ) {
         validateTextControls(maxLines, minLines, overflow)
         // Split invalidation like BasicText: layout-affecting params re-measure
@@ -294,12 +306,14 @@ internal class CjkTextLayoutNode(
         val drawChanged = color != this.color || colorSpans != this.colorSpans ||
             richTextChanged || overflow != this.overflow
         val semanticsChanged = semanticsText != this.semanticsText
+        val mappingChanged = inlineOffsetMapping !== this.inlineOffsetMapping
         val oldSelectionState = this.selectionState
         val oldSelectionScope = this.selectionScope
         val callbackChanged = onTextLayout !== this.onTextLayout
         val precomputedChanged = precomputedLayout !== this.precomputedLayout
         this.text = text
         this.semanticsText = semanticsText
+        this.inlineOffsetMapping = inlineOffsetMapping
         this.textStyle = textStyle
         this.paragraphStyle = paragraphStyle
         this.color = color
@@ -332,8 +346,9 @@ internal class CjkTextLayoutNode(
             if (isAttached) selectionState?.register(this, selectionScope)
             invalidateDraw()
             invalidateSemantics()
-        } else if (semanticsChanged) {
-            selectionState?.selectableChanged(this, textChanged = true)
+        } else if (semanticsChanged || mappingChanged) {
+            selectionState?.selectableChanged(this, textChanged = semanticsChanged)
+            if (mappingChanged) invalidateDraw()
         }
         if (layoutChanged || precomputedChanged) {
             invalidateMeasurement()
@@ -383,13 +398,20 @@ internal class CjkTextLayoutNode(
     override fun selectionOffsetAt(localPosition: Offset): Int? {
         val layout = result ?: return null
         val index = replayIndex ?: return null
-        return index.selectionOffsetForPosition(layout, localPosition.x, localPosition.y)
+        val logical = inlineOffsetMapping.toLogical(index.selectionOffsetForPosition(layout, localPosition.x, localPosition.y))
+        return inlineOffsetMapping.coerceLogicalOffset(logical, SourceBoundaryBias.Nearest)
     }
 
     override fun selectionWordRangeAt(localPosition: Offset): org.tiqian.core.TextRange? {
         val layout = result ?: return null
         val index = replayIndex ?: return null
-        return index.selectionWordRangeForPosition(layout, localPosition.x, localPosition.y)
+        return index.selectionWordRangeForPosition(layout, localPosition.x, localPosition.y)?.let { range ->
+            val logical = inlineOffsetMapping.toLogical(range)
+            org.tiqian.core.TextRange(
+                inlineOffsetMapping.coerceLogicalOffset(logical.start, SourceBoundaryBias.Backward),
+                inlineOffsetMapping.coerceLogicalOffset(logical.end, SourceBoundaryBias.Forward),
+            )
+        }
     }
 
     override fun selectionParagraphRangeAt(localPosition: Offset): org.tiqian.core.TextRange? {
@@ -397,8 +419,7 @@ internal class CjkTextLayoutNode(
         val index = replayIndex ?: return null
         val source = semanticsText.text
         if (source.isEmpty()) return org.tiqian.core.TextRange(0, 0)
-        val rawOffset = index.selectionOffsetForPosition(layout, localPosition.x, localPosition.y)
-            .coerceIn(0, source.length)
+        val rawOffset = inlineOffsetMapping.toLogical(index.selectionOffsetForPosition(layout, localPosition.x, localPosition.y))
         var start = rawOffset
         while (start > 0 && source[start - 1] != '\n') start--
         var end = rawOffset
@@ -406,24 +427,66 @@ internal class CjkTextLayoutNode(
         return org.tiqian.core.TextRange(start, end)
     }
 
-    override fun coerceSelectionOffset(offset: Int, bias: SourceBoundaryBias): Int =
-        result?.coerceSelectionOffset(offset, bias) ?: offset.coerceIn(0, semanticsText.length)
+    override fun coerceSelectionOffset(
+        offset: Int,
+        bias: SourceBoundaryBias,
+    ): Int {
+        val logical =
+            result?.let {
+                inlineOffsetMapping.toLogical(it.coerceSelectionOffset(inlineOffsetMapping.toLayout(offset), bias))
+            } ?: offset.coerceIn(0, semanticsText.length)
+        return inlineOffsetMapping.coerceLogicalOffset(logical, bias)
+    }
 
-    override fun selectionCursorPosition(offset: Int): Offset? {
+    private fun selectionEndpointBox(
+        offset: Int,
+        isEnd: Boolean,
+    ): org.tiqian.core.Rect? {
+        val logical = offset.coerceIn(0, semanticsText.length)
+        if (!inlineOffsetMapping.hasRenderOnlyObjects || semanticsText.isEmpty() || isEnd && logical == 0) return null
+        val unit =
+            if (isEnd) {
+                org.tiqian.core.TextRange(inlineOffsetMapping.coerceLogicalOffset(logical - 1, SourceBoundaryBias.Backward), logical)
+            } else {
+                org.tiqian.core.TextRange(logical, inlineOffsetMapping.coerceLogicalOffset(logical + 1, SourceBoundaryBias.Forward))
+            }
+        val boxes = selectionBoxes(unit)
+        return if (isEnd) boxes.lastOrNull() else boxes.firstOrNull()
+    }
+
+    override fun selectionCursorPosition(
+        offset: Int,
+        isEnd: Boolean,
+    ): Offset? {
+        selectionEndpointBox(offset, isEnd)?.let { return Offset(if (isEnd) it.right else it.left, it.bottom) }
         val layout = result ?: return null
-        val cursor = replayIndex?.cursorRect(layout, offset) ?: return null
+        val cursor = replayIndex?.cursorRect(layout, inlineOffsetMapping.toLayout(offset, after = !isEnd)) ?: return null
         return Offset(cursor.left, cursor.bottom)
     }
 
-    override fun selectionLineRange(offset: Int): org.tiqian.core.TextRange? {
+    private fun selectionLineIndex(
+        offset: Int,
+        isEnd: Boolean,
+    ): Int {
+        val layout = result ?: return -1
+        val logical = if (inlineOffsetMapping.hasRenderOnlyObjects && isEnd && offset > 0) offset - 1 else offset
+        return layout.getLineForOffset(inlineOffsetMapping.toLayout(logical, after = !isEnd || offset > 0))
+    }
+
+    override fun selectionLineRange(
+        offset: Int,
+        isEnd: Boolean,
+    ): org.tiqian.core.TextRange? {
         val layout = result ?: return null
-        val lineIndex = layout.getLineForOffset(offset)
-        return layout.lines.getOrNull(lineIndex)?.range
+        return layout.lines
+            .getOrNull(selectionLineIndex(offset, isEnd))
+            ?.range
+            ?.let(inlineOffsetMapping::toLogical)
     }
 
     override fun selectionLineLeft(offset: Int): Float {
         val layout = result ?: return -1f
-        val lineIndex = layout.getLineForOffset(offset)
+        val lineIndex = layout.getLineForOffset(inlineOffsetMapping.toLayout(offset))
         val line = layout.lines.getOrNull(lineIndex) ?: return -1f
         return replayIndex?.positionedClustersByLine?.getOrNull(lineIndex)
             ?.firstOrNull()?.left ?: line.indent
@@ -431,28 +494,32 @@ internal class CjkTextLayoutNode(
 
     override fun selectionLineRight(offset: Int): Float {
         val layout = result ?: return -1f
-        val lineIndex = layout.getLineForOffset(offset)
+        val lineIndex = layout.getLineForOffset(inlineOffsetMapping.toLayout(offset))
         val line = layout.lines.getOrNull(lineIndex) ?: return -1f
         return replayIndex?.positionedClustersByLine?.getOrNull(lineIndex)
             ?.lastOrNull()?.right ?: line.indent
     }
 
-    override fun selectionLineCenterY(offset: Int): Float {
+    override fun selectionLineCenterY(
+        offset: Int,
+        isEnd: Boolean,
+    ): Float {
         val layout = result ?: return -1f
-        val lineIndex = layout.getLineForOffset(offset)
-        val line = layout.lines.getOrNull(lineIndex) ?: return -1f
+        val line = layout.lines.getOrNull(selectionLineIndex(offset, isEnd)) ?: return -1f
         return (line.top + line.bottom) / 2f
     }
 
-    override fun selectionLineHeight(offset: Int): Float {
+    override fun selectionLineHeight(
+        offset: Int,
+        isEnd: Boolean,
+    ): Float {
         val layout = result ?: return 0f
-        val lineIndex = layout.getLineForOffset(offset)
-        val line = layout.lines.getOrNull(lineIndex) ?: return 0f
+        val line = layout.lines.getOrNull(selectionLineIndex(offset, isEnd)) ?: return 0f
         return line.bottom - line.top
     }
 
     override fun selectionBoxes(range: org.tiqian.core.TextRange): List<org.tiqian.core.Rect> =
-        result?.let { layout -> replayIndex?.selectionBoxes(layout, range) }.orEmpty()
+        result?.let { layout -> inlineOffsetMapping.layoutRanges(range).flatMap { replayIndex?.selectionBoxes(layout, it).orEmpty() } }.orEmpty()
 
     override fun invalidateSelection() {
         invalidateDraw()
@@ -561,7 +628,7 @@ internal class CjkTextLayoutNode(
             val drawCache = drawCache ?: return
             val drawScope = this
             val selectionRange = selectionState?.rangeFor(this@CjkTextLayoutNode)
-            val selectionBoxes = selectionRange?.let { replayIndex.selectionBoxes(result, it) }.orEmpty()
+            val selectionBoxes = selectionRange?.let { range -> inlineOffsetMapping.layoutRanges(range).flatMap { replayIndex.selectionBoxes(result, it) } }.orEmpty()
             val selectionColor = selectionRange?.let { selectionState?.selectionBackgroundArgb }
             if (overflow == TextOverflow.Visible) {
                 tiqianTraceSection("TiqianParagraph.paint") {

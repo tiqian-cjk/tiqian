@@ -110,6 +110,12 @@ fun AnnotatedString.cjkTextCompatibility(
         add(CjkRichTextTag)
         add(CjkWbrTag)
         if (composeInlineAnnotationsAreModeled) add(ComposeInlineContentTag)
+        val renderOnlySlots = getStringAnnotations(RenderOnlyInlineObjectTag, 0, length)
+        if (renderOnlySlots.all { slot ->
+                slot.end == slot.start + 1 && slot.start in text.indices &&
+                    text[slot.start] == InlinePlaceholderChar && TextRange(slot.start, slot.end) in modeledInlineRanges
+            }
+        ) { add(RenderOnlyInlineObjectTag) }
     }
     if (getStringAnnotations(0, length).any { it.tag !in supportedStringTags }) {
         issues += CjkTextCapabilityIssue.UnknownStringAnnotations

@@ -20,12 +20,14 @@ import androidx.compose.ui.text.LinkInteractionListener
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.UrlAnnotation
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.use
 import org.tiqian.core.LayoutResult
 import org.tiqian.core.getBoundingBoxes
+import org.tiqian.core.getOffsetForPosition
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -55,7 +57,7 @@ class CjkTextLinkClickTest {
                 CjkText(
                     text = text,
                     modifier = Modifier.width(460.dp),
-                    style = TextStyle(fontSize = 20.sp),
+                    style = TextStyle(fontSize = 20.sp, fontFamily = FontFamily.Serif),
                     onTextLayout = { layout = it },
                 )
             }
@@ -63,17 +65,25 @@ class CjkTextLinkClickTest {
             scene.render()
             val result = layout ?: error("onTextLayout not called")
             val linkStart = "前文说明".length
-            val box = result.getBoundingBoxes(linkStart, linkStart + "这是链接".length).first()
-            val inside = Offset((box.left + box.right) / 2f, (box.top + box.bottom) / 2f)
+            val boxes = result.getBoundingBoxes(linkStart, linkStart + "这是链接".length)
+            val firstBox = boxes.first()
+            val lastBox = boxes.last()
+            val inside = Offset(firstBox.left + (firstBox.right - firstBox.left) / 4f, firstBox.center.y)
+            assertTrue(boxes.all { it.right > it.left }, "the link fixture must have measurable glyphs")
 
-            scene.sendPointerEvent(PointerEventType.Press, inside)
-            scene.sendPointerEvent(PointerEventType.Release, inside)
+            tap(scene, inside, pressTime = 1_000L, releaseTime = 1_050L)
             assertEquals(1, clicks, "tap inside the link must fire the listener")
 
-            val outside = Offset((box.left + box.right) / 2f, box.bottom + 80f)
-            scene.sendPointerEvent(PointerEventType.Press, outside)
-            scene.sendPointerEvent(PointerEventType.Release, outside)
-            assertEquals(1, clicks, "tap outside the link must not fire")
+            val trailingInside = Offset(lastBox.right - 0.25f, lastBox.center.y)
+            assertEquals(linkStart + "这是链接".length, result.getOffsetForPosition(trailingInside.x, trailingInside.y))
+            tap(scene, trailingInside, pressTime = 2_000L, releaseTime = 2_050L)
+            assertEquals(2, clicks, "the trailing half of the last linked glyph must still fire")
+
+            tap(scene, Offset(lastBox.right + 0.25f, lastBox.center.y), pressTime = 3_000L, releaseTime = 3_050L)
+            assertEquals(2, clicks, "the adjacent unlinked glyph must not fire")
+            val outside = Offset(firstBox.center.x, firstBox.bottom + 80f)
+            tap(scene, outside, pressTime = 4_000L, releaseTime = 4_050L)
+            assertEquals(2, clicks, "tap outside the link must not fire")
         }
     }
 
@@ -101,7 +111,7 @@ class CjkTextLinkClickTest {
                 CjkText(
                     text = text,
                     modifier = Modifier.width(340.dp),
-                    style = TextStyle(fontSize = 20.sp),
+                    style = TextStyle(fontSize = 20.sp, fontFamily = FontFamily.Serif),
                     onTextLayout = { layout = it },
                 )
             }
@@ -109,7 +119,7 @@ class CjkTextLinkClickTest {
             scene.render()
             val result = layout ?: error("onTextLayout not called")
             val box = result.getBoundingBoxes("前文".length, "前文链接".length).first()
-            tap(scene, box.center)
+            tap(scene, box.center, pressTime = 1_000L, releaseTime = 1_050L)
 
             assertEquals(url, opened)
         }
@@ -138,7 +148,7 @@ class CjkTextLinkClickTest {
                 CjkText(
                     text = text,
                     modifier = Modifier.width(340.dp),
-                    style = TextStyle(fontSize = 20.sp),
+                    style = TextStyle(fontSize = 20.sp, fontFamily = FontFamily.Serif),
                     onTextLayout = { layout = it },
                 )
             }
@@ -147,14 +157,14 @@ class CjkTextLinkClickTest {
             val box = (layout ?: error("onTextLayout not called"))
                 .getBoundingBoxes(0, text.length)
                 .first()
-            tap(scene, box.center)
+            tap(scene, box.center, pressTime = 1_000L, releaseTime = 1_050L)
 
             assertEquals(url, opened)
         }
     }
 
     @Test
-    fun linkAddedWithoutTextChangeRelayoutsAndKeepsHitTesting() {
+    fun linkAddedWithoutTextChangeKeepsHitTesting() {
         var clicks = 0
         val listener = LinkInteractionListener { clicks++ }
         val plain = AnnotatedString("链接正文后续。")
@@ -171,20 +181,25 @@ class CjkTextLinkClickTest {
             CjkText(
                 text = if (enabled.value) linked else plain,
                 modifier = Modifier.width(340.dp),
-                style = TextStyle(fontSize = 20.sp),
+                style = TextStyle(fontSize = 20.sp, fontFamily = FontFamily.Serif),
                 onTextLayout = { layout = it },
             )
         }.use { scene ->
             scene.render()
             val result = layout ?: error("onTextLayout not called")
             val box = result.getBoundingBoxes(0, "链接".length).first()
+            tap(scene, box.center, pressTime = 1_000L, releaseTime = 1_050L)
+            assertEquals(0, clicks, "plain text must not dispatch a link click")
 
             enabled.value = true
             scene.render()
-            assertTrue(layout !== result, "link break policy must invalidate the previous layout")
-            tap(scene, box.center)
-
+            tap(scene, box.center, pressTime = 2_000L, releaseTime = 2_050L)
             assertEquals(1, clicks, "link annotations added without text changes must still hit-test")
+
+            enabled.value = false
+            scene.render()
+            tap(scene, box.center, pressTime = 3_000L, releaseTime = 3_050L)
+            assertEquals(1, clicks, "removing annotations must stop link clicks without changing the text")
         }
     }
 
@@ -203,7 +218,7 @@ class CjkTextLinkClickTest {
             CjkText(
                 text = text,
                 modifier = Modifier.width(340.dp),
-                style = TextStyle(fontSize = 20.sp),
+                style = TextStyle(fontSize = 20.sp, fontFamily = FontFamily.Serif),
                 onTextLayout = { layout = it },
             )
         }.use { scene ->
@@ -231,11 +246,6 @@ class CjkTextLinkClickTest {
 
             assertEquals(0, clicks, "a drag that leaves the link must cancel the click")
         }
-    }
-
-    private fun tap(scene: ImageComposeScene, position: Offset) {
-        scene.sendPointerEvent(PointerEventType.Press, position)
-        scene.sendPointerEvent(PointerEventType.Release, position)
     }
 
     private val org.tiqian.core.Rect.center: Offset

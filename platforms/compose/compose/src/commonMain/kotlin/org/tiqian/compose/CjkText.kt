@@ -205,6 +205,7 @@ fun CjkText(
 ) {
     val density = LocalDensity.current
     val renderText = remember(text) { text.withBaseLinkStyles() }
+    val inlineOffsetMapping = remember(text) { CjkInlineObjectOffsetMapping(text) }
     val coreStyle = remember(textStyle, density) { textStyle.toCoreTextStyle(density) }
     val resolvedParagraphStyle = remember(paragraphStyle, textStyle, density) {
         paragraphStyle.withCjkTextStyleLineHeight(textStyle, density)
@@ -226,7 +227,9 @@ fun CjkText(
     }
     CjkTextLayout(
         text = renderText.text,
-        semanticsText = text,
+        semanticsText = inlineOffsetMapping.logicalText,
+        linkText = renderText,
+        inlineOffsetMapping = inlineOffsetMapping,
         modifier = modifier,
         textStyle = coreStyle,
         paragraphStyle = resolvedParagraphStyle,
