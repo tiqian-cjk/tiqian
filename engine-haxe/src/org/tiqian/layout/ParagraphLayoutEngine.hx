@@ -80,7 +80,7 @@ class ExplainableStubParagraphLayoutEngine implements ParagraphLayoutEngine {
         this.textShaper = textShaper == null ? new ExplainableStubTextShaper() : textShaper;
         this.hyphenator = hyphenator == null ? DefaultHyphenator.defaultHyphenator() : hyphenator;
         this.annotationCache = annotationCache == null ? new LruWidthIndependentAnnotationCache() : annotationCache;
-        this.measureSpacingCarrierAdvance = measureSpacingCarrierAdvance == true;
+        this.measureSpacingCarrierAdvance = measureSpacingCarrierAdvance == null ? false : measureSpacingCarrierAdvance;
     }
 
     public function layout(input:LayoutInput):LayoutResult {
