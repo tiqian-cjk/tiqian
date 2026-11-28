@@ -1,5 +1,6 @@
 package org.tiqian.compose
 
+import org.tiqian.clreq.ClreqProfile
 import org.tiqian.core.LayoutConstraints
 import org.tiqian.core.LayoutInput
 import org.tiqian.core.TextRange
@@ -19,8 +20,42 @@ import org.tiqian.shaping.TextShaper
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotSame
+import kotlin.test.assertSame
 
 class ComposeBackendCacheTest {
+
+    @Test
+    fun documentMeasurersReuseOnlyExactLayoutsFromTheSamePlatformProfile() {
+        val session = ParagraphMeasurementSession()
+        val foreground = createPlatformParagraphMeasurer(session = session)
+        val worker = createPlatformParagraphMeasurer(session = session)
+        val input = LayoutInput(
+            content = TiqianTextContent("回访第一个段落。"),
+            constraints = LayoutConstraints(maxWidth = 160f),
+        )
+        val first = foreground.measure(input)
+        val edited = input.copy(content = TiqianTextContent("另一个段落。"))
+        assertNotSame(first, foreground.measure(edited))
+        assertSame(first, worker.measure(input.copy()))
+        assertSame(first, foreground.measure(input.copy()))
+        assertNotSame(first, worker.measure(input.copy(constraints = LayoutConstraints(maxWidth = 120f))))
+        assertNotSame(first, worker.measure(input.copy(textStyle = input.textStyle.copy(fontSize = 22f))))
+        assertNotSame(first, createPlatformParagraphMeasurer(ClreqProfile.TaiwanHorizontal, session).measure(input))
+        assertNotSame(first, createPlatformParagraphMeasurer(session = ParagraphMeasurementSession()).measure(input))
+        assertNotSame(first, ParagraphMeasurer(ExplainableStubParagraphLayoutEngine()).measure(input))
+    }
+
+    @Test
+    fun fullLayoutsHaveBoundedDocumentRetention() {
+        val measurer = createPlatformParagraphMeasurer(session = ParagraphMeasurementSession())
+        val width = LayoutConstraints(maxWidth = 160f)
+        val first = measurer.measure("first", width)
+        repeat(32) { measurer.measure("paragraph $it", width) }
+        assertNotSame(first, measurer.measure("first", width))
+        val long = "文".repeat(1025)
+        assertNotSame(measurer.measure(long, width), measurer.measure(long, width))
+    }
 
     @Test
     fun exactShapingInputIsReusedAndTypographyChangeMisses() {

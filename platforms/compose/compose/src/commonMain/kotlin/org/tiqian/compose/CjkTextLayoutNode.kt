@@ -165,6 +165,9 @@ internal class CjkTextLayoutNode(
 ) : Modifier.Node(), LayoutModifierNode, DrawModifierNode, SemanticsModifierNode,
     CjkSelectable {
 
+    // update() invalidates each phase explicitly; publishing the current result needs none.
+    override val shouldAutoInvalidate: Boolean = false
+
     /**
      * `ExactComposeMeasureReuse`: Compose can ask a node to measure again even when the engine input
      * is unchanged (for example when only `minLines` changes the outer box). Keep exactly one result
@@ -185,6 +188,7 @@ internal class CjkTextLayoutNode(
     private var cachedLayout: CachedLayout? = null
     private var replayIndex: LayoutResultReplayIndex? = null
     private var drawCache: ParagraphDrawCache? = null
+    private var fontSource = currentPlatformFontSource()
     private var drawClipWidth: Float = 0f
     private var drawClipHeight: Float = 0f
     private var drawClipLeft: Float = 0f
@@ -213,6 +217,7 @@ internal class CjkTextLayoutNode(
     }
 
     override fun onAttach() {
+        fontSource = currentPlatformFontSource()
         drawCache = createParagraphDrawCache()
         selectionBridge.selectable = this
         selectionBridge.coordinates?.let(::updateSelectionCoordinates)
@@ -279,7 +284,16 @@ internal class CjkTextLayoutNode(
             this.richTextSpans.layoutLineBreakSpans(this.text)
         val autoSpaceSuppressionChanged = richTextSpans.layoutAutoSpaceSuppressedRanges() !=
             this.richTextSpans.layoutAutoSpaceSuppressedRanges()
-        val layoutChanged = text != this.text || textStyle != this.textStyle ||
+        val currentFontSource = currentPlatformFontSource()
+        val fontSourceChanged = currentFontSource !== fontSource
+        if (fontSourceChanged) {
+            // The retained renderer captures the font source independently of the measurer.
+            fontSource = currentFontSource
+            cachedLayout = null
+            drawCache?.dispose()
+            drawCache = if (isAttached) createParagraphDrawCache() else null
+        }
+        val layoutChanged = fontSourceChanged || text != this.text || textStyle != this.textStyle ||
             paragraphStyle != this.paragraphStyle || decorations != this.decorations ||
             spans != this.spans || rubySpans != this.rubySpans ||
             inlineObjects != this.inlineObjects ||
@@ -297,7 +311,7 @@ internal class CjkTextLayoutNode(
         val oldSelectionState = this.selectionState
         val oldSelectionScope = this.selectionScope
         val callbackChanged = onTextLayout !== this.onTextLayout
-        val precomputedChanged = precomputedLayout !== this.precomputedLayout
+        val precomputedChanged = precomputedLayout !== this.precomputedLayout && precomputedLayout !== result
         this.text = text
         this.semanticsText = semanticsText
         this.textStyle = textStyle
@@ -336,6 +350,8 @@ internal class CjkTextLayoutNode(
             selectionState?.selectableChanged(this, textChanged = true)
         }
         if (layoutChanged || precomputedChanged) {
+            // A change to the outer box may reuse the layout, but not the old span paint.
+            if (richTextChanged) replayIndex = null
             invalidateMeasurement()
             invalidateDraw()
         } else if (drawChanged) {
@@ -505,7 +521,7 @@ internal class CjkTextLayoutNode(
         // geometry cannot have changed, so keep the replay index, the recorded display list AND
         // the NaturalRunCoalescedDraw plan (ADR 0050) — invalidating here rebuilt the plan with
         // its per-cluster advance validation on every draw (P50 3.9→8.2ms, worst record 256ms).
-        if (result !== laidOut) {
+        if (result !== laidOut || replayIndex == null) {
             result = laidOut
             replayIndex = laidOut.toReplayIndex(richTextSpans)
             drawCache?.invalidateGeometry()
@@ -593,6 +609,7 @@ private fun updateInlineObjectPlacements(
     placements: List<CjkInlineObjectPlacement>,
 ) {
     require(inlineObjects.size == placements.size)
+    if (inlineObjects.isEmpty()) return
     val positionedByRange = replayIndex?.positionedClusters?.associateBy { it.range }.orEmpty()
     inlineObjects.forEachIndexed { index, inlineObject ->
         val placement = placements[index]

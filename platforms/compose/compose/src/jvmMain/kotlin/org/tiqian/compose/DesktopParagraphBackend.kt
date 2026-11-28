@@ -20,7 +20,8 @@ actual fun createPlatformParagraphMeasurer(
     profile: ClreqProfile,
     session: ParagraphMeasurementSession?,
 ): ParagraphMeasurer =
-    ParagraphMeasurer(
+    session.defaultParagraphMeasurer(
+        profile,
         ExplainableStubParagraphLayoutEngine(
             lineBreaker = LookaheadLineBreaker(),
             textShaper = BoundedComposeTextShaperCache(
@@ -36,6 +37,8 @@ actual fun createPlatformParagraphMeasurer(
             },
         ),
     )
+
+internal actual fun currentPlatformFontSource(): Any = Unit
 
 internal actual fun <K, V> createSharedComposeBackendCache(
     maxEntries: Int,

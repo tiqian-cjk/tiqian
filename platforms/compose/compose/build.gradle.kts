@@ -42,6 +42,8 @@ kotlin {
             implementation(kotlin("test"))
             implementation("androidx.test:runner:1.7.0")
             implementation("androidx.test.ext:junit:1.3.0")
+            implementation("androidx.compose.ui:ui-test-junit4:1.11.1")
+            implementation("androidx.compose.ui:ui-test-manifest:1.11.1")
         }
 
         jvmTest.dependencies {

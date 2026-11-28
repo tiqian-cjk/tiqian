@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.use
@@ -37,6 +39,34 @@ import kotlin.test.assertTrue
  */
 @OptIn(ExperimentalComposeUiApi::class)
 class CjkTextRecompositionTest {
+
+    @Test
+    fun reusingLayoutDuringRemeasurePaintsTheCurrentRichText() {
+        val session = ParagraphMeasurementSession()
+        val first = createPlatformParagraphMeasurer(session = session)
+        val second = createPlatformParagraphMeasurer(session = session)
+        val text = AnnotatedString("AB")
+        var updated by mutableStateOf(false)
+
+        ImageComposeScene(width = 200, height = 120) {
+            CjkText(
+                text = text,
+                modifier = Modifier.width(160.dp),
+                textStyle = CjkTextStyle(fontSize = 30.sp),
+                minLines = if (updated) 2 else 1,
+                measurer = if (updated) second else first,
+                inlineBackgrounds = listOf(CjkInlineBackground(TextRange(0, text.length), if (updated) Color.Blue else Color.Red)),
+            )
+        }.use { scene ->
+            val before = scene.render(0L).use { it.toComposeImageBitmap().toPixelMap() }
+            val y = (0 until before.height).first { row -> (0 until before.width).any { before[it, row] == Color.Red } }
+            val x = (0 until before.width).first { before[it, y] == Color.Red }
+            updated = true
+            Snapshot.sendApplyNotifications()
+            val after = scene.render(100_000_000L).use { it.toComposeImageBitmap().toPixelMap() }
+            assertEquals(Color.Blue, after[x, y], "the old background must not survive a layout cache hit")
+        }
+    }
 
     @Test
     fun outerMinLinesRemeasureReusesExactEngineResult() {

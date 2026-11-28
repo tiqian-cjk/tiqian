@@ -1,8 +1,12 @@
 package org.tiqian.compose
 
+import org.tiqian.clreq.ClreqProfile
+import org.tiqian.core.LayoutInput
+import org.tiqian.core.LayoutResult
 import org.tiqian.font.FontMetricsRequest
 import org.tiqian.font.FontMetricsResolver
 import org.tiqian.font.RawFontMetrics
+import org.tiqian.layout.ParagraphLayoutEngine
 import org.tiqian.shaping.ShapingInput
 import org.tiqian.shaping.ShapingResult
 import org.tiqian.shaping.TextShaper
@@ -62,26 +66,45 @@ private class BoundedInsertionCache<K, V>(maxEntries: Int) : SharedComposeBacken
 }
 
 /**
- * Width-independent backend results shared by foreground measurement and independently confined
- * pre-layout workers. The platform store serializes cache misses, so a shaping backend instance is
- * still owned by exactly one measurer while completed immutable results can be reused by all of
- * them. Keep the session at the document/surface lifetime; typography and font decisions remain in
- * the exact keys and therefore invalidate honestly.
+ * Shares completed measurements between the document's default platform measurers. Engines remain
+ * confined to their callers: concurrent misses compute outside the lock and return the first
+ * published result. Keep the session at the document/surface lifetime.
  */
 class ParagraphMeasurementSession(
     shapingCacheEntries: Int = DEFAULT_SHARED_COMPOSE_SHAPING_CACHE_ENTRIES,
     metricsCacheEntries: Int = DEFAULT_SHARED_COMPOSE_METRICS_CACHE_ENTRIES,
 ) {
+    internal val fontSource = currentPlatformFontSource()
     internal val shapingCache =
         createSharedComposeBackendCache<ShapingInput, ShapingResult>(shapingCacheEntries)
     internal val metricsCache =
         createSharedComposeBackendCache<FontMetricsRequest, RawFontMetrics>(metricsCacheEntries)
+    internal val layoutCache =
+        createSharedComposeBackendCache<Pair<ClreqProfile, LayoutInput>, LayoutResult>(16)
 }
+
+/** Only the platform factories have the same font backend across independently confined engines. */
+internal fun ParagraphMeasurementSession?.defaultParagraphMeasurer(
+    profile: ClreqProfile,
+    engine: ParagraphLayoutEngine,
+): ParagraphMeasurer {
+    if (this == null) return ParagraphMeasurer(engine)
+    return ParagraphMeasurer(object : ParagraphLayoutEngine {
+        override fun layout(input: LayoutInput): LayoutResult {
+            // A single long paragraph can retain thousands of clusters and their debug records.
+            if (input.content.text.length > MAX_CACHED_LAYOUT_TEXT_LENGTH) return engine.layout(input)
+            return layoutCache.getOrPut(profile to input) { engine.layout(input) }
+        }
+    })
+}
+
+internal expect fun currentPlatformFontSource(): Any
 
 internal expect fun <K, V> createSharedComposeBackendCache(
     maxEntries: Int,
 ): SharedComposeBackendCache<K, V>
 
+private const val MAX_CACHED_LAYOUT_TEXT_LENGTH = 1024
 private const val DEFAULT_COMPOSE_SHAPING_CACHE_ENTRIES = 512
 private const val DEFAULT_COMPOSE_METRICS_CACHE_ENTRIES = 256
 private const val DEFAULT_SHARED_COMPOSE_SHAPING_CACHE_ENTRIES = 4096
