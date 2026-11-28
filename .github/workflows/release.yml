@@ -360,11 +360,60 @@ jobs:
     uses: ./.github/workflows/publish-precompute.yml
     secrets: inherit
 
+  npm-web-adapters:
+    # The consumer checks install the published precompute, protocol and shared
+    # packages at the same version as the adapter tarballs.
+    needs: [gate, npm-precompute, publish]
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    uses: ./.github/workflows/publish-web-adapters.yml
+    secrets: inherit
+
+  npm-web-adapters-latest:
+    name: Synchronize @tiqian/${{ matrix.adapter }} latest dist-tag
+    needs: [gate, npm-web-adapters]
+    runs-on: ubuntu-latest
+    # Serialize the release-order check and the tag write with alpha publication.
+    concurrency:
+      group: publish-tiqian-${{ matrix.adapter }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        adapter: ${{ fromJSON(needs.npm-web-adapters.outputs.adapters) }}
+    env:
+      PACKAGE: '@tiqian/${{ matrix.adapter }}'
+      RELEASE_VERSION: ${{ needs.gate.outputs.version }}
+    steps:
+      - name: Check out the release commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Node.js for the npm registry
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Point latest at the published alpha
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.21.0 semver@7.8.6
+          export NODE_PATH="$(npm root --global)"
+          node tools/check-npm-release-order.cjs "${PACKAGE}" "${RELEASE_VERSION}"
+          bash "${GITHUB_WORKSPACE}/tools/npm-dist-tag.sh" --package "${PACKAGE}" --version "${RELEASE_VERSION}" --tag latest
+
   maven:
     # See the publish job: the Central staging upload waits for the npm chain
     # so a version cannot accumulate staging deployments from a release that
     # never published its npm packages.
-    needs: [gate, npm-precompute]
+    needs: [gate, npm-precompute, npm-web-adapters, npm-web-adapters-latest]
     permissions:
       contents: read
       actions: read
@@ -386,7 +435,7 @@ jobs:
     secrets: inherit
 
   registry:
-    needs: [gate, npm-precompute, npm-core, npm-web-component, maven, publish]
+    needs: [gate, npm-precompute, npm-core, npm-web-component, npm-web-adapters, npm-web-adapters-latest, maven, publish]
     permissions:
       contents: write
       actions: read
