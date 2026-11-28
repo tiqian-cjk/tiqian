@@ -408,11 +408,9 @@ jobs:
             path="$(find "${dir}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
             [[ -n "${path}" ]] && siblings+=(--with "${path}")
           done
-          # The registry does not have @tiqian/protocol or @tiqian/shared yet
-          # (the pack matrix publishes them after this lane), so an install of
-          # the main package cannot resolve its siblings here. The binaries job
-          # already ran the loader test against the built addon on every
-          # platform; this step holds the published manifest and file list.
+          # The binaries job already ran the loader test against the built
+          # addon on every platform; this step holds the published manifest
+          # and file list.
           bash "${GITHUB_WORKSPACE}/tools/check-npm-package.sh" "${main}" \
             --expect @tiqian/precompute --manifest-only
 

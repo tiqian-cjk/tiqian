@@ -41,6 +41,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       include: ${{ steps.matrix.outputs.include }}
+      include_npm: ${{ steps.matrix.outputs.include_npm }}
+      include_other: ${{ steps.matrix.outputs.include_other }}
       bundles: ${{ steps.matrix.outputs.bundles }}
       version: ${{ steps.matrix.outputs.version }}
     steps:
@@ -58,6 +60,10 @@ jobs:
           bundles="$(python3 tools/release-matrix.py --list-bundles | paste -sd" " -)"
           bundles="${bundles% }"
           echo "include=${include}" >> "${GITHUB_OUTPUT}"
+          for part in npm other; do
+            split="$(python3 -c 'import json, sys; part = sys.argv[1]; document = json.loads(sys.argv[2]); print(json.dumps({"include": [entry for entry in document["include"] if (entry["ecosystem"] == "npm") == (part == "npm")]}, separators=(",", ":")))' "${part}" "${include}")"
+            echo "include_${part}=${split}" >> "${GITHUB_OUTPUT}"
+          done
           echo "bundles=${bundles}" >> "${GITHUB_OUTPUT}"
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
@@ -184,20 +190,19 @@ jobs:
   # the npm publishers, the Swift upload follows release-registry.yml, and the
   # Central staging publish stays in the maven job until the pack run collects
   # the Gradle publication tree (docs/release-pipeline-convergence.md 6.5).
-  publish:
+  publish-npm:
     name: Publish ${{ matrix.bundle }} (${{ matrix.ecosystem }})
-    # The npm lanes run first because they are the only lanes whose registry
-    # authorization is unproven, and every write here is irreversible. Ordering
-    # the irreversible steps behind the least certain one keeps a version from
-    # existing in some registries and not others when a lane fails.
-    needs: [matrix, pack, npm-precompute]
+    # The npm bundles of the matrix. @tiqian/core and every later npm lane
+    # depend on @tiqian/engine, @tiqian/protocol and @tiqian/shared at this
+    # version, so npm-core waits for this job.
+    needs: [matrix, pack]
     permissions:
       contents: read
       actions: read
       id-token: write
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.matrix.outputs.include) }}
+      matrix: ${{ fromJSON(needs.matrix.outputs.include_npm) }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out the release commit
@@ -251,17 +256,14 @@ jobs:
           print("verified %s: %s -> %s" % (bundle, ", ".join(selected), destination))
           PY
       - name: Set up Node.js for the npm registry
-        if: matrix.ecosystem == 'npm'
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
       - name: Use an OIDC-capable npm CLI
-        if: matrix.ecosystem == 'npm'
         run: npm install --global npm@11.12.1
       - name: Publish the npm package to alpha
-        if: matrix.ecosystem == 'npm'
         shell: bash
         run: |
           set -euo pipefail
@@ -276,7 +278,6 @@ jobs:
           fi
           bash "${GITHUB_WORKSPACE}/tools/npm-publish.sh" "${tarballs[0]}" --tag alpha
       - name: Point the latest dist-tag at the published version
-        if: matrix.ecosystem == 'npm'
         env:
           PACKAGE: ${{ matrix.registryName }}
           RELEASE_VERSION: ${{ matrix.version }}
@@ -285,6 +286,82 @@ jobs:
           set -euo pipefail
           npm install --global npm@11.21.0
           bash "${GITHUB_WORKSPACE}/tools/npm-dist-tag.sh" --package "${PACKAGE}" --version "${RELEASE_VERSION}" --tag latest
+      - name: Report the destination of this bundle
+        shell: bash
+        env:
+          BUNDLE: ${{ matrix.bundle }}
+          ECOSYSTEM: ${{ matrix.ecosystem }}
+          OFFICIAL: ${{ matrix.official }}
+          PACKED: ${{ matrix.packed }}
+        run: |
+          echo "${BUNDLE}: packed=${PACKED} ecosystem=${ECOSYSTEM} official=${OFFICIAL}"
+
+  publish:
+    name: Publish ${{ matrix.bundle }} (${{ matrix.ecosystem }})
+    # The npm lanes run first because they are the only lanes whose registry
+    # authorization is unproven, and every write here is irreversible. Ordering
+    # the irreversible steps behind the least certain one keeps a version from
+    # existing in some registries and not others when a lane fails.
+    needs: [matrix, pack, npm-precompute]
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix.outputs.include_other) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the release commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Download the release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-artifacts
+          path: release-artifacts
+      - name: Verify this bundle against the pack digest manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "${{ matrix.bundle }}" "${{ matrix.version }}" "${RUNNER_TEMP}/selected-artifacts.txt" <<PY
+          import hashlib, json, pathlib, subprocess, sys
+
+          bundle, version, selected_path = sys.argv[1], sys.argv[2], sys.argv[3]
+          document = json.loads(subprocess.check_output(
+              ["python3", "tools/release-matrix.py", "--json", "--version", version], text=True))
+          entry = next(item for item in document["bundles"] if item["id"] == bundle)
+          sums = pathlib.Path("release-artifacts", "SHA256SUMS")
+          if not sums.is_file():
+              print("release-artifacts/SHA256SUMS is missing; the pack job recorded no digest")
+              sys.exit(1)
+          recorded = {}
+          for line in sums.read_text().splitlines():
+              digest, _, name = line.partition("  ")
+              recorded[name.strip()] = digest.strip()
+          selected, failures = [], []
+          for path in entry["artifacts"]:
+              name = pathlib.Path(path).name
+              target = pathlib.Path("release-artifacts", name)
+              if name not in recorded or not target.is_file():
+                  failures.append("%s is not part of this pack run" % name)
+                  continue
+              actual = hashlib.sha256(target.read_bytes()).hexdigest()
+              if actual != recorded[name]:
+                  failures.append("%s digest %s does not match the pack manifest %s" % (name, actual, recorded[name]))
+                  continue
+              selected.append(name)
+          if failures:
+              for failure in failures:
+                  print(failure)
+              sys.exit(1)
+          pathlib.Path(selected_path).write_text("\n".join(selected) + "\n")
+          state = document["ecosystems"].get(entry["ecosystem"], {})
+          if state.get("state") == "enabled":
+              destination = "official registry %s" % entry["ecosystem"]
+          else:
+              destination = "official registry %s not enabled (%s)" % (entry["ecosystem"], state.get("reason", ""))
+          print("verified %s: %s -> %s" % (bundle, ", ".join(selected), destination))
+          PY
       - name: Upload the Swift archive to the registry storage
         if: matrix.ecosystem == 'swift'
         env:
@@ -334,7 +411,7 @@ jobs:
   # release-manifest.json is rewritten, so the release gate keeps seeing every
   # unit it declares.
   npm-core:
-    needs: [gate]
+    needs: [gate, publish-npm]
     permissions:
       contents: read
       actions: read
@@ -363,7 +440,7 @@ jobs:
   npm-web-adapters:
     # The consumer checks install the published precompute, protocol and shared
     # packages at the same version as the adapter tarballs.
-    needs: [gate, npm-precompute, publish]
+    needs: [gate, npm-precompute, publish-npm]
     permissions:
       contents: read
       actions: read
@@ -410,9 +487,7 @@ jobs:
           bash "${GITHUB_WORKSPACE}/tools/npm-dist-tag.sh" --package "${PACKAGE}" --version "${RELEASE_VERSION}" --tag latest
 
   maven:
-    # See the publish job: the Central staging upload waits for the npm chain
-    # so a version cannot accumulate staging deployments from a release that
-    # never published its npm packages.
+    # The Central staging upload waits for the npm chain.
     needs: [gate, npm-precompute, npm-web-adapters, npm-web-adapters-latest]
     permissions:
       contents: read
@@ -435,7 +510,7 @@ jobs:
     secrets: inherit
 
   registry:
-    needs: [gate, npm-precompute, npm-core, npm-web-component, npm-web-adapters, npm-web-adapters-latest, maven, publish]
+    needs: [gate, npm-precompute, npm-core, npm-web-component, npm-web-adapters, npm-web-adapters-latest, maven, publish, publish-npm]
     permissions:
       contents: write
       actions: read

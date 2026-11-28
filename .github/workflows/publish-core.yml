@@ -164,8 +164,7 @@ jobs:
         # archives this lane already generated for the manifest step, and
         # imports the entry a consumer uses, so a manifest or file-list defect
         # fails here instead of at a registry. The siblings come from this
-        # lane's own pack output: the release publishes them from the pack
-        # matrix later, so the registry does not have them yet at this point.
+        # lane's own pack output.
         shell: bash
         env:
           TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-core-release

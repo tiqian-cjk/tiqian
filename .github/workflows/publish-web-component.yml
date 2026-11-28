@@ -161,10 +161,8 @@ jobs:
         run: |
           set -euo pipefail
           tarball="$(find "${TIQIAN_RELEASE_ARTIFACT_DIR}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
-          # @tiqian/core installs @tiqian/engine, @tiqian/protocol and
-          # @tiqian/shared, which the release publishes from the pack matrix
-          # after this lane; the archives this lane generated for its manifest
-          # step stand in for them.
+          # The archives this lane generated for its manifest step supply
+          # @tiqian/engine, @tiqian/protocol and @tiqian/shared.
           siblings=()
           for bundle in protocol-ts shared-ts ts; do
             path="$(find "${GITHUB_WORKSPACE}/engine-haxe/out/${bundle}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
