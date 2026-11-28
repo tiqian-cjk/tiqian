@@ -135,6 +135,13 @@ jobs:
         # boring pack wrote; the runtime is assembled explicitly below.
         run: nix develop -c bun install --ignore-scripts
 
+      - name: Resolve the workspace dependency ranges to the release version
+        working-directory: platforms/web/client/web-component
+        # The manifest names the workspace engine as a dev dependency, and npm
+        # copies workspace ranges into the tarball unchanged; the inspection
+        # below refuses a manifest that still carries one.
+        run: python3 "$GITHUB_WORKSPACE/tools/publish-contract.py" --resolve . --version "${{ steps.release.outputs.version }}"
+
       - name: Build and verify the release tarball
         env:
           TIQIAN_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/tiqian-web-component-release
@@ -153,11 +160,12 @@ jobs:
         run: |
           set -euo pipefail
           tarball="$(find "${TIQIAN_RELEASE_ARTIFACT_DIR}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
-          # @tiqian/core installs @tiqian/protocol and @tiqian/shared, which the
-          # release publishes from the pack matrix after this lane; the archives
-          # this lane generated for its manifest step stand in for them.
+          # @tiqian/core installs @tiqian/engine, @tiqian/protocol and
+          # @tiqian/shared, which the release publishes from the pack matrix
+          # after this lane; the archives this lane generated for its manifest
+          # step stand in for them.
           siblings=()
-          for bundle in protocol-ts shared-ts; do
+          for bundle in protocol-ts shared-ts ts; do
             path="$(find "${GITHUB_WORKSPACE}/engine-haxe/out/${bundle}" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
             if [[ -z "${path}" ]]; then
               echo "::error::the ${bundle} bundle wrote no archive"
