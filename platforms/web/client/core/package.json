@@ -1,6 +1,6 @@
 {
   "name": "@tiqian/core",
-  "version": "0.1.0-alpha.15",
+  "version": "0.1.0-alpha.16",
   "description": "Core paragraph layout engine, snapshot tables, and runtime bindings for Tiqian.",
   "keywords": [
     "cjk",
