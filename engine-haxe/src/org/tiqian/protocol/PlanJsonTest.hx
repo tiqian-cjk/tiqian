@@ -84,6 +84,7 @@ class PlanJsonTest {
             overlayWidth: null,
             decorationSegments: [],
             emphasisDots: [],
+            spacingCarrierAdvances: [],
         };
         final json = PlanJson.encode(plan);
         final expected = "{\"schema\":1,\"layoutRevision\":\"tiqian-layout-v2\",\"width\":300,\"height\":20,\"lines\":[{\"rangeStart\":0,\"rangeEnd\":2,\"top\":0,\"bottom\":20,\"baseline\":18,\"indent\":0,\"visualWidth\":24,\"hyphenAdvance\":0,\"endReason\":\"ParagraphEnd\",\"cells\":[{\"rangeStart\":0,\"rangeEnd\":1,\"source\":\"你\",\"display\":\"你\",\"drawX\":0,\"naturalWidth\":12,\"leadingLayoutAdvance\":12},{\"rangeStart\":1,\"rangeEnd\":2,\"source\":\"好\",\"display\":\"好\",\"drawX\":12,\"naturalWidth\":12,\"leadingLayoutAdvance\":12}]}]}";
@@ -141,9 +142,11 @@ class PlanJsonTest {
             overlayWidth: null,
             decorationSegments: [],
             emphasisDots: [],
+            spacingCarrierAdvances: [{rangeStart: 0, rangeEnd: 2, advance: 3.75}],
         };
         final json = PlanJson.encode(plan);
         TracedAssertions.assertTrue(json.indexOf("\"shapingBoundary\":true") >= 0, json);
         TracedAssertions.assertTrue(json.indexOf("\"openTypeFeatures\":[\"kern\",\"liga\"]") >= 0, json);
+        TracedAssertions.assertTrue(json.indexOf("\"spacingCarrierAdvances\":[{\"rangeStart\":0,\"rangeEnd\":2,\"advance\":3.75}]") >= 0, json);
     }
 }

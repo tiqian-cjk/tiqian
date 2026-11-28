@@ -63,6 +63,8 @@ pub struct EngineComponents {
     pub text_shaper: Option<Rc<RefCell<dyn TextShaper>>>,
     pub hyphenator: Option<Rc<RefCell<dyn Hyphenator>>>,
     pub annotation_cache: Option<Rc<RefCell<dyn WidthIndependentAnnotationCache>>>,
+    /// `Some(true)` shapes U+00A0 per font segment for the Web spacing carrier.
+    pub measure_spacing_carrier_advance: Option<bool>,
 }
 
 /// Runs the full paragraph layout pipeline in-process. One engine instance
@@ -91,6 +93,7 @@ impl Engine {
             components.text_shaper,
             components.hyphenator,
             components.annotation_cache,
+            components.measure_spacing_carrier_advance,
         )
         .map_err(named_new)?;
         Ok(Self { inner })

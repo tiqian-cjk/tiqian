@@ -45,6 +45,7 @@ class PlanPackedTest {
             fontSize: null, overlayWidth: null,
             decorationSegments: [],
             emphasisDots: [],
+            spacingCarrierAdvances: [{rangeStart: 0, rangeEnd: 2, advance: 3.75}],
         };
         final bytes = PlanPacked.encode(plan);
         final decoded = PlanPacked.decode(bytes);
@@ -53,6 +54,9 @@ class PlanPackedTest {
         TracedAssertions.assertEquals(plan.lines[0].cells.length, decoded.lines[0].cells.length, "cell count");
         TracedAssertions.assertEqualsString(plan.lines[0].cells[0].source, decoded.lines[0].cells[0].source, "cell source");
         TracedAssertions.assertEqualsString(plan.lines[0].cells[0].display, decoded.lines[0].cells[0].display, "cell display");
+        TracedAssertions.assertEquals(1, decoded.spacingCarrierAdvances.length, "carrier advance count");
+        TracedAssertions.assertEquals(2, decoded.spacingCarrierAdvances[0].rangeEnd, "carrier advance range end");
+        TracedAssertions.assertTrue(decoded.spacingCarrierAdvances[0].advance == 3.75, "carrier advance value");
         TracedAssertions.assertEquals(plan.emphasisRanges.length, decoded.emphasisRanges.length, "emphasis count");
         TracedAssertions.assertEquals(plan.inlineEdges.length, decoded.inlineEdges.length, "inline edge count");
         if (decoded.inlineEdges.length > 0) {

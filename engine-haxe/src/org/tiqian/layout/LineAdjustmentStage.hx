@@ -821,6 +821,7 @@ class LineAdjustmentStage {
                     plan.lineSpacingDecision, rubyLineHeightDecision, inlineObjectLineHeightDecision, plan.kinsokuDecision, contextualKinsokuDecisions,
                     prep.lineLengthGridDecision, plan.firstLineIndentDecision, prep.inlineBoxResult.decisions, inlineObjectDecisions,
                     prep.inlineObjectPunctuationAttachmentDecisions, prep.zeroWidthBreakDecisions, prep.breakOpportunityDecisions,
-                    prep.emergencyTrackingEligibilityDecisions, plan.progressiveBreakOpportunities)));
+                    prep.emergencyTrackingEligibilityDecisions, plan.progressiveBreakOpportunities,
+                    prep.spacingCarrierAdvanceDecisions)));
     }
 }

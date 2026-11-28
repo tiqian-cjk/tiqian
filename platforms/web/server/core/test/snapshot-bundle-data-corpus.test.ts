@@ -97,7 +97,7 @@ function entry(plan: string, patch: Record<string, unknown> = {}) {
     status: "prepared",
     schema: 1,
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v16",
+    renderRevision: "prebroken-dom-v17",
     key: "p-1",
     sourceSha256: "a".repeat(64),
     sourceArtifactSha256: "b".repeat(64),

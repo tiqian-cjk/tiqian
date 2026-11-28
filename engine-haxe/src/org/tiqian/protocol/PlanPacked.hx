@@ -118,7 +118,7 @@ private class StringPool {
 
 class PlanPacked {
     static inline var PLAN_MAGIC:Int = 0x54515050;
-    static inline var PLAN_PROTOCOL_REVISION:Int = 1;
+    static inline var PLAN_PROTOCOL_REVISION:Int = 2;
     static inline var PLAN_STRING_ABSENT:Int = 0xFFFFFFFF;
 
     /** Identity on Float; gives the Kotlin emitter an argument position so a
@@ -447,6 +447,12 @@ class PlanPacked {
         for (dot in plan.emphasisDots) writer.f64(dot.anchorY);
         for (dot in plan.emphasisDots) writer.f64(dot.dotDiameter);
 
+        // === SPACING CARRIER ADVANCES ===
+        writer.u32(plan.spacingCarrierAdvances.length);
+        for (carrier in plan.spacingCarrierAdvances) writer.u32(carrier.rangeStart);
+        for (carrier in plan.spacingCarrierAdvances) writer.u32(carrier.rangeEnd);
+        for (carrier in plan.spacingCarrierAdvances) writer.f64(carrier.advance);
+
         return writer.finish();
     }
 
@@ -657,6 +663,13 @@ class PlanPacked {
             dots.push({clusterRangeStart: Math.isNaN(ds) ? null : ds,
                 anchorX: r.f64(), anchorY: r.f64(), dotDiameter: r.f64()});
         }
+        // Spacing carrier advances
+        final sca = r.u32();
+        final scS:Array<Int> = []; for (i in 0...sca) scS.push(r.u32());
+        final scE:Array<Int> = []; for (i in 0...sca) scE.push(r.u32());
+        final scA:Array<Float> = []; for (i in 0...sca) scA.push(r.f64());
+        final carriers:Array<Plan.PlanSpacingCarrierAdvance> = [];
+        for (i in 0...sca) carriers.push({rangeStart: scS[i], rangeEnd: scE[i], advance: scA[i]});
         if (r.failed) return null;
 
         return {
@@ -667,6 +680,7 @@ class PlanPacked {
             fontSize: Math.isNaN(fontSz) ? null : fontSz,
             overlayWidth: Math.isNaN(overlayW) ? null : overlayW,
             decorationSegments: decos, emphasisDots: dots,
+            spacingCarrierAdvances: carriers,
         };
     }
 }

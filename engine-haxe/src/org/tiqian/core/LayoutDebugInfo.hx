@@ -46,6 +46,7 @@ class LayoutDebugInfo {
     public final zeroWidthBreakDecisions:ReadOnlyArray<ZeroWidthBreakDecisionInfo>;
     public final breakOpportunityDecisions:ReadOnlyArray<BreakOpportunityDecisionInfo>;
     public final emergencyTrackingEligibilityDecisions:ReadOnlyArray<EmergencyTrackingEligibilityDecisionInfo>;
+    public final spacingCarrierAdvanceDecisions:ReadOnlyArray<SpacingCarrierAdvanceDecisionInfo>;
 
     /** The published no-argument default, used by LayoutResult's debug parameter. */
     public static final Default:LayoutDebugInfo = new LayoutDebugInfo(null);
@@ -64,7 +65,8 @@ class LayoutDebugInfo {
             ?inlineObjectDecisions:Array<InlineObjectDecisionInfo>,
             ?inlineObjectPunctuationAttachmentDecisions:Array<InlineObjectPunctuationAttachmentDecisionInfo>,
             ?zeroWidthBreakDecisions:Array<ZeroWidthBreakDecisionInfo>, ?breakOpportunityDecisions:Array<BreakOpportunityDecisionInfo>,
-            ?emergencyTrackingEligibilityDecisions:Array<EmergencyTrackingEligibilityDecisionInfo>) {
+            ?emergencyTrackingEligibilityDecisions:Array<EmergencyTrackingEligibilityDecisionInfo>,
+            ?spacingCarrierAdvanceDecisions:Array<SpacingCarrierAdvanceDecisionInfo>) {
         this.maxLinesDecision = maxLinesDecision;
         this.metricDecisions = metricDecisions == null ? [] : metricDecisions;
         this.geometryDecisions = geometryDecisions == null ? [] : geometryDecisions;
@@ -95,6 +97,7 @@ class LayoutDebugInfo {
         this.zeroWidthBreakDecisions = zeroWidthBreakDecisions == null ? [] : zeroWidthBreakDecisions;
         this.breakOpportunityDecisions = breakOpportunityDecisions == null ? [] : breakOpportunityDecisions;
         this.emergencyTrackingEligibilityDecisions = emergencyTrackingEligibilityDecisions == null ? [] : emergencyTrackingEligibilityDecisions;
+        this.spacingCarrierAdvanceDecisions = spacingCarrierAdvanceDecisions == null ? [] : spacingCarrierAdvanceDecisions;
     }
 
     public static function withMetricDecisions(values:Array<MetricDecisionInfo>):LayoutDebugInfo {

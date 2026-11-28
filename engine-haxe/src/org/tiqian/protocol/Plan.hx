@@ -126,6 +126,13 @@ typedef PlanCell = {
     var styleDelta:Null<PlanStyleDelta>;
 }
 
+/** Advance of the U+00A0 spacing carrier for cells inside [rangeStart, rangeEnd); present with or without render evidence. */
+typedef PlanSpacingCarrierAdvance = {
+    var rangeStart:Int;
+    var rangeEnd:Int;
+    var advance:Float;
+}
+
 // ---- Top-level plan DTO ----
 
 /**
@@ -146,4 +153,5 @@ typedef Plan = {
     var overlayWidth:Null<Float>;
     var decorationSegments:Array<PlanDecorationSegment>;
     var emphasisDots:Array<PlanEmphasisDot>;
+    var spacingCarrierAdvances:Array<PlanSpacingCarrierAdvance>;
 }

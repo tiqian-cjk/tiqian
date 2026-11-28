@@ -362,6 +362,9 @@ class LayoutDumpFormat {
         for (x in d.lineEdgeTrimDecisions)
             o.add("edgetrim " + x.clusterRange.start + "-" + x.clusterRange.end + " side=" + x.side + " trim=" + dumpFmt(x.trimAmount) + " reason="
                 + x.reason + "\n");
+        for (x in d.spacingCarrierAdvanceDecisions)
+            o.add("carrieradvance " + x.range.start + "-" + x.range.end + " font=" + x.fontKey + " advance=" + dumpFmt(x.advance) + " reason="
+                + x.reason + "\n");
         for (i in 0...d.decorationDecisions.length) {
             final x:DecorationDecisionInfo = d.decorationDecisions[i];
             o.add("deco " + x.clusterRange.start + "-" + x.clusterRange.end + " '" + x.sourceText + "' kind=" + x.kind + " applied="

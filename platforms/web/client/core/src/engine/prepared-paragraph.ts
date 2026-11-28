@@ -5,6 +5,7 @@
 
 import { LruWidthIndependentAnnotationCache } from "@tiqian/engine/org/tiqian/layout/WidthIndependentAnnotationCache";
 import { TiqianIllegalArgumentException } from "@tiqian/engine/org/tiqian/core/TiqianIllegalArgumentException";
+import { IllegalStateException } from "@tiqian/engine/org/tiqian/core/IllegalStateException";
 import type { PlanWithDiagnostics } from "@tiqian/engine/org/tiqian/layout/PreparedParagraph";
 import type { ShapingInput, ShapingResult } from "@tiqian/engine/org/tiqian/shaping/TextShaper";
 import type { FontMetricsRequest } from "@tiqian/engine/org/tiqian/font/FontMetrics";
@@ -28,6 +29,38 @@ export interface EngineCallbacks {
 }
 
 const annotationCacheStore = new WeakMap<EngineCallbacks, LruWidthIndependentAnnotationCache>();
+
+/** A host shaping failure carried through the engine as its declared shaping fault. */
+class HostShapingFault extends IllegalStateException {
+  readonly hostError: unknown;
+
+  constructor(hostError: unknown) {
+    super(String(hostError instanceof Error ? hostError.message : hostError));
+    this.hostError = hostError;
+  }
+}
+
+const engineCallbackStore = new WeakMap<EngineCallbacks, EngineCallbacks>();
+
+// Host shaping errors enter the engine as its shaping fault.
+function engineCallbacks(callbacks: EngineCallbacks): EngineCallbacks {
+  let entry = engineCallbackStore.get(callbacks);
+  if (entry === undefined) {
+    entry = {
+      shape: (input: ShapingInput): ShapingResult => {
+        try {
+          return callbacks.shape(input);
+        } catch (error) {
+          if (error instanceof IllegalStateException) throw error;
+          throw new HostShapingFault(error);
+        }
+      },
+      resolve: callbacks.resolve,
+    };
+    engineCallbackStore.set(callbacks, entry);
+  }
+  return entry;
+}
 
 function annotationCache(callbacks: EngineCallbacks): LruWidthIndependentAnnotationCache {
   let entry = annotationCacheStore.get(callbacks);
@@ -57,6 +90,9 @@ function asProtocolRequest(request: PrepareParagraphRequest): ParagraphRequest {
 // engine's illegal-argument exception for a reversed or negative range; the
 // layout callers catch the range kinds by name.
 function mapRefusal(error: unknown): never {
+  if (error instanceof HostShapingFault) {
+    throw error.hostError;
+  }
   if (error instanceof ParagraphRequestException) {
     throw makeIllegalArgument(error.message);
   }
@@ -82,7 +118,7 @@ export function preparedParagraphWithDiagnostics(
     return PreparedParagraphLayout.toPlanWithDiagnostics(
       asProtocolRequest(request),
       zeroAdvanceEpsilonPx,
-      callbacks,
+      engineCallbacks(callbacks),
       annotationCache(callbacks),
       request.renderEvidenceOverride ?? null,
     );
@@ -99,7 +135,7 @@ export function preparedParagraphPlan(
   try {
     return PreparedParagraphLayout.toPlan(
       asProtocolRequest(request),
-      callbacks,
+      engineCallbacks(callbacks),
       annotationCache(callbacks),
       request.renderEvidenceOverride ?? null,
     );

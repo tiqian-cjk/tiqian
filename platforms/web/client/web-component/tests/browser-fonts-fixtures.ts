@@ -268,7 +268,7 @@ export function manifestWithFaces(
     schema: 2,
     tables: { snapshot: currentTable.sha256 },
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v16",
+    renderRevision: "prebroken-dom-v17",
     fontSourcePolicy: "host-compatible-stylesheet-v1",
     renderFontFamilies: ["Fixture CJK"],
     paragraphSelector: "p[data-tq-snapshot-key]",

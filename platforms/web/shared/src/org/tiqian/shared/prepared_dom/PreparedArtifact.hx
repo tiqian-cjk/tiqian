@@ -30,6 +30,7 @@ class PreparedArtifact {
         final renderTextSpans = options.renderTextSpans;
         final emphasisRanges = plan.emphasisRanges;
         final inlineBoxes = inlineBoxesFor(plan.inlineEdges, options.inlineBoxes);
+        final spacingCarrierAdvances:Array<PreparedSpacingCarrierAdvance> = plan.spacingCarrierAdvances == null ? [] : plan.spacingCarrierAdvances;
         final state = newArtifactState(options.cjkStrongSemantics, options.liveSource);
         final styleClassFor = options.styleClassFor;
         var inlineObjectCount = 0;
@@ -67,6 +68,9 @@ class PreparedArtifact {
                         : Math.max(naturalAdvance - cell.naturalWidth - trailingInlineEdge, 0.0);
                 final trailingGap = hasBopomofo ? 0.0 : layoutTrailingGap;
                 final styleItalic = cell.style != null && cell.style.italic == true;
+                final carrierAdvance = inlineCarrierEligible(next != null, cell.renderFontFamily != null)
+                    ? spacingCarrierAdvanceFor(spacingCarrierAdvances, cell.rangeStart, cell.rangeEnd)
+                    : null;
                 final run:PreparedRunTyped = {
                     rangeStart: cell.rangeStart,
                     rangeEnd: cell.rangeEnd,
@@ -89,6 +93,7 @@ class PreparedArtifact {
                     shapingEvidence: cell.shapingEvidence,
                     punctuationInkFloor: cell.punctuationInkFloor,
                     punctuationBodyWidth: cell.punctuationBodyWidth,
+                    spacingCarrierAdvance: carrierAdvance,
                     evidenceRenderFontFamily: cell.renderFontFamily,
                     inlineObjectAdvance: cell.inlineObject,
                     bopomofoAdvanceWidth: bopomofoAdvanceWidth,
@@ -279,6 +284,7 @@ class PreparedArtifact {
                         shapingEvidence: run.shapingEvidence,
                         punctuationInkFloor: run.punctuationInkFloor,
                         punctuationBodyWidth: run.punctuationBodyWidth,
+                        spacingCarrierAdvance: run.spacingCarrierAdvance,
                         evidenceRenderFontFamily: run.evidenceRenderFontFamily
                     };
                     container.push(PreparedDom.renderRun(renderInput, styleClassFor, spacingBoundary));
@@ -494,6 +500,19 @@ class PreparedArtifact {
             index += 1;
         }
         return entries;
+    }
+
+    /** InlineCarrierEligibility: a line-end cell and a cell drawn in its evidence face keep the block carrier. */
+    private static function inlineCarrierEligible(hasNextCell:Bool, drawnInEvidenceFace:Bool):Bool {
+        return hasNextCell && !drawnInEvidenceFace;
+    }
+
+    /** U+00A0 advance of the shaped segment that contains the cell range, or null when no segment does. */
+    private static function spacingCarrierAdvanceFor(advances:Array<PreparedSpacingCarrierAdvance>, start:Float, end:Float):Null<Float> {
+        for (entry in advances) {
+            if (entry.rangeStart <= start && end <= entry.rangeEnd) return entry.advance;
+        }
+        return null;
     }
 
     /** Summed inline-start width at one offset (prepared-dom.ts:721). */

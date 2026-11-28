@@ -370,7 +370,7 @@ function buildSnapshot(
     schema: 2,
     tables: { snapshot: sha256(tableBytes) },
     layoutRevision: "tiqian-layout-v2",
-    renderRevision: "prebroken-dom-v16",
+    renderRevision: "prebroken-dom-v17",
     fontSourcePolicy: "host-compatible-stylesheet-v1",
     renderFontFamilies: ["Fixture CJK"],
     paragraphSelector: "p[data-tq-snapshot-key]",

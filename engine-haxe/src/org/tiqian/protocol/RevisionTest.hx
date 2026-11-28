@@ -18,7 +18,7 @@ class RevisionTest {
         TracedAssertions.assertEquals(1, Revision.SNAPSHOT_SCHEMA, "SNAPSHOT_SCHEMA");
         TracedAssertions.assertEquals(2, Revision.SNAPSHOT_TABLES_SCHEMA, "SNAPSHOT_TABLES_SCHEMA");
         TracedAssertions.assertEqualsString("tiqian-layout-v2", Revision.LAYOUT_REVISION, "LAYOUT_REVISION");
-        TracedAssertions.assertEqualsString("prebroken-dom-v16", Revision.RENDER_REVISION, "RENDER_REVISION");
+        TracedAssertions.assertEqualsString("prebroken-dom-v17", Revision.RENDER_REVISION, "RENDER_REVISION");
         TracedAssertions.assertEqualsString(
             "host-compatible-stylesheet-v1", Revision.FONT_SOURCE_POLICY, "FONT_SOURCE_POLICY"
         );

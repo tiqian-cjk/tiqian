@@ -217,6 +217,13 @@ interface PlanBopomofoZone extends BopomofoZone {
   baseRangeEnd: number;
 }
 
+/** U+00A0 spacing carrier advance for the cells inside one shaped segment range. */
+interface PlanSpacingCarrierAdvance {
+  rangeStart: number;
+  rangeEnd: number;
+  advance: number;
+}
+
 /** The plan properties consumed by the prepared DOM renderer. */
 interface PreparedLayoutPlan {
   schema: number;
@@ -229,6 +236,7 @@ interface PreparedLayoutPlan {
   inlineEdges?: InlineEdgeEntry[];
   decorationSegments?: EvidenceDecorationSegment[];
   emphasisDots?: EvidenceEmphasisDot[];
+  spacingCarrierAdvances?: PlanSpacingCarrierAdvance[];
   fontSize?: number;
   overlayWidth?: number;
 }
@@ -679,6 +687,13 @@ function toTypedPlan(plan: PreparedLayoutPlan): GeneratedPreparedPlan {
     emphasisDots: plan.emphasisDots == null
       ? null
       : Array.from(plan.emphasisDots, toTypedEmphasisDot),
+    spacingCarrierAdvances: plan.spacingCarrierAdvances == null
+      ? null
+      : Array.from(plan.spacingCarrierAdvances, (entry) => ({
+        rangeStart: Number(entry.rangeStart),
+        rangeEnd: Number(entry.rangeEnd),
+        advance: Number(entry.advance),
+      })),
     fontSize: Number(plan.fontSize),
     overlayWidth: Number(plan.overlayWidth),
   };

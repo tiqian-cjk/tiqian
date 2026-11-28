@@ -242,6 +242,17 @@ class PreparedDom {
                 Markup.setAttribute(carrierEntries, "data-tq-spacing-boundary", spacingBoundary);
             }
 
+            final carrierAdvance = input.spacingCarrierAdvance;
+            if (spacingBoundary == "" && carrierAdvance != null) {
+                // Inline text keeps the host decoration across the gap.
+                final noBreakSpaceAdvance:Float = carrierAdvance;
+                Markup.setAttribute(carrierEntries, "data-tq-spacing-carrier-inline", "");
+                Markup.applyDynamicStyles(carrierEntries, ["word-spacing:" + Markup.px(input.spacing.px - noBreakSpaceAdvance) + "!important"],
+                    styleClassFor);
+                container.children.push(Markup.renderedElement("span", carrierEntries, "\u00A0", false));
+                return container;
+            }
+
             // The marker lets host decoration stop without changing the gap.
             final carrierStyles:Array<String> = [
                 "display:inline-block!important",

@@ -30,6 +30,49 @@ class PreparedParagraphRenderEvidenceTest {
         TracedAssertions.assertTrue(e.indexOf("\"overlayWidth\":") >= 0);
     }
 
+    @:test public static function spacingCarrierAdvanceFollowsShapedSegments():Void {
+        final t = new TestTraceRecorder("PreparedParagraphRenderEvidenceTest");
+        t.section("spacingCarrierAdvanceFollowsShapedSegments");
+        final unprobed = PreparedParagraphRenderEvidenceTestSupport.layout(new LayoutInput(new TiqianTextContent("中文 Latin words 混排段落测试。"), null,
+            null, new LayoutConstraints(120)));
+        TracedAssertions.assertEquals(0, unprobed.debug.spacingCarrierAdvanceDecisions.length, "the default engine skips the carrier probe");
+        final r = PreparedParagraphRenderEvidenceTestSupport.layoutWithSpacingCarrierProbe(new LayoutInput(new TiqianTextContent("中文 Latin words 混排段落测试。"),
+            null, null, new LayoutConstraints(120)));
+        final records = r.debug.spacingCarrierAdvanceDecisions;
+        TracedAssertions.assertTrue(records.length > 0, "carrier advance records");
+        var previousEnd = 0;
+        for (i in 0...records.length) {
+            final record = records[i];
+            TracedAssertions.assertTrue(record.range.start >= previousEnd, "records ordered without overlap");
+            TracedAssertions.assertTrue(record.advance >= 0, "carrier advance non-negative");
+            TracedAssertions.assertEqualsString("SpacingCarrierNoBreakSpaceAdvance", record.reason, "carrier reason");
+            previousEnd = record.range.end;
+        }
+        final p = PreparedParagraphRenderEvidenceTestSupport.plain(r);
+        final e = PreparedParagraphRenderEvidenceTestSupport.evidence(r);
+        PreparedParagraphRenderEvidenceTestSupport.contains(p, "\"spacingCarrierAdvances\":[", "plain spacingCarrierAdvances");
+        PreparedParagraphRenderEvidenceTestSupport.contains(e, "\"spacingCarrierAdvances\":[", "evidence spacingCarrierAdvances");
+        final plan = PlanLowering.toPlan(r, true);
+        TracedAssertions.assertEquals(records.length, plan.spacingCarrierAdvances.length, "plan carries every carrier record");
+        TracedAssertions.assertEquals(records.length, PlanLowering.toPlan(r, false).spacingCarrierAdvances.length, "plain plan carries the carrier table");
+        var latinCells = 0;
+        for (li in 0...plan.lines.length) {
+            for (ci in 0...plan.lines[li].cells.length) {
+                final cell = plan.lines[li].cells[ci];
+                if (!cell.latin)
+                    continue;
+                latinCells += 1;
+                var covered = false;
+                for (i in 0...records.length) {
+                    if (records[i].range.start <= cell.rangeStart && cell.rangeEnd <= records[i].range.end)
+                        covered = true;
+                }
+                TracedAssertions.assertTrue(covered, "latin cell " + cell.rangeStart + "-" + cell.rangeEnd + " has a carrier advance");
+            }
+        }
+        TracedAssertions.assertTrue(latinCells > 0, "fixture has latin cells");
+    }
+
     @:test public static function pinyinRubyEmitsRubyDecisions():Void {
         final t = new TestTraceRecorder("PreparedParagraphRenderEvidenceTest");
         t.section("pinyinRubyEmitsRubyDecisions");

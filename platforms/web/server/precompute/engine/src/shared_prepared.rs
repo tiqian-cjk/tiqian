@@ -16,6 +16,7 @@ use tiqian_shared::org::tiqian::shared::prepared_dom::prepared_emphasis_range::P
 use tiqian_shared::org::tiqian::shared::prepared_dom::prepared_plan::PreparedPlan;
 use tiqian_shared::org::tiqian::shared::prepared_dom::prepared_plan_cell::PreparedPlanCell;
 use tiqian_shared::org::tiqian::shared::prepared_dom::prepared_plan_line::PreparedPlanLine;
+use tiqian_shared::org::tiqian::shared::prepared_dom::prepared_spacing_carrier_advance::PreparedSpacingCarrierAdvance;
 use tiqian_shared::org::tiqian::shared::prepared_dom::style_delta::StyleDelta;
 use tiqian_shared::runtime::u_string::UString;
 
@@ -56,6 +57,20 @@ pub fn to_prepared_plan(plan: &Plan) -> PreparedPlan {
             None
         } else {
             Some(plan.emphasis_dots.iter().map(to_dot).collect())
+        },
+        spacing_carrier_advances: if plan.spacing_carrier_advances.is_empty() {
+            None
+        } else {
+            Some(
+                plan.spacing_carrier_advances
+                    .iter()
+                    .map(|entry| PreparedSpacingCarrierAdvance {
+                        range_start: f64::from(entry.range_start),
+                        range_end: f64::from(entry.range_end),
+                        advance: entry.advance,
+                    })
+                    .collect(),
+            )
         },
         font_size: plan.font_size.unwrap_or(0.0),
         overlay_width: plan.overlay_width.unwrap_or(0.0),

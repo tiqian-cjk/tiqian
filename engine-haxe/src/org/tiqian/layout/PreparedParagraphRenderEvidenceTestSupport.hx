@@ -10,6 +10,10 @@ class PreparedParagraphRenderEvidenceTestSupport {
     public static function layout(input:LayoutInput):LayoutResult
         return new ExplainableStubParagraphLayoutEngine(new LookaheadLineBreaker()).layout(input);
 
+    public static function layoutWithSpacingCarrierProbe(input:LayoutInput):LayoutResult
+        return new ExplainableStubParagraphLayoutEngine(null, null, null, null, null, null, null, null, new LookaheadLineBreaker(), null, null, null,
+            null, true).layout(input);
+
     public static function evidence(r:LayoutResult):String
         return PreparedParagraphFns.toPreparedParagraphJson(r, true);
 

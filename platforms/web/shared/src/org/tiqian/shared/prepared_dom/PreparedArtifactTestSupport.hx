@@ -33,6 +33,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -58,6 +59,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -87,6 +89,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -114,6 +117,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -143,6 +147,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -169,6 +174,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -194,6 +200,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -221,6 +228,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -249,6 +257,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -275,6 +284,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -301,6 +311,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [{ offset: 1, inlineStart: null, inlineEnd: 4 }],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -326,6 +337,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -351,6 +363,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -376,6 +389,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: [{ left: 0, top: 20, right: 60, kind: ProperNoun }, { left: 60, top: 20, right: 120, kind: BookTitle }],
         emphasisDots: [{ clusterRangeStart: Math.NaN, anchorX: 10, anchorY: 25, dotDiameter: 5 }],
+        spacingCarrierAdvances: null,
         fontSize: 20,
         overlayWidth: 120 };
     }
@@ -401,6 +415,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: [{ clusterRangeStart: 0, anchorX: 10, anchorY: 25, dotDiameter: 5 }, { clusterRangeStart: 1, anchorX: 50, anchorY: 25, dotDiameter: 5 }],
+        spacingCarrierAdvances: null,
         fontSize: 20,
         overlayWidth: 120 };
     }
@@ -427,6 +442,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -454,6 +470,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -483,6 +500,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [{ offset: 1, inlineStart: null, inlineEnd: 4 }],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -509,6 +527,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -534,6 +553,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -559,6 +579,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: null,
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }
@@ -584,6 +605,7 @@ class PreparedArtifactTestSupport {
         inlineEdges: [],
         decorationSegments: [{ left: 0, top: 20, right: 60, kind: ProperNoun }],
         emphasisDots: null,
+        spacingCarrierAdvances: null,
         fontSize: Math.NaN,
         overlayWidth: Math.NaN };
     }

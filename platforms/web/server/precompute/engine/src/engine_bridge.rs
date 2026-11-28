@@ -498,6 +498,7 @@ pub(crate) fn precompute_paragraph_with_numeric_spans(
                 Rc::clone(&numeric_spans),
             )
         }))),
+        measure_spacing_carrier_advance: Some(true),
         ..EngineComponents::default()
     })
     .map_err(|error| error.0)?;
